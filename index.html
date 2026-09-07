@@ -1965,7 +1965,12 @@
   <div class="wrap" id="page-picking" style="display:none;">
 
   <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; margin-bottom:16px;">
-    <div class="upload-wrap" style="align-items:flex-start;">
+    <!-- Dòng trạng thái tải/lưu (upload-status) không hiện trực tiếp ở đây nữa — đã có nút chuông
+         thông báo 🔔 ở đầu sidebar theo dõi & hiện lại y hệt các thông báo này rồi (xem
+         watchStatusElForNotif). Vẫn giữ nguyên trong DOM (chỉ ẩn bằng display:none) để không phải
+         sửa hàng chục chỗ set text/class vào #upload-status trong toàn bộ file, và để nút chuông
+         vẫn tiếp tục bắt được thay đổi bình thường. -->
+    <div class="upload-wrap" style="align-items:flex-start; display:none;">
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
       </div>
       <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.tsv,.txt">
@@ -3034,13 +3039,13 @@
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-label">Cloud (Google Apps Script) — chạy được cả trên Safari/iPhone</div>
+        <div class="settings-section-label">Cloud (Firebase Realtime Database) — chạy được cả trên Safari/iPhone</div>
         <div class="settings-cloud-row">
-          <input type="text" id="cv-url-input" placeholder="URL Apps Script (.../exec)" autocomplete="off">
-          <input type="password" id="cv-token-input" placeholder="Mật khẩu (Token)" autocomplete="off" style="flex:0 0 130px;">
+          <input type="text" id="cv-url-input" placeholder="Database URL (...firebasedatabase.app/)" autocomplete="off">
+          <input type="password" id="cv-token-input" placeholder="Database secret" autocomplete="off" style="flex:0 0 130px;">
         </div>
         <div class="settings-btn-row">
-          <button class="btn-update btn-ghost-outline" id="cv-connect-btn" type="button" title="Kết nối tới Web App Apps Script đã triển khai — nhập đủ URL + Mật khẩu rồi bấm">Kết nối</button>
+          <button class="btn-update btn-ghost-outline" id="cv-connect-btn" type="button" title="Kết nối tới Firebase Realtime Database — nhập đủ Database URL + Database secret rồi bấm">Kết nối</button>
           <button class="btn-update btn-ghost-outline" id="cv-disconnect-btn" type="button" title="Ngắt kết nối Cloud trên trình duyệt này">Ngắt</button>
           <button class="btn-update btn-ghost-outline" id="cv-test-btn" type="button" title="Kiểm tra kết nối và báo rõ lỗi thật thay vì chỉ báo chung chung">Kiểm tra kết nối</button>
         </div>
@@ -3420,19 +3425,19 @@ const FileVault = {
 };
 
 /* ============================================================
-   ============  CloudVault: lưu trạng thái LÊN INTERNET (Google Apps Script)  ============
+   ============  CloudVault: lưu trạng thái LÊN INTERNET (Firebase Realtime Database)  ============
    ============  Hoạt động trên MỌI trình duyệt, kể cả Safari/iPhone  ============
    ============================================================
-   - Dùng 1 "Web App" tự triển khai bằng Google Apps Script (miễn phí, chạy trên hạ
-     tầng Google — hầu như không mạng/Wi-Fi nào chặn) làm nơi lưu trạng thái, thay
-     cho JSONBin.io (đã gặp lỗi kết nối không rõ nguyên nhân).
-   - "URL Apps Script" + "Mật khẩu": dán URL Web App đã triển khai (kết thúc bằng
-     /exec) và mật khẩu (TOKEN) đã đặt trong đoạn script đó.
-   - "Kết nối": tải dữ liệu hiện có từ URL đó lên; nếu URL chưa có dữ liệu, lần ghi
-     đầu tiên sẽ tự tạo.
-   - URL & mật khẩu là THÔNG TIN KẾT NỐI (không phải dữ liệu dashboard) nên vẫn lưu
-     trong localStorage của trình duyệt để khỏi phải nhập lại; dữ liệu THẬT của
-     dashboard nằm trên Google Apps Script, không nằm trong localStorage. */
+   - Dùng Firebase Realtime Database (free tier — 1GB lưu trữ, 10GB băng thông/tháng) làm nơi lưu
+     trạng thái, thay cho Google Apps Script (hay bị "cold start" tải chậm vài giây mỗi lần gọi).
+   - "Database URL" + "Database secret": dán URL Realtime Database (dạng
+     https://ten-du-an-default-rtdb.<region>.firebasedatabase.app/) và Database secret (lấy ở
+     Project settings → Service accounts → Database secrets, mục Legacy).
+   - "Kết nối": tải dữ liệu hiện có từ node "dashboard_data" của Database đó lên; nếu chưa có dữ
+     liệu, lần ghi đầu tiên sẽ tự tạo.
+   - Database URL & secret là THÔNG TIN KẾT NỐI (không phải dữ liệu dashboard) nên vẫn lưu trong
+     localStorage của trình duyệt để khỏi phải nhập lại; dữ liệu THẬT của dashboard nằm trên
+     Firebase, không nằm trong localStorage. */
 const CV_LS_URL = 'tn5_cloud_gas_url';
 const CV_LS_TOKEN = 'tn5_cloud_gas_token';
 
@@ -3443,6 +3448,12 @@ const CloudVault = {
   _retryTimer: null,
   _retryCount: 0,
   _hadError: false,
+
+  // Đường dẫn REST cố định trong Realtime Database — gộp mọi dữ liệu dashboard vào 1 node riêng
+  // "dashboard_data", tránh đụng nếu sau này project Firebase này còn dùng cho việc khác.
+  _dataUrl(){
+    return this.url.replace(/\/+$/, '') + '/dashboard_data.json';
+  },
 
   init(){
     try{
@@ -3461,12 +3472,12 @@ const CloudVault = {
         const msg = ok
           ? (this._pushedLocalToEmptyCloud
               ? '✓ Cloud đang trống — đã tải dữ liệu hiện có trên máy này LÊN Cloud (không xoá mất dữ liệu cục bộ).'
-              : '✓ Đã đồng bộ với Cloud (Google Apps Script).')
-          : '✗ Không tải được — kiểm tra lại URL / Mật khẩu, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết.';
+              : '✓ Đã đồng bộ với Cloud (Firebase).')
+          : '✗ Không tải được — kiểm tra lại Database URL / Database secret, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết.';
         this._setStatus(msg, ok ? 'ok' : 'err');
       });
     } else {
-      this._setStatus('Chưa kết nối Cloud — dán URL Apps Script + Mật khẩu rồi bấm "Kết nối".', '');
+      this._setStatus('Chưa kết nối Cloud — dán Database URL + Database secret rồi bấm "Kết nối".', '');
     }
   },
 
@@ -3482,7 +3493,7 @@ const CloudVault = {
     const tokenInput = document.getElementById('cv-token-input');
     const url = urlInput ? urlInput.value.trim() : '';
     const token = tokenInput ? tokenInput.value.trim() : '';
-    if(!url || !token){ this._setStatus('✗ Cần nhập cả URL Apps Script và Mật khẩu.', 'err'); return; }
+    if(!url || !token){ this._setStatus('✗ Cần nhập cả Database URL và Database secret.', 'err'); return; }
     this.url = url;
     this.token = token;
     this._setStatus('Đang kết nối & tải dữ liệu từ Cloud…', '');
@@ -3497,7 +3508,7 @@ const CloudVault = {
         'ok'
       );
     } else {
-      this._setStatus('✗ Không tải được — kiểm tra lại URL / Mật khẩu, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết. (Nếu URL đúng, có thể Apps Script chưa được triển khai ở chế độ "Anyone" — xem lại bước Deploy.)', 'err');
+      this._setStatus('✗ Không tải được — kiểm tra lại Database URL / Database secret, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết. (Kiểm tra lại đã dán đúng Database secret ở mục Project settings → Service accounts, và Rules đã Publish chưa.)', 'err');
     }
   },
 
@@ -3520,22 +3531,22 @@ const CloudVault = {
     const tokenInput = document.getElementById('cv-token-input');
     const url = (urlInput ? urlInput.value.trim() : '') || this.url;
     const token = (tokenInput ? tokenInput.value.trim() : '') || this.token;
-    if(!url || !token){ this._setStatus('✗ Cần nhập cả URL và Mật khẩu trước khi kiểm tra.', 'err'); return; }
-    this._setStatus('Đang kiểm tra kết nối tới Google Apps Script…', '');
+    if(!url || !token){ this._setStatus('✗ Cần nhập cả Database URL và Database secret trước khi kiểm tra.', 'err'); return; }
+    this._setStatus('Đang kiểm tra kết nối tới Firebase…', '');
     try{
-      const sep = url.indexOf('?') === -1 ? '?' : '&';
-      const res = await fetch(url + sep + 'token=' + encodeURIComponent(token));
+      const testUrl = url.replace(/\/+$/, '') + '/dashboard_data.json?auth=' + encodeURIComponent(token);
+      const res = await fetch(testUrl);
       const text = await res.text();
       let json = null;
       try{ json = JSON.parse(text); }catch(e){}
-      if(res.ok && json && !json.error){
-        this._setStatus('✓ Kết nối OK — Apps Script trả về dữ liệu hợp lệ. URL & Mật khẩu đúng.', 'ok');
-      } else if(json && json.error === 'Unauthorized'){
-        this._setStatus('✗ Sai Mật khẩu (Token) — kiểm tra lại đúng chuỗi đã đặt trong đoạn script (TOKEN = ...).', 'err');
+      if(res.ok && !(json && json.error)){
+        this._setStatus('✓ Kết nối OK — Firebase trả về dữ liệu hợp lệ. Database URL & Database secret đúng.', 'ok');
+      } else if(json && json.error){
+        this._setStatus('✗ Firebase báo lỗi: "' + json.error + '" — kiểm tra lại đã dán đúng Database secret (Project settings → Service accounts → Database secrets) và Rules đã Publish đúng như hướng dẫn chưa.', 'err');
       } else if(!res.ok){
-        this._setStatus('✗ Máy chủ trả về mã lỗi ' + res.status + '. Kiểm tra lại đã Deploy đúng chế độ "Anyone" chưa.', 'err');
+        this._setStatus('✗ Máy chủ trả về mã lỗi ' + res.status + '. Kiểm tra lại Database URL (dạng https://ten-du-an-default-rtdb....firebasedatabase.app/).', 'err');
       } else {
-        this._setStatus('✗ Phản hồi không đúng định dạng mong đợi — kiểm tra lại đã dán đúng URL kết thúc bằng "/exec" chưa, và đã paste đúng đoạn code Apps Script chưa.', 'err');
+        this._setStatus('✗ Phản hồi không đúng định dạng mong đợi — kiểm tra lại đã dán đúng Database URL chưa.', 'err');
       }
     }catch(e){
       this._setStatus('✗ Không kết nối được tới máy chủ (lỗi mạng thật sự: "' + e.message + '") — kiểm tra Internet, hoặc URL dán bị sai/thiếu.', 'err');
@@ -3545,16 +3556,17 @@ const CloudVault = {
   async readAll(){
     if(!this.url || !this.token) return false;
     try{
-      const sep = this.url.indexOf('?') === -1 ? '?' : '&';
-      const res = await fetch(this.url + sep + 'token=' + encodeURIComponent(this.token));
+      const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token));
       if(!res.ok) return false;
       const json = await res.json();
-      if(!json || json.error || typeof json.data !== 'object' || !json.data) return false;
+      if(json && json.error) return false;
+      // Firebase trả về "null" (không phải {}) khi node đang trống — coi như dữ liệu rỗng.
+      const cloudData = (json && typeof json === 'object') ? json : {};
 
-      const cloudIsEmpty = Object.keys(json.data).length === 0;
+      const cloudIsEmpty = Object.keys(cloudData).length === 0;
       const localHasData = Object.keys(_mem).length > 0;
       if(cloudIsEmpty && localHasData){
-        // Cloud đang TRỐNG (vd: Apps Script mới deploy lần đầu, hoặc file lưu trên Cloud bị mất) nhưng
+        // Cloud đang TRỐNG (vd: mới tạo Database lần đầu, hoặc dữ liệu trên Cloud bị mất) nhưng
         // máy này đang có dữ liệu — đẩy dữ liệu hiện có trên máy LÊN Cloud thay vì xoá mất dữ liệu cục bộ
         // bằng cách ghi đè với dữ liệu rỗng từ Cloud.
         this._pushedLocalToEmptyCloud = true;
@@ -3566,12 +3578,12 @@ const CloudVault = {
       // Cloud có dữ liệu nhưng có thể THIẾU 1 số mục mà máy này đang có (VD: vừa tải lên 1
       // file Plan trước khi kịp đẩy lên Cloud lần đầu) — giữ lại các mục chỉ-có-ở-máy này
       // thay vì ghi đè mất, rồi đẩy chúng lên Cloud luôn để đồng bộ đầy đủ trở lại.
-      const localOnlyKeys = Object.keys(_mem).filter(k => !(k in json.data));
+      const localOnlyKeys = Object.keys(_mem).filter(k => !(k in cloudData));
       const preserved = {};
       localOnlyKeys.forEach(k => { preserved[k] = _mem[k]; });
 
       Object.keys(_mem).forEach(k => delete _mem[k]);
-      Object.assign(_mem, json.data, preserved);
+      Object.assign(_mem, cloudData, preserved);
 
       if(typeof FileVault !== 'undefined') FileVault._runReloaders();
 
@@ -3589,12 +3601,11 @@ const CloudVault = {
   async peek(){
     if(!this.url || !this.token) return null;
     try{
-      const sep = this.url.indexOf('?') === -1 ? '?' : '&';
-      const res = await fetch(this.url + sep + 'token=' + encodeURIComponent(this.token));
+      const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token));
       if(!res.ok) return null;
       const json = await res.json();
-      if(!json || json.error || typeof json.data !== 'object' || !json.data) return null;
-      return json.data;
+      if(json && json.error) return null;
+      return (json && typeof json === 'object') ? json : {};
     }catch(e){ return null; }
   },
 
@@ -3615,11 +3626,11 @@ const CloudVault = {
     return this._writeChain;
   },
 
-  // Ghi 1 GÓI NHỎ, chỉ gồm đúng các key được chỉ định (VD: chỉ mỗi Plan) — Apps Script sẽ GHÉP
-  // (merge) vào dữ liệu đang có trên Cloud thay vì ghi đè toàn bộ. Dùng cho những dữ liệu quan
-  // trọng nhưng nhỏ gọn (như Plan) để không bị "chết chung" với gói lớn (tồn kho + lịch sử có
-  // thể lên tới hàng MB, dễ đứt giữa chừng trên mạng chậm) — cũng xếp hàng chung 1 chuỗi với
-  // writeAll() để không bao giờ chạy chồng chéo nhau.
+  // Ghi 1 GÓI NHỎ, chỉ gồm đúng các key được chỉ định (VD: chỉ mỗi Plan) — dùng PATCH của Firebase,
+  // tự động GHÉP (merge) các key gửi lên vào dữ liệu đang có trên Cloud thay vì ghi đè toàn bộ node.
+  // Dùng cho những dữ liệu quan trọng nhưng nhỏ gọn (như Plan) để không bị "chết chung" với gói lớn
+  // (tồn kho + lịch sử có thể lên tới hàng MB, dễ đứt giữa chừng trên mạng chậm) — cũng xếp hàng
+  // chung 1 chuỗi với writeAll() để không bao giờ chạy chồng chéo nhau.
   async writeMerge(keys){
     this._writeChain = (this._writeChain || Promise.resolve()).then(() => this._writeMergeNow(keys));
     return this._writeChain;
@@ -3630,21 +3641,19 @@ const CloudVault = {
     const partial = {};
     keys.forEach(k => { if(k in _mem) partial[k] = _mem[k]; });
     try{
-      const payload = JSON.stringify({ token: this.token, data: partial, merge: true });
-      const res = await fetch(this.url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: payload
+      const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(partial)
       });
-      if(!res.ok) throw new Error('HTTP ' + res.status);
-      const json = await res.json().catch(() => null);
-      if(json && json.error) throw new Error(json.error);
+      const bodyJson = await res.json().catch(() => null);
+      if(!res.ok) throw new Error('HTTP ' + res.status + (bodyJson && bodyJson.error ? ' — ' + bodyJson.error : ''));
+      if(bodyJson && bodyJson.error) throw new Error(bodyJson.error);
 
       // Kiểm chứng lại đúng các key nhỏ vừa gửi.
-      const sep = this.url.indexOf('?') === -1 ? '?' : '&';
-      const verifyRes = await fetch(this.url + sep + 'token=' + encodeURIComponent(this.token) + '&_v=' + Date.now());
+      const verifyRes = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token) + '&_v=' + Date.now());
       const verifyJson = verifyRes.ok ? await verifyRes.json().catch(() => null) : null;
-      const cloudData = (verifyJson && typeof verifyJson.data === 'object' && verifyJson.data) ? verifyJson.data : null;
+      const cloudData = (verifyJson && typeof verifyJson === 'object') ? verifyJson : null;
       if(cloudData){
         const bad = keys.filter(k => (k in partial) && (!(k in cloudData) || String(cloudData[k]).length < String(partial[k]).length));
         if(bad.length) throw new Error('Cloud không lưu đủ (thiếu/thiếu bớt: ' + bad.join(', ') + ')');
@@ -3660,26 +3669,23 @@ const CloudVault = {
   async _writeAllNow(){
     if(!this.url || !this.token) return;
     try{
-      const payload = JSON.stringify({ token: this.token, data: _mem });
-      // Dùng Content-Type: text/plain để tránh trình duyệt gửi preflight OPTIONS
-      // (Google Apps Script Web App xử lý preflight không tốt, hay gây "Failed to fetch").
-      const res = await fetch(this.url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      const payload = JSON.stringify(_mem);
+      // PUT ghi đè TOÀN BỘ node "dashboard_data" trên Firebase bằng đúng _mem hiện tại.
+      const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: payload
       });
-      if(!res.ok) throw new Error('HTTP ' + res.status);
-      const json = await res.json().catch(() => null);
-      if(json && json.error) throw new Error(json.error);
+      const bodyJson = await res.json().catch(() => null);
+      if(!res.ok) throw new Error('HTTP ' + res.status + (bodyJson && bodyJson.error ? ' — ' + bodyJson.error : ''));
+      if(bodyJson && bodyJson.error) throw new Error(bodyJson.error);
 
       // KIỂM CHỨNG SAU KHI GHI: đọc lại ngay từ Cloud để xác nhận dữ liệu THẬT SỰ đã lên đó.
-      // Trước đây client chỉ tin vào phản hồi "OK" của Apps Script rồi báo "đã lưu" — nếu phía
-      // Apps Script âm thầm lưu thiếu/không lưu được (VD: vượt giới hạn dung lượng lưu trữ của
-      // Google), người dùng vẫn tưởng đã an toàn và chỉ phát hiện mất dữ liệu ở máy khác.
-      const sep = this.url.indexOf('?') === -1 ? '?' : '&';
-      const verifyRes = await fetch(this.url + sep + 'token=' + encodeURIComponent(this.token) + '&_v=' + Date.now());
+      // Trước đây client chỉ tin vào phản hồi "OK" rồi báo "đã lưu" — nếu phía Cloud âm thầm lưu
+      // thiếu/không lưu được, người dùng vẫn tưởng đã an toàn và chỉ phát hiện mất dữ liệu ở máy khác.
+      const verifyRes = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token) + '&_v=' + Date.now());
       const verifyJson = verifyRes.ok ? await verifyRes.json().catch(() => null) : null;
-      const cloudData = (verifyJson && typeof verifyJson.data === 'object' && verifyJson.data) ? verifyJson.data : null;
+      const cloudData = (verifyJson && typeof verifyJson === 'object') ? verifyJson : null;
       if(cloudData){
         const missing = Object.keys(_mem).filter(k => !(k in cloudData));
         const truncated = Object.keys(_mem).filter(k => (k in cloudData) && String(cloudData[k]).length < String(_mem[k]).length);
@@ -3687,8 +3693,8 @@ const CloudVault = {
           const sizeKB = Math.round(payload.length / 1024);
           throw new Error(
             `Cloud nhận nhưng KHÔNG lưu đủ dữ liệu (thiếu: ${missing.concat(truncated).join(', ') || 'không rõ'}). ` +
-            `Dung lượng đang gửi ~${sizeKB} KB — nhiều khả năng đã vượt giới hạn lưu trữ của Google Apps Script. ` +
-            `Hãy dùng "Xuất JSON" để sao lưu ngay, và xem lại phần lưu trữ trong code Apps Script (nên lưu vào file trên Google Drive thay vì PropertiesService).`
+            `Dung lượng đang gửi ~${sizeKB} KB — kiểm tra lại Rules đã Publish đúng, và tài khoản Firebase chưa vượt hạn mức miễn phí. ` +
+            `Hãy dùng "Xuất JSON" để sao lưu ngay nếu nghi ngờ mất dữ liệu.`
           );
         }
       }
@@ -5437,7 +5443,7 @@ function aggregatePlanRows(rows, planType){
 
 // Gộp NHIỀU lần tải Plan liên tiếp (VD: Row rồi FC rồi HCP trong vài giây) thành ĐÚNG 1 request
 // lưu lên Cloud duy nhất, thay vì mỗi lần tải gửi 1 request riêng — tránh mọi khả năng các
-// request gần nhau bị xử lý sai thứ tự (kể cả phía Google Apps Script mà mình không kiểm soát
+// request gần nhau bị xử lý sai thứ tự (kể cả phía Cloud mà mình không kiểm soát
 // được), vì chỉ còn lại 1 request thì không có gì để tranh chấp thứ tự nữa.
 let _planAutoSaveTimer = null;
 function schedulePlanAutoSaveToCloud(){
@@ -5449,7 +5455,7 @@ function schedulePlanAutoSaveToCloud(){
     try{
       // Chỉ gửi ĐÚNG mục Plan (gói rất nhỏ, vài chục KB) bằng writeMerge() — KHÔNG gửi kèm
       // khối tồn kho/lịch sử khổng lồ (có thể tới hàng MB), để không bị "chết chung" nếu mạng
-      // chậm/đứt giữa chừng lúc gửi khối lớn đó. Apps Script sẽ ghép vào dữ liệu Cloud hiện có.
+      // chậm/đứt giữa chừng lúc gửi khối lớn đó. Firebase sẽ ghép (PATCH) vào dữ liệu Cloud hiện có.
       await CloudVault.writeMerge([STORAGE_KEY_PLANS]);
       if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
       if(statusEl){ statusEl.className = 'upload-status ok'; statusEl.textContent = `✓ Plan vừa tải đã lưu lên Cloud lúc ${fmtDateTime(new Date())}.`; }
@@ -8228,8 +8234,13 @@ function qrScanTick(){
   qrScanRAF = requestAnimationFrame(qrScanTick);
 }
 
-function handleQrScanResult(giNo){
+function handleQrScanResult(giNoRaw){
   if(navigator.vibrate) navigator.vibrate(60);
+  // Mã QR thực tế quét được thường có thêm rất nhiều thông tin phía sau (nối bằng ký tự "^", VD:
+  // "TN526090363725^W31_2026_025313024_2-PMC12+PORD130612^..."), nhưng số GI No. đúng chỉ là
+  // 14 KÝ TỰ ĐẦU TIÊN — luôn cắt về đúng 14 ký tự trước khi tra cứu/so khớp/hiện log, để không bị
+  // báo "Không tìm thấy GI No." do dính theo phần thừa phía sau.
+  const giNo = String(giNoRaw || '').trim().slice(0, 14);
   const result = handleQrScanReal(giNo);
   qrScanCount++;
   qrScanUpdateCounter();
@@ -11726,7 +11737,7 @@ if(btnRefreshData){
     const loadingMsg = document.getElementById('loading-msg');
     const statusEl = document.getElementById('upload-status');
     if(typeof CloudVault === 'undefined' || !CloudVault.url || !CloudVault.token){
-      if(statusEl){ statusEl.className = 'upload-status err'; statusEl.textContent = '✗ Chưa kết nối Cloud — vào Cài đặt để nhập URL Apps Script + Mật khẩu và bấm "Kết nối" trước.'; }
+      if(statusEl){ statusEl.className = 'upload-status err'; statusEl.textContent = '✗ Chưa kết nối Cloud — vào Cài đặt để nhập Database URL + Database secret và bấm "Kết nối" trước.'; }
       return;
     }
     if(hasUnsavedChanges){
@@ -11762,7 +11773,7 @@ if(btnSaveCloud){
     const statusEl = document.getElementById('upload-status');
     // Không có gì thay đổi kể từ lần lưu trước -> bỏ qua, không gửi request lên Cloud nữa. Tránh
     // vừa tốn request vô ích vừa là nguyên nhân hay gặp lỗi "Unauthorized"/thất bại giả khi bấm
-    // "Lưu" liên tục nhiều lần dù dữ liệu không đổi (Google Apps Script đôi khi trả lỗi tạm thời
+    // "Lưu" liên tục nhiều lần dù dữ liệu không đổi (Cloud đôi khi trả lỗi tạm thời
     // nếu gọi dồn dập).
     if(!hasUnsavedChanges){
       if(statusEl && !statusEl.classList.contains('err')){
