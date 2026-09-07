@@ -5519,7 +5519,8 @@ function buildItemIndex(data){
   const idx = {};
   if(!data || !data.kho_detail) return idx;
   for(const kho of Object.keys(data.kho_detail)){
-    for(const [item, , , oqc, qty] of data.kho_detail[kho]){
+    for(const [item, , locator, oqc, qty] of data.kho_detail[kho]){
+      if(PROD_LOCATOR_RE.test(locator || '')) continue; // loại vị trí "Prod" — không tính vào So sánh Plan / Tổng hợp 3 Plan
       const key = item.toLowerCase();
       idx[key] = idx[key] || { byKho: {}, pass: 0, ng: 0, other: 0 };
       idx[key].byKho[kho] = (idx[key].byKho[kho] || 0) + qty;
@@ -5536,7 +5537,8 @@ function buildItemCustPoIndex(data){
   const idx = {};
   if(!data || !data.kho_detail) return idx;
   for(const kho of Object.keys(data.kho_detail)){
-    for(const [item, custpo, , oqc, qty] of data.kho_detail[kho]){
+    for(const [item, custpo, locator, oqc, qty] of data.kho_detail[kho]){
+      if(PROD_LOCATOR_RE.test(locator || '')) continue; // loại vị trí "Prod" — không tính vào So sánh Plan / Tổng hợp 3 Plan
       const key = item.toLowerCase() + '\u241F' + (custpo || '').toLowerCase();
       idx[key] = idx[key] || { byKho: {}, pass: 0, ng: 0, other: 0 };
       idx[key].byKho[kho] = (idx[key].byKho[kho] || 0) + qty;
@@ -5725,7 +5727,7 @@ function exportCompareToExcel(type){
   const detailHeader = ['OQC', 'Kho', 'Item No.', 'Cust PO (tồn kho)', 'Locator', 'SL tồn'];
   const detailRows = [];
   compare.rows.forEach(r => {
-    const locs = buildItemLocatorDetail(r.item);
+    const locs = buildItemLocatorDetail(r.item, null, true); // loại vị trí "Prod" khỏi Excel So sánh Plan
     if(!locs.length){
       detailRows.push(['', '(khong co ton kho)', r.item, '', '', 0]);
     } else {
@@ -6923,7 +6925,7 @@ function exportCombinedPlanToExcel(){
   const detailHeader = ['OQC', 'Kho', 'Item No.', 'Cust PO (tồn kho)', 'Locator', 'SL tồn'];
   const detailRows = [];
   combined.rows.forEach(r => {
-    const locs = buildItemLocatorDetail(r.item);
+    const locs = buildItemLocatorDetail(r.item, null, true); // loại vị trí "Prod" khỏi Excel Tổng hợp 3 Plan
     if(!locs.length){
       detailRows.push(['', '(khong co ton kho)', r.item, '', '', 0]);
     } else {
