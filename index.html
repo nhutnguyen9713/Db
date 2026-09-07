@@ -2190,6 +2190,9 @@
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
         📷 Quét mã
       </button>
+      <button type="button" class="btn-export-excel" id="qr-gi-clear-btn" style="white-space:nowrap; display:none; border-color:var(--red); color:var(--red);" title="Xoá lịch sử các GI đã quét — cho phép quét lại các mã đã quét trước đó. LƯU Ý: nếu lỡ quét lại đúng pallet đã tính rồi, SL sẽ bị cộng thêm 1 lần nữa.">
+        🗑 Đã quét: <span id="qr-gi-clear-count">0</span> GI
+      </button>
     </div>
 
     <div class="panel search-panel" id="cc-suggest-panel" style="margin-bottom:16px; border-color:var(--teal);">
@@ -8366,18 +8369,30 @@ function handleQrScanReal(giNoRaw){
   }
   scannedGiSet.add(norm); // đánh dấu GI này đã xử lý xong — quét lại sẽ báo trùng, không cộng thêm nữa
   saveStateToStorage();
+  updateQrGiClearBtn();
   return response;
 }
 
-const btnOpenQrScan = document.getElementById('btn-open-qr-scan');
-if(btnOpenQrScan) btnOpenQrScan.addEventListener('click', openQrScanOverlay);
-const qrScanCloseBtn = document.getElementById('qr-scan-close-btn');
-if(qrScanCloseBtn) qrScanCloseBtn.addEventListener('click', closeQrScanOverlay);
-const qrScanResetLocBtn = document.getElementById('qr-scan-reset-loc-btn');
-if(qrScanResetLocBtn) qrScanResetLocBtn.addEventListener('click', qrScanResetLocator);
-const qrScanClearHistoryBtn = document.getElementById('qr-scan-clear-history-btn');
-if(qrScanClearHistoryBtn) qrScanClearHistoryBtn.addEventListener('click', () => {
-  if(!scannedGiSet.size){ qrScanSetStatus('Lịch sử quét đang trống — chưa có gì để xoá.', ''); return; }
+// Nút "🗑 Đã quét: N GI" luôn hiện sẵn ngay trên trang Kiểm tồn kho (cạnh nút "📷 Quét mã") — không
+// cần mở camera lên mới xoá được lịch sử quét như trước, vì nhiều lúc người dùng muốn xoá SAU khi
+// đã thoát khỏi màn hình quét rồi. Ẩn hẳn nút này khi chưa quét gì (đỡ rối giao diện).
+function updateQrGiClearBtn(){
+  const btn = document.getElementById('qr-gi-clear-btn');
+  const countEl = document.getElementById('qr-gi-clear-count');
+  if(!btn) return;
+  const n = scannedGiSet.size;
+  if(countEl) countEl.textContent = fmt(n);
+  btn.style.display = n > 0 ? '' : 'none';
+}
+
+// Dùng chung cho cả nút trong overlay quét (qr-scan-clear-history-btn) lẫn nút ngoài trang chính
+// (qr-gi-clear-btn) — cùng 1 hành vi, chỉ khác nơi hiện thông báo kết quả.
+function qrScanClearHistory(useOverlayStatus){
+  if(!scannedGiSet.size){
+    if(useOverlayStatus) qrScanSetStatus('Lịch sử quét đang trống — chưa có gì để xoá.', '');
+    else alert('Lịch sử quét đang trống — chưa có gì để xoá.');
+    return;
+  }
   const ok = confirm(
     `Xoá lịch sử ${scannedGiSet.size} GI No. đã quét?\n\n` +
     `Sau khi xoá, các mã ĐÃ quét trước đó có thể quét lại được (không còn báo "đã quét trước đó — không quét trùng" nữa). ` +
@@ -8387,9 +8402,25 @@ if(qrScanClearHistoryBtn) qrScanClearHistoryBtn.addEventListener('click', () => 
   const clearedCount = scannedGiSet.size;
   scannedGiSet.clear();
   saveStateToStorage();
-  qrScanSetStatus(`Đã xoá lịch sử ${fmt(clearedCount)} GI đã quét — có thể quét lại bình thường.`, 'ok');
-  qrScanAddLog(`🗑 Đã xoá lịch sử ${clearedCount} GI đã quét trong phiên.`, 'ok');
-});
+  updateQrGiClearBtn();
+  if(useOverlayStatus){
+    qrScanSetStatus(`Đã xoá lịch sử ${fmt(clearedCount)} GI đã quét — có thể quét lại bình thường.`, 'ok');
+    qrScanAddLog(`🗑 Đã xoá lịch sử ${clearedCount} GI đã quét trong phiên.`, 'ok');
+  } else if(typeof showAppToast === 'function'){
+    showAppToast(`✓ Đã xoá lịch sử ${clearedCount} GI đã quét.`);
+  }
+}
+
+const btnOpenQrScan = document.getElementById('btn-open-qr-scan');
+if(btnOpenQrScan) btnOpenQrScan.addEventListener('click', openQrScanOverlay);
+const qrScanCloseBtn = document.getElementById('qr-scan-close-btn');
+if(qrScanCloseBtn) qrScanCloseBtn.addEventListener('click', closeQrScanOverlay);
+const qrScanResetLocBtn = document.getElementById('qr-scan-reset-loc-btn');
+if(qrScanResetLocBtn) qrScanResetLocBtn.addEventListener('click', qrScanResetLocator);
+const qrScanClearHistoryBtn = document.getElementById('qr-scan-clear-history-btn');
+if(qrScanClearHistoryBtn) qrScanClearHistoryBtn.addEventListener('click', () => qrScanClearHistory(true));
+const qrGiClearBtn = document.getElementById('qr-gi-clear-btn');
+if(qrGiClearBtn) qrGiClearBtn.addEventListener('click', () => qrScanClearHistory(false));
 
 /* ============ Phiếu pick theo container — sắp theo thứ tự đi 1 vòng không quay lui, FIFO theo
    ngày nhận (Lot/GI No. cũ nhất lấy trước), giới hạn đúng số lượng cần lấy theo kế hoạch. Xem
@@ -9592,6 +9623,7 @@ async function saveConfirmedSnapshotAndReset(){
     // quét lại đúng những pallet đó bình thường, không bị báo "đã quét trùng" nữa).
     ktInputValues = {};
     scannedGiSet.clear();
+    if(typeof updateQrGiClearBtn === 'function') updateQrGiClearBtn();
     saveStateToStorage();
     renderConfirmedList();
     renderKhoSearchPage();
@@ -11728,6 +11760,7 @@ function initDashboard(){
   }
 
   renderKhoSearchPage();
+  if(typeof updateQrGiClearBtn === 'function') updateQrGiClearBtn();
 }
 initDashboard();
 FileVault.registerReloader(initDashboard);
