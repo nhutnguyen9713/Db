@@ -8189,6 +8189,8 @@ let qrScanPhysicalLocator = null; // vị trí thực tế đang đứng quét t
 // là OQC gì (VD: vừa IQC xong, tem tồn kho chưa kịp cập nhật) — nếu khác OQC hệ thống sẽ báo "Sai OQC"
 // và KHÔNG cộng nhầm vào dòng OQC khác, tránh 2 dòng PASS/NG bù trừ số lượng cho nhau.
 let qrScanOqcOverride = null;
+let qrBarcodeDetector = null; // null = dùng jsQR (dự phòng); có giá trị = dùng bộ nhận diện của máy
+let qrScanNativeBusy = false; // chặn không cho 2 lượt detect() (bất đồng bộ) chạy chồng lên nhau
 
 function qrScanAddLog(text, cls){
   const log = document.getElementById('qr-scan-log');
@@ -8301,7 +8303,25 @@ async function openQrScanOverlay(){
   }catch(e){
     qrScanAddLog('⚠ Lỗi khi phát âm thanh: ' + e.message, 'warn');
   }
-  qrScanTick();
+  // Ưu tiên dùng bộ nhận diện mã vạch CÓ SẴN CỦA HỆ ĐIỀU HÀNH (BarcodeDetector — trên Android chạy
+  // bằng chính công cụ Google ML Kit tích hợp sẵn) nếu trình duyệt hỗ trợ — nhận diện chính xác và
+  // nhanh hơn NHIỀU so với tự giải mã bằng JavaScript thuần (jsQR), đặc biệt với mã QR dày/nhiều chi
+  // tiết hoặc ảnh không hoàn hảo. jsQR chỉ dùng làm phương án dự phòng cho trình duyệt không hỗ trợ
+  // (VD: Safari/iPhone hiện chưa hỗ trợ BarcodeDetector).
+  qrBarcodeDetector = null;
+  if('BarcodeDetector' in window){
+    try{
+      qrBarcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+      qrScanAddLog('✓ Dùng bộ nhận diện mã vạch có sẵn của máy (nhanh & chính xác hơn) để quét.', 'ok');
+    }catch(e){
+      qrBarcodeDetector = null;
+      qrScanAddLog('⚠ Máy có API nhận diện mã vạch nhưng khởi tạo lỗi (' + e.message + ') — dùng phương án dự phòng jsQR.', 'warn');
+    }
+  } else {
+    qrScanAddLog('ℹ Trình duyệt này chưa hỗ trợ bộ nhận diện mã vạch có sẵn — dùng phương án dự phòng jsQR (yếu hơn với mã dày/ảnh không hoàn hảo).', '');
+  }
+  if(qrBarcodeDetector) qrScanTickNative();
+  else qrScanTick();
 }
 
 function closeQrScanOverlay(){
@@ -8314,6 +8334,35 @@ function closeQrScanOverlay(){
     qrScanStream = null;
   }
   if(qrAudioCtx && qrAudioCtx.state === 'running') qrAudioCtx.suspend().catch(() => {});
+}
+
+// Vòng quét dùng BarcodeDetector CÓ SẴN CỦA MÁY (nhanh/chính xác hơn jsQR nhiều) — nhận thẳng
+// <video> làm đầu vào (không cần tự vẽ ra canvas để giải mã như jsQR), trình duyệt tự lo phần đọc
+// khung hình camera hiệu quả nhất.
+async function qrScanTickNative(){
+  const video = document.getElementById('qr-scan-video');
+  if(!video || !qrScanStream){ return; }
+  if(video.readyState !== video.HAVE_ENOUGH_DATA || qrScanNativeBusy){
+    qrScanRAF = requestAnimationFrame(qrScanTickNative);
+    return;
+  }
+  qrScanNativeBusy = true;
+  try{
+    const barcodes = await qrBarcodeDetector.detect(video);
+    if(barcodes && barcodes.length && barcodes[0].rawValue){
+      const data = barcodes[0].rawValue;
+      // Chỉ xử lý 1 mã ĐÚNG 1 LẦN trong khi nó còn nằm liên tục trong khung hình (xem giải thích ở
+      // qrScanTick bên dưới — áp dụng y hệt).
+      if(data !== qrScanLastCode){
+        qrScanLastCode = data;
+        handleQrScanResult(data.trim());
+      }
+    } else {
+      qrScanLastCode = null;
+    }
+  }catch(err){ /* bỏ qua lỗi đọc frame lẻ tẻ, thử lại frame sau */ }
+  qrScanNativeBusy = false;
+  qrScanRAF = requestAnimationFrame(qrScanTickNative);
 }
 
 function qrScanTick(){
