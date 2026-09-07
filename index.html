@@ -61,6 +61,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -3092,12 +3095,16 @@
           <input type="text" id="cv-url-input" placeholder="Database URL (...firebasedatabase.app/)" autocomplete="off">
           <input type="password" id="cv-token-input" placeholder="Database secret" autocomplete="off" style="flex:0 0 130px;">
         </div>
+        <div class="settings-cloud-row" style="margin-top:6px;">
+          <input type="text" id="cv-apikey-input" placeholder="Web API Key (để bật đồng bộ realtime tức thời)" autocomplete="off">
+        </div>
         <div class="settings-btn-row">
           <button class="btn-update btn-ghost-outline" id="cv-connect-btn" type="button" title="Kết nối tới Firebase Realtime Database — nhập đủ Database URL + Database secret rồi bấm">Kết nối</button>
           <button class="btn-update btn-ghost-outline" id="cv-disconnect-btn" type="button" title="Ngắt kết nối Cloud trên trình duyệt này">Ngắt</button>
           <button class="btn-update btn-ghost-outline" id="cv-test-btn" type="button" title="Kiểm tra kết nối và báo rõ lỗi thật thay vì chỉ báo chung chung">Kiểm tra kết nối</button>
         </div>
         <div class="upload-status" id="cv-status">Chưa kết nối Cloud</div>
+        <div class="upload-status" id="cv-realtime-status" style="margin-top:4px;"></div>
       </div>
 
       <div class="settings-section">
@@ -3497,17 +3504,33 @@ const FileVault = {
      liệu, lần ghi đầu tiên sẽ tự tạo.
    - Database URL & secret là THÔNG TIN KẾT NỐI (không phải dữ liệu dashboard) nên vẫn lưu trong
      localStorage của trình duyệt để khỏi phải nhập lại; dữ liệu THẬT của dashboard nằm trên
-     Firebase, không nằm trong localStorage. */
+     Firebase, không nằm trong localStorage.
+   - "Web API Key" (tuỳ chọn — để trống vẫn dùng bình thường, chỉ mất khả năng realtime): bật thêm
+     lớp ĐỒNG BỘ REALTIME THẬT (WebSocket qua Firebase SDK, đăng nhập ẩn danh) — thiết bị khác vừa
+     ghi thay đổi lên Cloud sẽ TỰ ĐỘNG kéo về máy này ngay, không cần bấm "Làm mới dữ liệu" nữa. Có
+     bảo vệ: KHÔNG BAO GIỜ tự ghi đè trong lúc người dùng đang gõ dở/chưa lưu — sẽ tự áp dụng ngay
+     khi an toàn (xem _isSafeToApply/_pendingSnapshot). Cần bật "Anonymous" trong Firebase
+     Authentication → Sign-in method trước khi dùng được. */
 const CV_LS_URL = 'tn5_cloud_gas_url';
 const CV_LS_TOKEN = 'tn5_cloud_gas_token';
+const CV_LS_APIKEY = 'tn5_cloud_apikey';
 
 const CloudVault = {
   url: '',
   token: '',
+  apiKey: '',
   _writeTimer: null,
   _retryTimer: null,
   _retryCount: 0,
   _hadError: false,
+  // --- Realtime (WebSocket, qua Firebase SDK) — lớp BỔ SUNG bên trên REST đã có sẵn ở trên. REST
+  // vẫn là "xương sống" cho đọc/ghi chủ động (bấm Lưu, Kết nối, Kiểm tra...) vì đã có sẵn cơ chế
+  // kiểm chứng & retry chắc chắn. Realtime CHỈ để tự phát hiện khi CÓ THIẾT BỊ KHÁC vừa ghi thay đổi
+  // lên Cloud, rồi tự kéo về máy này ngay — không cần đợi người dùng bấm "Làm mới dữ liệu" nữa.
+  _fbRef: null,
+  _realtimeActive: false,
+  _pendingSnapshot: null, // dữ liệu mới từ thiết bị khác đang CHỜ, vì máy này đang gõ dở/chưa lưu
+  _safeCheckTimer: null,
 
   // Đường dẫn REST cố định trong Realtime Database — gộp mọi dữ liệu dashboard vào 1 node riêng
   // "dashboard_data", tránh đụng nếu sau này project Firebase này còn dùng cho việc khác.
@@ -3519,12 +3542,15 @@ const CloudVault = {
     try{
       this.url = localStorage.getItem(CV_LS_URL) || '';
       this.token = localStorage.getItem(CV_LS_TOKEN) || '';
+      this.apiKey = localStorage.getItem(CV_LS_APIKEY) || '';
     }catch(e){}
     this._bindUi();
     const urlInput = document.getElementById('cv-url-input');
     const tokenInput = document.getElementById('cv-token-input');
+    const apiKeyInput = document.getElementById('cv-apikey-input');
     if(urlInput) urlInput.value = this.url;
     if(tokenInput) tokenInput.value = this.token;
+    if(apiKeyInput) apiKeyInput.value = this.apiKey;
     if(this.url && this.token){
       this._setStatus('Đang tải dữ liệu từ Cloud…', '');
       this._pushedLocalToEmptyCloud = false;
@@ -3536,6 +3562,7 @@ const CloudVault = {
           : '✗ Không tải được — kiểm tra lại Database URL / Database secret, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết.';
         this._setStatus(msg, ok ? 'ok' : 'err');
       });
+      try{ this._startRealtime(); }catch(e){ console.warn('CloudVault: lỗi khởi động realtime:', e); }
     } else {
       this._setStatus('Chưa kết nối Cloud — dán Database URL + Database secret rồi bấm "Kết nối".', '');
     }
@@ -3545,17 +3572,21 @@ const CloudVault = {
     try{
       localStorage.setItem(CV_LS_URL, this.url);
       localStorage.setItem(CV_LS_TOKEN, this.token);
+      localStorage.setItem(CV_LS_APIKEY, this.apiKey);
     }catch(e){}
   },
 
   async connect(){
     const urlInput = document.getElementById('cv-url-input');
     const tokenInput = document.getElementById('cv-token-input');
+    const apiKeyInput = document.getElementById('cv-apikey-input');
     const url = urlInput ? urlInput.value.trim() : '';
     const token = tokenInput ? tokenInput.value.trim() : '';
+    const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
     if(!url || !token){ this._setStatus('✗ Cần nhập cả Database URL và Database secret.', 'err'); return; }
     this.url = url;
     this.token = token;
+    this.apiKey = apiKey;
     this._setStatus('Đang kết nối & tải dữ liệu từ Cloud…', '');
     this._pushedLocalToEmptyCloud = false;
     const ok = await this.readAll();
@@ -3567,22 +3598,28 @@ const CloudVault = {
           : '✓ Đã kết nối & tải dữ liệu từ Cloud.',
         'ok'
       );
+      try{ this._startRealtime(); }catch(e){ console.warn('CloudVault: lỗi khởi động realtime:', e); }
     } else {
       this._setStatus('✗ Không tải được — kiểm tra lại Database URL / Database secret, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết. (Kiểm tra lại đã dán đúng Database secret ở mục Project settings → Service accounts, và Rules đã Publish chưa.)', 'err');
     }
   },
 
   disconnect(){
+    this._stopRealtime();
     this.url = '';
     this.token = '';
+    this.apiKey = '';
     try{
       localStorage.removeItem(CV_LS_URL);
       localStorage.removeItem(CV_LS_TOKEN);
+      localStorage.removeItem(CV_LS_APIKEY);
     }catch(e){}
     const urlInput = document.getElementById('cv-url-input');
     const tokenInput = document.getElementById('cv-token-input');
+    const apiKeyInput = document.getElementById('cv-apikey-input');
     if(urlInput) urlInput.value = '';
     if(tokenInput) tokenInput.value = '';
+    if(apiKeyInput) apiKeyInput.value = '';
     this._setStatus('Đã ngắt kết nối Cloud trên trình duyệt này.', '');
   },
 
@@ -3622,38 +3659,138 @@ const CloudVault = {
       if(json && json.error) return false;
       // Firebase trả về "null" (không phải {}) khi node đang trống — coi như dữ liệu rỗng.
       const cloudData = (json && typeof json === 'object') ? json : {};
+      return await this._applyCloudSnapshot(cloudData);
+    }catch(e){ console.warn('CloudVault đọc lỗi:', e); return false; }
+  },
 
-      const cloudIsEmpty = Object.keys(cloudData).length === 0;
-      const localHasData = Object.keys(_mem).length > 0;
-      if(cloudIsEmpty && localHasData){
-        // Cloud đang TRỐNG (vd: mới tạo Database lần đầu, hoặc dữ liệu trên Cloud bị mất) nhưng
-        // máy này đang có dữ liệu — đẩy dữ liệu hiện có trên máy LÊN Cloud thay vì xoá mất dữ liệu cục bộ
-        // bằng cách ghi đè với dữ liệu rỗng từ Cloud.
-        this._pushedLocalToEmptyCloud = true;
-        try{ await this.writeAll(); }catch(e){ /* đã báo lỗi trong writeAll, không làm hỏng luồng đọc */ }
-        if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
-        return true;
-      }
-
-      // Cloud có dữ liệu nhưng có thể THIẾU 1 số mục mà máy này đang có (VD: vừa tải lên 1
-      // file Plan trước khi kịp đẩy lên Cloud lần đầu) — giữ lại các mục chỉ-có-ở-máy này
-      // thay vì ghi đè mất, rồi đẩy chúng lên Cloud luôn để đồng bộ đầy đủ trở lại.
-      const localOnlyKeys = Object.keys(_mem).filter(k => !(k in cloudData));
-      const preserved = {};
-      localOnlyKeys.forEach(k => { preserved[k] = _mem[k]; });
-
-      Object.keys(_mem).forEach(k => delete _mem[k]);
-      Object.assign(_mem, cloudData, preserved);
-
-      if(typeof FileVault !== 'undefined') FileVault._runReloaders();
-
-      if(localOnlyKeys.length){ try{ await this.writeAll(); }catch(e){ /* đã báo lỗi trong writeAll */ } }
-      // Vừa đồng bộ xong với Cloud (đọc về + nếu cần đẩy phần chỉ-có-ở-máy lên) — coi như "đã lưu".
-      // Đặt SAU _runReloaders() vì việc render lại có thể tự động ghi snapshot tồn kho hôm nay
-      // (đánh dấu "chưa lưu" lại) — ta muốn trạng thái sạch phản ánh đúng lúc này.
+  // Áp dụng 1 bản dữ liệu Cloud (từ readAll() HOẶC từ listener realtime) vào _mem + render lại toàn
+  // bộ trang — TÁCH RIÊNG ra khỏi readAll() để realtime dùng lại đúng 1 logic gộp duy nhất, không
+  // viết 2 nơi dễ lệch nhau.
+  async _applyCloudSnapshot(cloudData){
+    const cloudIsEmpty = Object.keys(cloudData).length === 0;
+    const localHasData = Object.keys(_mem).length > 0;
+    if(cloudIsEmpty && localHasData){
+      // Cloud đang TRỐNG (vd: mới tạo Database lần đầu, hoặc dữ liệu trên Cloud bị mất) nhưng
+      // máy này đang có dữ liệu — đẩy dữ liệu hiện có trên máy LÊN Cloud thay vì xoá mất dữ liệu cục bộ
+      // bằng cách ghi đè với dữ liệu rỗng từ Cloud.
+      this._pushedLocalToEmptyCloud = true;
+      try{ await this.writeAll(); }catch(e){ /* đã báo lỗi trong writeAll, không làm hỏng luồng đọc */ }
       if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
       return true;
-    }catch(e){ console.warn('CloudVault đọc lỗi:', e); return false; }
+    }
+
+    // Cloud có dữ liệu nhưng có thể THIẾU 1 số mục mà máy này đang có (VD: vừa tải lên 1
+    // file Plan trước khi kịp đẩy lên Cloud lần đầu) — giữ lại các mục chỉ-có-ở-máy này
+    // thay vì ghi đè mất, rồi đẩy chúng lên Cloud luôn để đồng bộ đầy đủ trở lại.
+    const localOnlyKeys = Object.keys(_mem).filter(k => !(k in cloudData));
+    const preserved = {};
+    localOnlyKeys.forEach(k => { preserved[k] = _mem[k]; });
+
+    Object.keys(_mem).forEach(k => delete _mem[k]);
+    Object.assign(_mem, cloudData, preserved);
+
+    if(typeof FileVault !== 'undefined') FileVault._runReloaders();
+
+    if(localOnlyKeys.length){ try{ await this.writeAll(); }catch(e){ /* đã báo lỗi trong writeAll */ } }
+    // Vừa đồng bộ xong với Cloud (đọc về + nếu cần đẩy phần chỉ-có-ở-máy lên) — coi như "đã lưu".
+    // Đặt SAU _runReloaders() vì việc render lại có thể tự động ghi snapshot tồn kho hôm nay
+    // (đánh dấu "chưa lưu" lại) — ta muốn trạng thái sạch phản ánh đúng lúc này.
+    if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
+    return true;
+  },
+
+  // ============ Realtime (WebSocket qua Firebase SDK) ============
+  // An toàn: KHÔNG BAO GIỜ tự áp dụng dữ liệu mới trong lúc người dùng đang gõ dở (đang có ô nhập
+  // liệu nào đó đang được focus) hoặc đang có thay đổi CHƯA LƯU trên máy này — tránh ghi đè mất số
+  // liệu đang nhập ngay dưới tay người dùng. Nếu chưa an toàn, giữ lại (_pendingSnapshot) và tự kiểm
+  // tra lại định kỳ, áp dụng ngay khi an toàn.
+  _isSafeToApply(){
+    if(typeof hasUnsavedChanges !== 'undefined' && hasUnsavedChanges) return false;
+    const ae = document.activeElement;
+    if(!ae) return true;
+    const tag = (ae.tagName || '').toLowerCase();
+    if(tag === 'input' || tag === 'textarea' || tag === 'select') return false;
+    if(ae.isContentEditable) return false;
+    return true;
+  },
+
+  _setRealtimeStatus(msg, kind){
+    const el = document.getElementById('cv-realtime-status');
+    if(el){ el.textContent = msg; el.className = 'upload-status' + (kind === 'ok' ? ' ok' : kind === 'err' ? ' err' : ''); }
+  },
+
+  _startRealtime(){
+    this._stopRealtime(); // huỷ kết nối realtime cũ (nếu có) trước khi mở kết nối mới
+    if(!this.apiKey){
+      this._setRealtimeStatus('ℹ Chưa nhập Web API Key — chỉ đồng bộ khi bấm nút (không tự động realtime). Xem hướng dẫn lấy Web API Key nếu muốn bật.', '');
+      return;
+    }
+    if(typeof firebase === 'undefined'){
+      this._setRealtimeStatus('⚠ Không tải được thư viện Firebase SDK (cần Internet) — không bật được realtime.', 'err');
+      return;
+    }
+    try{
+      if(!firebase.apps || !firebase.apps.length){
+        firebase.initializeApp({ apiKey: this.apiKey, databaseURL: this.url });
+      }
+      this._setRealtimeStatus('Đang bật đồng bộ realtime…', '');
+      firebase.auth().signInAnonymously()
+        .then(() => {
+          this._fbRef = firebase.database().ref('dashboard_data');
+          this._fbRef.on('value', (snapshot) => this._onRealtimeValue(snapshot), (err) => {
+            console.warn('CloudVault realtime lỗi:', err);
+            this._setRealtimeStatus('⚠ Mất kết nối realtime: ' + err.message + ' — vẫn dùng được nút "Lưu"/"Làm mới dữ liệu" như bình thường.', 'err');
+          });
+          this._realtimeActive = true;
+          this._setRealtimeStatus('✓ Đồng bộ realtime đang bật — thay đổi từ thiết bị khác sẽ tự cập nhật ngay.', 'ok');
+          clearInterval(this._safeCheckTimer);
+          this._safeCheckTimer = setInterval(() => this._flushPendingSnapshot(), 3000);
+        })
+        .catch(err => {
+          this._setRealtimeStatus('⚠ Không đăng nhập ẩn danh được: ' + err.message + ' — kiểm tra đã bật "Anonymous" trong Firebase Authentication chưa, và Web API Key đã đúng chưa.', 'err');
+        });
+    }catch(e){
+      this._setRealtimeStatus('⚠ Lỗi khởi tạo Firebase SDK: ' + e.message, 'err');
+    }
+  },
+
+  _stopRealtime(){
+    if(this._fbRef){ try{ this._fbRef.off(); }catch(e){} this._fbRef = null; }
+    clearInterval(this._safeCheckTimer);
+    this._safeCheckTimer = null;
+    this._pendingSnapshot = null;
+    this._realtimeActive = false;
+    // Xoá app Firebase cũ (nếu có) để lần _startRealtime() sau luôn khởi tạo lại ĐÚNG url/apiKey mới
+    // nhất — phòng trường hợp người dùng đổi Database URL/Web API Key rồi bấm "Kết nối" lại.
+    if(typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length){
+      firebase.apps.forEach(app => { try{ app.delete(); }catch(e){} });
+    }
+    this._setRealtimeStatus('', '');
+  },
+
+  // Có dữ liệu mới từ Cloud (do THIẾT BỊ KHÁC vừa ghi, hoặc do CHÍNH máy này vừa ghi — Firebase báo
+  // lại luôn cả 2 trường hợp, vô hại vì gộp lại dữ liệu giống hệt cũng không đổi gì).
+  _onRealtimeValue(snapshot){
+    const val = snapshot.val();
+    const cloudData = (val && typeof val === 'object') ? val : {};
+    if(this._isSafeToApply()){
+      this._pendingSnapshot = null;
+      this._applyCloudSnapshot(cloudData);
+      this._setRealtimeStatus('✓ Realtime đang bật — vừa tự cập nhật dữ liệu mới nhất.', 'ok');
+    } else {
+      // Đang gõ dở/chưa lưu -> KHÔNG áp dụng ngay, chờ tới lúc an toàn (xem _flushPendingSnapshot).
+      this._pendingSnapshot = cloudData;
+      this._setRealtimeStatus('🔄 Có dữ liệu mới từ thiết bị khác — sẽ tự áp dụng ngay khi bạn ngừng nhập/đã lưu xong.', '');
+    }
+  },
+
+  _flushPendingSnapshot(){
+    if(!this._pendingSnapshot) return;
+    if(!this._isSafeToApply()) return;
+    const data = this._pendingSnapshot;
+    this._pendingSnapshot = null;
+    this._applyCloudSnapshot(data);
+    this._setRealtimeStatus('✓ Realtime đang bật — vừa tự áp dụng dữ liệu mới từ thiết bị khác.', 'ok');
   },
 
   // Đọc dữ liệu THÔ hiện có trên Cloud, KHÔNG đụng gì tới _mem/trạng thái cục bộ — chỉ để "nhìn
