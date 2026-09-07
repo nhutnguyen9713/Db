@@ -720,6 +720,17 @@
     background:#1d2430; color:#fff; padding:11px 20px; border-radius:9px; font-size:13px; font-weight:600;
     box-shadow:0 8px 24px rgba(0,0,0,0.35); max-width:92vw; text-align:center;
   }
+  .pwa-update-banner{
+    position:fixed; top:0; left:0; right:0; z-index:21000;
+    background:var(--violet); color:#fff; font-size:13.5px; font-weight:600;
+    padding:10px 14px; display:flex; align-items:center; justify-content:center; gap:10px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.25); padding-top:calc(10px + env(safe-area-inset-top, 0px));
+  }
+  .pwa-update-banner button{
+    border:1px solid rgba(255,255,255,0.6); background:rgba(255,255,255,0.15); color:#fff;
+    border-radius:8px; padding:5px 12px; font-size:13px; font-weight:700; cursor:pointer;
+  }
+  .pwa-update-banner button:hover{background:rgba(255,255,255,0.3);}
   .cpt-hidden-cont-popup-title{font-size:11.5px; color:var(--muted-2); margin-bottom:8px; line-height:1.5;}
   .cpt-hidden-cont-popup-list{display:flex; flex-wrap:wrap; gap:6px;}
   .cpt-hidden-cont-chip{
@@ -931,16 +942,17 @@
   }
   .qr-scan-topbar .btn-update{background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.3); color:#fff;}
   .qr-scan-locator-row{
-    display:flex; align-items:center; justify-content:space-between; gap:8px;
-    background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); border-radius:8px;
-    padding:6px 10px;
+    display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); border-radius:10px;
+    padding:10px 12px;
   }
-  .qr-scan-locator-badge{color:#fff; font-size:12px; font-weight:700; font-family:var(--mono);}
+  .qr-scan-locator-badge{color:#fff; font-size:13px; font-weight:700; font-family:var(--mono);}
   .qr-scan-reset-loc-btn{
-    border:1px solid rgba(255,255,255,0.35); background:rgba(255,255,255,0.1); color:#fff;
-    border-radius:6px; padding:4px 9px; font-size:11.5px; cursor:pointer; white-space:nowrap;
+    border:1px solid rgba(255,255,255,0.4); background:rgba(255,255,255,0.14); color:#fff;
+    border-radius:10px; padding:12px 20px; font-size:15px; font-weight:700; cursor:pointer;
+    white-space:nowrap; min-height:48px;
   }
-  .qr-scan-reset-loc-btn:hover{background:rgba(255,255,255,0.2);}
+  .qr-scan-reset-loc-btn:hover, .qr-scan-reset-loc-btn:active{background:rgba(255,255,255,0.26);}
   .qr-scan-video-wrap{
     position:relative; width:100%; aspect-ratio:1/1; background:#000; border-radius:12px; overflow:hidden;
   }
@@ -12812,15 +12824,37 @@ CloudVault.init();
 })();
 </script>
 <div id="app-toast" class="app-toast" style="display:none;"></div>
+<div id="pwa-update-banner" class="pwa-update-banner" style="display:none;">
+  🔄 Có bản cập nhật mới — <button type="button" id="pwa-update-reload-btn">Bấm để tải lại</button>
+</div>
 <script>
 // Đăng ký Service Worker để có thể "Cài đặt" thành app riêng (PWA) — cần chạy qua https:// hoặc
 // http://localhost, không hoạt động khi mở file trực tiếp (file:// hoặc content://).
 if('serviceWorker' in navigator){
   window.addEventListener('load', function(){
-    navigator.serviceWorker.register('sw.js').catch(function(err){
+    navigator.serviceWorker.register('sw.js').then(function(reg){
+      // Chủ động kiểm tra ngay có bản sw.js mới không (không chỉ chờ trình duyệt tự kiểm tra định kỳ)
+      reg.update().catch(function(){});
+
+      // Có Service Worker MỚI đang cài (updatefound) -> theo dõi tới khi cài xong (installed).
+      reg.addEventListener('updatefound', function(){
+        const newWorker = reg.installing;
+        if(!newWorker) return;
+        newWorker.addEventListener('statechange', function(){
+          // "installed" + đã có controller từ trước = đây là bản CẬP NHẬT (không phải lần cài đầu
+          // tiên) -> báo cho người dùng biết, để họ chủ động bấm tải lại lấy bản mới.
+          if(newWorker.state === 'installed' && navigator.serviceWorker.controller){
+            const banner = document.getElementById('pwa-update-banner');
+            if(banner) banner.style.display = 'flex';
+          }
+        });
+      });
+    }).catch(function(err){
       console.warn('Không đăng ký được Service Worker (PWA sẽ không cài đặt được):', err);
     });
   });
+  const reloadBtn = document.getElementById('pwa-update-reload-btn');
+  if(reloadBtn) reloadBtn.addEventListener('click', function(){ window.location.reload(); });
 }
 </script>
 </body>
