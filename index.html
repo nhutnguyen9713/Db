@@ -6399,9 +6399,22 @@ function buildContPickTooltipHtml(items){
     const locsHtml = it.locs.length
       ? `<div class="cpt-locs">${it.locs.map(l => `<div class="cpt-loc-row"><span>${escHtml(l.locator)}</span><b>${fmt(l.qty)}</b></div>`).join('')}</div>`
       : `<div class="cpt-empty">Không có tồn kho</div>`;
+    // Gộp thêm tổng tồn theo TỪNG KHO (3B/3A/2B/DG1...) cho mã hàng này — bên cạnh chi tiết theo
+    // từng Locator ở trên, để biết ngay kho nào đang giữ bao nhiêu mà không cần cộng tay từng dòng.
+    const khoTotals = new Map();
+    it.locs.forEach(l => khoTotals.set(l.kho, (khoTotals.get(l.kho) || 0) + l.qty));
+    const khoOrder = [...new Set([...CPT_KHO_ORDER, ...khoTotals.keys()])];
+    const khoRowsHtml = khoOrder
+      .filter(kho => khoTotals.has(kho))
+      .map(kho => `<div class="cpt-loc-row"><span>${escHtml((kho || '—').replace('Kho ', ''))}</span><b>${fmt(khoTotals.get(kho))}</b></div>`)
+      .join('');
+    const khoBlockHtml = khoRowsHtml
+      ? `<div class="cpt-total" style="color:var(--muted); font-weight:600; margin-top:4px;">Theo kho:</div><div class="cpt-locs">${khoRowsHtml}</div>`
+      : '';
     return `<div class="cpt-item">
       <div class="cpt-item-head"><b>${escHtml(it.item)}</b>${it.po ? ` <span class="cpt-po">(PO ${escHtml(it.po)})</span>` : ''} <span class="cpt-kh">— KH ${fmt(it.qty)} Pcs</span></div>
       ${locsHtml}
+      ${khoBlockHtml}
       <div class="cpt-total">Tổng tồn hiện có: <b>${fmt(it.totalOnHand)}</b> Pcs</div>
     </div>`;
   }).join('');
