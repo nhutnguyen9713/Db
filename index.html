@@ -4,6 +4,18 @@
 <meta charset="UTF-8">
 <meta id="viewport-meta" name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>Dashboard Tồn Kho — Tổng hợp Mã / Kho</title>
+
+<!-- ===== PWA: cài được thành app riêng trên màn hình chính (iOS & Android) ===== -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#d87a0f">
+<!-- iOS Safari cần các thẻ riêng bên dưới, không chỉ đọc manifest.json như Android -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TN5">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<!-- ===== Hết phần PWA ===== -->
+
 <script>
 /* Bộ bắt lỗi JS hiển thị ngay trên màn hình — để chẩn đoán lỗi trên máy không có console (vd: iPhone) */
 (function(){
@@ -12800,5 +12812,16 @@ CloudVault.init();
 })();
 </script>
 <div id="app-toast" class="app-toast" style="display:none;"></div>
+<script>
+// Đăng ký Service Worker để có thể "Cài đặt" thành app riêng (PWA) — cần chạy qua https:// hoặc
+// http://localhost, không hoạt động khi mở file trực tiếp (file:// hoặc content://).
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(err){
+      console.warn('Không đăng ký được Service Worker (PWA sẽ không cài đặt được):', err);
+    });
+  });
+}
+</script>
 </body>
 </html>
