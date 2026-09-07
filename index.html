@@ -992,6 +992,19 @@
     white-space:nowrap; min-height:48px; flex-shrink:0;
   }
   .qr-scan-reset-loc-btn:hover, .qr-scan-reset-loc-btn:active{background:rgba(255,255,255,0.26);}
+  .qr-scan-oqc-row{
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.14); border-radius:10px;
+    padding:8px 12px;
+  }
+  .qr-scan-oqc-label{color:rgba(255,255,255,0.75); font-size:12px; font-weight:600; flex-shrink:0;}
+  .qr-scan-oqc-btns{display:flex; gap:6px; flex-wrap:wrap;}
+  .qr-scan-oqc-btn{
+    border:1px solid rgba(255,255,255,0.35); background:transparent; color:#fff;
+    border-radius:8px; padding:6px 12px; font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .qr-scan-oqc-btn.active{background:var(--amber-bright); border-color:var(--amber-bright); color:#3a2400;}
+  .qr-scan-oqc-btn:not(.active):hover{background:rgba(255,255,255,0.14);}
   .qr-scan-video-wrap{
     position:relative; width:100%; aspect-ratio:1/1; background:#000; border-radius:12px; overflow:hidden;
   }
@@ -2988,6 +3001,15 @@
     <div class="qr-scan-locator-row">
       <span id="qr-scan-locator-badge" class="qr-scan-locator-badge">📍 Chưa xác lập vị trí — quét 1 mã bất kỳ để bắt đầu</span>
       <button type="button" class="qr-scan-reset-loc-btn" id="qr-scan-reset-loc-btn" title="Bấm khi bạn đã di chuyển sang 1 vị trí thực tế khác, để hệ thống xác lập lại đúng mốc vị trí đang quét">🔁 Đổi vị trí</button>
+    </div>
+    <div class="qr-scan-oqc-row">
+      <span class="qr-scan-oqc-label">OQC đang quét:</span>
+      <div class="qr-scan-oqc-btns" id="qr-scan-oqc-btns">
+        <button type="button" class="qr-scan-oqc-btn active" data-oqc="">Theo hệ thống</button>
+        <button type="button" class="qr-scan-oqc-btn" data-oqc="PASS">PASS</button>
+        <button type="button" class="qr-scan-oqc-btn" data-oqc="NG">NG</button>
+        <button type="button" class="qr-scan-oqc-btn" data-oqc="Khac">Khác</button>
+      </div>
     </div>
     <div class="qr-scan-video-wrap">
       <video id="qr-scan-video" autoplay playsinline muted></video>
@@ -8006,7 +8028,7 @@ function createSearchController(ids){
             <td class="kt-calc-cell">
               <div class="kt-calc-row">
                 <span style="color:var(--text); font-weight:700; margin-right:4px;">KT =</span>
-                <span class="kt-result" style="font-weight:700; color:var(--amber); min-width:40px; text-align:right; display:inline-block;">${fmt(ktIv0*ktIv1 + ktIv2*ktIv3 + ktIv4*ktIv5)}</span>
+                <span class="kt-result" style="font-weight:700; color:${ktResultColor(ktIv0*ktIv1 + ktIv2*ktIv3 + ktIv4*ktIv5, r.qty)}; min-width:40px; text-align:right; display:inline-block;">${fmt(ktIv0*ktIv1 + ktIv2*ktIv3 + ktIv4*ktIv5)}</span>
                 <button type="button" class="kt-calc-toggle"><span>Nhập số liệu</span><span class="kt-calc-toggle-arrow">▾</span></button>
                 <span class="kt-calc-inputs">
                   <span style="margin: 0 4px; color:var(--muted-2);">|</span>
@@ -8164,6 +8186,12 @@ let qrScanRAF = null;
 let qrScanCount = 0;
 let qrScanLastCode = null;
 let qrScanPhysicalLocator = null; // vị trí thực tế đang đứng quét trong phiên hiện tại — null = chưa xác lập
+// null = tin tưởng hoàn toàn OQC hệ thống ghi cho từng pallet (mặc định, không làm chậm quét hàng
+// loạt). Khi người quét CHỌN 1 trạng thái cụ thể (PASS/NG/Khac), mọi lượt quét sau đó sẽ dùng ĐÚNG
+// giá trị này thay vì tin OQC hệ thống — dùng khi biết trước cả cụm pallet đang cầm trên tay thực tế
+// là OQC gì (VD: vừa IQC xong, tem tồn kho chưa kịp cập nhật) — nếu khác OQC hệ thống sẽ báo "Sai OQC"
+// và KHÔNG cộng nhầm vào dòng OQC khác, tránh 2 dòng PASS/NG bù trừ số lượng cho nhau.
+let qrScanOqcOverride = null;
 
 function qrScanAddLog(text, cls){
   const log = document.getElementById('qr-scan-log');
@@ -8193,6 +8221,14 @@ function qrScanResetLocator(){
   qrScanPhysicalLocator = null;
   qrScanUpdateLocatorBadge();
   qrScanSetStatus('Đã đổi vị trí — quét pallet đầu tiên tại vị trí mới để xác lập lại mốc.', '');
+}
+function qrScanUpdateOqcBtns(){
+  const wrap = document.getElementById('qr-scan-oqc-btns');
+  if(!wrap) return;
+  wrap.querySelectorAll('.qr-scan-oqc-btn').forEach(btn => {
+    const val = btn.dataset.oqc || null;
+    btn.classList.toggle('active', val === qrScanOqcOverride);
+  });
 }
 
 async function openQrScanOverlay(){
@@ -8240,8 +8276,10 @@ async function openQrScanOverlay(){
   qrScanCount = 0;
   qrScanLastCode = null;
   qrScanPhysicalLocator = null;
+  qrScanOqcOverride = null;
   qrScanUpdateCounter();
   qrScanUpdateLocatorBadge();
+  qrScanUpdateOqcBtns();
   qrScanSetStatus('Đưa mã vạch/QR (tem pallet) vào khung để quét…', '');
   const log = document.getElementById('qr-scan-log');
   if(log) log.innerHTML = '';
@@ -8422,7 +8460,7 @@ function handleQrScanReal(giNoRaw){
   const custpo = String(match[RAW_KEY_IDX.custpo] || '').trim();
   const systemLocator = match[RAW_KEY_IDX.locator];
   const oqcRaw = String(match[RAW_KEY_IDX.oqc] || '').trim();
-  const oqcNorm = ccOqcNormalize(oqcRaw);
+  const systemOqcNorm = ccOqcNormalize(oqcRaw);
   const palletQty = Number(match[RAW_KEY_IDX.qty]) || 0;
   const khoObj = CC_KHO_LIST.find(k => k.label === kho);
 
@@ -8436,6 +8474,15 @@ function handleQrScanReal(giNoRaw){
   const isWrongLocation = systemLocator !== qrScanPhysicalLocator;
   const effectiveLocator = isWrongLocation ? qrScanPhysicalLocator : systemLocator;
 
+  // Nếu người quét đã CHỌN 1 OQC cụ thể (khác "Theo hệ thống", xem qrScanOqcOverride) và khác với OQC
+  // hệ thống ghi cho ĐÚNG pallet này -> coi là "Sai OQC", ghi nhận theo đúng OQC đã chọn — giống hệt
+  // cơ chế Sai vị trí, KHÔNG BAO GIỜ cộng lẫn vào dòng OQC khác (tránh 2 dòng PASS/NG bù trừ nhau).
+  const isWrongOqc = qrScanOqcOverride !== null && qrScanOqcOverride !== systemOqcNorm;
+  const effectiveOqcNorm = isWrongOqc ? qrScanOqcOverride : systemOqcNorm;
+  const effectiveOqcLabel = effectiveOqcNorm === 'Khac' ? 'Khác' : effectiveOqcNorm;
+  const systemOqcLabel = systemOqcNorm === 'Khac' ? 'Khác' : systemOqcNorm;
+  const isMismatch = isWrongLocation || isWrongOqc;
+
   // Kho này chưa "Tạo danh sách" lần nào -> tự khởi tạo 1 danh sách rỗng ở chế độ Locator để có chỗ
   // hiển thị dòng vừa quét được.
   if(!ccKhoResults[kho]){
@@ -8445,44 +8492,71 @@ function handleQrScanReal(giNoRaw){
   const result = ccKhoResults[kho];
   const flatItems = result.mode === 'locator' ? result.list.flatMap(g => g.items) : result.list;
   const foundItem = flatItems.find(r =>
-    r.item === item && String(r.custpo || '').trim() === custpo && r.locator === effectiveLocator && ccOqcNormalize(r.oqc) === oqcNorm
+    r.item === item && String(r.custpo || '').trim() === custpo && r.locator === effectiveLocator && ccOqcNormalize(r.oqc) === effectiveOqcNorm
   );
 
   let response;
-  if(foundItem && !isWrongLocation){
+  if(foundItem && !isMismatch){
     const rowKey = ccRowKeyForItem(foundItem);
     ktInputValues[rowKey] = mergePalletIntoKtTally(ktInputValues[rowKey], palletQty);
     response = { ok:true, mismatch:false,
       message:`✓ ${item}${custpo ? ' (PO ' + custpo + ')' : ''} — ${effectiveLocator} — đã cộng ${fmt(palletQty)} Pcs vào ô kiểm thực tế.` };
   } else {
+    // QUAN TRỌNG: các dòng "⚠ Sai vị trí/Sai OQC" KHÔNG được tự tăng SL tồn (existing.qty) theo số
+    // lượng vừa quét — SL tồn của các dòng này LUÔN giữ = 0, vì hệ thống KHÔNG hề dự kiến có hàng ở
+    // đúng vị trí/OQC này. Nhờ vậy các dòng này sẽ hiện đúng là "Dư" (SL kiểm > SL tồn = 0) trong mọi
+    // bảng so sánh/báo cáo xuất ra — trước đây SL tồn tự tăng theo đúng số vừa quét làm 2 số luôn
+    // bằng nhau, trông như "khớp đúng" nên KHÔNG hiện lên báo cáo dù thực chất đây là hàng phát hiện
+    // thừa/sai vị trí cần chú ý. Riêng trường hợp "mã CHƯA CÓ trong danh sách" nhưng ĐÚNG vị trí+OQC
+    // (không phải sai lệch gì, chỉ là chưa được chọn vào mẫu "Đề xuất kiểm hôm nay") thì lấy đúng SL
+    // tồn THẬT từ dữ liệu gốc cho combo này, để so sánh chính xác thay vì mặc định 0.
     const addToList = (existing) => {
-      const oldKey = ccRowKeyForItem(existing);
-      const tally = mergePalletIntoKtTally(ktInputValues[oldKey], palletQty);
-      delete ktInputValues[oldKey];
-      existing.qty += palletQty;
+      const key = ccRowKeyForItem(existing);
+      const tally = mergePalletIntoKtTally(ktInputValues[key], palletQty);
       existing.palletCount = (existing.palletCount || 0) + 1;
-      ktInputValues[ccRowKeyForItem(existing)] = tally;
+      ktInputValues[key] = tally;
+    };
+    const realQtyForCombo = isMismatch ? 0 : rawRows
+      .filter(rr =>
+        String(rr[RAW_KEY_IDX.item] || '').trim().toLowerCase() === item.toLowerCase() &&
+        String(rr[RAW_KEY_IDX.custpo] || '').trim().toLowerCase() === custpo.toLowerCase() &&
+        String(rr[RAW_KEY_IDX.locator] || '') === effectiveLocator &&
+        ccOqcNormalize(rr[RAW_KEY_IDX.oqc]) === effectiveOqcNorm
+      )
+      .reduce((s, rr) => s + (Number(rr[RAW_KEY_IDX.qty]) || 0), 0);
+    const newRowBase = {
+      kho, item, custpo, locator: effectiveLocator, oqc: isWrongOqc ? effectiveOqcLabel : oqcRaw,
+      qty: realQtyForCombo, palletCount: 0, isScannedExtra: isMismatch,
+      isWrongLocation, wmsLocator: systemLocator,
+      isWrongOqc, wmsOqc: oqcRaw
     };
     if(result.mode === 'locator'){
       let grp = result.list.find(g => g.locator === effectiveLocator);
       if(!grp){ grp = { locator: effectiveLocator, items: [], maxScore: 0, palletCount: 0 }; result.list.push(grp); }
-      // Nếu đang SAI VỊ TRÍ: CHỈ được cộng dồn vào 1 dòng "⚠ Sai vị trí" đã tự tạo từ lượt quét lệch
+      // Nếu đang SAI VỊ TRÍ/SAI OQC: CHỈ được cộng dồn vào 1 dòng "⚠" đã tự tạo từ lượt quét lệch
       // trước đó (r.isScannedExtra === true) — TUYỆT ĐỐI không được cộng nhầm vào 1 dòng BÌNH THƯỜNG
-      // đã có sẵn trong kế hoạch (dù trùng y hệt mã hàng + PO + OQC), vì dòng đó là hàng ĐÚNG vị trí,
-      // không liên quan gì tới pallet lệch vị trí này — trộn chung sẽ làm mất hẳn cảnh báo sai vị trí.
-      let existing = grp.items.find(r => r.item === item && String(r.custpo || '').trim() === custpo && ccOqcNormalize(r.oqc) === oqcNorm && (!isWrongLocation || r.isScannedExtra));
-      if(!existing){ existing = { kho, item, custpo, locator: effectiveLocator, oqc: oqcRaw, qty: 0, palletCount: 0, isScannedExtra: isWrongLocation, wmsLocator: systemLocator }; grp.items.push(existing); }
+      // đã có sẵn trong kế hoạch (dù trùng y hệt mã hàng + PO + OQC hiệu lực), vì dòng đó là hàng ĐÚNG,
+      // không liên quan gì tới pallet lệch này — trộn chung sẽ làm mất cảnh báo và làm 2 dòng OQC
+      // khác nhau (VD: PASS/NG cùng 1 mã) bù trừ số lượng cho nhau.
+      let existing = grp.items.find(r => r.item === item && String(r.custpo || '').trim() === custpo && ccOqcNormalize(r.oqc) === effectiveOqcNorm && (!isMismatch || r.isScannedExtra));
+      if(!existing){ existing = newRowBase; grp.items.push(existing); }
       addToList(existing);
     } else {
-      let existing = result.list.find(r => r.item === item && String(r.custpo || '').trim() === custpo && r.locator === effectiveLocator && ccOqcNormalize(r.oqc) === oqcNorm && (!isWrongLocation || r.isScannedExtra));
-      if(!existing){ existing = { kho, item, custpo, locator: effectiveLocator, oqc: oqcRaw, qty: 0, palletCount: 0, isScannedExtra: isWrongLocation, wmsLocator: systemLocator }; result.list.push(existing); }
+      let existing = result.list.find(r => r.item === item && String(r.custpo || '').trim() === custpo && r.locator === effectiveLocator && ccOqcNormalize(r.oqc) === effectiveOqcNorm && (!isMismatch || r.isScannedExtra));
+      if(!existing){ existing = newRowBase; result.list.push(existing); }
       addToList(existing);
     }
-    response = isWrongLocation
-      ? { ok:true, mismatch:true,
-          message:`⚠ SAI VỊ TRÍ — hệ thống ghi nhận mã ${item}${custpo ? ' (PO ' + custpo + ')' : ''} ở vị trí ${systemLocator}, nhưng đang quét thấy tại ${effectiveLocator}. Đã ghi nhận vào đúng vị trí thực tế ${effectiveLocator}.` }
-      : { ok:true, mismatch:false,
-          message:`✓ ${item}${custpo ? ' (PO ' + custpo + ')' : ''} — ${effectiveLocator} — mã chưa có trong danh sách, đã tự thêm và cộng ${fmt(palletQty)} Pcs.` };
+    if(isMismatch){
+      const parts = [];
+      if(isWrongLocation) parts.push(`vị trí hệ thống ghi ${systemLocator}, đang quét thấy tại ${effectiveLocator}`);
+      if(isWrongOqc) parts.push(`OQC hệ thống ghi ${systemOqcLabel}, bạn xác nhận là ${effectiveOqcLabel}`);
+      const tag = isWrongLocation && isWrongOqc ? 'SAI VỊ TRÍ & SAI OQC' : (isWrongLocation ? 'SAI VỊ TRÍ' : 'SAI OQC');
+      response = { ok:true, mismatch:true,
+        message:`⚠ ${tag} — hệ thống ghi nhận mã ${item}${custpo ? ' (PO ' + custpo + ')' : ''}: ${parts.join('; ')}. Đã ghi nhận đúng theo thực tế, KHÔNG cộng lẫn vào dòng khác.` };
+    } else {
+      response = { ok:true, mismatch:false,
+        message:`✓ ${item}${custpo ? ' (PO ' + custpo + ')' : ''} — ${effectiveLocator} — mã chưa có trong danh sách, đã tự thêm và cộng ${fmt(palletQty)} Pcs.` };
+    }
   }
 
   if(khoObj){
@@ -8540,6 +8614,19 @@ const qrScanCloseBtn = document.getElementById('qr-scan-close-btn');
 if(qrScanCloseBtn) qrScanCloseBtn.addEventListener('click', closeQrScanOverlay);
 const qrScanResetLocBtn = document.getElementById('qr-scan-reset-loc-btn');
 if(qrScanResetLocBtn) qrScanResetLocBtn.addEventListener('click', qrScanResetLocator);
+const qrScanOqcBtnsWrap = document.getElementById('qr-scan-oqc-btns');
+if(qrScanOqcBtnsWrap) qrScanOqcBtnsWrap.addEventListener('click', (e) => {
+  const btn = e.target.closest('.qr-scan-oqc-btn');
+  if(!btn) return;
+  qrScanOqcOverride = btn.dataset.oqc || null;
+  qrScanUpdateOqcBtns();
+  qrScanSetStatus(
+    qrScanOqcOverride
+      ? `Đã chọn quét theo OQC = ${qrScanOqcOverride === 'Khac' ? 'Khác' : qrScanOqcOverride} — nếu hệ thống ghi khác, sẽ báo "Sai OQC" và tách riêng, không cộng nhầm.`
+      : 'Đã quay lại tin theo OQC hệ thống ghi cho từng pallet (mặc định).',
+    ''
+  );
+});
 const qrScanClearHistoryBtn = document.getElementById('qr-scan-clear-history-btn');
 if(qrScanClearHistoryBtn) qrScanClearHistoryBtn.addEventListener('click', () => qrScanClearHistory(true));
 const qrGiClearBtn = document.getElementById('qr-gi-clear-btn');
@@ -9539,7 +9626,12 @@ function renderConfirmedList(){
       <td class="num">${fmt(item.data.qty)}</td>
       <td style="font-size:10px; text-align:center; font-family:var(--mono); color:var(--muted-2);">${calcStr}</td>
       <td class="num" style="color:var(--violet); font-weight:700;">${Math.round(total).toLocaleString('en-US')}</td>
-      <td>${item.data.isWrongLocation ? `<span class="scanned-extra-badge" title="Vị trí hệ thống WMS ghi nhận cho mã này">⚠ WMS: ${escHtml(item.data.wmsLocator || '—')}</span>` : '—'}</td>
+      <td>${(() => {
+        const parts = [];
+        if(item.data.isWrongLocation) parts.push(`Vị trí ${escHtml(item.data.wmsLocator || '—')}`);
+        if(item.data.isWrongOqc) parts.push(`OQC ${escHtml(item.data.wmsOqc || '—')}`);
+        return parts.length ? `<span class="scanned-extra-badge" title="Thông tin hệ thống WMS ghi nhận cho mã này">⚠ WMS: ${parts.join(' · ')}</span>` : '—';
+      })()}</td>
       <td style="text-align:center;">
         <button type="button" class="cki-restore-btn" data-restore-key="${escAttr(key)}" title="Lỡ nhập sai — khôi phục dòng này về bảng Kiểm tồn kho để nhập lại">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -9729,7 +9821,8 @@ async function saveConfirmedSnapshotAndReset(){
       kho: item.data.kho, item: item.data.item, custpo: item.data.custpo,
       locator: item.data.locator, oqc: item.data.oqc, qty: item.data.qty,
       actualResult: Math.round(total),
-      isWrongLocation: !!item.data.isWrongLocation, wmsLocator: item.data.wmsLocator || ''
+      isWrongLocation: !!item.data.isWrongLocation, wmsLocator: item.data.wmsLocator || '',
+      isWrongOqc: !!item.data.isWrongOqc, wmsOqc: item.data.wmsOqc || ''
     };
   });
 
@@ -10047,8 +10140,18 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, skipPa
   ws.getColumn(10).width = 18;
   ws.getColumn(11).width = 12;
 
+  // Tổng SL pallet + tổng số vị trí (locator) KHÁC NHAU — hiện thêm vào tiêu đề chart tròn, bên
+  // cạnh số dòng, để nhìn tiêu đề là biết ngay quy mô đợt kiểm (không phải mở bảng đếm tay).
+  // skipPalletCount=true (xuất Lịch sử) không tính lại được Số pallet -> bỏ qua phần này khỏi tiêu đề.
+  const locatorCount = new Set(flatRows.map(r => r.locator)).size;
+  const palletSum = flatRows.reduce((s, r) => s + (typeof r.palletCount === 'number' ? r.palletCount : 0), 0);
+  const titleExtra = skipPalletCount
+    ? ` · ${fmt(locatorCount)} vị trí`
+    : ` · ${fmt(locatorCount)} vị trí · ${fmt(palletSum)} pallet`;
+
   return {
     rowCount: flatRows.length, mismatchCount, okCount, shortCount, surplusCount, matchCount, negativeCount, positiveCount,
+    locatorCount, palletSum,
     chartInfo: {
       sheetName: ws.name,
       catRange: `$J$${chartDataRow + 1}:$J$${chartDataRow + 3}`,
@@ -10056,7 +10159,7 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, skipPa
       categories: ['Match', 'Negative', 'Positive'],
       values: [matchCount, negativeCount, positiveCount],
       colors: ['00B050', 'FF0000', 'FFC000'],
-      title: `Kiểm kho ${khoLabel.replace('Kho ', '')} — ${flatRows.length} dòng`
+      title: `Kiểm kho ${khoLabel.replace('Kho ', '')} — ${flatRows.length} dòng${titleExtra}`
     }
   };
 }
@@ -10693,6 +10796,16 @@ function ccAllLocatorsInResult(khoLabel){
   return [...new Set(flat.map(x => x.locator).filter(Boolean))].sort();
 }
 
+// So màu kết quả "KT =" (số vừa kiểm được) với "SL tồn" (số hệ thống) ngay khi vừa nhìn là biết đủ/
+// thiếu/dư, không cần tự trừ nhẩm: XANH (var(--teal)) = khớp đúng, ĐỎ (var(--red)) = kiểm thiếu so
+// với hệ thống, CAM (var(--amber-bright)) = kiểm dư so với hệ thống.
+function ktResultColor(total, qty){
+  const t = Math.round(Number(total) || 0);
+  const q = Math.round(Number(qty) || 0);
+  if(t === q) return 'var(--teal)';
+  return t < q ? 'var(--red)' : 'var(--amber-bright)';
+}
+
 function buildKtItemRowHtml(r, rowStyle, groupCls, locBorderStyle){
   const rowKey = ccRowKeyForItem(r);
   if(confirmedKiemTonItems[rowKey]) return ''; // Da xac nhan roi -> khong hien lai
@@ -10705,27 +10818,32 @@ function buildKtItemRowHtml(r, rowStyle, groupCls, locBorderStyle){
   const ktIv4 = ktSaved && ktSaved[4] !== undefined ? ktSaved[4] : 0;
   const ktIv5 = ktSaved && ktSaved[5] !== undefined ? ktSaved[5] : 1;
   // Locator ở đầu LUÔN là vị trí ĐANG QUÉT/ĐANG ĐỨNG (r.locator) — đúng vị trí thực tế ngoài kho.
-  // Nếu là dòng "sai vị trí" (isScannedExtra), ghi chú thêm vị trí hệ thống WMS ghi nhận (r.wmsLocator)
-  // ngay bên dưới, để người kiểm biết hệ thống đang lưu pallet này ở đâu mà không cần tra lại.
-  const wmsNoteHtml = (r.isScannedExtra && r.wmsLocator)
-    ? `<div class="scanned-extra-wms-note" title="Vị trí hệ thống WMS đang ghi nhận cho mã này">WMS: <b>${escHtml(r.wmsLocator)}</b></div>`
+  // Nếu là dòng "sai vị trí/sai OQC" (isScannedExtra), ghi chú thêm những gì hệ thống WMS đang ghi
+  // nhận (vị trí và/hoặc OQC) ngay bên dưới, để người kiểm biết hệ thống đang lưu ra sao mà không
+  // cần tra lại — và badge cảnh báo hiện đúng loại sai lệch (vị trí, OQC, hoặc cả hai).
+  const wmsNoteParts = [];
+  if(r.isWrongLocation && r.wmsLocator) wmsNoteParts.push(`Vị trí <b>${escHtml(r.wmsLocator)}</b>`);
+  if(r.isWrongOqc && r.wmsOqc) wmsNoteParts.push(`OQC <b>${escHtml(r.wmsOqc)}</b>`);
+  const wmsNoteHtml = wmsNoteParts.length
+    ? `<div class="scanned-extra-wms-note" title="Thông tin hệ thống WMS đang ghi nhận cho mã này">WMS: ${wmsNoteParts.join(' · ')}</div>`
     : '';
+  const mismatchBadgeText = r.isWrongLocation && r.isWrongOqc ? '⚠ Sai vị trí & OQC' : (r.isWrongLocation ? '⚠ Sai vị trí' : (r.isWrongOqc ? '⚠ Sai OQC' : ''));
   const locatorCellHtml = r.isScannedExtra
     ? `<select class="scanned-extra-loc-select">${ccAllLocatorsInResult(r.kho).map(loc => `<option value="${escAttr(loc)}"${loc === r.locator ? ' selected' : ''}>${escHtml(loc)}</option>`).join('')}</select>${wmsNoteHtml}`
     : escHtml(r.locator);
 
   return `
-    <tr class="${(groupCls || '').trim()}${r.isScannedExtra ? ' row-scanned-extra' : ''}"${rowStyle || ''} data-wrong-location="${r.isScannedExtra ? '1' : '0'}" data-wms-locator="${escAttr(r.wmsLocator || '')}">
+    <tr class="${(groupCls || '').trim()}${r.isScannedExtra ? ' row-scanned-extra' : ''}"${rowStyle || ''} data-wrong-location="${r.isWrongLocation ? '1' : '0'}" data-wms-locator="${escAttr(r.wmsLocator || '')}" data-wrong-oqc="${r.isWrongOqc ? '1' : '0'}" data-wms-oqc="${escAttr(r.wmsOqc || '')}">
       <td class="col-kho kt-card-hide" data-label="Kho">${escHtml((r.kho || '').replace('Kho ',''))}</td>
       <td class="loc-group-cell" data-label="Locator"${locBorderStyle || ''}>${locatorCellHtml}</td>
-      <td data-label="OQC">${oqcBadge(r.oqc)}${r.isScannedExtra ? ' <span class="scanned-extra-badge" title="Được tự thêm khi quét QR — mã này không có sẵn trong danh sách kiểm tại vị trí hệ thống ghi nhận">⚠ Sai vị trí</span>' : ''}</td>
+      <td data-label="OQC">${oqcBadge(r.oqc)}${r.isScannedExtra ? ` <span class="scanned-extra-badge" title="Được tự thêm khi quét QR — mã này không có sẵn trong danh sách kiểm tại vị trí/OQC hệ thống ghi nhận">${mismatchBadgeText}</span>` : ''}</td>
       <td data-label="Cust PO">${escHtml(r.custpo || '')}</td>
       <td data-label="Item No.">${escHtml(r.item)}</td>
       <td class="num" data-label="SL tồn">${fmt(r.qty)}</td>
       <td class="kt-calc-cell">
         <div class="kt-calc-row">
           <span style="color:var(--text); font-weight:700; margin-right:4px;">KT =</span>
-          <span class="kt-result" style="font-weight:700; color:var(--amber); min-width:40px; text-align:right; display:inline-block;">${fmt(ktIv0*ktIv1 + ktIv2*ktIv3 + ktIv4*ktIv5)}</span>
+          <span class="kt-result" style="font-weight:700; color:${ktResultColor(ktIv0*ktIv1 + ktIv2*ktIv3 + ktIv4*ktIv5, r.qty)}; min-width:40px; text-align:right; display:inline-block;">${fmt(ktIv0*ktIv1 + ktIv2*ktIv3 + ktIv4*ktIv5)}</span>
           <button type="button" class="kt-calc-toggle"><span>Nhập số liệu</span><span class="kt-calc-toggle-arrow">▾</span></button>
           <span class="kt-calc-inputs">
             <span style="margin: 0 4px; color:var(--muted-2);">|</span>
@@ -11553,13 +11671,17 @@ document.addEventListener('input', function(e) {
     if (vals.length >= 6) {
       total = (vals[0] * vals[1]) + (vals[2] * vals[3]) + (vals[4] * vals[5]);
     }
+    const tr = td.closest('tr');
     const resultSpan = td.querySelector('.kt-result');
     if (resultSpan) {
       resultSpan.textContent = Math.round(total).toLocaleString('en-US');
+      // Tô lại màu so sánh với SL tồn ngay khi số vừa đổi — không cần đợi bấm Xác nhận mới biết đủ/thiếu/dư.
+      const qtyCell = tr ? tr.querySelector('td[data-label="SL tồn"]') : null;
+      const qty = qtyCell ? parseFloat(qtyCell.textContent.replace(/,/g, '')) || 0 : 0;
+      resultSpan.style.color = ktResultColor(total, qty);
     }
     // Lưu lại giá trị vừa nhập theo rowKey để không bị mất khi bảng render lại
     // (VD: sau khi bấm "Xác nhận" ở 1 dòng khác trong cùng bảng).
-    const tr = td.closest('tr');
     const rowKey = getRowKeyFromTr(tr);
     if (rowKey){ ktInputValues[rowKey] = vals; saveStateToStorage(); }
   }
@@ -11594,16 +11716,18 @@ function confirmSingleRow(tr){
   if(oqcText.toUpperCase().includes('PASS')) oqc = 'PASS';
   else if(oqcText.toUpperCase().includes('NG')) oqc = 'NG';
 
-  // Dòng "sai vị trí" (tự thêm khi quét QR lệch vị trí hệ thống) — giữ lại vị trí WMS ghi nhận để
-  // hiện tiếp ở bảng "Đã xác nhận" sau khi bấm Xác nhận, không bị mất đi.
+  // Dòng "sai vị trí"/"sai OQC" (tự thêm khi quét QR lệch so với hệ thống) — giữ lại thông tin WMS
+  // ghi nhận để hiện tiếp ở bảng "Đã xác nhận" sau khi bấm Xác nhận, không bị mất đi.
   const isWrongLocation = tr.dataset.wrongLocation === '1';
   const wmsLocator = tr.dataset.wmsLocator || '';
+  const isWrongOqc = tr.dataset.wrongOqc === '1';
+  const wmsOqc = tr.dataset.wmsOqc || '';
 
   const inputs = td.querySelectorAll('.kt-input');
   const inputValues = Array.from(inputs).map(inp => parseFloat(inp.value) || 0);
   const total = (inputValues[0] * inputValues[1]) + (inputValues[2] * inputValues[3]) + (inputValues[4] * inputValues[5]);
 
-  const rowData = { kho: byLabel('Kho'), item, custpo, locator, oqc, qty, isWrongLocation, wmsLocator };
+  const rowData = { kho: byLabel('Kho'), item, custpo, locator, oqc, qty, isWrongLocation, wmsLocator, isWrongOqc, wmsOqc };
   confirmedKiemTonItems[rowKey] = { data: rowData, inputs: inputValues, result: Math.round(total) };
   delete ktInputValues[rowKey]; // đã chuyển hẳn qua confirmedKiemTonItems — xoá bản nháp cũ, tránh
   // lần sau nếu đề xuất lại đúng dòng này (trùng item/locator/PO/SL) sẽ tự điền sẵn số liệu cũ.
