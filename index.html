@@ -3710,14 +3710,12 @@ const CloudVault = {
       if(!res.ok) throw new Error('HTTP ' + res.status + (bodyJson && bodyJson.error ? ' — ' + bodyJson.error : ''));
       if(bodyJson && bodyJson.error) throw new Error(bodyJson.error);
 
-      // Kiểm chứng lại đúng các key nhỏ vừa gửi.
-      const verifyRes = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token) + '&_v=' + Date.now());
-      const verifyJson = verifyRes.ok ? await verifyRes.json().catch(() => null) : null;
-      const cloudData = (verifyJson && typeof verifyJson === 'object') ? verifyJson : null;
-      if(cloudData){
-        const bad = keys.filter(k => (k in partial) && (!(k in cloudData) || String(cloudData[k]).length < String(partial[k]).length));
-        if(bad.length) throw new Error('Cloud không lưu đủ (thiếu/thiếu bớt: ' + bad.join(', ') + ')');
-      }
+      // Kiểm chứng NGAY TỪ PHẢN HỒI CỦA PATCH: Firebase trả lại đúng phần dữ liệu vừa ghép trong
+      // response body của chính request này — không cần gửi thêm request nào để "tải lại" mới biết
+      // (tận dụng đúng 1 request duy nhất, không tốn thêm băng thông "Downloads" trên Firebase).
+      const mergedKeys = keys.filter(k => k in partial);
+      const bad = mergedKeys.filter(k => !bodyJson || !(k in bodyJson) || String(bodyJson[k]).length < String(partial[k]).length);
+      if(bad.length) throw new Error('Cloud không lưu đủ (thiếu/thiếu bớt: ' + bad.join(', ') + ')');
       this._retryCount = 0;
       clearTimeout(this._retryTimer);
     }catch(e){
@@ -3740,12 +3738,11 @@ const CloudVault = {
       if(!res.ok) throw new Error('HTTP ' + res.status + (bodyJson && bodyJson.error ? ' — ' + bodyJson.error : ''));
       if(bodyJson && bodyJson.error) throw new Error(bodyJson.error);
 
-      // KIỂM CHỨNG SAU KHI GHI: đọc lại ngay từ Cloud để xác nhận dữ liệu THẬT SỰ đã lên đó.
-      // Trước đây client chỉ tin vào phản hồi "OK" rồi báo "đã lưu" — nếu phía Cloud âm thầm lưu
-      // thiếu/không lưu được, người dùng vẫn tưởng đã an toàn và chỉ phát hiện mất dữ liệu ở máy khác.
-      const verifyRes = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token) + '&_v=' + Date.now());
-      const verifyJson = verifyRes.ok ? await verifyRes.json().catch(() => null) : null;
-      const cloudData = (verifyJson && typeof verifyJson === 'object') ? verifyJson : null;
+      // KIỂM CHỨNG NGAY TỪ PHẢN HỒI CỦA PUT: Firebase trả lại ĐÚNG dữ liệu vừa ghi trong response
+      // body của chính request PUT này — không cần gửi thêm 1 request GET riêng để "tải lại" mới biết
+      // (trước đây làm vậy, tốn gấp đôi băng thông mỗi lần lưu — đây chính là lý do mục "Downloads"
+      // trên Firebase Console tăng nhanh hơn nhiều so với dung lượng dữ liệu thực tế đang lưu).
+      const cloudData = (bodyJson && typeof bodyJson === 'object') ? bodyJson : null;
       if(cloudData){
         const missing = Object.keys(_mem).filter(k => !(k in cloudData));
         const truncated = Object.keys(_mem).filter(k => (k in cloudData) && String(cloudData[k]).length < String(_mem[k]).length);
