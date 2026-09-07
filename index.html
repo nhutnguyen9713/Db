@@ -3053,6 +3053,18 @@
       </div>
 
       <div class="settings-section">
+        <div class="settings-section-label">Dung lượng dữ liệu đang lưu</div>
+        <div class="desc" style="margin-bottom:8px;">Xem từng mục dữ liệu đang chiếm bao nhiêu dung lượng (tính trên đúng gói JSON sẽ gửi lên Cloud/file) — để biết chỗ nào đang phình to bất thường.</div>
+        <div class="settings-btn-row">
+          <button class="btn-update btn-ghost-outline" id="btn-storage-size" type="button" title="Tính lại dung lượng từng mục dữ liệu ngay lúc này">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            Xem dung lượng dữ liệu
+          </button>
+        </div>
+        <div id="storage-size-result" style="margin-top:8px;"></div>
+      </div>
+
+      <div class="settings-section">
         <div class="settings-section-label">Mở khoá đầy đủ tính năng</div>
         <div class="desc" style="margin-bottom:8px;">Mặc định chỉ hiện 4 tab: Picking Status, Tìm mã hàng, Kiểm tồn kho, Màn hình kho. Nhập đúng mật khẩu để hiện lại toàn bộ các tab trên sidebar.</div>
         <div class="settings-cloud-row">
@@ -8320,11 +8332,15 @@ function handleQrScanReal(giNoRaw){
     if(result.mode === 'locator'){
       let grp = result.list.find(g => g.locator === effectiveLocator);
       if(!grp){ grp = { locator: effectiveLocator, items: [], maxScore: 0, palletCount: 0 }; result.list.push(grp); }
-      let existing = grp.items.find(r => r.item === item && String(r.custpo || '').trim() === custpo && ccOqcNormalize(r.oqc) === oqcNorm);
+      // Nếu đang SAI VỊ TRÍ: CHỈ được cộng dồn vào 1 dòng "⚠ Sai vị trí" đã tự tạo từ lượt quét lệch
+      // trước đó (r.isScannedExtra === true) — TUYỆT ĐỐI không được cộng nhầm vào 1 dòng BÌNH THƯỜNG
+      // đã có sẵn trong kế hoạch (dù trùng y hệt mã hàng + PO + OQC), vì dòng đó là hàng ĐÚNG vị trí,
+      // không liên quan gì tới pallet lệch vị trí này — trộn chung sẽ làm mất hẳn cảnh báo sai vị trí.
+      let existing = grp.items.find(r => r.item === item && String(r.custpo || '').trim() === custpo && ccOqcNormalize(r.oqc) === oqcNorm && (!isWrongLocation || r.isScannedExtra));
       if(!existing){ existing = { kho, item, custpo, locator: effectiveLocator, oqc: oqcRaw, qty: 0, palletCount: 0, isScannedExtra: isWrongLocation, wmsLocator: systemLocator }; grp.items.push(existing); }
       addToList(existing);
     } else {
-      let existing = result.list.find(r => r.item === item && String(r.custpo || '').trim() === custpo && r.locator === effectiveLocator && ccOqcNormalize(r.oqc) === oqcNorm);
+      let existing = result.list.find(r => r.item === item && String(r.custpo || '').trim() === custpo && r.locator === effectiveLocator && ccOqcNormalize(r.oqc) === oqcNorm && (!isWrongLocation || r.isScannedExtra));
       if(!existing){ existing = { kho, item, custpo, locator: effectiveLocator, oqc: oqcRaw, qty: 0, palletCount: 0, isScannedExtra: isWrongLocation, wmsLocator: systemLocator }; result.list.push(existing); }
       addToList(existing);
     }
@@ -13239,6 +13255,41 @@ FileVault.registerReloader(function(){
 // Khởi động FileVault + CloudVault sau khi mọi module đã đăng ký hàm nạp lại (reloader)
 FileVault.init();
 CloudVault.init();
+
+// "Xem dung lượng dữ liệu" — tính đúng dung lượng JSON (byte) của TỪNG mục trong _mem, xếp từ lớn
+// tới nhỏ, để người dùng tự biết mục nào đang phình to bất thường thay vì đoán mò. Đây CHÍNH XÁC là
+// gói dữ liệu sẽ được gửi lên Cloud/file mỗi lần lưu (writeAll gửi thẳng _mem).
+function fmtBytes(n){
+  if(n >= 1024*1024) return (n/(1024*1024)).toFixed(2) + ' MB';
+  if(n >= 1024) return (n/1024).toFixed(1) + ' KB';
+  return n + ' B';
+}
+function renderStorageSize(){
+  const resultEl = document.getElementById('storage-size-result');
+  if(!resultEl) return;
+  const rows = Object.keys(_mem).map(k => {
+    const raw = _mem[k];
+    const bytes = typeof raw === 'string' ? new Blob([raw]).size : new Blob([JSON.stringify(raw)]).size;
+    return { key: k, label: STORAGE_KEY_LABELS[k] || k, bytes };
+  }).sort((a, b) => b.bytes - a.bytes);
+  const total = rows.reduce((s, r) => s + r.bytes, 0);
+  if(!rows.length){
+    resultEl.innerHTML = `<div style="color:var(--muted-2); font-style:italic;">Chưa có dữ liệu nào đang lưu.</div>`;
+    return;
+  }
+  resultEl.innerHTML = `
+    <div style="font-weight:700; margin-bottom:6px;">Tổng cộng: ${fmtBytes(total)}${CloudVault && CloudVault.url ? ' (đúng gói sẽ gửi lên Cloud mỗi lần "Lưu")' : ''}</div>
+    <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+      ${rows.map(r => `
+        <tr style="border-bottom:1px solid var(--line, #e5e5e5);">
+          <td style="padding:4px 8px 4px 0;">${escHtml(r.label)}</td>
+          <td style="padding:4px 0; text-align:right; font-weight:700; white-space:nowrap; color:${r.bytes > total * 0.3 ? 'var(--red)' : 'inherit'};">${fmtBytes(r.bytes)}</td>
+        </tr>`).join('')}
+    </table>`;
+}
+const btnStorageSize = document.getElementById('btn-storage-size');
+if(btnStorageSize) btnStorageSize.addEventListener('click', renderStorageSize);
+
 </script>
 <script>
 /* Nút "Chế độ máy tính" — ép trình duyệt render trang ở độ rộng desktop (1280px)
