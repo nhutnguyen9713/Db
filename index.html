@@ -975,6 +975,11 @@
     display:flex; align-items:center; justify-content:space-between; color:#fff; font-family:var(--mono); font-size:13px;
   }
   .qr-scan-topbar .btn-update{background:rgba(255,255,255,0.12); border-color:rgba(255,255,255,0.3); color:#fff;}
+  .qr-scan-clear-history-btn{
+    background:none; border:1px solid rgba(255,255,255,0.35); color:#fff; border-radius:8px;
+    padding:4px 8px; font-size:11px; cursor:pointer; font-family:var(--mono); white-space:nowrap;
+  }
+  .qr-scan-clear-history-btn:hover, .qr-scan-clear-history-btn:active{background:rgba(255,255,255,0.18);}
   .qr-scan-locator-row{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
     background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.18); border-radius:10px;
@@ -2957,7 +2962,10 @@
 <div class="qr-scan-overlay" id="qr-scan-overlay">
   <div class="qr-scan-box">
     <div class="qr-scan-topbar">
-      <span id="qr-scan-counter">Đã quét: 0 pallet</span>
+      <span style="display:flex; align-items:center; gap:8px; min-width:0;">
+        <span id="qr-scan-counter">Đã quét: 0 pallet</span>
+        <button type="button" class="qr-scan-clear-history-btn" id="qr-scan-clear-history-btn" title="Xoá lịch sử các GI đã quét trong phiên — cho phép quét lại các mã đã quét trước đó. LƯU Ý: nếu quét lại đúng pallet đã tính rồi, số lượng sẽ bị CỘNG THÊM 1 LẦN NỮA — chỉ dùng khi chắc chắn cần quét lại.">🗑 Xoá lịch sử quét</button>
+      </span>
       <button type="button" class="btn-update btn-ghost-outline" id="qr-scan-close-btn">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
         Thoát
@@ -8367,6 +8375,21 @@ const qrScanCloseBtn = document.getElementById('qr-scan-close-btn');
 if(qrScanCloseBtn) qrScanCloseBtn.addEventListener('click', closeQrScanOverlay);
 const qrScanResetLocBtn = document.getElementById('qr-scan-reset-loc-btn');
 if(qrScanResetLocBtn) qrScanResetLocBtn.addEventListener('click', qrScanResetLocator);
+const qrScanClearHistoryBtn = document.getElementById('qr-scan-clear-history-btn');
+if(qrScanClearHistoryBtn) qrScanClearHistoryBtn.addEventListener('click', () => {
+  if(!scannedGiSet.size){ qrScanSetStatus('Lịch sử quét đang trống — chưa có gì để xoá.', ''); return; }
+  const ok = confirm(
+    `Xoá lịch sử ${scannedGiSet.size} GI No. đã quét?\n\n` +
+    `Sau khi xoá, các mã ĐÃ quét trước đó có thể quét lại được (không còn báo "đã quét trước đó — không quét trùng" nữa). ` +
+    `LƯU Ý: nếu lỡ quét lại đúng pallet đã tính số lượng rồi, số lượng sẽ bị CỘNG THÊM 1 LẦN NỮA vào ô kiểm thực tế — chỉ xoá khi chắc chắn cần quét lại (VD: vừa quét nhầm hàng loạt).`
+  );
+  if(!ok) return;
+  const clearedCount = scannedGiSet.size;
+  scannedGiSet.clear();
+  saveStateToStorage();
+  qrScanSetStatus(`Đã xoá lịch sử ${fmt(clearedCount)} GI đã quét — có thể quét lại bình thường.`, 'ok');
+  qrScanAddLog(`🗑 Đã xoá lịch sử ${clearedCount} GI đã quét trong phiên.`, 'ok');
+});
 
 /* ============ Phiếu pick theo container — sắp theo thứ tự đi 1 vòng không quay lui, FIFO theo
    ngày nhận (Lot/GI No. cũ nhất lấy trước), giới hạn đúng số lượng cần lấy theo kế hoạch. Xem
