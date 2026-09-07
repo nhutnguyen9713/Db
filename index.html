@@ -1006,6 +1006,17 @@
   .qr-scan-status.err{color:#ff8a8a;}
   .qr-scan-status.ok{color:#7be0c0;}
   .qr-scan-status.warn{color:#ffcf7a;}
+  .qr-scan-manual-row{display:flex; gap:8px;}
+  .qr-scan-manual-row input{
+    flex:1; min-width:0; border:1px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.08);
+    color:#fff; border-radius:10px; padding:10px 12px; font-size:14px; font-family:var(--mono);
+  }
+  .qr-scan-manual-row input::placeholder{color:rgba(255,255,255,0.5);}
+  .qr-scan-manual-btn{
+    border:1px solid rgba(255,255,255,0.4); background:rgba(255,255,255,0.14); color:#fff;
+    border-radius:10px; padding:10px 18px; font-size:14px; font-weight:700; cursor:pointer; flex-shrink:0;
+  }
+  .qr-scan-manual-btn:hover, .qr-scan-manual-btn:active{background:rgba(255,255,255,0.26);}
   .qr-scan-log{
     max-height:120px; overflow-y:auto; background:rgba(255,255,255,0.06); border-radius:10px; padding:8px 10px;
     font-family:var(--mono); font-size:11.5px; color:#ddd; display:flex; flex-direction:column-reverse; gap:4px;
@@ -2984,6 +2995,10 @@
     </div>
     <canvas id="qr-scan-canvas" style="display:none;"></canvas>
     <div id="qr-scan-status" class="qr-scan-status">Đưa mã vạch/QR (tem pallet) vào khung để quét…</div>
+    <div class="qr-scan-manual-row">
+      <input type="text" id="qr-scan-manual-input" placeholder="Mã quá mờ? Gõ tay số GI No. tại đây…" autocomplete="off" autocapitalize="characters">
+      <button type="button" class="qr-scan-manual-btn" id="qr-scan-manual-btn">Nhập</button>
+    </div>
     <div id="qr-scan-log" class="qr-scan-log"></div>
   </div>
 </div>
@@ -8148,7 +8163,6 @@ let qrScanStream = null;
 let qrScanRAF = null;
 let qrScanCount = 0;
 let qrScanLastCode = null;
-let qrScanLastTime = 0;
 let qrScanPhysicalLocator = null; // vị trí thực tế đang đứng quét trong phiên hiện tại — null = chưa xác lập
 
 function qrScanAddLog(text, cls){
@@ -8199,7 +8213,19 @@ async function openQrScanOverlay(){
     return;
   }
   try{
-    qrScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    // Yêu cầu độ phân giải CAO (thay vì để trình duyệt tự chọn mặc định, thường chỉ ~640x480) và bật
+    // lấy nét liên tục nếu máy hỗ trợ — mã QR càng dày/nhiều chi tiết càng cần độ phân giải cao mới
+    // đọc được rõ từng ô vuông nhỏ, ảnh mờ/độ phân giải thấp là nguyên nhân phổ biến nhất khiến quét
+    // "không nhận" dù mã vẫn nằm rõ ràng trong khung hình. Dùng "ideal" (không phải "exact") nên máy
+    // không hỗ trợ vẫn chạy bình thường, chỉ là lấy độ phân giải gần nhất có thể.
+    qrScanStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'environment',
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        advanced: [{ focusMode: 'continuous' }]
+      }
+    });
   }catch(err){
     alert('Không mở được camera: ' + (err && err.message ? err.message : 'không rõ lỗi') + '. Hãy kiểm tra đã cấp quyền Camera cho trình duyệt/app chưa.');
     return;
@@ -8208,7 +8234,6 @@ async function openQrScanOverlay(){
   overlay.style.display = 'flex';
   qrScanCount = 0;
   qrScanLastCode = null;
-  qrScanLastTime = 0;
   qrScanPhysicalLocator = null;
   qrScanUpdateCounter();
   qrScanUpdateLocatorBadge();
@@ -8243,16 +8268,37 @@ function qrScanTick(){
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   let code = null;
   try{
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    code = jsQR(imageData.data, imageData.width, imageData.height);
+    // Ưu tiên giải mã đúng VÙNG BÊN TRONG khung xanh hiện trên màn hình (khớp CSS .qr-scan-frame,
+    // inset 12% mỗi cạnh) — vừa loại bỏ nền xung quanh gây rối cho thuật toán tìm mã, vừa coi như
+    // "phóng to" mã QR tương đối so với vùng ảnh đưa vào giải mã, giúp đọc được cả những mã dày/nhiều
+    // chi tiết mà quét trên nguyên khung hình đầy đủ có thể bị bỏ sót vì độ phân giải camera không đủ.
+    const marginX = Math.round(canvas.width * 0.12);
+    const marginY = Math.round(canvas.height * 0.12);
+    const cropW = canvas.width - marginX * 2;
+    const cropH = canvas.height - marginY * 2;
+    if(cropW > 0 && cropH > 0){
+      const croppedData = ctx.getImageData(marginX, marginY, cropW, cropH);
+      code = jsQR(croppedData.data, croppedData.width, croppedData.height);
+    }
+    // Không thấy trong vùng khung -> thử lại trên TOÀN khung hình, phòng khi mã bị lệch ra ngoài
+    // khung xanh 1 chút nhưng vẫn còn lọt trong camera.
+    if(!code || !code.data){
+      const fullData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      code = jsQR(fullData.data, fullData.width, fullData.height);
+    }
   }catch(err){ /* bỏ qua lỗi đọc frame lẻ tẻ, thử lại frame sau */ }
   if(code && code.data){
-    const now = Date.now();
-    if(code.data !== qrScanLastCode || (now - qrScanLastTime) > 1500){
+    // Chỉ xử lý 1 mã QR ĐÚNG 1 LẦN trong khi nó còn nằm liên tục trong khung hình — không đọc lại
+    // mỗi vài giây nữa (trước đây cứ 1.5s lại đọc lại, khiến báo "đã quét trước đó" lặp đi lặp lại
+    // liên tục khi camera vẫn đang chĩa vào cùng 1 tem, gây hiểu lầm là quét lỗi/không quét được).
+    if(code.data !== qrScanLastCode){
       qrScanLastCode = code.data;
-      qrScanLastTime = now;
       handleQrScanResult(code.data.trim());
     }
+  } else {
+    // Không còn thấy mã nào trong khung hình -> reset, để lần THẤY LẠI tiếp theo (kể cả gặp lại
+    // đúng mã cũ, VD: camera rung lắc mất dấu rồi bắt lại) được coi là 1 lượt quét mới.
+    qrScanLastCode = null;
   }
   qrScanRAF = requestAnimationFrame(qrScanTick);
 }
@@ -8421,6 +8467,24 @@ const qrScanClearHistoryBtn = document.getElementById('qr-scan-clear-history-btn
 if(qrScanClearHistoryBtn) qrScanClearHistoryBtn.addEventListener('click', () => qrScanClearHistory(true));
 const qrGiClearBtn = document.getElementById('qr-gi-clear-btn');
 if(qrGiClearBtn) qrGiClearBtn.addEventListener('click', () => qrScanClearHistory(false));
+
+// Nhập tay số GI No. — dùng khi mã QR/vạch trên tem quá mờ/hỏng/góc chụp khó, camera không đọc
+// được, nhưng vẫn đọc được số GI No. in trên tem bằng mắt thường. Xử lý y hệt 1 lượt quét camera
+// thành công (cùng đi qua handleQrScanResult, cùng áp dụng mọi kiểm tra sai vị trí/trùng lặp).
+function qrScanSubmitManual(){
+  const input = document.getElementById('qr-scan-manual-input');
+  if(!input) return;
+  const val = input.value.trim();
+  if(!val){ qrScanSetStatus('Chưa nhập số GI No. nào.', 'err'); return; }
+  input.value = '';
+  handleQrScanResult(val);
+}
+const qrScanManualBtn = document.getElementById('qr-scan-manual-btn');
+if(qrScanManualBtn) qrScanManualBtn.addEventListener('click', qrScanSubmitManual);
+const qrScanManualInput = document.getElementById('qr-scan-manual-input');
+if(qrScanManualInput) qrScanManualInput.addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){ e.preventDefault(); qrScanSubmitManual(); }
+});
 
 /* ============ Phiếu pick theo container — sắp theo thứ tự đi 1 vòng không quay lui, FIFO theo
    ngày nhận (Lot/GI No. cũ nhất lấy trước), giới hạn đúng số lượng cần lấy theo kế hoạch. Xem
