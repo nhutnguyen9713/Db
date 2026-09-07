@@ -8203,6 +8203,11 @@ async function openQrScanOverlay(){
     alert('Không tải được thư viện quét mã (cần Internet). Vui lòng thử lại.');
     return;
   }
+  // Khởi tạo/mở khoá AudioContext NGAY TRONG lúc bấm nút (thao tác chạm của người dùng) — trình
+  // duyệt (đặc biệt Safari/iPhone) chặn phát âm thanh nếu không bắt nguồn trực tiếp từ 1 cú chạm,
+  // nên phải làm bước này ở đây thay vì đợi tới lúc quét được mã (khi đó không còn tính là thao
+  // tác chạm nữa, âm thanh sẽ bị chặn im lặng không kêu).
+  qrGetAudioCtx();
   // Camera (getUserMedia) chỉ hoạt động trên "secure context" — trang phải được mở qua địa chỉ
   // https:// thật (hoặc http://localhost). Mở trực tiếp file HTML từ máy (file:// hoặc
   // content://) sẽ luôn bị trình duyệt chặn, báo "Permission denied" dù đã cấp quyền Camera cho
@@ -8252,6 +8257,7 @@ function closeQrScanOverlay(){
     qrScanStream.getTracks().forEach(t => t.stop());
     qrScanStream = null;
   }
+  if(qrAudioCtx && qrAudioCtx.state === 'running') qrAudioCtx.suspend().catch(() => {});
 }
 
 function qrScanTick(){
@@ -8303,8 +8309,43 @@ function qrScanTick(){
   qrScanRAF = requestAnimationFrame(qrScanTick);
 }
 
+// Phát tiếng "bíp" ngắn bằng Web Audio API (tự tạo sóng âm, không cần file .mp3/.wav nào) — dùng
+// làm phản hồi ÂM THANH khi quét, quan trọng nhất cho iPhone/Safari vì API rung (navigator.vibrate)
+// không tồn tại trên nền tảng đó — rung thôi sẽ hoàn toàn im lặng, không báo được gì cho người dùng.
+let qrAudioCtx = null;
+function qrGetAudioCtx(){
+  if(!qrAudioCtx){
+    try{ qrAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){ qrAudioCtx = null; }
+  }
+  if(qrAudioCtx && qrAudioCtx.state === 'suspended') qrAudioCtx.resume().catch(() => {});
+  return qrAudioCtx;
+}
+function qrPlayBeepPattern(notes){
+  const ctx = qrGetAudioCtx();
+  if(!ctx) return;
+  let t = ctx.currentTime;
+  notes.forEach(n => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(n.freq, t);
+    // Lên/xuống âm lượng nhanh ở đầu/cuối mỗi tiếng bíp để tránh tiếng "tách" khó chịu khi bật/tắt đột ngột.
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.35, t + 0.01);
+    gain.gain.linearRampToValueAtTime(0, t + n.dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + n.dur + 0.02);
+    t += n.dur + (n.gap || 0);
+  });
+}
+// 3 kiểu tiếng bíp khác nhau rõ rệt, khớp đúng với 3 kiểu rung — nghe là phân biệt được ngay:
+// 1 tiếng bíp cao ngắn = thành công; 2 tiếng bíp liên tiếp = có cảnh báo; 1 tiếng bíp trầm dài = bị từ chối.
+function qrBeepSuccess(){ qrPlayBeepPattern([{ freq: 1046, dur: 0.09 }]); }
+function qrBeepWarn(){ qrPlayBeepPattern([{ freq: 740, dur: 0.08, gap: 0.05 }, { freq: 740, dur: 0.08 }]); }
+function qrBeepError(){ qrPlayBeepPattern([{ freq: 220, dur: 0.28 }]); }
+
 function handleQrScanResult(giNoRaw){
-  if(navigator.vibrate) navigator.vibrate(60);
   // Mã QR thực tế quét được thường có thêm rất nhiều thông tin phía sau (nối bằng ký tự "^", VD:
   // "TN526090363725^W31_2026_025313024_2-PMC12+PORD130612^..."), nhưng số GI No. đúng chỉ là
   // 14 KÝ TỰ ĐẦU TIÊN — luôn cắt về đúng 14 ký tự trước khi tra cứu/so khớp/hiện log, để không bị
@@ -8313,6 +8354,17 @@ function handleQrScanResult(giNoRaw){
   const result = handleQrScanReal(giNo);
   qrScanCount++;
   qrScanUpdateCounter();
+  // Rung + phát tiếng bíp phản hồi NGAY khi quét — 3 kiểu khác nhau rõ rệt cho 3 kết quả, để không
+  // cần nhìn màn hình vẫn biết ngay quét đúng hay có vấn đề. Có cả 2 kênh (rung + âm thanh) vì rung
+  // không hoạt động trên iPhone/Safari — âm thanh đảm bảo vẫn có phản hồi trên mọi thiết bị.
+  if(navigator.vibrate){
+    if(!result.ok) navigator.vibrate(250);
+    else if(result.mismatch) navigator.vibrate([60, 80, 60]);
+    else navigator.vibrate(60);
+  }
+  if(!result.ok) qrBeepError();
+  else if(result.mismatch) qrBeepWarn();
+  else qrBeepSuccess();
   if(!result.ok){
     qrScanSetStatus('✗ ' + result.message, 'err');
     qrScanAddLog('✗ ' + giNo + ' — ' + result.message, 'err');
