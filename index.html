@@ -797,9 +797,17 @@
     font-size:12px; font-weight:700; color:#fff; background:rgba(0,0,0,0.18) !important;
     padding:3px 10px; border-radius:20px; white-space:nowrap; flex:none;
   }
+  .ps-kho-title-multipo-badge{
+    font-size:12px; font-weight:700; color:#fff; background:var(--red) !important;
+    padding:3px 10px; border-radius:20px; white-space:nowrap; flex:none;
+  }
   .ps-row-surplus td{background:#fff6e0 !important;}
   .ps-item-surplus-badge{
     display:inline-block; font-size:11px; font-weight:700; color:#8a5c00; background:#ffe8b0;
+    padding:1px 8px; border-radius:10px; margin-left:6px; white-space:nowrap;
+  }
+  .ps-item-multipo-badge{
+    display:inline-block; font-size:11px; font-weight:700; color:#fff; background:var(--red);
     padding:1px 8px; border-radius:10px; margin-left:6px; white-space:nowrap;
   }
   tr.row-scanned-extra{ background:rgba(214,57,75,0.06) !important; }
@@ -810,6 +818,9 @@
   .scanned-extra-loc-select{
     border:1px dashed var(--red); border-radius:5px; padding:3px 6px; font-size:12px;
     font-family:var(--mono); background:#fff; max-width:140px;
+  }
+  .scanned-extra-wms-note{
+    font-size:10px; color:var(--muted-2); margin-top:2px; font-family:var(--mono);
   }
   .ps-loc-header-row th{
     background:linear-gradient(135deg, #0e8f76, #1cb8a0) !important; color:#fff !important;
@@ -2352,6 +2363,7 @@
               <th style="text-align:right">SL tồn</th>
               <th style="text-align:center">Phép tính nhập</th>
               <th style="text-align:right">Kết quả KT</th>
+              <th>Sai vị trí</th>
               <th style="text-align:center">Thao tác</th>
             </tr>
           </thead>
@@ -5622,7 +5634,11 @@ function buildCompareTable(type){
     </table>`, okCount, shortCount, poMismatchCount, rows, khoOrder };
 }
 
-function buildItemLocatorDetail(item, po){
+// Vị trí "Prod" (VD: D3B-FG-PROD) là khu trung chuyển/sản xuất, KHÔNG phải tồn kho lưu trữ thật —
+// dùng chung 1 regex để loại vị trí này ở những chỗ tính "tồn kho khả dụng để pick".
+const PROD_LOCATOR_RE = /prod/i;
+
+function buildItemLocatorDetail(item, po, excludeProd){
   if(!currentData || !currentData.kho_detail) return [];
   const itemLower = item.toLowerCase();
   const poLower = po ? po.trim().toLowerCase() : '';
@@ -5631,6 +5647,7 @@ function buildItemLocatorDetail(item, po){
     for(const [it, custpo, locator, oqc, qty] of currentData.kho_detail[kho]){
       if(it.toLowerCase() !== itemLower) continue;
       if(poLower && (custpo || '').trim().toLowerCase() !== poLower) continue;
+      if(excludeProd && PROD_LOCATOR_RE.test(locator || '')) continue;
       rows.push({ kho, locator, custpo, oqc, qty });
     }
   }
@@ -6089,8 +6106,9 @@ function renderContainerPickingOverview(){
       if(r.loadDate) entry.loadDates.add(fmtDate(r.loadDate));
       if(r.planTime) entry.planTimes.add(r.planTime);
       const itemPoKey = r.item + '||' + (r.custPo || '');
-      if(!entry.items.has(itemPoKey)) entry.items.set(itemPoKey, { item: r.item, po: r.custPo || '', qty: 0 });
+      if(!entry.items.has(itemPoKey)) entry.items.set(itemPoKey, { item: r.item, po: r.custPo || '', qty: 0, cbm: 0 });
       entry.items.get(itemPoKey).qty += planQty;
+      entry.items.get(itemPoKey).cbm += (parseFloat(r.cbm) || 0);
     });
   });
 
@@ -6119,10 +6137,12 @@ function renderContainerPickingOverview(){
     else inProgress++;
 
     const items = [...entry.items.values()].map(it => {
-      const locs = buildItemLocatorDetail(it.item, it.po);
+      // Loại vị trí "Prod" khỏi tồn kho khả dụng — đây là khu trung chuyển/sản xuất, không tính là
+      // hàng sẵn sàng để pick xuất cont.
+      const locs = buildItemLocatorDetail(it.item, it.po, true);
       const totalOnHand = locs.reduce((s, l) => s + l.qty, 0);
       const passOnHand = locs.reduce((s, l) => s + (l.oqc === 'PASS' ? l.qty : 0), 0);
-      return { item: it.item, po: it.po, qty: it.qty, locs, totalOnHand, passOnHand };
+      return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, locs, totalOnHand, passOnHand };
     });
 
     // Mã hàng nào "Thiếu" TÍNH RIÊNG cho container này (không gộp với container khác dùng chung mã):
@@ -6477,7 +6497,7 @@ function buildItemLocatorPopoverHtml(item, po){
     return `<div class="cpt-item-head"><b>${escHtml(item)}</b>${poNote}</div><div class="cpt-empty">Không có container nào đóng mã hàng này (trong Plan xuất cont đã tải)</div>`;
   }
   const totalQty = conts.reduce((s, c) => s + c.qty, 0);
-  const locs = buildItemLocatorDetail(item, po);
+  const locs = buildItemLocatorDetail(item, po, true); // loại vị trí "Prod" — không tính là tồn khả dụng để pick
   const totalOnHand = locs.reduce((s, l) => s + l.qty, 0);
   const khoTotals = new Map();
   locs.forEach(l => khoTotals.set(l.kho, (khoTotals.get(l.kho)||0) + l.qty));
@@ -8288,11 +8308,11 @@ function handleQrScanReal(giNoRaw){
       let grp = result.list.find(g => g.locator === effectiveLocator);
       if(!grp){ grp = { locator: effectiveLocator, items: [], maxScore: 0, palletCount: 0 }; result.list.push(grp); }
       let existing = grp.items.find(r => r.item === item && String(r.custpo || '').trim() === custpo && ccOqcNormalize(r.oqc) === oqcNorm);
-      if(!existing){ existing = { kho, item, custpo, locator: effectiveLocator, oqc: oqcRaw, qty: 0, palletCount: 0, isScannedExtra: isWrongLocation }; grp.items.push(existing); }
+      if(!existing){ existing = { kho, item, custpo, locator: effectiveLocator, oqc: oqcRaw, qty: 0, palletCount: 0, isScannedExtra: isWrongLocation, wmsLocator: systemLocator }; grp.items.push(existing); }
       addToList(existing);
     } else {
       let existing = result.list.find(r => r.item === item && String(r.custpo || '').trim() === custpo && r.locator === effectiveLocator && ccOqcNormalize(r.oqc) === oqcNorm);
-      if(!existing){ existing = { kho, item, custpo, locator: effectiveLocator, oqc: oqcRaw, qty: 0, palletCount: 0, isScannedExtra: isWrongLocation }; result.list.push(existing); }
+      if(!existing){ existing = { kho, item, custpo, locator: effectiveLocator, oqc: oqcRaw, qty: 0, palletCount: 0, isScannedExtra: isWrongLocation, wmsLocator: systemLocator }; result.list.push(existing); }
       addToList(existing);
     }
     response = isWrongLocation
@@ -8361,8 +8381,9 @@ function buildPickSlipForContainer(type, cNo){
   const allLocs = []; // TẤT CẢ vị trí đang có hàng (PASS + NG) — lấy đúng logic như khi hover 1 dòng container
 
   (row.items || []).forEach(it => {
-    // Toàn bộ vị trí hiện có của mã hàng + PO này, y hệt dữ liệu hiển thị khi hover chuột vào dòng container.
-    const locs = buildItemLocatorDetail(it.item, it.po);
+    // Toàn bộ vị trí hiện có của mã hàng + PO này, y hệt dữ liệu hiển thị khi hover chuột vào dòng
+    // container — LOẠI vị trí "Prod" (khu trung chuyển/sản xuất), không tính là hàng sẵn sàng để pick.
+    const locs = buildItemLocatorDetail(it.item, it.po, true);
 
     // Đếm số pallet tại từng vị trí — 1 GI No = 1 pallet, lấy từ dữ liệu raw rows chi tiết (nếu không
     // có GI No thì mỗi dòng raw tính là 1 pallet).
@@ -8391,6 +8412,20 @@ function buildPickSlipForContainer(type, cNo){
     }
   });
 
+  // Đếm số PO KHÁC NHAU hiện đang có tồn kho cho MỖI MÃ HÀNG (không lọc theo PO — xét toàn bộ tồn
+  // kho của mã đó, loại vị trí "Prod") — cảnh báo dễ lấy nhầm PO khi 1 mã có nhiều PO cùng tồn tại.
+  const itemAllPoMap = new Map(); // item (lowercase) -> Set các Cust PO đang tồn
+  const seenItemCodes = new Set();
+  (row.items || []).forEach(it => {
+    const itemKey = it.item.toLowerCase();
+    if(seenItemCodes.has(itemKey)) return;
+    seenItemCodes.add(itemKey);
+    const allPoLocs = buildItemLocatorDetail(it.item, null, true);
+    const poSet = new Set(allPoLocs.map(l => (l.custpo || '').trim()).filter(Boolean));
+    itemAllPoMap.set(itemKey, poSet);
+  });
+  allLocs.forEach(g => { g.itemPoCount = (itemAllPoMap.get(g.item.toLowerCase()) || new Set()).size; });
+
   // Nhóm theo TỪNG MÃ HÀNG (đúng thứ tự trong kế hoạch) trước, trong mỗi mã mới sắp theo kho/locator.
   const itemOrderMap = new Map();
   (row.items || []).forEach((it, idx) => itemOrderMap.set(it.item + '||' + (it.po || ''), idx));
@@ -8408,6 +8443,20 @@ function buildPickSlipForContainer(type, cNo){
   (row.items || []).forEach(it => planQtyMap.set(it.item + '||' + (it.po || ''), it.qty));
   allLocs.forEach(g => { g.planQty = planQtyMap.get(g.item + '||' + (g.po || '')) || 0; });
 
+  // Ước tính CBM cho từng vị trí: CBM/đơn vị = Tổng CBM kế hoạch của mã này (lấy từ bảng Plan, cột
+  // CBM) chia cho SL kế hoạch của mã đó, rồi nhân với SL tồn thực tế đang có ở TỪNG vị trí — để biết
+  // ngay lấy hàng ở vị trí nào thì chiếm khoảng bao nhiêu khối (m3), không cần tính tay.
+  const planCbmPerUnitMap = new Map();
+  (row.items || []).forEach(it => {
+    const key = it.item + '||' + (it.po || '');
+    planCbmPerUnitMap.set(key, it.qty > 0 ? (it.cbm || 0) / it.qty : 0);
+  });
+  allLocs.forEach(g => {
+    const cbmPerUnit = planCbmPerUnitMap.get(g.item + '||' + (g.po || '')) || 0;
+    g.cbmPerUnit = cbmPerUnit;
+    g.cbm = g.onHand * cbmPerUnit;
+  });
+
   // Tổng tồn kho TOÀN KHO (tất cả vị trí, PASS+NG) cho từng mã hàng+PO, cộng lại cho cả container.
   const itemPoOnHandTotal = new Map();
   allLocs.forEach(l => {
@@ -8415,6 +8464,7 @@ function buildPickSlipForContainer(type, cNo){
     itemPoOnHandTotal.set(ip, (itemPoOnHandTotal.get(ip) || 0) + l.onHand);
   });
   const totalOnHandWarehouse = [...itemPoOnHandTotal.values()].reduce((s, v) => s + v, 0);
+  const totalCbmWarehouse = allLocs.reduce((s, l) => s + (l.cbm || 0), 0);
 
   // Đánh dấu mã hàng DƯ HÀNG — tổng tồn (toàn kho) của mã+PO này nhiều hơn SL kế hoạch cần lấy.
   allLocs.forEach(g => {
@@ -8424,7 +8474,7 @@ function buildPickSlipForContainer(type, cNo){
     g.isSurplus = g.surplusQty > 0;
   });
 
-  return { row, grouped: allLocs, shortages, totalOnHandWarehouse };
+  return { row, grouped: allLocs, shortages, totalOnHandWarehouse, totalCbmWarehouse };
 }
 
 let currentPickSlipData = null; // slip đang mở trong modal — dùng khi bấm "Xuất Excel"
@@ -8451,47 +8501,55 @@ function buildPickSlipBodyByItem(grouped){
   let bodyHtml = '';
   let itemOnHandSubtotal = 0;
   let itemPalletSubtotal = 0;
+  let itemCbmSubtotal = 0;
   let khoOnHandSubtotal = 0;
   let khoPalletSubtotal = 0;
+  let khoCbmSubtotal = 0;
   grouped.forEach((g, i) => {
     const key = g.item + '||' + (g.po || '');
     if(key !== currentKey){
       if(currentKey !== null){
-        bodyHtml += `<tr class="ps-subtotal-row"><td colspan="3" style="text-align:right;">Tổng ${escHtml(currentKho)}</td><td class="num">${fmt(khoOnHandSubtotal)}</td><td class="num">${fmt(khoPalletSubtotal)}</td></tr>`;
-        bodyHtml += `<tr class="ps-total-row"><td colspan="3" style="text-align:right;">Tổng mã này</td><td class="num">${fmt(itemOnHandSubtotal)}</td><td class="num">${fmt(itemPalletSubtotal)}</td></tr></tbody></table>`;
+        bodyHtml += `<tr class="ps-subtotal-row"><td colspan="3" style="text-align:right;">Tổng ${escHtml(currentKho)}</td><td class="num">${fmt(khoOnHandSubtotal)}</td><td class="num">${fmt(khoPalletSubtotal)}</td><td class="num">${fmtDec(khoCbmSubtotal,2)}</td></tr>`;
+        bodyHtml += `<tr class="ps-total-row"><td colspan="3" style="text-align:right;">Tổng mã này</td><td class="num">${fmt(itemOnHandSubtotal)}</td><td class="num">${fmt(itemPalletSubtotal)}</td><td class="num">${fmtDec(itemCbmSubtotal,2)}</td></tr></tbody></table>`;
       }
       currentKey = key;
       currentKho = null;
       itemOnHandSubtotal = 0;
       itemPalletSubtotal = 0;
+      itemCbmSubtotal = 0;
       stt = 0;
       const surplusBadge = g.isSurplus ? `<span class="ps-kho-title-surplus-badge">⚠ Dư ${fmt(g.surplusQty)}</span>` : '';
-      bodyHtml += `<div class="ps-kho-title${g.isSurplus ? ' surplus' : ''}"><span class="ps-kho-title-main">Mã <b>${escHtml(g.item)}</b> — PO <b>${escHtml(g.po || '—')}</b></span><span style="display:flex; gap:6px; flex:none;"><span class="ps-kho-title-kh">KH ${fmt(g.planQty)}</span>${surplusBadge}</span></div><table class="ps-table"><thead><tr><th>#</th><th>Locator</th><th>OQC</th><th style="text-align:right">Tồn kho</th><th style="text-align:right">SL pallet</th></tr></thead><tbody>`;
+      const multiPoBadge = g.itemPoCount > 1 ? `<span class="ps-kho-title-multipo-badge">Có ${g.itemPoCount} PO</span>` : '';
+      bodyHtml += `<div class="ps-kho-title${g.isSurplus ? ' surplus' : ''}"><span class="ps-kho-title-main">Mã <b>${escHtml(g.item)}</b> — PO <b>${escHtml(g.po || '—')}</b></span><span style="display:flex; gap:6px; flex:none;"><span class="ps-kho-title-kh">KH ${fmt(g.planQty)}</span>${multiPoBadge}${surplusBadge}</span></div><table class="ps-table"><thead><tr><th>#</th><th>Locator</th><th>OQC</th><th style="text-align:right">Tồn kho</th><th style="text-align:right">SL pallet</th><th style="text-align:right">CBM</th></tr></thead><tbody>`;
     }
     if(g.kho !== currentKho){
       if(currentKho !== null){
-        bodyHtml += `<tr class="ps-subtotal-row"><td colspan="3" style="text-align:right;">Tổng ${escHtml(currentKho)}</td><td class="num">${fmt(khoOnHandSubtotal)}</td><td class="num">${fmt(khoPalletSubtotal)}</td></tr>`;
+        bodyHtml += `<tr class="ps-subtotal-row"><td colspan="3" style="text-align:right;">Tổng ${escHtml(currentKho)}</td><td class="num">${fmt(khoOnHandSubtotal)}</td><td class="num">${fmt(khoPalletSubtotal)}</td><td class="num">${fmtDec(khoCbmSubtotal,2)}</td></tr>`;
       }
       currentKho = g.kho;
       khoOnHandSubtotal = 0;
       khoPalletSubtotal = 0;
-      bodyHtml += `<tr class="ps-kho-subrow"><td colspan="5">${escHtml(g.kho)}</td></tr>`;
+      khoCbmSubtotal = 0;
+      bodyHtml += `<tr class="ps-kho-subrow"><td colspan="6">${escHtml(g.kho)}</td></tr>`;
     }
     stt++;
     itemOnHandSubtotal += g.onHand;
     itemPalletSubtotal += g.pallets;
+    itemCbmSubtotal += (g.cbm || 0);
     khoOnHandSubtotal += g.onHand;
     khoPalletSubtotal += g.pallets;
+    khoCbmSubtotal += (g.cbm || 0);
     bodyHtml += `<tr${g.isSurplus ? ' class="ps-row-surplus"' : ''}>
       <td>${stt}</td>
       <td><b>${escHtml(g.locator)}</b></td>
       <td>${oqcBadge(g.oqc)}</td>
       <td class="num">${fmt(g.onHand)}</td>
       <td class="num">${fmt(g.pallets)}</td>
+      <td class="num">${fmtDec(g.cbm,2)}</td>
     </tr>`;
     if(i === grouped.length - 1){
-      bodyHtml += `<tr class="ps-subtotal-row"><td colspan="3" style="text-align:right;">Tổng ${escHtml(currentKho)}</td><td class="num">${fmt(khoOnHandSubtotal)}</td><td class="num">${fmt(khoPalletSubtotal)}</td></tr>`;
-      bodyHtml += `<tr class="ps-total-row"><td colspan="3" style="text-align:right;">Tổng mã này</td><td class="num">${fmt(itemOnHandSubtotal)}</td><td class="num">${fmt(itemPalletSubtotal)}</td></tr></tbody></table>`;
+      bodyHtml += `<tr class="ps-subtotal-row"><td colspan="3" style="text-align:right;">Tổng ${escHtml(currentKho)}</td><td class="num">${fmt(khoOnHandSubtotal)}</td><td class="num">${fmt(khoPalletSubtotal)}</td><td class="num">${fmtDec(khoCbmSubtotal,2)}</td></tr>`;
+      bodyHtml += `<tr class="ps-total-row"><td colspan="3" style="text-align:right;">Tổng mã này</td><td class="num">${fmt(itemOnHandSubtotal)}</td><td class="num">${fmt(itemPalletSubtotal)}</td><td class="num">${fmtDec(itemCbmSubtotal,2)}</td></tr></tbody></table>`;
     }
   });
   return bodyHtml;
@@ -8513,48 +8571,56 @@ function buildPickSlipBodyByLocator(grouped){
   let bodyHtml = '';
   let locatorOnHandSubtotal = 0;
   let locatorPalletSubtotal = 0;
+  let locatorCbmSubtotal = 0;
   let khoOnHandSubtotal = 0;
   let khoPalletSubtotal = 0;
+  let khoCbmSubtotal = 0;
   sorted.forEach((g, i) => {
     if(g.kho !== currentKho){
       if(currentLocator !== null){
-        bodyHtml += `<tr class="ps-subtotal-row"><td colspan="3" style="text-align:right;">Tổng ${escHtml(currentLocator)}</td><td class="num">${fmt(locatorOnHandSubtotal)}</td><td class="num">${fmt(locatorPalletSubtotal)}</td></tr></tbody></table>`;
+        bodyHtml += `<tr class="ps-subtotal-row"><td colspan="3" style="text-align:right;">Tổng ${escHtml(currentLocator)}</td><td class="num">${fmt(locatorOnHandSubtotal)}</td><td class="num">${fmt(locatorPalletSubtotal)}</td><td class="num">${fmtDec(locatorCbmSubtotal,2)}</td></tr></tbody></table>`;
       }
       if(currentKho !== null){
-        bodyHtml += `<div class="ps-kho-subtotal-note">Tổng ${escHtml(currentKho)}: ${fmt(khoOnHandSubtotal)} Pcs · ${fmt(khoPalletSubtotal)} pallet</div>`;
+        bodyHtml += `<div class="ps-kho-subtotal-note">Tổng ${escHtml(currentKho)}: ${fmt(khoOnHandSubtotal)} Pcs · ${fmt(khoPalletSubtotal)} pallet · ${fmtDec(khoCbmSubtotal,2)} CBM</div>`;
       }
       currentKho = g.kho;
       currentLocator = null;
       khoOnHandSubtotal = 0;
       khoPalletSubtotal = 0;
+      khoCbmSubtotal = 0;
       bodyHtml += `<div class="ps-kho-title"><span class="ps-kho-title-main">${escHtml(g.kho)}</span></div>`;
     }
     if(g.locator !== currentLocator){
       if(currentLocator !== null){
-        bodyHtml += `<tr class="ps-subtotal-row"><td colspan="3" style="text-align:right;">Tổng ${escHtml(currentLocator)}</td><td class="num">${fmt(locatorOnHandSubtotal)}</td><td class="num">${fmt(locatorPalletSubtotal)}</td></tr></tbody></table>`;
+        bodyHtml += `<tr class="ps-subtotal-row"><td colspan="3" style="text-align:right;">Tổng ${escHtml(currentLocator)}</td><td class="num">${fmt(locatorOnHandSubtotal)}</td><td class="num">${fmt(locatorPalletSubtotal)}</td><td class="num">${fmtDec(locatorCbmSubtotal,2)}</td></tr></tbody></table>`;
       }
       currentLocator = g.locator;
       locatorOnHandSubtotal = 0;
       locatorPalletSubtotal = 0;
+      locatorCbmSubtotal = 0;
       stt = 0;
-      bodyHtml += `<table class="ps-table"><thead><tr class="ps-loc-header-row"><th colspan="2">📍 ${escHtml(g.locator)}</th><th>OQC</th><th style="text-align:right">Tồn kho</th><th style="text-align:right">SL pallet</th></tr></thead><tbody>`;
+      bodyHtml += `<table class="ps-table"><thead><tr class="ps-loc-header-row"><th colspan="2">📍 ${escHtml(g.locator)}</th><th>OQC</th><th style="text-align:right">Tồn kho</th><th style="text-align:right">SL pallet</th><th style="text-align:right">CBM</th></tr></thead><tbody>`;
     }
     stt++;
     locatorOnHandSubtotal += g.onHand;
     locatorPalletSubtotal += g.pallets;
+    locatorCbmSubtotal += (g.cbm || 0);
     khoOnHandSubtotal += g.onHand;
     khoPalletSubtotal += g.pallets;
+    khoCbmSubtotal += (g.cbm || 0);
     const surplusBadge = g.isSurplus ? `<span class="ps-item-surplus-badge">⚠ Dư ${fmt(g.surplusQty)} (KH ${fmt(g.planQty)})</span>` : '';
+    const multiPoBadge = g.itemPoCount > 1 ? `<span class="ps-item-multipo-badge">Có ${g.itemPoCount} PO</span>` : '';
     bodyHtml += `<tr${g.isSurplus ? ' class="ps-row-surplus"' : ''}>
       <td>${stt}</td>
-      <td colspan="1"><b>${escHtml(g.item)}</b>${g.po ? ` <span style="color:#888; font-weight:400;">(PO ${escHtml(g.po)})</span>` : ''}${surplusBadge}</td>
+      <td colspan="1"><b>${escHtml(g.item)}</b>${g.po ? ` <span style="color:#888; font-weight:400;">(PO ${escHtml(g.po)})</span>` : ''}${multiPoBadge}${surplusBadge}</td>
       <td>${oqcBadge(g.oqc)}</td>
       <td class="num">${fmt(g.onHand)}</td>
       <td class="num">${fmt(g.pallets)}</td>
+      <td class="num">${fmtDec(g.cbm,2)}</td>
     </tr>`;
     if(i === sorted.length - 1){
-      bodyHtml += `<tr class="ps-subtotal-row"><td colspan="3" style="text-align:right;">Tổng ${escHtml(currentLocator)}</td><td class="num">${fmt(locatorOnHandSubtotal)}</td><td class="num">${fmt(locatorPalletSubtotal)}</td></tr></tbody></table>`;
-      bodyHtml += `<div class="ps-kho-subtotal-note">Tổng ${escHtml(currentKho)}: ${fmt(khoOnHandSubtotal)} Pcs · ${fmt(khoPalletSubtotal)} pallet</div>`;
+      bodyHtml += `<tr class="ps-subtotal-row"><td colspan="3" style="text-align:right;">Tổng ${escHtml(currentLocator)}</td><td class="num">${fmt(locatorOnHandSubtotal)}</td><td class="num">${fmt(locatorPalletSubtotal)}</td><td class="num">${fmtDec(locatorCbmSubtotal,2)}</td></tr></tbody></table>`;
+      bodyHtml += `<div class="ps-kho-subtotal-note">Tổng ${escHtml(currentKho)}: ${fmt(khoOnHandSubtotal)} Pcs · ${fmt(khoPalletSubtotal)} pallet · ${fmtDec(khoCbmSubtotal,2)} CBM</div>`;
     }
   });
   return bodyHtml;
@@ -8568,7 +8634,7 @@ function renderPickSlipBody(){
     contentEl.innerHTML = `<div style="padding:30px; text-align:center; color:#888;">Không tìm thấy container.</div>`;
     return;
   }
-  const { row, grouped, shortages, totalOnHandWarehouse } = slip;
+  const { row, grouped, shortages, totalOnHandWarehouse, totalCbmWarehouse } = slip;
   const totalPlanQty = [...new Map(grouped.map(g => [g.item + '||' + (g.po || ''), g.planQty])).values()].reduce((s, v) => s + v, 0);
 
   const bodyHtml = pickSlipViewMode === 'locator' ? buildPickSlipBodyByLocator(grouped) : buildPickSlipBodyByItem(grouped);
@@ -8610,7 +8676,7 @@ function renderPickSlipBody(){
     ${multiPoHtml}
     ${bodyHtml}
     <table class="ps-table"><tbody>
-    <tr class="ps-total-row"><td style="text-align:right; width:60%;">TỔNG (TẤT CẢ CÁC MÃ)<br><span style="font-weight:600; font-size:11px; color:#666;">SL kế hoạch: ${fmt(totalPlanQty)}</span></td><td class="num">${fmt(totalOnHandWarehouse)}</td></tr>
+    <tr class="ps-total-row"><td style="text-align:right; width:60%;">TỔNG (TẤT CẢ CÁC MÃ)<br><span style="font-weight:600; font-size:11px; color:#666;">SL kế hoạch: ${fmt(totalPlanQty)}</span></td><td class="num">${fmt(totalOnHandWarehouse)}</td><td class="num">${fmtDec(totalCbmWarehouse,2)} CBM</td></tr>
     </tbody></table>
     ${shortageHtml}
   `;
@@ -8628,9 +8694,10 @@ async function exportPickSlipExcel(){
   const slip = currentPickSlipData;
   if(!slip) return;
   if(!LIB_EXCELJS_OK){ alert('Không xuất được Excel: thư viện ExcelJS chưa tải được (cần Internet).'); return; }
-  const { row, grouped, shortages, totalOnHandWarehouse } = slip;
+  const { row, grouped, shortages, totalOnHandWarehouse, totalCbmWarehouse } = slip;
   const totalPlanQty = [...new Map(grouped.map(g => [g.item + '||' + (g.po || ''), g.planQty])).values()].reduce((s, v) => s + v, 0);
   const isLocatorMode = pickSlipViewMode === 'locator';
+  const roundCbm = v => Math.round((v || 0) * 100) / 100;
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'TN5 Dashboard';
@@ -8642,8 +8709,8 @@ async function exportPickSlipExcel(){
   };
 
   const headers = isLocatorMode
-    ? ['#', 'Item (PO)', 'OQC', 'Tồn kho', 'SL pallet']
-    : ['#', 'Locator', 'OQC', 'Tồn kho', 'SL pallet'];
+    ? ['#', 'Item (PO)', 'OQC', 'Tồn kho', 'SL pallet', 'CBM']
+    : ['#', 'Locator', 'OQC', 'Tồn kho', 'SL pallet', 'CBM'];
   const nCols = headers.length;
   const thin = { style:'thin', color:{ argb:'FFAAAAAA' } };
   const thick = { style:'medium', color:{ argb:'FF222222' } };
@@ -8693,24 +8760,27 @@ async function exportPickSlipExcel(){
       const cell = ws.getCell(r, i+1);
       cell.value = v;
       trackWidth(i, v);
-      cell.alignment = { vertical:'middle', horizontal: (i===3||i===4) ? 'right' : (i===0 ? 'center' : 'left'), wrapText: i===1 };
+      cell.alignment = { vertical:'middle', horizontal: (i===3||i===4||i===5) ? 'right' : (i===0 ? 'center' : 'left'), wrapText: i===1 };
       cell.border = { top:thin, bottom:thin, left: i===0?thick:thin, right: i===values.length-1?thick:thin };
       if(opts && opts.warn) cell.font = { bold:true, color:{ argb:'FFC9740A' } };
     });
     r++;
   };
-  const writeSubtotalRow = (label, onHand, pallets, bold) => {
-    ws.mergeCells(r,1,r,nCols-2);
+  const writeSubtotalRow = (label, onHand, pallets, cbmVal, bold) => {
+    ws.mergeCells(r,1,r,nCols-3);
     const labelCell = ws.getCell(r,1);
     labelCell.value = label;
     labelCell.font = { bold:true, size: bold ? 11.5 : 10.5 };
     labelCell.alignment = { horizontal:'right', vertical:'middle' };
-    const onHandCell = ws.getCell(r, nCols-1);
+    const onHandCell = ws.getCell(r, nCols-2);
     onHandCell.value = onHand; onHandCell.font = { bold:true };
     onHandCell.alignment = { horizontal:'right' };
-    const palletCell = ws.getCell(r, nCols);
+    const palletCell = ws.getCell(r, nCols-1);
     palletCell.value = pallets; palletCell.font = { bold:true };
     palletCell.alignment = { horizontal:'right' };
+    const cbmCell = ws.getCell(r, nCols);
+    cbmCell.value = cbmVal; cbmCell.font = { bold:true };
+    cbmCell.alignment = { horizontal:'right' };
     for(let c=1;c<=nCols;c++){
       ws.getCell(r,c).fill = { type:'pattern', pattern:'solid', fgColor:{ argb: bold ? 'FFEDEBFB' : 'FFF6F6F6' } };
       ws.getCell(r,c).border = { top: bold ? thick : thin, bottom:thick, left: c===1?thick:thin, right: c===nCols?thick:thin };
@@ -8737,64 +8807,64 @@ async function exportPickSlipExcel(){
       return a.item.localeCompare(b.item);
     });
     let currentKho = null, currentLocator = null;
-    let locOnHand = 0, locPallet = 0, khoOnHand = 0, khoPallet = 0, stt = 0;
+    let locOnHand = 0, locPallet = 0, locCbm = 0, khoOnHand = 0, khoPallet = 0, khoCbm = 0, stt = 0;
     sorted.forEach((g, i) => {
       if(g.kho !== currentKho){
-        if(currentLocator !== null) writeSubtotalRow('Tổng ' + currentLocator, locOnHand, locPallet);
-        if(currentKho !== null) writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, true);
-        currentKho = g.kho; currentLocator = null; khoOnHand = 0; khoPallet = 0;
+        if(currentLocator !== null) writeSubtotalRow('Tổng ' + currentLocator, locOnHand, locPallet, roundCbm(locCbm));
+        if(currentKho !== null) writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, roundCbm(khoCbm), true);
+        currentKho = g.kho; currentLocator = null; khoOnHand = 0; khoPallet = 0; khoCbm = 0;
         writeGroupHeaderRow(currentKho, KHO_COLOR);
       }
       if(g.locator !== currentLocator){
-        if(currentLocator !== null) writeSubtotalRow('Tổng ' + currentLocator, locOnHand, locPallet);
-        currentLocator = g.locator; locOnHand = 0; locPallet = 0; stt = 0;
+        if(currentLocator !== null) writeSubtotalRow('Tổng ' + currentLocator, locOnHand, locPallet, roundCbm(locCbm));
+        currentLocator = g.locator; locOnHand = 0; locPallet = 0; locCbm = 0; stt = 0;
         writeGroupHeaderRow(currentLocator, g.isSurplus ? GROUP_COLOR_WARN : GROUP_COLOR);
         writeMiniHeaderRow();
       }
       stt++;
-      locOnHand += g.onHand; locPallet += g.pallets;
-      khoOnHand += g.onHand; khoPallet += g.pallets;
-      const itemLabel = g.item + (g.po ? ` (PO ${g.po})` : '') + (g.isSurplus ? ` — DƯ ${g.surplusQty} (KH ${g.planQty})` : '');
-      writeDataRow([stt, itemLabel, g.oqc || '', g.onHand, g.pallets], { warn: g.isSurplus });
+      locOnHand += g.onHand; locPallet += g.pallets; locCbm += (g.cbm || 0);
+      khoOnHand += g.onHand; khoPallet += g.pallets; khoCbm += (g.cbm || 0);
+      const itemLabel = g.item + (g.po ? ` (PO ${g.po})` : '') + (g.itemPoCount > 1 ? ` — Có ${g.itemPoCount} PO` : '') + (g.isSurplus ? ` — DƯ ${g.surplusQty} (KH ${g.planQty})` : '');
+      writeDataRow([stt, itemLabel, g.oqc || '', g.onHand, g.pallets, roundCbm(g.cbm)], { warn: g.isSurplus });
       if(i === sorted.length - 1){
-        writeSubtotalRow('Tổng ' + currentLocator, locOnHand, locPallet);
-        writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, true);
+        writeSubtotalRow('Tổng ' + currentLocator, locOnHand, locPallet, roundCbm(locCbm));
+        writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, roundCbm(khoCbm), true);
       }
     });
   } else {
     let currentKey = null, currentKho = null;
-    let itemOnHand = 0, itemPallet = 0, khoOnHand = 0, khoPallet = 0, stt = 0;
+    let itemOnHand = 0, itemPallet = 0, itemCbm = 0, khoOnHand = 0, khoPallet = 0, khoCbm = 0, stt = 0;
     grouped.forEach((g, i) => {
       const key = g.item + '||' + (g.po || '');
       if(key !== currentKey){
         if(currentKey !== null){
-          writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, true);
-          writeSubtotalRow('Tổng mã này', itemOnHand, itemPallet, true);
+          writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, roundCbm(khoCbm), true);
+          writeSubtotalRow('Tổng mã này', itemOnHand, itemPallet, roundCbm(itemCbm), true);
         }
-        currentKey = key; currentKho = null; itemOnHand = 0; itemPallet = 0; stt = 0;
-        const headerLabel = `Mã ${g.item} — PO ${g.po || '—'} (KH ${g.planQty})` + (g.isSurplus ? ` — ⚠ DƯ ${g.surplusQty}` : '');
+        currentKey = key; currentKho = null; itemOnHand = 0; itemPallet = 0; itemCbm = 0; stt = 0;
+        const headerLabel = `Mã ${g.item} — PO ${g.po || '—'} (KH ${g.planQty})` + (g.itemPoCount > 1 ? ` — Có ${g.itemPoCount} PO` : '') + (g.isSurplus ? ` — ⚠ DƯ ${g.surplusQty}` : '');
         writeGroupHeaderRow(headerLabel, g.isSurplus ? GROUP_COLOR_WARN : GROUP_COLOR);
       }
       if(g.kho !== currentKho){
-        if(currentKho !== null) writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, true);
-        currentKho = g.kho; khoOnHand = 0; khoPallet = 0;
+        if(currentKho !== null) writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, roundCbm(khoCbm), true);
+        currentKho = g.kho; khoOnHand = 0; khoPallet = 0; khoCbm = 0;
         writeGroupHeaderRow(currentKho, KHO_COLOR);
         writeMiniHeaderRow();
       }
       stt++;
-      itemOnHand += g.onHand; itemPallet += g.pallets;
-      khoOnHand += g.onHand; khoPallet += g.pallets;
-      writeDataRow([stt, g.locator, g.oqc || '', g.onHand, g.pallets]);
+      itemOnHand += g.onHand; itemPallet += g.pallets; itemCbm += (g.cbm || 0);
+      khoOnHand += g.onHand; khoPallet += g.pallets; khoCbm += (g.cbm || 0);
+      writeDataRow([stt, g.locator, g.oqc || '', g.onHand, g.pallets, roundCbm(g.cbm)]);
       if(i === grouped.length - 1){
-        writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, true);
-        writeSubtotalRow('Tổng mã này', itemOnHand, itemPallet, true);
+        writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, roundCbm(khoCbm), true);
+        writeSubtotalRow('Tổng mã này', itemOnHand, itemPallet, roundCbm(itemCbm), true);
       }
     });
   }
 
   r++;
-  writeSubtotalRow('SL kế hoạch (tổng)', totalPlanQty, '', true);
-  writeSubtotalRow('TỔNG TỒN (tất cả mã)', totalOnHandWarehouse, '', true);
+  writeSubtotalRow('SL kế hoạch (tổng)', totalPlanQty, '', '', true);
+  writeSubtotalRow('TỔNG TỒN (tất cả mã)', totalOnHandWarehouse, '', roundCbm(totalCbmWarehouse), true);
 
   if(shortages.length){
     r++;
@@ -8805,7 +8875,7 @@ async function exportPickSlipExcel(){
   }
 
   // Tự căn chiều rộng cột theo nội dung thực tế (có giới hạn min/max cho từng cột)
-  const colCaps = [[4,6], [16,48], [8,10], [10,14], [10,12]];
+  const colCaps = [[4,6], [16,48], [8,10], [10,14], [10,12], [8,10]];
   headers.forEach((h, i) => {
     const [minW, maxW] = colCaps[i];
     ws.getColumn(i+1).width = Math.min(Math.max(colMaxLen[i] + 2, minW), maxW);
@@ -9245,6 +9315,7 @@ function renderConfirmedList(){
       <td class="num">${fmt(item.data.qty)}</td>
       <td style="font-size:10px; text-align:center; font-family:var(--mono); color:var(--muted-2);">${calcStr}</td>
       <td class="num" style="color:var(--violet); font-weight:700;">${Math.round(total).toLocaleString('en-US')}</td>
+      <td>${item.data.isWrongLocation ? `<span class="scanned-extra-badge" title="Vị trí hệ thống WMS ghi nhận cho mã này">⚠ WMS: ${escHtml(item.data.wmsLocator || '—')}</span>` : '—'}</td>
       <td style="text-align:center;">
         <button type="button" class="cki-restore-btn" data-restore-key="${escAttr(key)}" title="Lỡ nhập sai — khôi phục dòng này về bảng Kiểm tồn kho để nhập lại">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -9433,7 +9504,8 @@ async function saveConfirmedSnapshotAndReset(){
     return {
       kho: item.data.kho, item: item.data.item, custpo: item.data.custpo,
       locator: item.data.locator, oqc: item.data.oqc, qty: item.data.qty,
-      actualResult: Math.round(total)
+      actualResult: Math.round(total),
+      isWrongLocation: !!item.data.isWrongLocation, wmsLocator: item.data.wmsLocator || ''
     };
   });
 
@@ -10407,12 +10479,18 @@ function buildKtItemRowHtml(r, rowStyle, groupCls, locBorderStyle){
   const ktIv3 = ktSaved && ktSaved[3] !== undefined ? ktSaved[3] : 1;
   const ktIv4 = ktSaved && ktSaved[4] !== undefined ? ktSaved[4] : 0;
   const ktIv5 = ktSaved && ktSaved[5] !== undefined ? ktSaved[5] : 1;
+  // Locator ở đầu LUÔN là vị trí ĐANG QUÉT/ĐANG ĐỨNG (r.locator) — đúng vị trí thực tế ngoài kho.
+  // Nếu là dòng "sai vị trí" (isScannedExtra), ghi chú thêm vị trí hệ thống WMS ghi nhận (r.wmsLocator)
+  // ngay bên dưới, để người kiểm biết hệ thống đang lưu pallet này ở đâu mà không cần tra lại.
+  const wmsNoteHtml = (r.isScannedExtra && r.wmsLocator)
+    ? `<div class="scanned-extra-wms-note" title="Vị trí hệ thống WMS đang ghi nhận cho mã này">WMS: <b>${escHtml(r.wmsLocator)}</b></div>`
+    : '';
   const locatorCellHtml = r.isScannedExtra
-    ? `<select class="scanned-extra-loc-select">${ccAllLocatorsInResult(r.kho).map(loc => `<option value="${escAttr(loc)}"${loc === r.locator ? ' selected' : ''}>${escHtml(loc)}</option>`).join('')}</select>`
+    ? `<select class="scanned-extra-loc-select">${ccAllLocatorsInResult(r.kho).map(loc => `<option value="${escAttr(loc)}"${loc === r.locator ? ' selected' : ''}>${escHtml(loc)}</option>`).join('')}</select>${wmsNoteHtml}`
     : escHtml(r.locator);
 
   return `
-    <tr class="${(groupCls || '').trim()}${r.isScannedExtra ? ' row-scanned-extra' : ''}"${rowStyle || ''}>
+    <tr class="${(groupCls || '').trim()}${r.isScannedExtra ? ' row-scanned-extra' : ''}"${rowStyle || ''} data-wrong-location="${r.isScannedExtra ? '1' : '0'}" data-wms-locator="${escAttr(r.wmsLocator || '')}">
       <td class="col-kho kt-card-hide" data-label="Kho">${escHtml((r.kho || '').replace('Kho ',''))}</td>
       <td class="loc-group-cell" data-label="Locator"${locBorderStyle || ''}>${locatorCellHtml}</td>
       <td data-label="OQC">${oqcBadge(r.oqc)}${r.isScannedExtra ? ' <span class="scanned-extra-badge" title="Được tự thêm khi quét QR — mã này không có sẵn trong danh sách kiểm tại vị trí hệ thống ghi nhận">⚠ Sai vị trí</span>' : ''}</td>
@@ -11291,11 +11369,16 @@ function confirmSingleRow(tr){
   if(oqcText.toUpperCase().includes('PASS')) oqc = 'PASS';
   else if(oqcText.toUpperCase().includes('NG')) oqc = 'NG';
 
+  // Dòng "sai vị trí" (tự thêm khi quét QR lệch vị trí hệ thống) — giữ lại vị trí WMS ghi nhận để
+  // hiện tiếp ở bảng "Đã xác nhận" sau khi bấm Xác nhận, không bị mất đi.
+  const isWrongLocation = tr.dataset.wrongLocation === '1';
+  const wmsLocator = tr.dataset.wmsLocator || '';
+
   const inputs = td.querySelectorAll('.kt-input');
   const inputValues = Array.from(inputs).map(inp => parseFloat(inp.value) || 0);
   const total = (inputValues[0] * inputValues[1]) + (inputValues[2] * inputValues[3]) + (inputValues[4] * inputValues[5]);
 
-  const rowData = { kho: byLabel('Kho'), item, custpo, locator, oqc, qty };
+  const rowData = { kho: byLabel('Kho'), item, custpo, locator, oqc, qty, isWrongLocation, wmsLocator };
   confirmedKiemTonItems[rowKey] = { data: rowData, inputs: inputValues, result: Math.round(total) };
   delete ktInputValues[rowKey]; // đã chuyển hẳn qua confirmedKiemTonItems — xoá bản nháp cũ, tránh
   // lần sau nếu đề xuất lại đúng dòng này (trùng item/locator/PO/SL) sẽ tự điền sẵn số liệu cũ.
