@@ -5547,16 +5547,18 @@ function buildCompareTable(type){
   const doneContSet = new Set(
     (contPickAllRows || [])
       .filter(r => r.status === 'done' || r.status === 'manualDone')
-      .map(r => r.type + '|' + r.cNo)
+      .map(r => r.instanceKey)
   );
 
   const planPairs = {};
   for(const r of (planData[type].detailRows || [])){
-    if(isContainerHidden(type, r.containerNo)) continue; // container đã xoá khỏi Plan — bỏ qua hẳn
+    const rLoadDateStr = r.loadDate ? fmtDate(r.loadDate) : '';
+    const rPlanTimeStr = r.planTime || '';
+    if(isContainerHidden(type, r.containerNo, rLoadDateStr, rPlanTimeStr)) continue; // container đã xoá khỏi Plan — bỏ qua hẳn
     const custpo = (r.custPo && r.custPo.trim()) ? r.custPo.trim() : '(Khong co)';
     const key = r.item.toLowerCase() + '\u241F' + custpo.toLowerCase();
     if(!planPairs[key]) planPairs[key] = { item: r.item, custpo, qty: 0 };
-    const isDone = r.containerNo && doneContSet.has(type + '|' + r.containerNo);
+    const isDone = r.containerNo && doneContSet.has(contInstanceKey(type, r.containerNo, rLoadDateStr, rPlanTimeStr));
     if(isDone) continue;
     planPairs[key].qty += r.qty;
   }
@@ -5766,13 +5768,21 @@ const CONT_PICK_STATUS_LABEL = { notStarted: 'Chưa pick', inProgress: 'Đang pi
 const CONT_PICK_STATUS_COLOR = { notStarted: 'var(--red)', inProgress: 'var(--amber-bright)', done: 'var(--teal)', manualDone: 'var(--violet)' };
 const CONT_PICK_STATUS_ORDER = { notStarted: 0, inProgress: 1, done: 2, manualDone: 2 };
 
+// Khoá định danh 1 "LƯỢT XUẤT" container — ghép Loại Plan + Số cont + Ngày Load + Giờ Plan.
+// LÝ DO: cùng 1 số cont có thể được dùng lại cho nhiều lượt xuất khác nhau (Ngày Load / Giờ Plan
+// khác nhau) — đây là các container THỰC TẾ KHÁC NHAU, không phải trùng lặp — nên phải tách thành
+// các dòng/trạng thái RIÊNG (Pick, Ẩn, chọn Kho thủ công...), không được gộp chung chỉ vì trùng số cont.
+function contInstanceKey(type, cNo, loadDate, planTime){
+  return type + '|' + cNo + '|' + (loadDate || '') + '|' + (planTime || '');
+}
+
 // Đánh dấu "pick xong" THỦ CÔNG cho 1 container — chỉ đổi NHÃN hiển thị để nhân viên dễ theo dõi,
 // không hề đụng tới số liệu tồn kho/Plan ở bất kỳ đâu khác trong dashboard. Lưu qua LS nên cũng
 // được đồng bộ theo cơ chế Lưu/Cloud sẵn có, và dùng chung khi mở trên nhiều máy/nhiều người.
 let manualPickedContainers = {};
 const STORAGE_KEY_MANUAL_PICKED = 'tn5_dashboard_manual_picked_v1';
-function togglePickedManual(type, cNo){
-  const key = type + '|' + cNo;
+function togglePickedManual(type, cNo, loadDate, planTime){
+  const key = contInstanceKey(type, cNo, loadDate, planTime);
   if(manualPickedContainers[key]) delete manualPickedContainers[key];
   else manualPickedContainers[key] = { at: Date.now() };
   saveStateToStorage();
@@ -5787,20 +5797,21 @@ function togglePickedManual(type, cNo){
 // dashboard này. Có xác nhận trước khi xoá để tránh bấm nhầm, và có thể khôi phục lại bất cứ lúc nào.
 let hiddenPlanContainers = {};
 const STORAGE_KEY_HIDDEN_CONT = 'tn5_dashboard_hidden_containers_v1';
-function deleteContainerFromPlan(type, cNo){
-  const key = type + '|' + cNo;
+function deleteContainerFromPlan(type, cNo, loadDate, planTime){
+  const key = contInstanceKey(type, cNo, loadDate, planTime);
+  const loadInfo = (loadDate || planTime) ? ` (Load ${loadDate || '—'} ${planTime || ''})`.replace(/\s+\)/, ')') : '';
   const ok = window.confirm(
-    `Xoá container ${type}-${cNo} khỏi bảng Plan?\n\n` +
+    `Xoá container ${type}-${cNo}${loadInfo} khỏi bảng Plan?\n\n` +
     `Container này sẽ bị ẨN khỏi bảng thống kê (không xoá/sửa gì trong file Excel Plan bạn đã tải lên). ` +
     `Bạn có thể khôi phục lại bất cứ lúc nào ở mục "Cont đã ẩn" phía trên bảng.`
   );
   if(!ok) return;
-  hiddenPlanContainers[key] = { at: Date.now(), type, cNo };
+  hiddenPlanContainers[key] = { at: Date.now(), type, cNo, loadDate: loadDate || '', planTime: planTime || '' };
   saveStateToStorage();
   renderPlanPanel();
 }
-function restoreHiddenContainer(type, cNo){
-  const key = type + '|' + cNo;
+function restoreHiddenContainer(type, cNo, loadDate, planTime){
+  const key = contInstanceKey(type, cNo, loadDate, planTime);
   delete hiddenPlanContainers[key];
   saveStateToStorage();
   renderPlanPanel();
@@ -5832,8 +5843,8 @@ const CONFIRMED_HISTORY_MAX_DAYS = 5;
 let manualKhoOverrides = {};
 const STORAGE_KEY_MANUAL_KHO = 'tn5_dashboard_manual_kho_v1';
 const MANUAL_KHO_OPTIONS = ['Kho 3B', 'Kho 3A', 'Kho 2B'];
-function setManualKho(type, cNo, khoValue){
-  const key = type + '|' + cNo;
+function setManualKho(type, cNo, loadDate, planTime, khoValue){
+  const key = contInstanceKey(type, cNo, loadDate, planTime);
   if(khoValue){
     manualKhoOverrides[key] = khoValue;
   } else {
@@ -5892,7 +5903,7 @@ function renderContPickTable(){
       const shortBadge = hasShort
         ? `<button type="button" class="cpt-short-badge" data-jump-combined="${escAttr(combinedRowDomId(row.shortItems[0].item, row.shortItems[0].po))}" title="Thiếu ${row.shortItems.length} mã (tính riêng container này): ${row.shortItems.map(r=>`${r.item} (thiếu ${fmt(-r.diff)})`).join(', ')} — bấm để xem chi tiết mã hàng">⚠ Thiếu ${row.shortItems.length}</button>`
         : '';
-      const khoCell = `<select class="cpt-kho-manual-select${row.isManualKho ? ' is-manual' : ''}" data-manual-type="${escAttr(row.type)}" data-manual-cno="${escAttr(String(row.cNo))}" title="${row.isManualKho ? 'Đang chọn thủ công — bấm để đổi lại' : 'Kho hệ thống tự xác định — bấm để chọn lại thủ công nếu cần'}">
+      const khoCell = `<select class="cpt-kho-manual-select${row.isManualKho ? ' is-manual' : ''}" data-manual-type="${escAttr(row.type)}" data-manual-cno="${escAttr(String(row.cNo))}" data-manual-loaddate="${escAttr(row.loadDateKey || '')}" data-manual-plantime="${escAttr(row.planTimeKey || '')}" title="${row.isManualKho ? 'Đang chọn thủ công — bấm để đổi lại' : 'Kho hệ thống tự xác định — bấm để chọn lại thủ công nếu cần'}">
              <option value="">—</option>
              ${MANUAL_KHO_OPTIONS.map(k => `<option value="${escAttr(k)}"${row.topKho===k ? ' selected' : ''}>${escHtml(k.replace('Kho ',''))}</option>`).join('')}
            </select>`;
@@ -5917,8 +5928,8 @@ function renderContPickTable(){
         </td>
         <td>
           <span style="color:${CONT_PICK_STATUS_COLOR[row.status]}; font-weight:600;">${CONT_PICK_STATUS_LABEL[row.status]}</span>
-          <button type="button" class="cpt-mark-btn${row.isManual ? ' marked' : ''}" data-mark-type="${escAttr(row.type)}" data-mark-cno="${escAttr(String(row.cNo))}" title="${row.isManual ? 'Bỏ đánh dấu thủ công' : 'Đánh dấu thủ công là đã pick xong — không đụng tới số liệu tồn kho'}">${row.isManual ? '↺' : '✓'}</button>
-          <button type="button" class="cpt-delete-btn" data-delete-type="${escAttr(row.type)}" data-delete-cno="${escAttr(String(row.cNo))}" title="Xoá container này khỏi Plan (chỉ ẩn khỏi dashboard, không sửa file Excel gốc — sẽ hỏi xác nhận trước)">🗑</button>
+          <button type="button" class="cpt-mark-btn${row.isManual ? ' marked' : ''}" data-mark-type="${escAttr(row.type)}" data-mark-cno="${escAttr(String(row.cNo))}" data-mark-loaddate="${escAttr(row.loadDateKey || '')}" data-mark-plantime="${escAttr(row.planTimeKey || '')}" title="${row.isManual ? 'Bỏ đánh dấu thủ công' : 'Đánh dấu thủ công là đã pick xong — không đụng tới số liệu tồn kho'}">${row.isManual ? '↺' : '✓'}</button>
+          <button type="button" class="cpt-delete-btn" data-delete-type="${escAttr(row.type)}" data-delete-cno="${escAttr(String(row.cNo))}" data-delete-loaddate="${escAttr(row.loadDateKey || '')}" data-delete-plantime="${escAttr(row.planTimeKey || '')}" title="Xoá container này khỏi Plan (chỉ ẩn khỏi dashboard, không sửa file Excel gốc — sẽ hỏi xác nhận trước)">🗑</button>
         </td>
       </tr>`;
     }).join('');
@@ -5997,8 +6008,9 @@ function renderHiddenContBar(){
   if(!keys.length){ el.innerHTML = ''; return; }
   const chips = keys.map(k => {
     const h = hiddenPlanContainers[k];
-    return `<span class="cpt-hidden-cont-chip">${escHtml(h.type)}-${escHtml(String(h.cNo))}
-      <button type="button" class="cpt-hidden-cont-restore" data-restore-type="${escAttr(h.type)}" data-restore-cno="${escAttr(String(h.cNo))}" title="Khôi phục container này vào bảng Plan">↺ Khôi phục</button>
+    const loadInfo = (h.loadDate || h.planTime) ? ` <span style="opacity:.7;">(${escHtml(h.loadDate || '—')}${h.planTime ? ' ' + escHtml(h.planTime) : ''})</span>` : '';
+    return `<span class="cpt-hidden-cont-chip">${escHtml(h.type)}-${escHtml(String(h.cNo))}${loadInfo}
+      <button type="button" class="cpt-hidden-cont-restore" data-restore-type="${escAttr(h.type)}" data-restore-cno="${escAttr(String(h.cNo))}" data-restore-loaddate="${escAttr(h.loadDate || '')}" data-restore-plantime="${escAttr(h.planTime || '')}" title="Khôi phục container này vào bảng Plan">↺ Khôi phục</button>
     </span>`;
   }).join('');
   el.innerHTML = `
@@ -6045,14 +6057,20 @@ function renderContainerPickingOverview(){
   }
 
   const pickingIdx = buildPickingIndex(currentData);
-  const contMap = new Map(); // key = type|contNo -> { type, cNo, planQty, contribution, invoices:Set, csrs:Set }
+  // key = type|contNo|loadDate|planTime -> { type, cNo, loadDate, planTime, planQty, contribution, invoices:Set, csrs:Set }
+  // QUAN TRỌNG: khoá GỘP theo cả Ngày Load + Giờ Plan, KHÔNG chỉ theo số cont — vì cùng 1 số cont có
+  // thể là 2 lượt xuất khác nhau (ngày/giờ khác nhau) và phải được coi là 2 container RIÊNG BIỆT,
+  // không gộp SL kế hoạch / trạng thái pick của 2 lượt đó làm một.
+  const contMap = new Map();
 
   loadedTypes.forEach(type => {
     const rows = (planData[type].detailRows) || [];
     rows.forEach(r => {
       const cNo = r.containerNo;
       if(!cNo || cNo === '—') return;
-      const key = type + '|' + cNo;
+      const loadDateStr = r.loadDate ? fmtDate(r.loadDate) : '';
+      const planTimeStr = r.planTime || '';
+      const key = contInstanceKey(type, cNo, loadDateStr, planTimeStr);
       const itemKey = (r.item || '').toLowerCase();
       const csrKey = (r.csr || '').trim().toLowerCase();
       let passQty = 0;
@@ -6063,7 +6081,7 @@ function renderContainerPickingOverview(){
       const planQty = r.qty || 0;
       const contribution = planQty > 0 ? Math.min(passQty, planQty) : 0;
       let entry = contMap.get(key);
-      if(!entry){ entry = { type, cNo, planQty: 0, contribution: 0, invoices: new Set(), csrs: new Set(), loadDates: new Set(), planTimes: new Set(), items: new Map() }; contMap.set(key, entry); }
+      if(!entry){ entry = { type, cNo, loadDate: loadDateStr, planTime: planTimeStr, planQty: 0, contribution: 0, invoices: new Set(), csrs: new Set(), loadDates: new Set(), planTimes: new Set(), items: new Map() }; contMap.set(key, entry); }
       entry.planQty += planQty;
       entry.contribution += contribution;
       if(r.invoice) entry.invoices.add(r.invoice);
@@ -6080,7 +6098,8 @@ function renderContainerPickingOverview(){
   const detailRows = [];
   contMap.forEach(entry => {
     if(entry.planQty <= 0) return;
-    if(hiddenPlanContainers[entry.type + '|' + entry.cNo]) return; // đã bị xoá/ẩn thủ công khỏi Plan
+    const instanceKey = contInstanceKey(entry.type, entry.cNo, entry.loadDate, entry.planTime);
+    if(hiddenPlanContainers[instanceKey]) return; // đã bị xoá/ẩn thủ công khỏi Plan (đúng lượt xuất này)
     total++;
     const pct = (entry.contribution / entry.planQty) * 100;
     // Trạng thái TỰ TÍNH theo tồn kho thực tế — KHÔNG bị đánh dấu thủ công làm sai lệch, vẫn giữ
@@ -6092,7 +6111,7 @@ function renderContainerPickingOverview(){
 
     // Đánh dấu THỦ CÔNG (nếu có) — chỉ đổi NHÃN/TRẠNG THÁI HIỂN THỊ cho nhân viên dễ theo dõi,
     // hoàn toàn không đụng tới pct/contribution hay bất kỳ số liệu tồn kho nào ở trên.
-    const manualKey = entry.type + '|' + entry.cNo;
+    const manualKey = instanceKey;
     const isManual = !!(manualPickedContainers && manualPickedContainers[manualKey]);
     const status = isManual ? 'manualDone' : autoStatus;
     if(status === 'manualDone' || status === 'done') done++;
@@ -6129,6 +6148,8 @@ function renderContainerPickingOverview(){
 
     detailRows.push({
       type: entry.type, cNo: entry.cNo, pct, status, autoStatus, autoPct: pct, isManual,
+      instanceKey,
+      loadDateKey: entry.loadDate, planTimeKey: entry.planTime,
       loadDate: [...entry.loadDates].join(', ') || '—',
       planTime: [...entry.planTimes].join(', ') || '—',
       invoice: [...entry.invoices].join(', ') || '—',
@@ -6322,17 +6343,17 @@ document.addEventListener('click', (e) => {
   }
   const markBtn = e.target.closest('.cpt-mark-btn');
   if(markBtn){
-    togglePickedManual(markBtn.dataset.markType, markBtn.dataset.markCno);
+    togglePickedManual(markBtn.dataset.markType, markBtn.dataset.markCno, markBtn.dataset.markLoaddate, markBtn.dataset.markPlantime);
     return;
   }
   const deleteBtn = e.target.closest('.cpt-delete-btn');
   if(deleteBtn){
-    deleteContainerFromPlan(deleteBtn.dataset.deleteType, deleteBtn.dataset.deleteCno);
+    deleteContainerFromPlan(deleteBtn.dataset.deleteType, deleteBtn.dataset.deleteCno, deleteBtn.dataset.deleteLoaddate, deleteBtn.dataset.deletePlantime);
     return;
   }
   const restoreBtn = e.target.closest('.cpt-hidden-cont-restore');
   if(restoreBtn){
-    restoreHiddenContainer(restoreBtn.dataset.restoreType, restoreBtn.dataset.restoreCno);
+    restoreHiddenContainer(restoreBtn.dataset.restoreType, restoreBtn.dataset.restoreCno, restoreBtn.dataset.restoreLoaddate, restoreBtn.dataset.restorePlantime);
     return;
   }
   if(e.target.closest('.cpt-kho-manual-select')) return; // để dropdown chọn Kho hoạt động, không nhảy dòng
@@ -6352,7 +6373,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('change', (e) => {
   const sel = e.target.closest('.cpt-kho-manual-select');
   if(!sel) return;
-  setManualKho(sel.dataset.manualType, sel.dataset.manualCno, sel.value || null);
+  setManualKho(sel.dataset.manualType, sel.dataset.manualCno, sel.dataset.manualLoaddate, sel.dataset.manualPlantime, sel.value || null);
 });
 
 (function setupFixedBackToPickBtn(){
@@ -6581,8 +6602,8 @@ if(!IS_TOUCH_DEVICE){
 // Container đã bị "xoá" (ẩn) khỏi Plan — coi như xoá THẬT SỰ: không tính vào bất kỳ số liệu tổng
 // hợp hay bảng nào nữa (SL kế hoạch, số mã hàng, so sánh tồn kho...), dù dòng đó vẫn còn trong file
 // Excel gốc (VD: cont ca trước đã load xong hoặc delay chưa có lịch, quên xoá khỏi Plan).
-function isContainerHidden(type, cNo){
-  return !!hiddenPlanContainers[type + '|' + (cNo || '')];
+function isContainerHidden(type, cNo, loadDate, planTime){
+  return !!hiddenPlanContainers[contInstanceKey(type, cNo || '', loadDate, planTime)];
 }
 
 function renderPlanPanel(){
@@ -6608,7 +6629,7 @@ function renderPlanPanel(){
   const CONT_COLOR_PALETTE = GROUP_COLOR_PALETTE;
 
   planCardsEl.innerHTML = loadedTypes.map(type => {
-    const rows = (planData[type].detailRows || []).filter(r => !isContainerHidden(type, r.containerNo));
+    const rows = (planData[type].detailRows || []).filter(r => !isContainerHidden(type, r.containerNo, r.loadDate ? fmtDate(r.loadDate) : '', r.planTime || ''));
     const totalQtyDisplay = rows.reduce((s,r) => s + (r.qty || 0), 0);
     const itemCountDisplay = new Set(rows.map(r => (r.item || '').toLowerCase())).size;
     const containerSetDisplay = new Set(rows.map(r => r.containerNo).filter(c => c && c !== '—'));
@@ -6730,17 +6751,19 @@ function buildCombinedPlanCompareTable(){
   const doneContSet = new Set(
     (contPickAllRows || [])
       .filter(r => r.status === 'done' || r.status === 'manualDone')
-      .map(r => r.type + '|' + r.cNo)
+      .map(r => r.instanceKey)
   );
 
   const planPairs = {};
   loadedTypes.forEach(type => {
     for(const r of (planData[type].detailRows || [])){
-      if(isContainerHidden(type, r.containerNo)) continue; // container đã xoá khỏi Plan — bỏ qua hẳn
+      const rLoadDateStr = r.loadDate ? fmtDate(r.loadDate) : '';
+      const rPlanTimeStr = r.planTime || '';
+      if(isContainerHidden(type, r.containerNo, rLoadDateStr, rPlanTimeStr)) continue; // container đã xoá khỏi Plan — bỏ qua hẳn
       const custpo = (r.custPo && r.custPo.trim()) ? r.custPo.trim() : '(Khong co)';
       const key = r.item.toLowerCase() + '\u241F' + custpo.toLowerCase();
       if(!planPairs[key]) planPairs[key] = { item: r.item, custpo, qtyByType: {}, totalPlanQty: 0 };
-      const isDone = r.containerNo && doneContSet.has(type + '|' + r.containerNo);
+      const isDone = r.containerNo && doneContSet.has(contInstanceKey(type, r.containerNo, rLoadDateStr, rPlanTimeStr));
       if(isDone) continue; // container này đã pick xong — không tính vào SL còn cần nữa
       planPairs[key].qtyByType[type] = (planPairs[key].qtyByType[type] || 0) + r.qty;
       planPairs[key].totalPlanQty += r.qty;
@@ -8869,7 +8892,7 @@ function renderKioskPage(){
       <div class="kiosk-card-cont">${escHtml(r.type)}-${escHtml(String(r.cNo))}</div>
       <div class="kiosk-card-time"><div class="kiosk-card-loaddate">${escHtml(r.loadDate || '—')}</div>${escHtml(r.planTime)}</div>
       <div class="kiosk-card-status" style="color:${CONT_PICK_STATUS_COLOR[r.status]}">${CONT_PICK_STATUS_LABEL[r.status]} · ${r.pct.toFixed(0)}%${r.isManual ? ' <span style="color:var(--muted-2); font-weight:400; font-size:13px;">(tồn kho thực: ' + r.autoPct.toFixed(0) + '%)</span>' : ''}</div>
-      <button type="button" class="kiosk-card-mark-btn${r.isManual ? ' marked' : ''}" data-mark-type="${escAttr(r.type)}" data-mark-cno="${escAttr(String(r.cNo))}">
+      <button type="button" class="kiosk-card-mark-btn${r.isManual ? ' marked' : ''}" data-mark-type="${escAttr(r.type)}" data-mark-cno="${escAttr(String(r.cNo))}" data-mark-loaddate="${escAttr(r.loadDateKey || '')}" data-mark-plantime="${escAttr(r.planTimeKey || '')}">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${manualBtnIcon}</svg>
         ${manualBtnLabel}
       </button>
@@ -8886,7 +8909,7 @@ document.addEventListener('click', (e) => {
   const btn = e.target.closest('.kiosk-card-pick-btn');
   if(btn){ openPickSlip(btn.dataset.pickType, btn.dataset.pickCno); return; }
   const markBtn = e.target.closest('.kiosk-card-mark-btn');
-  if(markBtn) togglePickedManual(markBtn.dataset.markType, markBtn.dataset.markCno);
+  if(markBtn) togglePickedManual(markBtn.dataset.markType, markBtn.dataset.markCno, markBtn.dataset.markLoaddate, markBtn.dataset.markPlantime);
 });
 
 const kioskRefreshBtn = document.getElementById('kiosk-refresh-btn');
@@ -9382,7 +9405,7 @@ function mergeConfirmedDataFromCloud(cloudData){
   }catch(e){ console.warn('Không gộp được confirmedHistory từ Cloud:', e); }
 }
 
-function saveConfirmedSnapshotAndReset(){
+async function saveConfirmedSnapshotAndReset(){
   const keys = Object.keys(confirmedKiemTonItems);
   if(!keys.length){
     alert('Danh sách đã xác nhận đang trống, không có gì để lưu.');
@@ -9401,28 +9424,61 @@ function saveConfirmedSnapshotAndReset(){
     };
   });
 
-  // Cùng ngày lưu nhiều lần trong ngày -> gộp thêm vào (không ghi đè mất phần đã lưu trước đó cùng ngày)
-  confirmedHistory[dateKey] = (confirmedHistory[dateKey] || []).concat(records);
+  const btn = document.getElementById('btn-save-confirmed-history');
+  if(btn) btn.disabled = true;
+  const cloudActive = typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token;
 
-  // Chỉ giữ tối đa CONFIRMED_HISTORY_MAX_DAYS ngày gần nhất — xoá bớt ngày cũ hơn để tránh phình dung lượng
-  const allDates = Object.keys(confirmedHistory).sort((a,b) => dmyToSortKey(b) - dmyToSortKey(a));
-  allDates.slice(CONFIRMED_HISTORY_MAX_DAYS).forEach(d => delete confirmedHistory[d]);
+  try{
+    // Gộp trước phần "Đã xác nhận / KT đang nhập dở / GI đã quét / Lịch sử" MỚI NHẤT từ Cloud (đề
+    // phòng người khác vừa xác nhận thêm dòng trên thiết bị khác) — TRƯỚC khi xoá trắng ở đây, để
+    // không lỡ tay xoá mất phần họ vừa xác nhận mà máy này chưa kịp có.
+    if(cloudActive){
+      try{
+        const cloudData = await CloudVault.peek();
+        if(cloudData) mergeConfirmedDataFromCloud(cloudData);
+      }catch(e){ console.warn('Không gộp được dữ liệu Cloud trước khi Lưu:', e); }
+    }
 
-  confirmedKiemTonItems = {};
-  // Reset luôn toàn bộ "Đề xuất kiểm hôm nay" (cả 3 kho) — xoá sạch danh sách candidate cũ, mở khoá
-  // lại các thẻ kho để chuẩn bị cho đợt "Tạo danh sách" kiểm kê lần sau, không để lẫn dữ liệu cũ.
-  CC_KHO_LIST.forEach(k => ccClearKhoResult(k.label));
-  // Xoá luôn toàn bộ số liệu KT nháp còn sót (nếu không, đợt kiểm kê sau lỡ trùng đúng item/locator/
-  // PO/SL với đợt trước sẽ tự điền sẵn số cũ, gây nhầm lẫn) và danh sách GI đã quét (để đợt sau vẫn
-  // quét lại đúng những pallet đó bình thường, không bị báo "đã quét trùng" nữa).
-  ktInputValues = {};
-  scannedGiSet.clear();
-  saveStateToStorage();
-  renderConfirmedList();
-  renderKhoSearchPage();
-  renderConfirmedHistoryPopup();
-  showAppToast(`✓ Đã lưu trữ ${records.length} dòng vào lịch sử ngày ${dateKey}. Đã làm mới toàn bộ bảng cho đợt kiểm kê mới.`);
+    // Cùng ngày lưu nhiều lần trong ngày -> gộp thêm vào (không ghi đè mất phần đã lưu trước đó cùng ngày)
+    confirmedHistory[dateKey] = (confirmedHistory[dateKey] || []).concat(records);
+
+    // Chỉ giữ tối đa CONFIRMED_HISTORY_MAX_DAYS ngày gần nhất — xoá bớt ngày cũ hơn để tránh phình dung lượng
+    const allDates = Object.keys(confirmedHistory).sort((a,b) => dmyToSortKey(b) - dmyToSortKey(a));
+    allDates.slice(CONFIRMED_HISTORY_MAX_DAYS).forEach(d => delete confirmedHistory[d]);
+
+    confirmedKiemTonItems = {};
+    // Reset luôn toàn bộ "Đề xuất kiểm hôm nay" (cả 3 kho) — xoá sạch danh sách candidate cũ, mở khoá
+    // lại các thẻ kho để chuẩn bị cho đợt "Tạo danh sách" kiểm kê lần sau, không để lẫn dữ liệu cũ.
+    CC_KHO_LIST.forEach(k => ccClearKhoResult(k.label));
+    // Xoá luôn toàn bộ số liệu KT nháp còn sót (nếu không, đợt kiểm kê sau lỡ trùng đúng item/locator/
+    // PO/SL với đợt trước sẽ tự điền sẵn số cũ, gây nhầm lẫn) và danh sách GI đã quét (để đợt sau vẫn
+    // quét lại đúng những pallet đó bình thường, không bị báo "đã quét trùng" nữa).
+    ktInputValues = {};
+    scannedGiSet.clear();
+    saveStateToStorage();
+    renderConfirmedList();
+    renderKhoSearchPage();
+    renderConfirmedHistoryPopup();
+
+    // QUAN TRỌNG: đẩy NGAY thay đổi này (đã lưu trữ + đã xoá trắng) lên Cloud bằng writeAll() — nếu
+    // không, lần tải dữ liệu Cloud tiếp theo (mở lại trang, bấm "Làm mới dữ liệu", máy khác đăng
+    // nhập...) sẽ lấy về bản CŨ vẫn còn nguyên trên Cloud (chưa từng được xoá) và làm danh sách vừa
+    // xoá HIỆN LẠI y như cũ — đây chính là lỗi "bấm Lưu xong lại thấy xuất hiện lại, không xoá được".
+    if(cloudActive){
+      await CloudVault.writeAll();
+      if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
+      showAppToast(`✓ Đã lưu trữ ${records.length} dòng vào lịch sử ngày ${dateKey}, làm mới bảng và đồng bộ lên Cloud.`);
+    } else {
+      showAppToast(`✓ Đã lưu trữ ${records.length} dòng vào lịch sử ngày ${dateKey}. Đã làm mới toàn bộ bảng cho đợt kiểm kê mới.`);
+    }
+  }catch(e){
+    console.error('Lưu/đồng bộ Danh sách đã xác nhận lỗi:', e);
+    showAppToast(`⚠ Đã lưu trữ ${records.length} dòng và làm mới bảng, nhưng CHƯA đồng bộ được lên Cloud (${e.message}). Bấm "Lưu" ở đầu trang để thử lại — nếu không, danh sách có thể hiện lại khi tải lại dữ liệu Cloud.`);
+  }finally{
+    if(btn) btn.disabled = false;
+  }
 }
+
 
 // Vẽ nội dung popup Lịch sử — tab theo từng ngày (tối đa 5 ngày gần nhất), mặc định chọn ngày mới nhất
 let confirmedHistoryActiveTab = null;
@@ -11317,7 +11373,7 @@ document.addEventListener('keydown', function(e){
 
 // Gán sự kiện cho nút Đặt lại của bảng Đã xác nhận (chỉ xoá danh sách đã xác nhận,
 // không đụng tới dữ liệu tồn kho hay Plan đã tải)
-document.getElementById('btn-reset-confirmed').addEventListener('click', () => {
+document.getElementById('btn-reset-confirmed').addEventListener('click', async () => {
   const keys = Object.keys(confirmedKiemTonItems);
   if(!keys.length){
     alert('Danh sách đã xác nhận đang trống, không có gì để đặt lại.');
@@ -11334,6 +11390,18 @@ document.getElementById('btn-reset-confirmed').addEventListener('click', () => {
   saveStateToStorage();
   renderConfirmedList();
   renderKhoSearchPage(); // Hiện lại toàn bộ các dòng vừa mở khoá ở bảng Kiểm tồn kho
+
+  // Đẩy NGAY lên Cloud (nếu đã kết nối) — cùng lý do như nút "Lưu": nếu không đẩy ngay, lần tải lại
+  // dữ liệu Cloud tiếp theo sẽ lấy về bản CŨ (chưa đặt lại) và làm danh sách hiện lại như cũ.
+  if(typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token){
+    try{
+      await CloudVault.writeAll();
+      if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
+    }catch(e){
+      console.warn('Đồng bộ Cloud sau khi Đặt lại thất bại:', e);
+      if(typeof showAppToast === 'function') showAppToast(`⚠ Đã đặt lại trên máy này nhưng CHƯA đồng bộ được lên Cloud (${e.message}). Bấm "Lưu" ở đầu trang để thử lại.`);
+    }
+  }
 });
 
 const pageOverviewEl = document.getElementById('page-overview');
