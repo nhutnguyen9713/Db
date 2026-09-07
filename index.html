@@ -130,8 +130,10 @@
     width:40px; height:40px; border-radius:11px; background:var(--amber-bright);
     display:flex; align-items:center; justify-content:center; color:#12161F;
     font-family:var(--disp); font-weight:700; font-size:12px; letter-spacing:.02em;
-    margin-right:18px; flex-shrink:0;
+    margin-right:18px; flex-shrink:0; transition:transform .12s ease, filter .12s ease;
   }
+  .sidebar-logo:hover{filter:brightness(1.08); transform:scale(1.05);}
+  .sidebar-logo:active{transform:scale(0.96);}
   .sidebar-nav{display:flex; flex-direction:row; gap:10px; align-items:center; flex-wrap:wrap;}
   .sidebar-nav-btn{
     width:48px; height:48px; border-radius:14px; border:none; background:transparent; color:#8B96AC;
@@ -142,6 +144,27 @@
   .sidebar-nav-btn:hover:not(.active){background:rgba(255,255,255,0.08); color:#fff;}
   .sidebar-nav-btn.active{background:#fff; color:#12161F;}
   .sidebar-spacer{flex:1;}
+  .notif-badge{
+    position:absolute; top:4px; right:4px; min-width:16px; height:16px; padding:0 3px; border-radius:8px;
+    background:var(--red); color:#fff; font-size:10px; font-weight:800; align-items:center; justify-content:center;
+    box-shadow:0 0 0 2px #12161F;
+  }
+  .notif-panel{
+    position:absolute; top:56px; right:14px; z-index:9000; width:min(360px, 92vw); max-height:70vh;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,0.25);
+    flex-direction:column; overflow:hidden;
+  }
+  .notif-panel-head{
+    display:flex; align-items:baseline; justify-content:space-between; gap:8px; padding:12px 14px;
+    border-bottom:1px solid var(--line); font-weight:800; font-size:13.5px; color:var(--text);
+  }
+  .notif-list{overflow-y:auto; max-height:calc(70vh - 46px);}
+  .notif-item{padding:9px 14px; border-bottom:1px solid var(--line);}
+  .notif-item:last-child{border-bottom:none;}
+  .notif-item-time{font-family:var(--mono); font-size:10.5px; color:var(--muted-2); margin-bottom:2px;}
+  .notif-item-text{font-size:12.5px; color:var(--text); line-height:1.45;}
+  .notif-item.notif-error .notif-item-text{color:var(--red);}
+  .notif-item.notif-success .notif-item-text{color:var(--teal);}
   .sidebar-nav-btn-ghost{color:#4B5567; cursor:default;}
   .sidebar-nav-btn-ghost:hover{background:transparent; color:#4B5567;}
 
@@ -1111,6 +1134,15 @@
   .kho-detail-table tbody tr:hover{filter:brightness(0.97);}
   .kho-detail-table tbody tr.row-group-first td{border-top:2px solid rgba(22,32,46,0.14);}
   .kho-detail-table .loc-group-cell{border-left:4px solid transparent;}
+  tr.kt-loc-header-row td{padding:8px 10px; width:100%;}
+  .kt-loc-header-inner{display:flex; align-items:center; justify-content:center; gap:12px; flex-wrap:wrap; width:100%;}
+  .kt-loc-header-name{font-family:var(--mono); font-size:13px; font-weight:800; color:var(--text);}
+  .kt-confirm-locator-btn{
+    border:1px solid var(--violet); background:var(--violet); color:#fff;
+    border-radius:8px; padding:6px 14px; font-size:14px; font-weight:800; cursor:pointer; white-space:nowrap;
+    min-width:40px; text-align:center;
+  }
+  .kt-confirm-locator-btn:hover{background:#5a3fc0;}
   .kho-detail-table .num{text-align:right; font-weight:600; color:var(--amber);}
   .kho-detail-table .tx-total-col{background:rgba(230,168,63,0.10); border-left:2px solid var(--amber);}
   .kho-detail-table thead th.tx-total-col{background:rgba(230,168,63,0.18); color:var(--amber);}
@@ -1129,7 +1161,6 @@
 
   /* ================= THẺ VỊ TRÍ (chế độ Locator của "Đề xuất kiểm hôm nay") ================= */
   .cc-loc-cards{display:flex; flex-direction:column; gap:10px; margin-top:2px;}
-  @media (min-width:1000px){ .cc-loc-cards{display:grid; grid-template-columns:repeat(2, 1fr); align-items:start;} }
   .cc-loc-card{border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--panel);}
   .cc-loc-card-head{padding:11px 14px; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px;}
   .cc-loc-card-head:hover{background:var(--panel-2, var(--bg));}
@@ -1484,7 +1515,7 @@
 
 <div class="app-shell">
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-logo">TN5</div>
+    <div class="sidebar-logo" id="sidebar-logo-update" role="button" tabindex="0" title="Cập nhật dữ liệu — bấm để chọn file tồn kho mới (.xlsx/.csv/.tsv)" style="cursor:pointer;">TN5</div>
     <nav class="sidebar-nav">
       <button class="sidebar-nav-btn active" data-page="overview" type="button" title="Overview">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
@@ -1512,6 +1543,24 @@
       </button>
     </nav>
     <div class="sidebar-spacer"></div>
+    <button class="sidebar-nav-btn" id="notif-bell-btn" type="button" title="Thông báo &amp; nhật ký thay đổi" style="position:relative;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+      <span id="notif-badge" class="notif-badge" style="display:none;"></span>
+    </button>
+    <div id="notif-panel" class="notif-panel" style="display:none;">
+      <div class="notif-panel-head">
+        <span>🔔 Thông báo &amp; nhật ký</span>
+        <span style="font-size:10.5px; color:var(--muted-2); font-weight:400;">Chỉ lưu trong phiên này</span>
+      </div>
+      <div id="notif-list" class="notif-list"></div>
+    </div>
+    <button class="sidebar-nav-btn" id="btn-refresh-data" type="button" title="Tải lại dữ liệu mới nhất từ Cloud — giống bấm &quot;Kết nối&quot; ở mục Cloud — rồi làm mới toàn bộ bảng">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    </button>
+    <button class="sidebar-nav-btn" id="btn-save-cloud" type="button" title="Lưu ngay dữ liệu hiện tại lên Cloud — dữ liệu CHỈ được ghi lên Cloud khi bấm nút này, không tự động ghi ngầm nữa">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+      <span class="btn-save-dot"></span>
+    </button>
     <button class="sidebar-nav-btn" id="settings-open-btn" type="button" title="Cài đặt lưu trữ &amp; đồng bộ">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
@@ -1907,25 +1956,9 @@
   <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; margin-bottom:16px;">
     <div class="upload-wrap" style="align-items:flex-start;">
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn-update" id="btn-update" type="button">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>
-          Cập nhật dữ liệu
-        </button>
-        <button class="btn-update btn-danger" id="btn-reset-data" type="button" title="Xoá dữ liệu đã lưu, quay lại dữ liệu mặc định">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-          Đặt lại
-        </button>
-        <button class="btn-update btn-ghost-outline" id="btn-refresh-data" type="button" title="Tải lại dữ liệu mới nhất từ Cloud — giống bấm &quot;Kết nối&quot; ở mục Cloud — rồi làm mới toàn bộ bảng">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          Làm mới
-        </button>
-        <button class="btn-update" id="btn-save-cloud" type="button" title="Lưu ngay dữ liệu hiện tại lên Cloud — dữ liệu CHỈ được ghi lên Cloud khi bấm nút này, không tự động ghi ngầm nữa">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
-          Lưu<span class="btn-save-dot"></span>
-        </button>
       </div>
       <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.tsv,.txt">
-      <div class="upload-status" id="upload-status">Tải file .xlsx / .csv / .tsv mới để làm mới dashboard</div>
+      <div class="upload-status" id="upload-status">Bấm chữ "TN5" ở đầu sidebar để tải file .xlsx / .csv / .tsv mới, làm mới dashboard</div>
     </div>
     <div class="snapshot">
       NGÀY CHỐT DỮ LIỆU<br><b id="snapshot-date">—</b>
@@ -2941,6 +2974,17 @@
     <div class="settings-body">
 
       <div class="settings-section">
+        <div class="settings-section-label">Dữ liệu tồn kho</div>
+        <div class="desc" style="margin-bottom:8px;">Bấm vào chữ "TN5" ở đầu sidebar để cập nhật file tồn kho mới. Nút bên dưới chỉ dùng khi cần xoá sạch để bắt đầu lại từ đầu.</div>
+        <div class="settings-btn-row">
+          <button class="btn-update btn-danger" id="btn-reset-data" type="button" title="Xoá dữ liệu đã lưu, quay lại dữ liệu mặc định">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            Đặt lại
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <div class="settings-section-label">Đồng bộ file trên máy (không dùng bộ nhớ trình duyệt)</div>
         <div class="settings-btn-row">
           <button class="btn-update btn-ghost-outline" id="fv-choose-btn" type="button" title="Chọn 1 file .json ĐÃ CÓ SẴN trên máy (ví dụ file vừa 'Xuất JSON' trước đó) — đọc dữ liệu từ đó lên và bắt đầu tự đồng bộ mọi thay đổi vào file này">
@@ -3109,15 +3153,52 @@ async function fvIdbSet(key, val){
 // Bộ nhớ tạm thay cho localStorage — mọi module dùng LS.getItem/setItem/removeItem như cũ
 const _mem = {};
 let hasUnsavedChanges = false;
-function markUnsavedChanges(){
+// Tên hiển thị dễ hiểu cho từng loại dữ liệu — dùng để mô tả CHÍNH XÁC vừa thay đổi phần nào,
+// thay vì chỉ báo chung chung "có thay đổi chưa lưu".
+const STORAGE_KEY_LABELS = {
+  tn5_dashboard_inventory_v1: 'Dữ liệu tồn kho',
+  tn5_dashboard_plans_v1: 'Plan xuất cont',
+  tn5_dashboard_meta_v1: 'Thông tin file đã tải',
+  tn5_dashboard_confirmed_v1: 'Danh sách đã xác nhận',
+  tn5_dashboard_lastcheck_v1: 'Lần kiểm gần nhất',
+  tn5_dashboard_invsnapshot_v1: 'Snapshot tồn kho theo ngày',
+  tn5_dashboard_ccresults_v1: 'Đề xuất kiểm hôm nay',
+  tn5_dashboard_manual_picked_v1: 'Đánh dấu Pick thủ công',
+  tn5_dashboard_hidden_cont_v1: 'Container đã ẩn',
+  tn5_dashboard_manual_kho_v1: 'Chọn Kho thủ công',
+  tn5_dashboard_kt_inputs_v1: 'Số liệu KT đang nhập',
+  tn5_dashboard_scanned_extra_v1: 'Dòng tự thêm khi quét QR',
+  tn5_dashboard_scanned_gi_v1: 'Danh sách GI đã quét',
+  tn5_dashboard_confirmed_history_v1: 'Lịch sử đã lưu theo ngày'
+};
+
+// Gộp nhiều thay đổi xảy ra gần nhau (VD: 1 thao tác ghi luôn nhiều mục cùng lúc) thành ĐÚNG 1 dòng
+// thông báo duy nhất, tránh việc chuông thông báo bị spam nhiều dòng cho cùng 1 hành động của người
+// dùng.
+let _pendingChangedKeys = new Set();
+let _pendingChangeTimer = null;
+function markUnsavedChanges(key){
   hasUnsavedChanges = true;
   const btn = document.getElementById('btn-save-cloud');
   if(btn) btn.classList.add('has-changes');
-  const statusEl = document.getElementById('upload-status');
-  if(statusEl && !statusEl.classList.contains('err')){
-    statusEl.className = 'upload-status';
-    statusEl.textContent = '● Có thay đổi chưa lưu — bấm "Lưu" để đẩy lên Cloud.';
-  }
+
+  if(key) _pendingChangedKeys.add(key);
+  clearTimeout(_pendingChangeTimer);
+  _pendingChangeTimer = setTimeout(() => {
+    const labels = [..._pendingChangedKeys].map(k => STORAGE_KEY_LABELS[k] || k);
+    _pendingChangedKeys.clear();
+    const detail = labels.length ? labels.join(', ') : '';
+    const statusEl = document.getElementById('upload-status');
+    if(statusEl && !statusEl.classList.contains('err')){
+      statusEl.className = 'upload-status';
+      statusEl.textContent = detail
+        ? `● Có thay đổi chưa lưu (${detail}) — bấm "Lưu" để đẩy lên Cloud.`
+        : '● Có thay đổi chưa lưu — bấm "Lưu" để đẩy lên Cloud.';
+    }
+    if(typeof logNotification === 'function'){
+      logNotification(detail ? `Có thay đổi chưa lưu: ${detail}` : 'Có thay đổi chưa lưu', 'info');
+    }
+  }, 400);
 }
 function clearUnsavedChanges(){
   hasUnsavedChanges = false;
@@ -3132,11 +3213,11 @@ const LS = {
   // ngoài ý muốn giữa nhiều tab/thiết bị. Ở đây chỉ đánh dấu "có thay đổi chưa lưu".
   setItem(k, v){
     _mem[k] = String(v);
-    markUnsavedChanges();
+    markUnsavedChanges(k);
   },
   removeItem(k){
     delete _mem[k];
-    markUnsavedChanges();
+    markUnsavedChanges(k);
   }
 };
 
@@ -3491,6 +3572,20 @@ const CloudVault = {
     }catch(e){ console.warn('CloudVault đọc lỗi:', e); return false; }
   },
 
+  // Đọc dữ liệu THÔ hiện có trên Cloud, KHÔNG đụng gì tới _mem/trạng thái cục bộ — chỉ để "nhìn
+  // trộm" bản mới nhất trên Cloud trước khi ghi, phục vụ gộp dữ liệu (xem mergeConfirmedDataFromCloud).
+  async peek(){
+    if(!this.url || !this.token) return null;
+    try{
+      const sep = this.url.indexOf('?') === -1 ? '?' : '&';
+      const res = await fetch(this.url + sep + 'token=' + encodeURIComponent(this.token));
+      if(!res.ok) return null;
+      const json = await res.json();
+      if(!json || json.error || typeof json.data !== 'object' || !json.data) return null;
+      return json.data;
+    }catch(e){ return null; }
+  },
+
   scheduleWrite(){
     if(!this.url || !this.token) return;
     clearTimeout(this._writeTimer);
@@ -3679,6 +3774,10 @@ function getRowKeyFromTr(tr){
     if(!cell) return '';
     const sel = cell.querySelector('select');
     if(sel) return sel.value;
+    // Ưu tiên đọc trong .loc-text nếu có — tránh đọc lẫn chữ của các nút bấm khác cũng nằm
+    // trong cùng ô (VD: nút "✓✓ Cả vị trí" nằm chung ô Locator).
+    const textSpan = cell.querySelector('.loc-text');
+    if(textSpan) return textSpan.textContent.trim();
     return cell.textContent.trim();
   };
   const item = byLabel('Item No.');
@@ -5042,7 +5141,7 @@ function renderDashboard(DATA){
   touchUpdatedAt();
 }
 
-const btnUpdate = document.getElementById('btn-update');
+const btnUpdate = document.getElementById('sidebar-logo-update');
 const fileInput = document.getElementById('file-input');
 const statusEl = document.getElementById('upload-status');
 const overlay = document.getElementById('loading-overlay');
@@ -5080,6 +5179,7 @@ const loadingMsg = document.getElementById('loading-msg');
 })();
 
 if(btnUpdate) btnUpdate.addEventListener('click', () => fileInput.click());
+if(btnUpdate) btnUpdate.addEventListener('keydown', (e) => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); fileInput.click(); } });
 
 if(fileInput){
   fileInput.addEventListener('change', (e) => {
@@ -9139,9 +9239,91 @@ document.addEventListener('click', (e) => {
   restoreConfirmedItem(btn.dataset.restoreKey);
 });
 
+// ============ Nhật ký thông báo (chuông) — ghi lại TẤT CẢ thông báo trạng thái kèm ngày giờ ============
+// Chỉ lưu trong phiên làm việc hiện tại (mất khi tải lại trang) — không đồng bộ Cloud.
+let notificationLog = []; // { time: Date, text, type }
+let notifUnreadCount = 0;
+const NOTIF_LOG_MAX = 80;
+
+function logNotification(text, type){
+  if(!text) return;
+  // Tránh ghi trùng lặp liên tiếp y hệt nhau (VD: cùng 1 dòng trạng thái được set lại nhiều lần)
+  if(notificationLog[0] && notificationLog[0].text === text && (Date.now() - notificationLog[0].time.getTime()) < 800) return;
+  notificationLog.unshift({ time: new Date(), text, type: type || 'info' });
+  if(notificationLog.length > NOTIF_LOG_MAX) notificationLog.length = NOTIF_LOG_MAX;
+  notifUnreadCount++;
+  updateNotifBadge();
+  const panel = document.getElementById('notif-panel');
+  if(panel && panel.style.display !== 'none') renderNotifPanel();
+}
+
+function updateNotifBadge(){
+  const badge = document.getElementById('notif-badge');
+  if(!badge) return;
+  if(notifUnreadCount > 0){
+    badge.textContent = notifUnreadCount > 99 ? '99+' : String(notifUnreadCount);
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function fmtNotifTime(d){
+  const p = n => String(n).padStart(2,'0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())} · ${p(d.getDate())}/${p(d.getMonth()+1)}`;
+}
+
+function renderNotifPanel(){
+  const listEl = document.getElementById('notif-list');
+  if(!listEl) return;
+  if(!notificationLog.length){
+    listEl.innerHTML = `<div style="text-align:center; color:var(--muted-2); font-style:italic; padding:20px 0;">Chưa có thông báo nào trong phiên này.</div>`;
+    return;
+  }
+  listEl.innerHTML = notificationLog.map(n => `
+    <div class="notif-item notif-${n.type}">
+      <div class="notif-item-time">${fmtNotifTime(n.time)}</div>
+      <div class="notif-item-text">${escHtml(n.text)}</div>
+    </div>`).join('');
+}
+
+// Theo dõi mọi thay đổi nội dung của các dòng trạng thái chính trong app (upload/cloud/sync...) và
+// TỰ ĐỘNG ghi vào nhật ký thông báo — không cần sửa từng chỗ hiện thông báo rải rác khắp nơi.
+function watchStatusElForNotif(id){
+  const el = document.getElementById(id);
+  if(!el || typeof MutationObserver === 'undefined') return;
+  let lastText = el.textContent;
+  const obs = new MutationObserver(() => {
+    const text = el.textContent.trim();
+    if(!text || text === lastText) return;
+    lastText = text;
+    const type = el.classList.contains('err') ? 'error' : (el.classList.contains('ok') ? 'success' : 'info');
+    logNotification(text, type);
+  });
+  obs.observe(el, { childList: true, characterData: true, subtree: true });
+}
+['upload-status', 'cv-status', 'fv-status'].forEach(watchStatusElForNotif);
+
+document.addEventListener('click', (e) => {
+  const toggle = e.target.closest('#notif-bell-btn');
+  const panel = document.getElementById('notif-panel');
+  if(toggle){
+    if(panel){
+      const willShow = panel.style.display === 'none';
+      if(willShow){ renderNotifPanel(); notifUnreadCount = 0; updateNotifBadge(); }
+      panel.style.display = willShow ? 'flex' : 'none';
+    }
+    return;
+  }
+  if(panel && panel.style.display !== 'none' && !e.target.closest('#notif-panel') && !e.target.closest('#notif-bell-btn')){
+    panel.style.display = 'none';
+  }
+});
+
 // Thông báo nổi nhỏ, tự ẩn sau vài giây — dùng chung cho các thao tác lưu/xoá.
 let appToastTimer = null;
 function showAppToast(text){
+  logNotification(text, 'success');
   const el = document.getElementById('app-toast');
   if(!el) return;
   el.textContent = text;
@@ -9165,6 +9347,41 @@ function dmyToSortKey(dmy){
 // Bấm nút "Lưu": chụp lại toàn bộ "Danh sách đã xác nhận" hiện tại vào lịch sử theo ngày, rồi làm
 // mới (xoá trắng) bảng để bắt đầu đợt kiểm mới — các dòng vừa lưu cũng được mở khoá lại ở bảng
 // Kiểm tồn kho / Đề xuất kiểm hôm nay (giống hệt nút "Đặt lại"), chỉ khác là có lưu trữ lại trước.
+// Gộp dữ liệu "nhạy cảm khi nhiều người cùng dùng song song" (Đã xác nhận, số liệu KT đang nhập dở,
+// GI đã quét, lịch sử theo ngày) từ bản Cloud MỚI NHẤT vào dữ liệu đang có trong máy — TRƯỚC khi ghi
+// đè lên Cloud. Nhờ vậy nhiều người cùng bấm "LƯU" gần nhau (mỗi người kiểm 1 phần khác nhau) sẽ
+// không xoá mất phần của nhau nữa, vì phần đã có trên Cloud luôn được giữ lại (gộp thêm, không đè).
+function mergeConfirmedDataFromCloud(cloudData){
+  if(!cloudData) return;
+
+  try{
+    const cloudConfirmed = cloudData[STORAGE_KEY_CONFIRMED] ? JSON.parse(cloudData[STORAGE_KEY_CONFIRMED], jsonReviver) : {};
+    confirmedKiemTonItems = Object.assign({}, cloudConfirmed, confirmedKiemTonItems);
+  }catch(e){ console.warn('Không gộp được confirmedKiemTonItems từ Cloud:', e); }
+
+  try{
+    const cloudKt = cloudData[STORAGE_KEY_KT_INPUTS] ? JSON.parse(cloudData[STORAGE_KEY_KT_INPUTS]) : {};
+    ktInputValues = Object.assign({}, cloudKt, ktInputValues);
+  }catch(e){ console.warn('Không gộp được ktInputValues từ Cloud:', e); }
+
+  try{
+    const cloudGi = cloudData[STORAGE_KEY_SCANNED_GI] ? JSON.parse(cloudData[STORAGE_KEY_SCANNED_GI]) : [];
+    cloudGi.forEach(g => scannedGiSet.add(g));
+  }catch(e){ console.warn('Không gộp được scannedGiSet từ Cloud:', e); }
+
+  try{
+    const cloudHist = cloudData[STORAGE_KEY_CONFIRMED_HISTORY] ? JSON.parse(cloudData[STORAGE_KEY_CONFIRMED_HISTORY]) : {};
+    Object.keys(cloudHist).forEach((dateKey) => {
+      if(!confirmedHistory[dateKey]) confirmedHistory[dateKey] = [];
+      const existingKeys = new Set(confirmedHistory[dateKey].map((r) => JSON.stringify(r)));
+      (cloudHist[dateKey] || []).forEach((r) => {
+        const rk = JSON.stringify(r);
+        if(!existingKeys.has(rk)){ confirmedHistory[dateKey].push(r); existingKeys.add(rk); }
+      });
+    });
+  }catch(e){ console.warn('Không gộp được confirmedHistory từ Cloud:', e); }
+}
+
 function saveConfirmedSnapshotAndReset(){
   const keys = Object.keys(confirmedKiemTonItems);
   if(!keys.length){
@@ -10190,9 +10407,17 @@ function ccRenderLocatorCards(code, khoLabel, list){
   const rowsHtml = sortedList.map(loc => {
     if(!locatorColorMap.has(loc.locator)) locatorColorMap.set(loc.locator, GROUP_COLOR_PALETTE[locatorColorMap.size % GROUP_COLOR_PALETTE.length]);
     const locColor = locatorColorMap.get(loc.locator);
-    const rowStyle = ` style="background:${hexToRgba(locColor, 0.07)};"`;
+    const rowStyle = ` style="background:${hexToRgba(locColor, 0.1)};"`;
     const locBorderStyle = ` style="border-left-color:${locColor};"`;
-    return loc.items.map((it, i) => buildKtItemRowHtml(it, rowStyle, i === 0 ? 'row-group-first' : '', locBorderStyle)).join('');
+    const itemsHtml = loc.items.map((it) => buildKtItemRowHtml(it, rowStyle, '', locBorderStyle)).join('');
+    if(!itemsHtml.replace(/\s/g, '')) return ''; // Vị trí này đã kiểm/xác nhận hết -> không hiện tiêu đề trống
+    const headerRow = `<tr class="kt-loc-header-row"><td colspan="7" style="background:${hexToRgba(locColor, 0.1)}; border-left:4px solid ${locColor};">
+        <div class="kt-loc-header-inner">
+          <span class="kt-loc-header-name">📍 ${escHtml(loc.locator)}</span>
+          <button type="button" class="kt-confirm-locator-btn" data-loc-name="${escAttr(loc.locator)}" title="Xác nhận TẤT CẢ các dòng đang hiện ở vị trí này, dùng đúng số liệu đang nhập hiện tại của từng dòng (dòng nào chưa nhập gì thì tính bằng 0)">✓✓</button>
+        </div>
+      </td></tr>`;
+    return headerRow + itemsHtml;
   }).join('');
 
   if(!rowsHtml.replace(/\s/g, '')){
@@ -10968,21 +11193,22 @@ document.addEventListener('input', function(e) {
   }
 });
 
-// Sự kiện Xác nhận / Mở khóa dòng (cập nhật logic ẩn/hiện)
-document.addEventListener('click', function(e) {
-  const btn = e.target.closest('.kt-confirm-btn');
-  if (!btn) return;
-  const td = btn.closest('td');
-  if (!td) return;
-  const tr = td.closest('tr');
-  if (!tr) return;
-  
-  // Lấy key của dòng hiện tại
+// Xác nhận 1 dòng (dùng chung cho: bấm nút "Xác nhận" từng dòng, bấm "✓✓ Cả vị trí", và nhấn Enter
+// trong ô nhập số). Trả về true nếu vừa xác nhận thành công, false nếu dòng đã khoá từ trước (bỏ qua).
+function confirmSingleRow(tr){
+  if(!tr) return false;
+  const td = tr.querySelector('td.kt-calc-cell');
+  if(!td) return false;
+  const btn = td.querySelector('.kt-confirm-btn');
+  if(!btn || btn.dataset.locked === 'true') return false;
+
   const byLabel = (label) => {
     const cell = tr.querySelector(`td[data-label="${label}"]`);
     if(!cell) return '';
     const sel = cell.querySelector('select');
     if(sel) return sel.value;
+    const textSpan = cell.querySelector('.loc-text');
+    if(textSpan) return textSpan.textContent.trim();
     return cell.textContent.trim();
   };
   const rowKey = getRowKeyFromTr(tr);
@@ -10995,42 +11221,44 @@ document.addEventListener('click', function(e) {
   let oqc = 'Khac';
   if(oqcText.toUpperCase().includes('PASS')) oqc = 'PASS';
   else if(oqcText.toUpperCase().includes('NG')) oqc = 'NG';
-  
+
   const inputs = td.querySelectorAll('.kt-input');
-  const resultSpan = td.querySelector('.kt-result');
+  const inputValues = Array.from(inputs).map(inp => parseFloat(inp.value) || 0);
+  const total = (inputValues[0] * inputValues[1]) + (inputValues[2] * inputValues[3]) + (inputValues[4] * inputValues[5]);
+
+  const rowData = { kho: byLabel('Kho'), item, custpo, locator, oqc, qty };
+  confirmedKiemTonItems[rowKey] = { data: rowData, inputs: inputValues, result: Math.round(total) };
+  delete ktInputValues[rowKey]; // đã chuyển hẳn qua confirmedKiemTonItems — xoá bản nháp cũ, tránh
+  // lần sau nếu đề xuất lại đúng dòng này (trùng item/locator/PO/SL) sẽ tự điền sẵn số liệu cũ.
+
+  // Ghi nhận "lần kiểm gần nhất" cho dòng này — phục vụ tính Đề xuất kiểm hôm nay
+  if(item && locator) lastCheckedMap[item + '||' + locator] = new Date().toISOString();
+
+  inputs.forEach(inp => inp.disabled = true);
+  btn.textContent = 'Mở';
+  btn.style.borderColor = 'var(--red)';
+  btn.style.backgroundColor = 'var(--red)';
+  btn.dataset.locked = 'true';
+  return true;
+}
+
+// Sự kiện Xác nhận / Mở khóa dòng (cập nhật logic ẩn/hiện)
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.kt-confirm-btn');
+  if (!btn) return;
+  const td = btn.closest('td');
+  if (!td) return;
+  const tr = td.closest('tr');
+  if (!tr) return;
+  const rowKey = getRowKeyFromTr(tr);
   const isLocked = btn.dataset.locked === 'true';
-  
+
   if (!isLocked) {
-    // Lấy dữ liệu input
-    const inputValues = Array.from(inputs).map(inp => parseFloat(inp.value) || 0);
-    const total = (inputValues[0] * inputValues[1]) + (inputValues[2] * inputValues[3]) + (inputValues[4] * inputValues[5]);
-    
-    // Lưu vào biến confirm
-    const rowData = {
-      kho: byLabel('Kho'),
-      item: item,
-      custpo: custpo,
-      locator: locator,
-      oqc: oqc,
-      qty: qty
-    };
-    confirmedKiemTonItems[rowKey] = { data: rowData, inputs: inputValues, result: Math.round(total) };
-    delete ktInputValues[rowKey]; // đã chuyển hẳn qua confirmedKiemTonItems — xoá bản nháp cũ, tránh
-    // lần sau nếu đề xuất lại đúng dòng này (trùng item/locator/PO/SL) sẽ tự điền sẵn số liệu cũ.
-
-    // Ghi nhận "lần kiểm gần nhất" cho dòng này — phục vụ tính Đề xuất kiểm hôm nay
-    if(item && locator) lastCheckedMap[item + '||' + locator] = new Date().toISOString();
-
-    // Khóa dòng
-    inputs.forEach(inp => inp.disabled = true);
-    btn.textContent = 'Mở';
-    btn.style.borderColor = 'var(--red)';
-    btn.style.backgroundColor = 'var(--red)';
-    btn.dataset.locked = 'true';
-    
+    confirmSingleRow(tr);
     saveStateToStorage();
     renderKhoSearchPage(); // Sẽ tự động ẩn dòng này và hiển thị ở bảng confirm
   } else {
+    const inputs = td.querySelectorAll('.kt-input');
     // Xóa khỏi biến confirm, nhưng giữ lại giá trị đã nhập để dòng hiện lại ở bảng chính
     // vẫn còn đúng số liệu vừa xác nhận (không bị reset về 0).
     if(confirmedKiemTonItems[rowKey]) ktInputValues[rowKey] = confirmedKiemTonItems[rowKey].inputs;
@@ -11045,6 +11273,42 @@ document.addEventListener('click', function(e) {
     
     saveStateToStorage();
     renderKhoSearchPage(); // Sẽ tự động hiện lại dòng này ở bảng chính
+  }
+});
+
+// Bấm "✓✓ Cả vị trí" — xác nhận TẤT CẢ các dòng đang hiển thị cùng vị trí (locator) đó trong 1 lần,
+// dùng đúng số liệu đang nhập hiện tại của từng dòng (dòng nào chưa nhập gì thì tính bằng 0).
+document.addEventListener('click', function(e){
+  const btn = e.target.closest('.kt-confirm-locator-btn');
+  if(!btn) return;
+  const headerTr = btn.closest('tr');
+  if(!headerTr) return;
+  const rowsToConfirm = [];
+  let sib = headerTr.nextElementSibling;
+  while(sib && !sib.classList.contains('kt-loc-header-row')){
+    rowsToConfirm.push(sib);
+    sib = sib.nextElementSibling;
+  }
+  if(!rowsToConfirm.length) return;
+  if(rowsToConfirm.length > 1 && !confirm(`Xác nhận tất cả ${rowsToConfirm.length} dòng đang hiện ở vị trí này? Dòng nào chưa nhập số liệu sẽ tính bằng 0.`)) return;
+  let count = 0;
+  rowsToConfirm.forEach((tr) => { if(confirmSingleRow(tr)) count++; });
+  saveStateToStorage();
+  renderKhoSearchPage();
+  if(typeof showAppToast === 'function') showAppToast(`✓ Đã xác nhận ${count} dòng ở vị trí này.`);
+});
+
+// Nhấn Enter khi đang gõ trong 1 trong 6 ô nhập số -> xác nhận luôn dòng đang nhập (tương đương bấm
+// nút "Xác nhận" của đúng dòng đó), không cần với tay bấm nút.
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Enter') return;
+  if(!e.target.classList || !e.target.classList.contains('kt-input')) return;
+  e.preventDefault();
+  const tr = e.target.closest('tr');
+  if(!tr) return;
+  if(confirmSingleRow(tr)){
+    saveStateToStorage();
+    renderKhoSearchPage();
   }
 });
 
@@ -11343,13 +11607,23 @@ if(btnSaveCloud){
     }
     if(typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token){
       btnSaveCloud.disabled = true;
-      if(statusEl){ statusEl.className = 'upload-status'; statusEl.textContent = 'Đang lưu lên Cloud…'; }
+      if(statusEl){ statusEl.className = 'upload-status'; statusEl.textContent = 'Đang kiểm tra dữ liệu mới nhất trên Cloud…'; }
       try{
         clearTimeout(CloudVault._writeTimer);
         clearTimeout(CloudVault._retryTimer);
+        // Gộp trước phần "Đã xác nhận / KT đang nhập dở / GI đã quét / Lịch sử" từ Cloud vào máy này
+        // — để không xoá mất phần người khác vừa lưu (xem giải thích ở mergeConfirmedDataFromCloud).
+        const cloudData = await CloudVault.peek();
+        if(cloudData){
+          mergeConfirmedDataFromCloud(cloudData);
+          saveStateToStorage();
+          renderConfirmedList();
+          renderKhoSearchPage();
+        }
+        if(statusEl){ statusEl.className = 'upload-status'; statusEl.textContent = 'Đang lưu lên Cloud…'; }
         await CloudVault.writeAll();
         clearUnsavedChanges();
-        if(statusEl){ statusEl.className = 'upload-status ok'; statusEl.textContent = `✓ Đã lưu lên Cloud lúc ${fmtDateTime(new Date())}.`; }
+        if(statusEl){ statusEl.className = 'upload-status ok'; statusEl.textContent = `✓ Đã gộp dữ liệu mới nhất và lưu lên Cloud lúc ${fmtDateTime(new Date())}.`; }
       }catch(err){
         console.error('Lỗi khi lưu lên Cloud:', err);
         if(statusEl){ statusEl.className = 'upload-status err'; statusEl.textContent = `✗ Lưu lên Cloud thất bại: ${err.message} — dữ liệu vẫn đang giữ ở "chưa lưu", thử bấm Lưu lại.`; }
