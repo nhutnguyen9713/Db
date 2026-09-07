@@ -8245,6 +8245,27 @@ async function openQrScanOverlay(){
   qrScanSetStatus('Đưa mã vạch/QR (tem pallet) vào khung để quét…', '');
   const log = document.getElementById('qr-scan-log');
   if(log) log.innerHTML = '';
+  // "Mồi" + kiểm tra rung/âm thanh NGAY lúc mở camera (còn trong thao tác chạm, dễ được trình duyệt
+  // cho phép nhất) — ghi thẳng KẾT QUẢ THẬT vào nhật ký quét để biết chính xác máy này có hỗ trợ/cho
+  // phép hay không, thay vì đoán mò khi người dùng báo "không rung, không nghe thấy gì".
+  if(!navigator.vibrate){
+    qrScanAddLog('⚠ Máy/trình duyệt này KHÔNG có API rung (navigator.vibrate không tồn tại) — sẽ không rung được, chỉ còn tiếng bíp.', 'warn');
+  } else {
+    try{
+      const okVibrate = navigator.vibrate(35);
+      qrScanAddLog(okVibrate
+        ? '✓ Đã gửi lệnh rung mồi — nếu KHÔNG cảm nhận được rung, kiểm tra máy có đang tắt rung/ở chế độ im lặng không.'
+        : '⚠ navigator.vibrate() từ chối rung (trả về false) — có thể do cài đặt hệ thống chặn.', okVibrate ? 'ok' : 'warn');
+    }catch(e){
+      qrScanAddLog('⚠ Lỗi khi gọi rung: ' + e.message, 'warn');
+    }
+  }
+  try{
+    qrBeepSuccess();
+    qrScanAddLog('✓ Đã phát tiếng bíp mồi — nếu KHÔNG nghe thấy, kiểm tra âm lượng media (không phải âm lượng chuông) của máy.', 'ok');
+  }catch(e){
+    qrScanAddLog('⚠ Lỗi khi phát âm thanh: ' + e.message, 'warn');
+  }
   qrScanTick();
 }
 
@@ -8357,14 +8378,18 @@ function handleQrScanResult(giNoRaw){
   // Rung + phát tiếng bíp phản hồi NGAY khi quét — 3 kiểu khác nhau rõ rệt cho 3 kết quả, để không
   // cần nhìn màn hình vẫn biết ngay quét đúng hay có vấn đề. Có cả 2 kênh (rung + âm thanh) vì rung
   // không hoạt động trên iPhone/Safari — âm thanh đảm bảo vẫn có phản hồi trên mọi thiết bị.
-  if(navigator.vibrate){
-    if(!result.ok) navigator.vibrate(250);
-    else if(result.mismatch) navigator.vibrate([60, 80, 60]);
-    else navigator.vibrate(60);
-  }
-  if(!result.ok) qrBeepError();
-  else if(result.mismatch) qrBeepWarn();
-  else qrBeepSuccess();
+  try{
+    if(navigator.vibrate){
+      if(!result.ok) navigator.vibrate(250);
+      else if(result.mismatch) navigator.vibrate([60, 80, 60]);
+      else navigator.vibrate(60);
+    }
+  }catch(e){ /* im lặng bỏ qua — đã có dòng chẩn đoán rung riêng lúc mở camera */ }
+  try{
+    if(!result.ok) qrBeepError();
+    else if(result.mismatch) qrBeepWarn();
+    else qrBeepSuccess();
+  }catch(e){ qrScanAddLog('⚠ Lỗi phát âm thanh: ' + e.message, 'warn'); }
   if(!result.ok){
     qrScanSetStatus('✗ ' + result.message, 'err');
     qrScanAddLog('✗ ' + giNo + ' — ' + result.message, 'err');
