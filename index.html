@@ -841,6 +841,21 @@
   .ps-shortage{margin-top:14px; padding:10px 14px; border:2px solid #d6394b; border-radius:8px; color:#d6394b; font-weight:700; font-size:13px;}
   .ps-multipo-warning{margin-bottom:12px; padding:10px 14px; border:2px solid #d68f00; border-radius:8px; background:#fff8e6; color:#8a5c00; font-weight:600; font-size:12.5px; line-height:1.7;}
   .ps-kho-subtotal-note{text-align:right; font-size:11.5px; font-weight:700; color:#666; padding:4px 4px 10px;}
+  .ps-compact-header{display:flex; flex-direction:column; gap:2px; padding-bottom:10px; margin-bottom:8px; border-bottom:2px solid #111;}
+  .ps-compact-header-top{display:flex; justify-content:space-between; align-items:baseline; font-family:var(--disp);}
+  .ps-cc-cont{font-size:20px; font-weight:800;}
+  .ps-cc-time{font-family:var(--mono); font-size:13px; color:#444; font-weight:600;}
+  .ps-compact-header-sub{display:flex; justify-content:space-between; font-family:var(--mono); font-size:11px; color:#888; margin-top:2px;}
+  .ps-compact-kho{font-size:11px; font-weight:800; letter-spacing:.03em; text-transform:uppercase; color:#fff; background:var(--violet); padding:4px 10px; border-radius:5px; margin-top:10px;}
+  .ps-compact-loc{display:flex; justify-content:space-between; align-items:center; background:#f3f0fb; padding:6px 10px; font-weight:800; font-size:12.5px; border-left:3px solid var(--violet);}
+  .ps-compact-loc.surplus{background:#fff2da; border-left-color:#c9740a;}
+  .ps-cl-sub{font-weight:700; font-size:11px; color:#666; font-family:var(--mono);}
+  .ps-compact-item{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 10px; border-bottom:1px solid #eee;}
+  .ps-compact-item.surplus{background:#fff8e6;}
+  .ps-ci-name{font-size:13px;}
+  .ps-ci-name .po{color:#888; font-weight:400; font-size:12px;}
+  .ps-ci-detail{font-size:11px; color:#888; margin-top:1px; font-family:var(--mono);}
+  .ps-compact-total{display:flex; justify-content:space-between; padding:10px; margin-top:8px; background:#fafafa; border-top:2px solid #111; font-weight:800; font-size:13px;}
   .ps-footer{margin-top:20px; font-family:var(--mono); font-size:11px; color:#666; display:flex; justify-content:space-between;}
 
   .wh3b-search-row{display:flex; gap:10px; align-items:flex-start; margin-bottom:14px; flex-wrap:wrap;}
@@ -9158,6 +9173,100 @@ function buildPickSlipBodyByLocator(grouped){
   return bodyHtml;
 }
 
+// Header gọn dùng riêng cho chế độ "Xem theo Locator" — chỉ giữ đúng thông tin cần khi chụp màn hình
+// gửi cho nhân viên pick: số cont, ngày load + giờ plan chung 1 dòng, rồi CR và Invoice ở dòng dưới.
+function buildPickSlipHeaderCompact(row){
+  return `<div class="ps-compact-header">
+    <div class="ps-compact-header-top">
+      <span class="ps-cc-cont">${escHtml(row.type)}-${escHtml(String(row.cNo))}</span>
+      <span class="ps-cc-time">${escHtml(row.loadDate)} · ${escHtml(row.planTime)}</span>
+    </div>
+    <div class="ps-compact-header-sub">
+      <span>CR ${escHtml(row.csr)}</span>
+      <span>Inv ${escHtml(row.invoice)}</span>
+    </div>
+  </div>`;
+}
+
+// Bản gọn của bảng theo Locator — mỗi mã hàng chỉ chiếm 2 dòng (Item+PO+OQC / SL+pallet+CBM),
+// tổng mỗi locator hiện ngay trên dòng tiêu đề locator, không tách bảng riêng từng vị trí như bản cũ.
+function buildPickSlipBodyByLocatorCompact(grouped){
+  const sorted = grouped.slice().sort((a, b) => {
+    const ka = PICK_SLIP_KHO_ORDER[a.kho] ?? 9, kb = PICK_SLIP_KHO_ORDER[b.kho] ?? 9;
+    if(ka !== kb) return ka - kb;
+    const walkCmp = comparePickWalkOrder(a, b);
+    if(walkCmp !== 0) return walkCmp;
+    return a.item.localeCompare(b.item);
+  });
+  const locTotals = new Map();
+  sorted.forEach(g => {
+    const t = locTotals.get(g.locator) || { onHand: 0, pallets: 0 };
+    t.onHand += g.onHand; t.pallets += g.pallets;
+    locTotals.set(g.locator, t);
+  });
+  let currentKho = null, currentLocator = null;
+  let bodyHtml = '';
+  sorted.forEach(g => {
+    if(g.kho !== currentKho){
+      currentKho = g.kho;
+      bodyHtml += `<div class="ps-compact-kho">${escHtml(currentKho)}</div>`;
+    }
+    if(g.locator !== currentLocator){
+      currentLocator = g.locator;
+      const t = locTotals.get(currentLocator);
+      bodyHtml += `<div class="ps-compact-loc${g.isSurplus ? ' surplus' : ''}"><span>📍 ${escHtml(currentLocator)}</span><span class="ps-cl-sub">${fmt(t.onHand)} Pcs · ${fmt(t.pallets)} plt</span></div>`;
+    }
+    const poHtml = g.po ? ` <span class="po">(PO ${escHtml(g.po)})</span>` : '';
+    const multiPoHtml = g.itemPoCount > 1 ? ` <span class="ps-item-multipo-badge">${g.itemPoCount} PO</span>` : '';
+    const surplusHtml = g.isSurplus ? ` <span class="ps-item-surplus-badge">Dư ${fmt(g.surplusQty)} (KH ${fmt(g.planQty)})</span>` : '';
+    bodyHtml += `<div class="ps-compact-item${g.isSurplus ? ' surplus' : ''}">
+      <div>
+        <div class="ps-ci-name"><b>${escHtml(g.item)}</b>${poHtml}${multiPoHtml}${surplusHtml}</div>
+        <div class="ps-ci-detail">${fmt(g.onHand)} Pcs · ${fmt(g.pallets)} plt · ${fmtDec(g.cbm,2)} CBM</div>
+      </div>
+      ${oqcBadge(g.oqc)}
+    </div>`;
+  });
+  return bodyHtml;
+}
+
+// Bản gọn của bảng theo Mã hàng — mỗi mã 1 khối (kèm PO, KH kế hoạch, tổng), trong đó mỗi vị trí
+// (locator) chỉ chiếm 1 dòng gọn thay vì 1 dòng bảng nhiều cột như bản cũ.
+function buildPickSlipBodyByItemCompact(grouped){
+  const itemTotals = new Map();
+  grouped.forEach(g => {
+    const key = g.item + '||' + (g.po || '');
+    const t = itemTotals.get(key) || { onHand: 0, pallets: 0 };
+    t.onHand += g.onHand; t.pallets += g.pallets;
+    itemTotals.set(key, t);
+  });
+  let currentKey = null, currentKho = null;
+  let bodyHtml = '';
+  grouped.forEach(g => {
+    const key = g.item + '||' + (g.po || '');
+    if(key !== currentKey){
+      currentKey = key;
+      currentKho = null;
+      const t = itemTotals.get(key);
+      const multiPoHtml = g.itemPoCount > 1 ? ` <span class="ps-item-multipo-badge">${g.itemPoCount} PO</span>` : '';
+      const surplusHtml = g.isSurplus ? ` <span class="ps-item-surplus-badge">Dư ${fmt(g.surplusQty)}</span>` : '';
+      bodyHtml += `<div class="ps-compact-loc${g.isSurplus ? ' surplus' : ''}"><span><b>${escHtml(g.item)}</b> <span class="po">PO ${escHtml(g.po || '—')}</span>${multiPoHtml}${surplusHtml}</span><span class="ps-cl-sub">KH ${fmt(g.planQty)} · ${fmt(t.onHand)} Pcs · ${fmt(t.pallets)} plt</span></div>`;
+    }
+    if(g.kho !== currentKho){
+      currentKho = g.kho;
+      bodyHtml += `<div class="ps-compact-kho">${escHtml(currentKho)}</div>`;
+    }
+    bodyHtml += `<div class="ps-compact-item">
+      <div>
+        <div class="ps-ci-name"><b>📍 ${escHtml(g.locator)}</b></div>
+        <div class="ps-ci-detail">${fmt(g.onHand)} Pcs · ${fmt(g.pallets)} plt · ${fmtDec(g.cbm,2)} CBM</div>
+      </div>
+      ${oqcBadge(g.oqc)}
+    </div>`;
+  });
+  return bodyHtml;
+}
+
 function renderPickSlipBody(){
   const contentEl = document.getElementById('pick-slip-content');
   const slip = currentPickSlipData;
@@ -9169,47 +9278,16 @@ function renderPickSlipBody(){
   const { row, grouped, shortages, totalOnHandWarehouse, totalCbmWarehouse } = slip;
   const totalPlanQty = [...new Map(grouped.map(g => [g.item + '||' + (g.po || ''), g.planQty])).values()].reduce((s, v) => s + v, 0);
 
-  const bodyHtml = pickSlipViewMode === 'locator' ? buildPickSlipBodyByLocator(grouped) : buildPickSlipBodyByItem(grouped);
-
-  // Cảnh báo mã hàng có nhiều hơn 1 PO khác nhau trong cùng container này — dễ lấy nhầm PO.
-  const poByItem = new Map();
-  grouped.forEach(g => {
-    if(!poByItem.has(g.item)) poByItem.set(g.item, new Set());
-    poByItem.get(g.item).add(g.po || '—');
-  });
-  const multiPoWarnings = [...poByItem.entries()].filter(([, pos]) => pos.size > 1);
-  const multiPoHtml = multiPoWarnings.length
-    ? `<div class="ps-multipo-warning">⚠ ${multiPoWarnings.map(([item, pos]) => `Mã <b>${escHtml(item)}</b> có <b>${pos.size} PO</b> khác nhau (${[...pos].map(escHtml).join(', ')})`).join('<br>')}</div>`
-    : '';
-
   const shortageHtml = shortages.length
     ? `<div class="ps-shortage">⚠ THIẾU HÀNG — tồn PASS hiện có không đủ so với kế hoạch: ${shortages.map(s => `${escHtml(s.item)}${s.po ? ' (PO ' + escHtml(s.po) + ')' : ''} — thiếu ${fmt(s.missing)}`).join('; ')}</div>`
     : '';
 
-  const noteText = pickSlipViewMode === 'locator'
-    ? 'Danh sách TẤT CẢ vị trí đang tồn đúng mã hàng + PO của container này, nhóm theo TỪNG LOCATOR (đi theo lối đi trong kho) — chọn vị trí nào cũng được, không bắt buộc theo FIFO.'
-    : 'Danh sách TẤT CẢ vị trí đang tồn đúng mã hàng + PO của container này, nhóm theo TỪNG MÃ HÀNG — chọn vị trí nào cũng được, không bắt buộc theo FIFO.';
-
+  const totalPallet = grouped.reduce((s, g) => s + g.pallets, 0);
+  const bodyHtml = pickSlipViewMode === 'locator' ? buildPickSlipBodyByLocatorCompact(grouped) : buildPickSlipBodyByItemCompact(grouped);
   contentEl.innerHTML = `
-    <div class="ps-header">
-      <div>
-        <div class="ps-title">GỢI Ý PICK HÀNG XUẤT CONT</div>
-        <div class="ps-cont">${escHtml(row.type)}-${escHtml(String(row.cNo))}</div>
-      </div>
-      <div class="ps-meta">
-        Ngày load: <b>${escHtml(row.loadDate)}</b><br>
-        Giờ plan: <b>${escHtml(row.planTime)}</b><br>
-        Invoice: ${escHtml(row.invoice)}<br>
-        CR: ${escHtml(row.csr)}<br>
-        Xem lúc: ${escHtml(fmtDateTime(new Date()))}
-      </div>
-    </div>
-    <div class="ps-note">${noteText}</div>
-    ${multiPoHtml}
+    ${buildPickSlipHeaderCompact(row)}
     ${bodyHtml}
-    <table class="ps-table"><tbody>
-    <tr class="ps-total-row"><td style="text-align:right; width:60%;">TỔNG (TẤT CẢ CÁC MÃ)<br><span style="font-weight:600; font-size:11px; color:#666;">SL kế hoạch: ${fmt(totalPlanQty)}</span></td><td class="num">${fmt(totalOnHandWarehouse)}</td><td class="num">${fmtDec(totalCbmWarehouse,2)} CBM</td></tr>
-    </tbody></table>
+    <div class="ps-compact-total"><span>Tổng cont (SL kế hoạch: ${fmt(totalPlanQty)})</span><span>${fmt(totalOnHandWarehouse)} Pcs · ${fmt(totalPallet)} plt · ${fmtDec(totalCbmWarehouse,2)} CBM</span></div>
     ${shortageHtml}
   `;
 
