@@ -9837,6 +9837,12 @@ function renderConfirmedList(){
 
 // Khôi phục 1 dòng đã xác nhận (lỡ nhập sai) — xoá khỏi "Đã xác nhận" và trả dòng đó về bảng
 // "Kiểm tồn kho" với đúng số liệu đã nhập trước đó (không bị reset về 0) để nhập lại kết quả.
+// "Bia mộ" (tombstone) các rowKey vừa bị xoá khỏi confirmedKiemTonItems bằng thao tác Khôi phục —
+// BẮT BUỘC phải nhớ việc XOÁ này, vì bước "gộp dữ liệu Cloud" khi bấm Lưu (mergeConfirmedDataFromCloud)
+// chỉ biết CỘNG THÊM những gì Cloud có mà máy này chưa có — nếu không loại trừ các key vừa khôi phục,
+// nó sẽ vô tình "hồi sinh" lại đúng dòng vừa khôi phục (vì Cloud vẫn còn giữ bản CŨ, chưa kịp cập nhật
+// bản đã xoá) — đây chính là lỗi "khôi phục xong bấm Lưu lại thấy dòng đó quay về".
+let _restoredConfirmedKeys = new Set();
 function restoreConfirmedItem(rowKey){
   const entry = confirmedKiemTonItems[rowKey];
   if(!entry) return;
@@ -9844,6 +9850,7 @@ function restoreConfirmedItem(rowKey){
   if(!ok) return;
   ktInputValues[rowKey] = entry.inputs;
   delete confirmedKiemTonItems[rowKey];
+  _restoredConfirmedKeys.add(rowKey);
   saveStateToStorage();
   renderKhoSearchPage(); // hiện lại dòng ở bảng Kiểm tồn kho, giữ nguyên số liệu đã nhập trước đó
   renderConfirmedList(); // ẩn dòng khỏi bảng Đã xác nhận
@@ -9971,6 +9978,9 @@ function mergeConfirmedDataFromCloud(cloudData){
 
   try{
     const cloudConfirmed = cloudData[STORAGE_KEY_CONFIRMED] ? JSON.parse(cloudData[STORAGE_KEY_CONFIRMED], jsonReviver) : {};
+    // Loại bỏ những dòng VỪA bị xoá bằng "Khôi phục" ở máy này khỏi bản Cloud trước khi gộp — nếu
+    // không, Cloud (chưa kịp cập nhật bản đã xoá) sẽ làm dòng đó "hồi sinh" lại ngay khi Lưu.
+    _restoredConfirmedKeys.forEach(k => delete cloudConfirmed[k]);
     confirmedKiemTonItems = Object.assign({}, cloudConfirmed, confirmedKiemTonItems);
   }catch(e){ console.warn('Không gộp được confirmedKiemTonItems từ Cloud:', e); }
 
