@@ -9399,13 +9399,7 @@ async function exportPickSlipExcel(){
   };
 
   mergeFullRow(`GỢI Ý PICK HÀNG XUẤT CONT ${row.type}-${row.cNo}`, { font:{ bold:true, size:14 } });
-  mergeFullRow(`Ngày load: ${row.loadDate}    Giờ plan: ${row.planTime}    Invoice: ${row.invoice}    CR: ${row.csr}`, { font:{ italic:true, color:{ argb:'FF666666' } } });
-  mergeFullRow(
-    isLocatorMode
-      ? 'Liệt kê TẤT CẢ vị trí đang tồn đúng mã hàng + PO, nhóm theo từng locator (đi theo lối đi trong kho) — không phải phiếu pick chính thức.'
-      : 'Liệt kê TẤT CẢ vị trí đang tồn đúng mã hàng + PO, nhóm theo từng mã — không phải phiếu pick chính thức.',
-    { font:{ italic:true, size:10, color:{ argb:'FF6E4FE0' } }, alignment:{ wrapText:true, vertical:'middle' }, height:26 }
-  );
+  mergeFullRow(`Ngày load: ${row.loadDate}    Giờ plan: ${row.planTime}    CR: ${row.csr}    Invoice: ${row.invoice}`, { font:{ italic:true, color:{ argb:'FF666666' } } });
   r++;
 
   if(isLocatorMode){
