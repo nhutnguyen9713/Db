@@ -3838,8 +3838,13 @@ const CloudVault = {
 
   async _writeMergeNow(keys){
     if(!this.url || !this.token) return;
+    // QUAN TRỌNG: với key đã bị XÁC (không còn trong _mem, VD: vừa "Xoá danh sách" làm rỗng hẳn),
+    // PHẢI gửi rõ giá trị null cho key đó — Firebase PATCH coi "null" là lệnh XOÁ đúng key đó trên
+    // Cloud. Trước đây chỉ ĐƠN GIẢN BỎ QUA key không còn trong _mem (không gửi gì cho nó), khiến
+    // Cloud KHÔNG BAO GIỜ biết là cần xoá — cứ giữ mãi bản dữ liệu CŨ, nên "Xoá danh sách" xong đợi
+    // 1 lúc/tải lại trang sẽ luôn thấy nó "sống lại" y như cũ, dù xoá trên máy vẫn chạy đúng.
     const partial = {};
-    keys.forEach(k => { if(k in _mem) partial[k] = _mem[k]; });
+    keys.forEach(k => { partial[k] = (k in _mem) ? _mem[k] : null; });
     try{
       const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token), {
         method: 'PATCH',
@@ -3850,11 +3855,13 @@ const CloudVault = {
       if(!res.ok) throw new Error('HTTP ' + res.status + (bodyJson && bodyJson.error ? ' — ' + bodyJson.error : ''));
       if(bodyJson && bodyJson.error) throw new Error(bodyJson.error);
 
-      // Kiểm chứng NGAY TỪ PHẢN HỒI CỦA PATCH: Firebase trả lại đúng phần dữ liệu vừa ghép trong
-      // response body của chính request này — không cần gửi thêm request nào để "tải lại" mới biết
-      // (tận dụng đúng 1 request duy nhất, không tốn thêm băng thông "Downloads" trên Firebase).
-      const mergedKeys = keys.filter(k => k in partial);
-      const bad = mergedKeys.filter(k => !bodyJson || !(k in bodyJson) || String(bodyJson[k]).length < String(partial[k]).length);
+      // Kiểm chứng NGAY TỪ PHẢN HỒI CỦA PATCH: Firebase trả lại đúng phần dữ liệu vừa ghép (kể cả
+      // key vừa bị xoá, giá trị sẽ là null) trong response body của chính request này — không cần
+      // gửi thêm request nào để "tải lại" mới biết.
+      const bad = keys.filter(k => {
+        if(partial[k] === null) return !bodyJson || bodyJson[k] !== null; // key vừa xoá -> phải thấy null
+        return !bodyJson || !(k in bodyJson) || String(bodyJson[k]).length < String(partial[k]).length;
+      });
       if(bad.length) throw new Error('Cloud không lưu đủ (thiếu/thiếu bớt: ' + bad.join(', ') + ')');
       // QUAN TRỌNG: vừa đẩy thành công state MỚI NHẤT của máy này lên Cloud — mọi snapshot realtime
       // đang CHỜ (_pendingSnapshot, xem _onRealtimeValue) giờ đã CŨ hơn state vừa ghi, áp dụng nó vào
