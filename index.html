@@ -11114,8 +11114,8 @@ function ccHasMismatch(item, locator){
 }
 
 // Tính điểm ưu tiên cho mọi dòng item+locator của 1 kho (đã loại PICK/Loading), sắp xếp giảm dần theo điểm
-function ccComputeScoresForKho(khoLabel){
-  const invRows = ccBuildInventoryRows();
+function ccComputeScoresForKho(khoLabel, allowPick){
+  const invRows = ccBuildInventoryRows(allowPick);
   const moveFreq = ccMoveFrequencyByItem();
   const maxFreq = Math.max(1, ...Array.from(moveFreq.values()));
   const now = Date.now();
@@ -11165,8 +11165,8 @@ function ccComputeScoresForKho(khoLabel){
 }
 
 // Gộp điểm theo Locator (điểm locator = điểm cao nhất trong số các mã tại vị trí đó)
-function ccComputeLocatorScoresForKho(khoLabel){
-  const itemScored = ccComputeScoresForKho(khoLabel);
+function ccComputeLocatorScoresForKho(khoLabel, allowPick){
+  const itemScored = ccComputeScoresForKho(khoLabel, allowPick);
   const byLoc = new Map(); // locator -> { locator, items:[], maxScore, palletCount }
   itemScored.forEach(row => {
     if(!byLoc.has(row.locator)) byLoc.set(row.locator, { locator: row.locator, items: [], maxScore: 0, palletCount: 0 });
@@ -12191,9 +12191,9 @@ document.addEventListener('click', function(e){
 
   let list;
   if(tab === 'locator'){
-    list = ccComputeLocatorScoresForKho(khoLabel).filter(loc => selectedSet.has(loc.locator));
+    list = ccComputeLocatorScoresForKho(khoLabel, true).filter(loc => selectedSet.has(loc.locator));
   } else {
-    list = ccComputeScoresForKho(khoLabel).filter(row => selectedSet.has(row.item));
+    list = ccComputeScoresForKho(khoLabel, true).filter(row => selectedSet.has(row.item));
   }
 
   // Đồng bộ lại tab chế độ + kết quả hiển thị trên thẻ kho tương ứng
