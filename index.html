@@ -3273,14 +3273,14 @@ function markUnsavedChanges(key){
     _pendingChangedKeys.clear();
     const detail = labels.length ? labels.join(', ') : '';
     const statusEl = document.getElementById('upload-status');
+    // CHỈ cập nhật đúng 1 nơi (#upload-status) — nút chuông 🔔 đã tự động "nghe" và ghi lại mọi thay
+    // đổi của đúng phần tử này vào nhật ký rồi (xem watchStatusElForNotif), nên KHÔNG được gọi thêm
+    // logNotification() ở đây nữa — trước đây gọi cả 2 nơi làm cùng 1 sự kiện bị ghi lặp thành 2 dòng.
     if(statusEl && !statusEl.classList.contains('err')){
       statusEl.className = 'upload-status';
       statusEl.textContent = detail
         ? `● Có thay đổi chưa lưu (${detail}) — bấm "Lưu" để đẩy lên Cloud.`
         : '● Có thay đổi chưa lưu — bấm "Lưu" để đẩy lên Cloud.';
-    }
-    if(typeof logNotification === 'function'){
-      logNotification(detail ? `Có thay đổi chưa lưu: ${detail}` : 'Có thay đổi chưa lưu', 'info');
     }
   }, 400);
 }
@@ -5719,6 +5719,10 @@ document.querySelectorAll('.btn-plan-clear').forEach(btn => {
     renderKhoSearchPage();
     touchUpdatedAt();
     saveStateToStorage();
+    // Y HỆT lúc TẢI Plan lên — XOÁ Plan cũng phải tự lưu lên Cloud ngay, nếu không thì chỉ mới xoá
+    // trên máy này, Cloud vẫn còn giữ bản Plan cũ. Lần đọc lại Cloud tiếp theo (tải lại trang, đổi
+    // thiết bị, hay chính Realtime) sẽ kéo bản CŨ (chưa xoá) về, làm Plan "sống lại" y như cũ.
+    schedulePlanAutoSaveToCloud();
   });
 });
 
