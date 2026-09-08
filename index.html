@@ -846,15 +846,16 @@
   .ps-cc-cont{font-size:20px; font-weight:800;}
   .ps-cc-time{font-family:var(--mono); font-size:13px; color:#444; font-weight:600;}
   .ps-compact-header-sub{display:flex; justify-content:space-between; font-family:var(--mono); font-size:11px; color:#888; margin-top:2px;}
-  .ps-compact-kho{font-size:11px; font-weight:800; letter-spacing:.03em; text-transform:uppercase; color:#fff; background:var(--violet); padding:4px 10px; border-radius:5px; margin-top:10px;}
+  .ps-compact-kho{display:flex; justify-content:space-between; align-items:center; font-size:11px; font-weight:800; letter-spacing:.03em; text-transform:uppercase; color:#fff; background:var(--violet); padding:4px 10px; border-radius:5px; margin-top:10px;}
   .ps-compact-loc{display:flex; justify-content:space-between; align-items:center; background:#f3f0fb; padding:6px 10px; font-weight:800; font-size:12.5px; border-left:3px solid var(--violet);}
   .ps-compact-loc.surplus{background:#fff2da; border-left-color:#c9740a;}
   .ps-cl-sub{font-weight:700; font-size:11px; color:#666; font-family:var(--mono);}
-  .ps-compact-item{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 10px; border-bottom:1px solid #eee;}
+  .ps-compact-item{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 10px; border-bottom:1px solid #eee; flex-wrap:wrap;}
   .ps-compact-item.surplus{background:#fff8e6;}
   .ps-ci-name{font-size:13px;}
   .ps-ci-name .po{color:#888; font-weight:400; font-size:12px;}
   .ps-ci-detail{font-size:11px; color:#888; margin-top:1px; font-family:var(--mono);}
+  .ps-ci-qty{font-size:11px; color:#666; font-family:var(--mono); font-weight:700; text-align:right; white-space:nowrap; flex-shrink:0; margin-left:auto;}
   .ps-compact-total{display:flex; justify-content:space-between; padding:10px; margin-top:8px; background:#fafafa; border-top:2px solid #111; font-weight:800; font-size:13px;}
   .ps-footer{margin-top:20px; font-family:var(--mono); font-size:11px; color:#666; display:flex; justify-content:space-between;}
 
@@ -6230,7 +6231,7 @@ function renderContPickTable(){
         <td>${escHtml(row.loadDate)}</td>
         <td>${escHtml(row.planTime)}</td>
         <td>${escHtml(row.invoice)}
-          <button type="button" class="cpt-pick-slip-btn" data-pick-type="${escAttr(row.type)}" data-pick-cno="${escAttr(String(row.cNo))}" title="Xem gợi ý pick hàng cho container này">🖨</button>
+          <button type="button" class="cpt-pick-slip-btn" data-pick-type="${escAttr(row.type)}" data-pick-cno="${escAttr(String(row.cNo))}" data-pick-instance="${escAttr(row.instanceKey)}" title="Xem gợi ý pick hàng cho container này">🖨</button>
         </td>
         <td>${escHtml(row.csr)}</td>
         <td>${khoCell}</td>
@@ -6655,7 +6656,7 @@ document.addEventListener('click', (e) => {
   }
   const pickSlipBtn = e.target.closest('.cpt-pick-slip-btn');
   if(pickSlipBtn){
-    openPickSlip(pickSlipBtn.dataset.pickType, pickSlipBtn.dataset.pickCno);
+    openPickSlip(pickSlipBtn.dataset.pickType, pickSlipBtn.dataset.pickCno, pickSlipBtn.dataset.pickInstance);
     return;
   }
   const markBtn = e.target.closest('.cpt-mark-btn');
@@ -9079,8 +9080,14 @@ function pickSlipParseDate(s){
 }
 const PICK_SLIP_KHO_ORDER = { 'Kho 2B': 0, 'Kho 3A': 1, 'Kho 3B': 2, 'Kho DG1': 3 };
 
-function buildPickSlipForContainer(type, cNo){
-  const row = (contPickAllRows || []).find(r => r.type === type && String(r.cNo) === String(cNo));
+function buildPickSlipForContainer(type, cNo, instanceKey){
+  // Container cùng type+cNo CÓ THỂ xuất hiện nhiều lần (VD: 2 lượt xuất FC-1 khác ngày/giờ/Invoice
+  // khác nhau) — nếu chỉ tìm theo type+cNo sẽ luôn trúng đúng DÒNG ĐẦU TIÊN khớp, dù người dùng bấm
+  // vào dòng khác. instanceKey (gồm cả ngày load + giờ plan) mới xác định ĐÚNG 1 lượt xuất cụ thể,
+  // nên luôn ưu tiên dùng nó khi có; chỉ fallback về type+cNo cho các lời gọi cũ chưa kịp truyền vào.
+  const row = instanceKey
+    ? (contPickAllRows || []).find(r => r.instanceKey === instanceKey)
+    : (contPickAllRows || []).find(r => r.type === type && String(r.cNo) === String(cNo));
   if(!row) return null;
 
   const shortages = [];
@@ -9186,10 +9193,10 @@ function buildPickSlipForContainer(type, cNo){
 let currentPickSlipData = null; // slip đang mở trong modal — dùng khi bấm "Xuất Excel"
 let pickSlipViewMode = 'item'; // 'item' = nhóm theo mã hàng (mặc định) | 'locator' = nhóm theo locator
 
-function renderPickSlipContent(type, cNo){
+function renderPickSlipContent(type, cNo, instanceKey){
   const contentEl = document.getElementById('pick-slip-content');
   if(!contentEl) return;
-  const slip = buildPickSlipForContainer(type, cNo);
+  const slip = buildPickSlipForContainer(type, cNo, instanceKey);
   currentPickSlipData = slip;
   pickSlipViewMode = 'item';
   if(!slip){
@@ -9347,8 +9354,9 @@ function buildPickSlipHeaderCompact(row){
   </div>`;
 }
 
-// Bản gọn của bảng theo Locator — mỗi mã hàng chỉ chiếm 2 dòng (Item+PO+OQC / SL+pallet+CBM),
-// tổng mỗi locator hiện ngay trên dòng tiêu đề locator, không tách bảng riêng từng vị trí như bản cũ.
+// Bản gọn của bảng theo Locator — mỗi mã hàng chỉ chiếm 1 dòng (tên mã + PO + OQC bên trái, SL/pallet/
+// CBM bên phải), tổng mỗi locator hiện ngay trên dòng tiêu đề locator, tổng mỗi kho hiện trên dải
+// tiêu đề kho — không tách bảng riêng từng vị trí như bản cũ.
 function buildPickSlipBodyByLocatorCompact(grouped){
   const sorted = grouped.slice().sort((a, b) => {
     const ka = PICK_SLIP_KHO_ORDER[a.kho] ?? 9, kb = PICK_SLIP_KHO_ORDER[b.kho] ?? 9;
@@ -9358,17 +9366,22 @@ function buildPickSlipBodyByLocatorCompact(grouped){
     return a.item.localeCompare(b.item);
   });
   const locTotals = new Map();
+  const khoTotals = new Map();
   sorted.forEach(g => {
     const t = locTotals.get(g.locator) || { onHand: 0, pallets: 0 };
     t.onHand += g.onHand; t.pallets += g.pallets;
     locTotals.set(g.locator, t);
+    const kt = khoTotals.get(g.kho) || { onHand: 0, pallets: 0 };
+    kt.onHand += g.onHand; kt.pallets += g.pallets;
+    khoTotals.set(g.kho, kt);
   });
   let currentKho = null, currentLocator = null;
   let bodyHtml = '';
   sorted.forEach(g => {
     if(g.kho !== currentKho){
       currentKho = g.kho;
-      bodyHtml += `<div class="ps-compact-kho">${escHtml(currentKho)}</div>`;
+      const kt = khoTotals.get(currentKho);
+      bodyHtml += `<div class="ps-compact-kho"><span>${escHtml(currentKho)}</span><span>${fmt(kt.onHand)} Pcs &middot; ${fmt(kt.pallets)} plt</span></div>`;
     }
     if(g.locator !== currentLocator){
       currentLocator = g.locator;
@@ -9379,20 +9392,19 @@ function buildPickSlipBodyByLocatorCompact(grouped){
     const multiPoHtml = g.itemPoCount > 1 ? ` <span class="ps-item-multipo-badge">${g.itemPoCount} PO</span>` : '';
     const surplusHtml = g.isSurplus ? ` <span class="ps-item-surplus-badge">Dư ${fmt(g.surplusQty)} (KH ${fmt(g.planQty)})</span>` : '';
     bodyHtml += `<div class="ps-compact-item${g.isSurplus ? ' surplus' : ''}">
-      <div>
-        <div class="ps-ci-name"><b>${escHtml(g.item)}</b>${poHtml}${multiPoHtml}${surplusHtml}</div>
-        <div class="ps-ci-detail">${fmt(g.onHand)} Pcs · ${fmt(g.pallets)} plt · ${fmtDec(g.cbm,2)} CBM</div>
-      </div>
-      ${oqcBadge(g.oqc)}
+      <div class="ps-ci-name"><b>${escHtml(g.item)}</b>${poHtml}${multiPoHtml}${surplusHtml} ${oqcBadge(g.oqc)}</div>
+      <div class="ps-ci-qty">${fmt(g.onHand)} Pcs · ${fmt(g.pallets)} plt · ${fmtDec(g.cbm,2)} CBM</div>
     </div>`;
   });
   return bodyHtml;
 }
 
 // Bản gọn của bảng theo Mã hàng — mỗi mã 1 khối (kèm PO, KH kế hoạch, tổng), trong đó mỗi vị trí
-// (locator) chỉ chiếm 1 dòng gọn thay vì 1 dòng bảng nhiều cột như bản cũ.
+// (locator) chỉ chiếm 1 dòng gọn (tên vị trí + OQC bên trái, SL/pallet/CBM bên phải) thay vì 1 dòng
+// bảng nhiều cột như bản cũ. Tổng mỗi kho hiện trên dải tiêu đề kho.
 function buildPickSlipBodyByItemCompact(grouped){
   const itemTotals = new Map();
+  const khoTotals = new Map();
   grouped.forEach(g => {
     const key = g.item + '||' + (g.po || '');
     const t = itemTotals.get(key) || { onHand: 0, pallets: 0 };
@@ -9413,14 +9425,15 @@ function buildPickSlipBodyByItemCompact(grouped){
     }
     if(g.kho !== currentKho){
       currentKho = g.kho;
-      bodyHtml += `<div class="ps-compact-kho">${escHtml(currentKho)}</div>`;
+      // Tổng theo kho tính riêng cho ĐÚNG mã hàng này (không cộng dồn qua các mã khác) — nhất quán với
+      // cách mỗi khối trong chế độ Mã hàng chỉ nói về 1 mã, giống hệt tổng mỗi locator ở chế độ Locator.
+      const kt = { onHand: 0, pallets: 0 };
+      grouped.forEach(x => { if(x.item + '||' + (x.po || '') === key && x.kho === currentKho){ kt.onHand += x.onHand; kt.pallets += x.pallets; } });
+      bodyHtml += `<div class="ps-compact-kho"><span>${escHtml(currentKho)}</span><span>${fmt(kt.onHand)} Pcs &middot; ${fmt(kt.pallets)} plt</span></div>`;
     }
     bodyHtml += `<div class="ps-compact-item">
-      <div>
-        <div class="ps-ci-name"><b>📍 ${escHtml(g.locator)}</b></div>
-        <div class="ps-ci-detail">${fmt(g.onHand)} Pcs · ${fmt(g.pallets)} plt · ${fmtDec(g.cbm,2)} CBM</div>
-      </div>
-      ${oqcBadge(g.oqc)}
+      <div class="ps-ci-name"><b>📍 ${escHtml(g.locator)}</b> ${oqcBadge(g.oqc)}</div>
+      <div class="ps-ci-qty">${fmt(g.onHand)} Pcs · ${fmt(g.pallets)} plt · ${fmtDec(g.cbm,2)} CBM</div>
     </div>`;
   });
   return bodyHtml;
@@ -9657,8 +9670,8 @@ async function exportPickSlipExcel(){
   URL.revokeObjectURL(url);
 }
 
-function openPickSlip(type, cNo){
-  renderPickSlipContent(type, cNo);
+function openPickSlip(type, cNo, instanceKey){
+  renderPickSlipContent(type, cNo, instanceKey);
   const overlay = document.getElementById('pick-slip-overlay');
   if(overlay) overlay.classList.add('show');
 }
@@ -9742,7 +9755,7 @@ function renderKioskPage(){
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${manualBtnIcon}</svg>
         ${manualBtnLabel}
       </button>
-      <button type="button" class="kiosk-card-pick-btn" data-pick-type="${escAttr(r.type)}" data-pick-cno="${escAttr(String(r.cNo))}" title="Xem gợi ý pick hàng cho container này">
+      <button type="button" class="kiosk-card-pick-btn" data-pick-type="${escAttr(r.type)}" data-pick-cno="${escAttr(String(r.cNo))}" data-pick-instance="${escAttr(r.instanceKey)}" title="Xem gợi ý pick hàng cho container này">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         Gợi ý pick
       </button>
@@ -9753,7 +9766,7 @@ function renderKioskPage(){
 }
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.kiosk-card-pick-btn');
-  if(btn){ openPickSlip(btn.dataset.pickType, btn.dataset.pickCno); return; }
+  if(btn){ openPickSlip(btn.dataset.pickType, btn.dataset.pickCno, btn.dataset.pickInstance); return; }
   const markBtn = e.target.closest('.kiosk-card-mark-btn');
   if(markBtn) togglePickedManual(markBtn.dataset.markType, markBtn.dataset.markCno, markBtn.dataset.markLoaddate, markBtn.dataset.markPlantime);
 });
