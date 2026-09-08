@@ -846,16 +846,24 @@
   .ps-cc-cont{font-size:20px; font-weight:800;}
   .ps-cc-time{font-family:var(--mono); font-size:13px; color:#444; font-weight:600;}
   .ps-compact-header-sub{display:flex; justify-content:space-between; font-family:var(--mono); font-size:11px; color:#888; margin-top:2px;}
-  .ps-compact-kho{font-size:11px; font-weight:800; letter-spacing:.03em; text-transform:uppercase; color:#ffffff; background:var(--violet); padding:5px 10px; border-radius:5px; margin-top:10px;}
+  .ps-compact-kho{font-size:10px; font-weight:700; letter-spacing:.02em; text-transform:uppercase; color:#ffffff; background:var(--violet); padding:4px 10px; border-radius:5px; margin-top:10px; opacity:0.88;}
   .ps-compact-loc{display:flex; justify-content:space-between; align-items:center; background:#f3f0fb; padding:6px 10px; font-weight:800; font-size:12.5px; border-left:3px solid var(--violet);}
   .ps-compact-loc.surplus{background:#fff2da; border-left-color:#c9740a;}
   .ps-cl-sub{font-weight:700; font-size:11px; color:#666; font-family:var(--mono);}
+  /* Chế độ Mã hàng: đảo độ nhấn so với Locator — dòng MÃ là trọng tâm (nền đậm), dải KHO chỉ là bối
+     cảnh phụ (nền nhạt hơn hẳn) — ngược lại với chế độ Locator (KHO đậm, Locator nhạt, giữ nguyên). */
+  .ps-compact-item-head{display:flex; justify-content:space-between; align-items:center; background:var(--violet); color:#fff; padding:7px 10px; font-weight:800; font-size:13.5px; border-radius:5px; margin-top:10px;}
+  .ps-compact-item-head.surplus{background:#c9740a;}
+  .ps-compact-item-head .po{color:#e6ddfa; font-weight:500; font-size:12px;}
+  .ps-compact-item-head .ps-cl-sub-light{font-weight:700; font-size:11px; color:#fff; font-family:var(--mono);}
+  .ps-compact-item-head > span, .ps-compact-loc > span{background:transparent;}
+  .ps-compact-kho-light{font-size:10px; font-weight:700; letter-spacing:.02em; color:#6b5a9e; background:#f3f0fb; padding:4px 10px; border-radius:5px; margin-top:10px; border:1px solid #e6def7;}
   .ps-compact-item{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 10px; border-bottom:1px solid #eee; flex-wrap:wrap;}
   .ps-compact-item.surplus{background:#fff8e6;}
-  .ps-ci-name{font-size:13px;}
+  .ps-ci-name{font-size:13px; background:transparent;}
   .ps-ci-name .po{color:#888; font-weight:400; font-size:12px;}
   .ps-ci-detail{font-size:11px; color:#888; margin-top:1px; font-family:var(--mono);}
-  .ps-ci-qty{font-size:11px; color:#444; font-family:var(--mono); font-weight:800; text-align:left; white-space:nowrap; flex-shrink:0; margin-left:auto; width:175px;}
+  .ps-ci-qty{font-size:11px; color:#444; font-family:var(--mono); font-weight:800; text-align:left; white-space:nowrap; flex-shrink:0; margin-left:auto; width:175px; background:transparent;}
   .ps-compact-total{display:flex; justify-content:space-between; padding:10px; margin-top:8px; background:#fafafa; border-top:2px solid #111; font-weight:800; font-size:13px;}
   .ps-footer{margin-top:20px; font-family:var(--mono); font-size:11px; color:#666; display:flex; justify-content:space-between;}
 
@@ -2060,6 +2068,13 @@
   <div class="panel row3" id="cont-picking-overview" style="display:none; margin-bottom:16px;">
     <h2><span class="tag" style="background:var(--teal)">PICK</span>Thống kê Container theo Picking Status</h2>
     <div class="desc">Gộp theo từng container trong các Plan đã tải · 0% = Chưa pick · trên 0% dưới 100% = Đang pick · 100% = Pick xong</div>
+    <div style="margin:8px 0 4px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <button type="button" class="btn-export-excel" id="btn-cont-ship-upload" style="white-space:nowrap;" title="Tải file Transaction (cùng định dạng với trang Transaction) — chỉ đọc riêng các dòng Transaction Type = Ship (nhóm theo Item No. + Reference), so khớp Reference với CR của từng container để đổi cột Trạng thái thành 'Đang Load'/'Đã Load Xong'. KHÔNG ảnh hưởng tới số liệu KPI phía trên (vẫn tính Pick xong theo Picking Status như cũ).">
+        🚚 Cập nhật Transaction (Ship)
+      </button>
+      <input type="file" id="cont-ship-file-input" accept=".xlsx,.xls,.csv,.tsv,.txt" style="display:none">
+      <span class="upload-status" id="cont-ship-status" style="display:none;"></span>
+    </div>
     <div class="kpis" id="cont-picking-kpi-strip" style="margin-bottom:0;"></div>
     <div id="cont-picking-hidden-bar"></div>
     <div class="plan-table-wrap" id="cont-picking-detail-wrap" style="margin-top:14px; display:none;">
@@ -2076,6 +2091,7 @@
             <th style="text-align:right"><div class="cpt-th" style="justify-content:flex-end;"><span>Picking Status</span><button class="cpt-sort-btn" data-sort="pct" type="button">⇅</button></div></th>
             <th><div class="cpt-th"><span>Trạng thái</span><button class="cpt-sort-btn" data-sort="status" type="button">⇅</button><button class="cpt-filter-btn" data-col="status" type="button" title="Lọc theo giá trị"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg></button></div>
             </th>
+            <th><div class="cpt-th"><span>Trạng thái Loading</span></div></th>
           </tr>
         </thead>
         <tbody id="cont-picking-detail-tbody"></tbody>
@@ -4190,7 +4206,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.14';
+const APP_VERSION = 'v1.22';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6184,6 +6200,82 @@ function setManualKho(type, cNo, loadDate, planTime, khoValue){
 }
 
 let contPickAllRows = [];
+// Dữ liệu "Ship" đọc riêng từ file Transaction (Transaction Type = Ship) — dùng để phủ thêm trạng thái
+// Đang Load/Đã Load Xong lên bảng Picking Status theo đúng Reference (khớp với cột CR của container).
+// Chỉ lưu trong phiên hiện tại (không đồng bộ Cloud/localStorage), không ảnh hưởng tới số liệu KPI.
+let contShipData = null; // { byRef: Map<REF, qty>, byRefItem: Map<REF, Map<item, qty>>, fileName, updatedAtText }
+
+function contShipBuildFromRecords(records){
+  const byRef = new Map();
+  const byRefItem = new Map();
+  const byRefLocators = new Map(); // ref -> Set(locator) — để suy ra Kho nào đang/đã Load
+  records.forEach(r => {
+    if(String(r.transType || '').trim().toUpperCase() !== 'SHIP') return;
+    // Chuẩn hoá Reference: cắt khoảng trắng 2 đầu + bỏ dấu câu thừa ở CUỐI (dấu ; , . thấy xuất hiện
+    // trong dữ liệu gốc, VD: "CR0165293;") — không cắt dấu câu ở giữa để không làm sai các Reference
+    // hợp lệ có ký tự đặc biệt thật sự ở giữa.
+    const ref = String(r.reference || '').trim().toUpperCase().replace(/[;,.\s]+$/, '');
+    if(!ref) return;
+    // SL Ship trong file gốc ghi ÂM (hàng đang rời khỏi kho, cùng quy ước với các dòng SL âm ở vị trí
+    // XUẤT của Move Pallet/Transfer) — phải lấy trị tuyệt đối mới cộng dồn và so sánh % với Plan được,
+    // nếu không tổng luôn âm nên không bao giờ > 0% để đổi trạng thái.
+    const qty = Math.abs(r.qty || 0);
+    byRef.set(ref, (byRef.get(ref) || 0) + qty);
+    if(!byRefItem.has(ref)) byRefItem.set(ref, new Map());
+    const im = byRefItem.get(ref);
+    im.set(r.item, (im.get(r.item) || 0) + qty);
+    if(r.locator){
+      if(!byRefLocators.has(ref)) byRefLocators.set(ref, new Set());
+      byRefLocators.get(ref).add(r.locator);
+    }
+  });
+  return { byRef, byRefItem, byRefLocators };
+}
+
+// Suy ra danh sách Kho (VD: "Kho 2B", "Kho 2B + Kho 3A") từ tập hợp Locator Name gom được của các
+// Reference vừa khớp — dùng đúng logic đoán Kho theo tiền tố locator đã có sẵn (resolveKhoForLocator).
+function contShipKhoLabelForRefs(refs, byRefLocators){
+  const khoSet = new Set();
+  const lookupMap = buildLocatorKhoMap();
+  refs.forEach(ref => {
+    const locs = byRefLocators.get(ref);
+    if(!locs) return;
+    locs.forEach(loc => {
+      const kho = resolveKhoForLocator(loc, lookupMap);
+      if(kho && kho !== '—') khoSet.add(kho);
+    });
+  });
+  if(!khoSet.size) return '';
+  return [...khoSet].sort().map(k => `Kho ${k}`).join(' + ');
+}
+
+// Đếm số CR trong bảng Picking Status thực sự khớp được với Reference trong dữ liệu Ship vừa tải —
+// dùng để báo đúng số lượng khớp THẬT (khác với byRef.size chỉ là số Reference có trong file Ship,
+// có thể không trùng CR nào trong Plan hiện tại).
+function contShipCountMatchedContainers(byRef){
+  const matchedRefs = new Set();
+  (contPickAllRows || []).forEach(row => {
+    String(row.csr || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean).forEach(ref => {
+      if(byRef.has(ref)) matchedRefs.add(ref);
+    });
+  });
+  return matchedRefs.size;
+}
+
+// Container này đã Load Xong 100% (theo dữ liệu Ship vừa tải) chưa — dùng để TỰ ĐỘNG tính là "Pick
+// xong" trong KPI/Trạng thái mà không cần tick tay, vì đã chất hết hàng lên xe/cont thì chắc chắn đã
+// pick xong khỏi kho rồi (Ship luôn xảy ra SAU Pick). csrsSet là Set các CR (entry.csrs).
+function contShipIsFullyLoaded(csrsSet, planQty){
+  if(!contShipData || !contShipData.byRef.size || !csrsSet || !csrsSet.size) return false;
+  let shipQty = 0, matched = false;
+  csrsSet.forEach(csr => {
+    const ref = String(csr || '').trim().toUpperCase().replace(/[;,.\s]+$/, '');
+    if(contShipData.byRef.has(ref)){ matched = true; shipQty += contShipData.byRef.get(ref); }
+  });
+  if(!matched) return false;
+  const pct = planQty > 0 ? (shipQty / planQty * 100) : 0;
+  return pct >= 99.995;
+}
 let contPickColFilters = {}; // col -> Set giá trị được chọn (không có key = không lọc cột đó)
 let contPickSort = { col: null, dir: 1 };
 
@@ -6225,7 +6317,7 @@ function renderContPickTable(){
   contPickRowsCache = rows;
 
   if(!rows.length){
-    detailTbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:var(--muted-2); padding:16px; font-style:italic;">Không có dòng nào khớp với bộ lọc</td></tr>`;
+    detailTbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:var(--muted-2); padding:16px; font-style:italic;">Không có dòng nào khớp với bộ lọc</td></tr>`;
   } else {
     detailTbody.innerHTML = rows.map((row, idx) => {
       const hasShort = row.shortItems && row.shortItems.length > 0;
@@ -6236,6 +6328,24 @@ function renderContPickTable(){
              <option value="">—</option>
              ${MANUAL_KHO_OPTIONS.map(k => `<option value="${escAttr(k)}"${row.topKho===k ? ' selected' : ''}>${escHtml(k.replace('Kho ',''))}</option>`).join('')}
            </select>`;
+
+      // Trạng thái LOADING — cột RIÊNG, tách biệt hoàn toàn khỏi cột "Trạng thái" (Picking Status) để
+      // không gây nhầm lẫn giữa 2 việc khác nhau: pick xong hàng trong kho, và đã chất lên xe/cont hay
+      // chưa. Chỉ có giá trị khi đã tải file Ship VÀ Reference khớp đúng CR của container này.
+      let loadingHtml = '<span style="color:var(--muted-2);">—</span>';
+      if(contShipData && contShipData.byRef.size){
+        const refs = String(row.csr || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        let shipQty = 0, matched = false;
+        const matchedRefs = [];
+        refs.forEach(ref => { if(contShipData.byRef.has(ref)){ matched = true; shipQty += contShipData.byRef.get(ref); matchedRefs.push(ref); } });
+        if(matched && shipQty > 0){
+          const shipPct = row.planQty > 0 ? (shipQty / row.planQty * 100) : 0;
+          const khoLabel = contShipKhoLabelForRefs(matchedRefs, contShipData.byRefLocators);
+          const khoSuffix = khoLabel ? ` <span style="color:var(--muted-2); font-weight:400;">· ${escHtml(khoLabel)}</span>` : '';
+          if(shipPct >= 99.995) loadingHtml = `<span style="color:var(--teal); font-weight:600;">Đã Load Xong</span>${khoSuffix}`;
+          else loadingHtml = `<span style="color:var(--amber-bright); font-weight:600;">Đang Load (${shipPct.toFixed(0)}%)</span>${khoSuffix}`;
+        }
+      }
       return `
       <tr class="cont-pick-row${row.isManual ? ' cpt-row-manual' : ''}" style="cursor:pointer;" data-row-idx="${idx}" data-cont-jump="${contDomId(row.type, row.cNo)}">
         <td>${row.type}</td>
@@ -6260,6 +6370,7 @@ function renderContPickTable(){
           <button type="button" class="cpt-mark-btn${row.isManual ? ' marked' : ''}" data-mark-type="${escAttr(row.type)}" data-mark-cno="${escAttr(String(row.cNo))}" data-mark-loaddate="${escAttr(row.loadDateKey || '')}" data-mark-plantime="${escAttr(row.planTimeKey || '')}" title="${row.isManual ? 'Bỏ đánh dấu thủ công' : 'Đánh dấu thủ công là đã pick xong — không đụng tới số liệu tồn kho'}">${row.isManual ? '↺' : '✓'}</button>
           <button type="button" class="cpt-delete-btn" data-delete-type="${escAttr(row.type)}" data-delete-cno="${escAttr(String(row.cNo))}" data-delete-loaddate="${escAttr(row.loadDateKey || '')}" data-delete-plantime="${escAttr(row.planTimeKey || '')}" title="Xoá container này khỏi Plan (chỉ ẩn khỏi dashboard, không sửa file Excel gốc — sẽ hỏi xác nhận trước)">🗑</button>
         </td>
+        <td>${loadingHtml}</td>
       </tr>`;
     }).join('');
   }
@@ -6442,7 +6553,11 @@ function renderContainerPickingOverview(){
     // Đánh dấu THỦ CÔNG (nếu có) — chỉ đổi NHÃN/TRẠNG THÁI HIỂN THỊ cho nhân viên dễ theo dõi,
     // hoàn toàn không đụng tới pct/contribution hay bất kỳ số liệu tồn kho nào ở trên.
     const manualKey = instanceKey;
-    const isManual = !!(manualPickedContainers && manualPickedContainers[manualKey]);
+    const isManualUser = !!(manualPickedContainers && manualPickedContainers[manualKey]);
+    // Container đã Load Xong 100% theo dữ liệu Ship -> TỰ ĐỘNG tính là Pick xong (không cần tick tay),
+    // vì chất hàng lên xe/cont chỉ xảy ra SAU khi đã pick xong khỏi kho.
+    const isShipDone = !isManualUser && contShipIsFullyLoaded(entry.csrs, entry.planQty);
+    const isManual = isManualUser || isShipDone;
     const status = isManual ? 'manualDone' : autoStatus;
     if(status === 'manualDone' || status === 'done') done++;
     else if(status === 'notStarted') notStarted++;
@@ -6480,7 +6595,7 @@ function renderContainerPickingOverview(){
 
     detailRows.push({
       type: entry.type, cNo: entry.cNo, pct, status, autoStatus, autoPct: pct, isManual,
-      instanceKey,
+      instanceKey, planQty: entry.planQty,
       loadDateKey: entry.loadDate, planTimeKey: entry.planTime,
       loadDate: [...entry.loadDates].join(', ') || '—',
       planTime: [...entry.planTimes].join(', ') || '—',
@@ -9436,7 +9551,7 @@ function buildPickSlipBodyByItemCompact(grouped){
       const t = itemTotals.get(key);
       const multiPoHtml = g.itemPoCount > 1 ? ` <span class="ps-item-multipo-badge">${g.itemPoCount} PO</span>` : '';
       const surplusHtml = g.isSurplus ? ` <span class="ps-item-surplus-badge">Dư ${fmt(g.surplusQty)}</span>` : '';
-      bodyHtml += `<div class="ps-compact-loc${g.isSurplus ? ' surplus' : ''}"><span><b>${escHtml(g.item)}</b> <span class="po">PO ${escHtml(g.po || '—')}</span>${multiPoHtml}${surplusHtml}</span><span class="ps-cl-sub">KH ${fmt(g.planQty)} · ${fmt(t.onHand)} Pcs · ${fmt(t.pallets)} plt</span></div>`;
+      bodyHtml += `<div class="ps-compact-item-head${g.isSurplus ? ' surplus' : ''}"><span><b>${escHtml(g.item)}</b> <span class="po">PO ${escHtml(g.po || '—')}</span>${multiPoHtml}${surplusHtml}</span><span class="ps-cl-sub-light">KH ${fmt(g.planQty)} · ${fmt(t.onHand)} Pcs · ${fmt(t.pallets)} plt</span></div>`;
     }
     if(g.kho !== currentKho){
       currentKho = g.kho;
@@ -9444,7 +9559,7 @@ function buildPickSlipBodyByItemCompact(grouped){
       // cách mỗi khối trong chế độ Mã hàng chỉ nói về 1 mã, giống hệt tổng mỗi locator ở chế độ Locator.
       const kt = { onHand: 0, pallets: 0 };
       grouped.forEach(x => { if(x.item + '||' + (x.po || '') === key && x.kho === currentKho){ kt.onHand += x.onHand; kt.pallets += x.pallets; } });
-      bodyHtml += `<div class="ps-compact-kho">${escHtml(currentKho)} &nbsp;&mdash;&nbsp; ${fmt(kt.onHand)} Pcs &middot; ${fmt(kt.pallets)} plt</div>`;
+      bodyHtml += `<div class="ps-compact-kho-light">${escHtml(currentKho)} &nbsp;&mdash;&nbsp; ${fmt(kt.onHand)} Pcs &middot; ${fmt(kt.pallets)} plt</div>`;
     }
     bodyHtml += `<div class="ps-compact-item">
       <div class="ps-ci-name"><b>📍 ${escHtml(g.locator)}</b> ${oqcBadge(g.oqc)}</div>
@@ -13831,6 +13946,49 @@ if(txFileInput){
     }finally{
       if(txOverlay) txOverlay.classList.remove('show');
       txFileInput.value = '';
+    }
+  });
+}
+
+// Nút "🚚 Cập nhật Transaction (Ship)" ở panel Picking Status — tái dùng ĐÚNG cơ chế đọc file của
+// trang Transaction (txReadFileAsRows/txParseTransactionRecords), chỉ lọc riêng Transaction Type =
+// Ship để phủ trạng thái Đang Load/Đã Load Xong lên bảng, không tạo state Transaction đầy đủ.
+const contShipFileInput = document.getElementById('cont-ship-file-input');
+const btnContShipUpload = document.getElementById('btn-cont-ship-upload');
+if(btnContShipUpload && contShipFileInput) btnContShipUpload.addEventListener('click', () => contShipFileInput.click());
+if(contShipFileInput){
+  contShipFileInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const statusEl = document.getElementById('cont-ship-status');
+    const overlay = document.getElementById('loading-overlay');
+    const loadingMsg = document.getElementById('loading-msg');
+    if(overlay) overlay.classList.add('show');
+    if(loadingMsg) loadingMsg.textContent = `Đang đọc "${file.name}"…`;
+    if(statusEl){ statusEl.style.display = ''; statusEl.className = 'upload-status'; statusEl.textContent = 'Đang xử lý…'; }
+    try{
+      const rows = await txReadFileAsRows(file);
+      const records = txParseTransactionRecords(rows);
+      const { byRef, byRefItem, byRefLocators } = contShipBuildFromRecords(records);
+      if(!byRef.size) throw new Error('Không tìm thấy dòng nào có Transaction Type = Ship trong file này.');
+      contShipData = { byRef, byRefItem, byRefLocators, fileName: file.name, updatedAtText: `Cập nhật lúc ${fmtDateTime(new Date())}` };
+      // Gọi lại TOÀN BỘ renderContainerPickingOverview() (không chỉ renderContPickTable()) — vì KPI/
+      // trạng thái Pick xong giờ có tính thêm điều kiện "đã Load Xong theo Ship", cần build lại từ đầu
+      // mới cập nhật đúng số liệu KPI, không chỉ vẽ lại các dòng bảng.
+      renderContainerPickingOverview();
+      const matchedCount = contShipCountMatchedContainers(byRef);
+      if(statusEl){
+        statusEl.className = matchedCount ? 'upload-status ok' : 'upload-status err';
+        statusEl.textContent = matchedCount
+          ? `✓ Đã cập nhật Ship từ "${file.name}" — khớp được ${fmt(matchedCount)}/${fmt(byRef.size)} Reference (CR) với container đang có trong Plan.`
+          : `⚠ Đã đọc "${file.name}" (${fmt(byRef.size)} Reference Ship), nhưng KHÔNG khớp được CR nào với các container đang có trong Plan — kiểm tra lại đúng file/đúng đợt Plan chưa.`;
+      }
+    }catch(err){
+      console.error('Lỗi khi đọc file Ship:', err);
+      if(statusEl){ statusEl.className = 'upload-status err'; statusEl.textContent = `✗ Lỗi: ${err.message}`; }
+    }finally{
+      if(overlay) overlay.classList.remove('show');
+      contShipFileInput.value = '';
     }
   });
 }
