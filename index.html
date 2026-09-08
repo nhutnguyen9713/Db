@@ -1613,9 +1613,6 @@
       </div>
       <div id="notif-list" class="notif-list"></div>
     </div>
-    <button class="sidebar-nav-btn" id="btn-refresh-data" type="button" title="Tải lại dữ liệu mới nhất từ Cloud — giống bấm &quot;Kết nối&quot; ở mục Cloud — rồi làm mới toàn bộ bảng">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-    </button>
     <button class="sidebar-nav-btn" id="btn-save-cloud" type="button" title="Lưu ngay dữ liệu hiện tại lên Cloud — dữ liệu CHỈ được ghi lên Cloud khi bấm nút này, không tự động ghi ngầm nữa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
       <span class="btn-save-dot"></span>
@@ -1626,6 +1623,11 @@
     <button class="sidebar-nav-btn" id="theme-toggle-btn" type="button" title="Chuyển giao diện Sáng / Tối">
       <svg id="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
       <svg id="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+    </button>
+    <!-- Cố tình đặt XA nút "Lưu" ở trên — 2 nút Lưu/Làm mới dữ liệu nằm sát nhau rất dễ bấm lộn, mà bấm
+         nhầm "Làm mới dữ liệu" (tải đè từ Cloud) khi đang có thay đổi CHƯA LƯU sẽ MẤT DỮ LIỆU đó. -->
+    <button class="sidebar-nav-btn" id="btn-refresh-data" type="button" title="Tải lại dữ liệu mới nhất từ Cloud — giống bấm &quot;Kết nối&quot; ở mục Cloud — rồi làm mới toàn bộ bảng">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
     </button>
   </aside>
 
@@ -3168,6 +3170,12 @@
         <div class="upload-status" id="app-lock-status"></div>
       </div>
 
+      <div class="settings-section">
+        <div class="settings-section-label">Phiên bản</div>
+        <div class="desc" style="margin-bottom:8px;">Xem đang chạy đúng bản mới nhất chưa — so với ngày bạn vừa cập nhật file, để biết trình duyệt/PWA đã tải bản mới hay còn đang dùng bản cache cũ.</div>
+        <div class="upload-status" id="app-version-status">—</div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -4180,6 +4188,10 @@ function clearStoredState(){
 }
 
 let currentFileName = null;
+// Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
+// mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
+const APP_VERSION = 'v1.11';
+const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -4289,6 +4301,8 @@ document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeGiQrMo
 function showSettingsModal(){
   const overlay = document.getElementById('settings-overlay');
   if(overlay) overlay.classList.add('show');
+  const el = document.getElementById('app-version-status');
+  if(el) el.textContent = `${APP_VERSION} — cập nhật lần cuối: ${APP_VERSION_DATE}`;
 }
 function closeSettingsModal(){
   const overlay = document.getElementById('settings-overlay');
@@ -10667,7 +10681,7 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, skipPa
       categories: ['Match', 'Negative', 'Positive'],
       values: [matchCount, negativeCount, positiveCount],
       colors: ['00B050', 'FF0000', 'FFC000'],
-      title: `Kiểm kho ${khoLabel.replace('Kho ', '')} — ${flatRows.length} dòng${titleExtra}`
+      title: `Kiểm kho ${khoLabel.replace('Kho ', '')} — ${flatRows.length} mã${titleExtra}`
     }
   };
 }
@@ -10737,18 +10751,26 @@ ${dPts}
 </c:chartSpace>`;
       zip.file(chartPath, chartXml);
 
+      // Chart tự co GIÃN CHIỀU RỘNG theo đúng độ dài chữ tiêu đề — tránh tiêu đề dài (kho nhiều dòng/
+      // vị trí/pallet) bị tự xuống 2 hàng làm chart cao lên xấu. ~8.5px/ký tự (cỡ chữ tiêu đề mặc định
+      // của Excel, đậm) + biên an toàn 2 bên; giữ trong khoảng 380–760px để không quá nhỏ hay quá khổ.
+      const chartWidthPx = Math.min(760, Math.max(380, 50 + info.title.length * 8.5));
+      const chartHeightPx = 330;
+      const chartExtCx = Math.round(chartWidthPx * 9525); // 1px = 9525 EMU
+      const chartExtCy = Math.round(chartHeightPx * 9525);
+
       const drawingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
-<xdr:twoCellAnchor>
+<xdr:oneCellAnchor>
 <xdr:from><xdr:col>9</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>9</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>
-<xdr:to><xdr:col>14</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>26</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+<xdr:ext cx="${chartExtCx}" cy="${chartExtCy}"/>
 <xdr:graphicFrame macro="">
 <xdr:nvGraphicFramePr><xdr:cNvPr id="${drawingIndex+1}" name="Chart ${drawingIndex}"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>
-<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>
+<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="${chartExtCx}" cy="${chartExtCy}"/></xdr:xfrm>
 <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/></a:graphicData></a:graphic>
 </xdr:graphicFrame>
 <xdr:clientData/>
-</xdr:twoCellAnchor>
+</xdr:oneCellAnchor>
 </xdr:wsDr>`;
       zip.file(drawingPath, drawingXml);
 
@@ -10938,9 +10960,13 @@ const CC_MOVE_WINDOW_DAYS = 30;
 let ccKhoMode = { 'Kho 2B':'locator', 'Kho 3A':'locator', 'Kho 3B':'locator' };
 let ccKhoResults = {}; // { 'Kho 2B': { mode, list } }
 
-function ccIsExcludedLocator(locator){
-  // Loại các vị trí PICK / Loading / PROD — khu trung chuyển hoặc khu sản xuất, không phải vị trí lưu kho cố định
-  return /pick|loading|prod/i.test(String(locator || ''));
+function ccIsExcludedLocator(locator, allowPick){
+  // Loại các vị trí Loading / PROD — khu trung chuyển hoặc khu sản xuất, không phải vị trí lưu kho cố
+  // định. Vị trí PICK mặc định cũng bị loại (không tính vào Đề xuất kiểm hôm nay tự động), TRỪ KHI
+  // allowPick=true — dùng cho danh sách "Tự chọn" để người dùng vẫn chọn tay được các vị trí PICK khi
+  // cần đối chiếu (VD: hàng đang tạm để ở khu Pick trước khi xuất).
+  const s = String(locator || '');
+  return allowPick ? /loading|prod/i.test(s) : /pick|loading|prod/i.test(s);
 }
 
 // Nhóm "SPP": các Item No. KHÔNG bắt đầu bằng số 0 — loại hẳn ra khỏi Đề xuất kiểm hôm nay
@@ -10953,7 +10979,7 @@ function ccIsSppItem(item){
 // đếm số pallet THEO ĐÚNG SỐ DÒNG GI NO. GỐC (dùng raw_rows chi tiết từng dòng, không dùng kho_detail
 // vì kho_detail đã gộp sẵn theo item+custpo+locator+oqc+ref nên mất granularity GI No.).
 // Đã loại locator PICK/Loading/PROD và loại nhóm SPP (Item No. không bắt đầu bằng số 0).
-function ccBuildInventoryRows(){
+function ccBuildInventoryRows(allowPick){
   const rows = new Map(); // key(kho||item||locator||custpo) -> { item, locator, kho, custpo, oqc, qty, palletCount }
   if(!currentData) return rows;
   const raw = getRawRows(currentData);
@@ -10961,7 +10987,7 @@ function ccBuildInventoryRows(){
     const kho = r[RAW_KEY_IDX.kho], item = r[RAW_KEY_IDX.item], custpo = r[RAW_KEY_IDX.custpo] || '',
           locator = r[RAW_KEY_IDX.locator], oqc = r[RAW_KEY_IDX.oqc] || '', qty = Number(r[RAW_KEY_IDX.qty]) || 0;
     if(!item || !locator || !kho) return;
-    if(ccIsExcludedLocator(locator)) return;
+    if(ccIsExcludedLocator(locator, allowPick)) return;
     if(ccIsSppItem(item)) return;
     const key = kho + '||' + item + '||' + locator + '||' + custpo;
     if(rows.has(key)){
@@ -11947,7 +11973,7 @@ let ccCustomState = {
 
 // Danh sách các Item No. riêng biệt trong 1 kho (đã loại PICK/Loading/PROD/SPP), kèm số locator + SL tồn
 function ccGetDistinctItemsForKho(khoLabel){
-  const invRows = ccBuildInventoryRows();
+  const invRows = ccBuildInventoryRows(true);
   const byItem = new Map();
   invRows.forEach(row => {
     if(row.kho !== khoLabel) return;
@@ -11963,7 +11989,7 @@ function ccGetDistinctItemsForKho(khoLabel){
 
 // Danh sách các Locator riêng biệt trong 1 kho, kèm số mã + số pallet
 function ccGetDistinctLocatorsForKho(khoLabel){
-  const invRows = ccBuildInventoryRows();
+  const invRows = ccBuildInventoryRows(true);
   const byLoc = new Map();
   invRows.forEach(row => {
     if(row.kho !== khoLabel) return;
