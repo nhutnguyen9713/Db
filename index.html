@@ -2235,6 +2235,9 @@
       <button type="button" class="btn-export-excel" id="qr-gi-clear-btn" style="white-space:nowrap; display:none; border-color:var(--red); color:var(--red);" title="Xoá lịch sử các GI đã quét — cho phép quét lại các mã đã quét trước đó. LƯU Ý: nếu lỡ quét lại đúng pallet đã tính rồi, SL sẽ bị cộng thêm 1 lần nữa.">
         🗑 Đã quét: <span id="qr-gi-clear-count">0</span> GI
       </button>
+      <button type="button" class="btn-export-excel" id="btn-view-gi-log" style="white-space:nowrap; display:none;" title="Xem lại từng GI No. đã quét, gộp theo từng vị trí/mã hàng/PO — đối chiếu khi 1 locator bị thiếu pallet">
+        👁 Xem GI đã quét
+      </button>
     </div>
 
     <div class="panel search-panel" id="cc-suggest-panel" style="margin-bottom:16px; border-color:var(--teal);">
@@ -2992,6 +2995,19 @@
   </div>
 </div>
 
+<div class="pick-slip-overlay" id="gi-log-overlay">
+  <div class="pick-slip-box">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;">GI No. đã quét — theo vị trí</div>
+      <button type="button" class="btn-update btn-ghost-outline" id="gi-log-close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        Đóng
+      </button>
+    </div>
+    <div class="pick-slip-content" id="gi-log-content"></div>
+  </div>
+</div>
+
 <div class="gi-qr-overlay" id="gi-qr-overlay">
   <div class="gi-qr-box">
     <button type="button" class="gi-qr-close" id="gi-qr-close" title="Đóng">
@@ -3268,6 +3284,7 @@ const STORAGE_KEY_LABELS = {
   tn5_dashboard_kt_inputs_v1: 'Số liệu KT đang nhập',
   tn5_dashboard_scanned_extra_v1: 'Dòng tự thêm khi quét QR',
   tn5_dashboard_scanned_gi_v1: 'Danh sách GI đã quét',
+  tn5_dashboard_gi_scan_log_v1: 'Nhật ký GI đã quét (theo vị trí)',
   tn5_dashboard_confirmed_history_v1: 'Lịch sử đã lưu theo ngày'
 };
 
@@ -3301,6 +3318,7 @@ function markUnsavedChanges(key){
 }
 function clearUnsavedChanges(){
   hasUnsavedChanges = false;
+  _localInventoryDirty = false;
   const btn = document.getElementById('btn-save-cloud');
   if(btn) btn.classList.remove('has-changes');
 }
@@ -4086,6 +4104,9 @@ function saveStateToStorage(){
     if(scannedGiSet.size) LS.setItem(STORAGE_KEY_SCANNED_GI, JSON.stringify([...scannedGiSet]));
     else LS.removeItem(STORAGE_KEY_SCANNED_GI);
 
+    if(giScanLog.length) LS.setItem(STORAGE_KEY_GI_LOG, JSON.stringify(giScanLog));
+    else LS.removeItem(STORAGE_KEY_GI_LOG);
+
     if(Object.keys(confirmedHistory).length) LS.setItem(STORAGE_KEY_CONFIRMED_HISTORY, JSON.stringify(confirmedHistory));
     else LS.removeItem(STORAGE_KEY_CONFIRMED_HISTORY);
   }catch(err){
@@ -4109,6 +4130,7 @@ function loadStateFromStorage(){
     const ktInputsRaw = LS.getItem(STORAGE_KEY_KT_INPUTS);
     const scannedExtraRaw = LS.getItem(STORAGE_KEY_SCANNED_EXTRA);
     const scannedGiRaw = LS.getItem(STORAGE_KEY_SCANNED_GI);
+    const giLogRaw = LS.getItem(STORAGE_KEY_GI_LOG);
     const confirmedHistoryRaw = LS.getItem(STORAGE_KEY_CONFIRMED_HISTORY);
     return {
       inv: invRaw ? JSON.parse(invRaw, jsonReviver) : null,
@@ -4124,11 +4146,12 @@ function loadStateFromStorage(){
       ktInputs: ktInputsRaw ? JSON.parse(ktInputsRaw) : {},
       scannedExtra: scannedExtraRaw ? JSON.parse(scannedExtraRaw) : {},
       scannedGi: scannedGiRaw ? JSON.parse(scannedGiRaw) : [],
+      giScanLog: giLogRaw ? JSON.parse(giLogRaw) : [],
       confirmedHistory: confirmedHistoryRaw ? JSON.parse(confirmedHistoryRaw) : {}
     };
   }catch(err){
     console.warn('Không đọc được dữ liệu đã lưu:', err);
-    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], confirmedHistory: {} };
+    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], confirmedHistory: {} };
   }
 }
 
@@ -4147,10 +4170,15 @@ function clearStoredState(){
   LS.removeItem(STORAGE_KEY_KT_INPUTS);
   LS.removeItem(STORAGE_KEY_SCANNED_EXTRA);
   LS.removeItem(STORAGE_KEY_SCANNED_GI);
+  LS.removeItem(STORAGE_KEY_GI_LOG);
   LS.removeItem(STORAGE_KEY_CONFIRMED_HISTORY);
 }
 
 let currentFileName = null;
+// TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
+// bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
+// vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
+let _localInventoryDirty = false;
 
 /* ============ dữ liệu gốc nhúng sẵn (rút gọn để demo) ============ */
 const DEFAULT_DATA = {"snapshot_date": "—", "total_qty": 0, "distinct_items": 0, "distinct_locators": 0, "distinct_pallets": 0, "n_rows": 0, "pass_qty": 0, "ng_qty": 0, "kho_order": ["Kho 2B", "Kho 3A", "Kho 3B", "Kho DG1"], "qty_by_kho": {"Kho 2B": 0, "Kho 3A": 0, "Kho 3B": 0, "Kho DG1": 0}, "kho_oqc": {"Kho 2B": {"PASS": 0, "NG": 0}, "Kho 3A": {"PASS": 0, "NG": 0}, "Kho 3B": {"PASS": 0, "NG": 0}, "Kho DG1": {"PASS": 0, "NG": 0}}, "top_buyers": [], "other_buyers_qty": 0, "top_items": [], "top_locators": [], "aging": [], "kho_detail": {"Kho 2B": [], "Kho 3A": [], "Kho 3B": [], "Kho DG1": []}, "pallet_by_kho": {"Kho 2B": 0, "Kho 3A": 0, "Kho 3B": 0, "Kho DG1": 0}, "kho_oqc_pallet": {"Kho 2B": {"PASS": 0, "NG": 0}, "Kho 3A": {"PASS": 0, "NG": 0}, "Kho 3B": {"PASS": 0, "NG": 0}, "Kho DG1": {"PASS": 0, "NG": 0}}};
@@ -5457,6 +5485,7 @@ if(fileInput){
         renderDashboard(DATA);
         touchUpdatedAt(file.name);
         currentFileName = file.name;
+        _localInventoryDirty = true;
         saveStateToStorage();
         renderKhoSearchPage();
         // Vẽ lại các danh sách "Đề xuất kiểm hôm nay" đã tạo trước đó (nếu có) — tránh trường hợp
@@ -6101,6 +6130,15 @@ const STORAGE_KEY_SCANNED_EXTRA = 'tn5_dashboard_scanned_extra_v1';
 // Cloud, dùng Set để tra cứu nhanh trong lúc chạy.
 let scannedGiSet = new Set();
 const STORAGE_KEY_SCANNED_GI = 'tn5_dashboard_scanned_gi_v1';
+
+// Nhật ký CHI TIẾT từng lượt quét GI thành công — mảng {gi, kho, item, custpo, locator, oqc, qty,
+// rowKey, ts}. scannedGiSet ở trên chỉ biết "GI này đã quét" (chặn quét trùng), KHÔNG biết đã cộng
+// vào dòng/vị trí nào — mảng này bù đắp phần đó, phục vụ 2 việc: (1) khi xoá 1 dòng khỏi "Đề xuất
+// kiểm hôm nay", tự động xoá luôn các GI đã quét gắn với đúng dòng đó khỏi scannedGiSet (cho quét lại
+// được, VD: lỡ quét nhầm sang locator khác quên đổi vị trí); (2) hiện popup "Xem GI đã quét" để đối
+// chiếu từng GI theo từng vị trí khi phát hiện thiếu pallet.
+let giScanLog = [];
+const STORAGE_KEY_GI_LOG = 'tn5_dashboard_gi_scan_log_v1';
 
 // Lịch sử "Danh sách đã xác nhận" theo ngày — bấm nút "Lưu" sẽ chụp lại toàn bộ danh sách đã xác
 // nhận hiện tại vào đây (key = ngày dd/mm/yyyy), rồi làm mới (xoá trắng) bảng đã xác nhận để bắt
@@ -8732,9 +8770,11 @@ function handleQrScanReal(giNoRaw){
   );
 
   let response;
+  let loggedRowKey = null;
   if(foundItem && !isMismatch){
     const rowKey = ccRowKeyForItem(foundItem);
     ktInputValues[rowKey] = mergePalletIntoKtTally(ktInputValues[rowKey], palletQty);
+    loggedRowKey = rowKey;
     response = { ok:true, mismatch:false,
       message:`✓ ${item}${custpo ? ' (PO ' + custpo + ')' : ''} — ${effectiveLocator} — đã cộng ${fmt(palletQty)} Pcs vào ô kiểm thực tế.` };
   } else {
@@ -8751,6 +8791,7 @@ function handleQrScanReal(giNoRaw){
       const tally = mergePalletIntoKtTally(ktInputValues[key], palletQty);
       existing.palletCount = (existing.palletCount || 0) + 1;
       ktInputValues[key] = tally;
+      loggedRowKey = key;
     };
     const realQtyForCombo = isMismatch ? 0 : rawRows
       .filter(rr =>
@@ -8801,6 +8842,13 @@ function handleQrScanReal(giNoRaw){
     ccSetCardLocked(kho, true);
   }
   scannedGiSet.add(norm); // đánh dấu GI này đã xử lý xong — quét lại sẽ báo trùng, không cộng thêm nữa
+  if(loggedRowKey){
+    giScanLog.push({
+      gi: norm, kho, item, custpo, locator: effectiveLocator,
+      oqc: effectiveOqcNorm === 'Khac' ? 'Khác' : effectiveOqcNorm,
+      qty: palletQty, rowKey: loggedRowKey, ts: new Date().toISOString()
+    });
+  }
   saveStateToStorage();
   updateQrGiClearBtn();
   return response;
@@ -8812,11 +8860,70 @@ function handleQrScanReal(giNoRaw){
 function updateQrGiClearBtn(){
   const btn = document.getElementById('qr-gi-clear-btn');
   const countEl = document.getElementById('qr-gi-clear-count');
+  const viewBtn = document.getElementById('btn-view-gi-log');
+  if(viewBtn) viewBtn.style.display = giScanLog.length > 0 ? '' : 'none';
   if(!btn) return;
   const n = scannedGiSet.size;
   if(countEl) countEl.textContent = fmt(n);
   btn.style.display = n > 0 ? '' : 'none';
 }
+
+// Popup "Xem GI đã quét" — liệt kê TỪNG GI No. đã quét, nhóm theo Kho -> Locator -> Mã hàng/PO/OQC,
+// để đối chiếu tay khi phát hiện 1 locator bị thiếu 1 pallet nào đó (biết đúng GI nào đã tính vào
+// vị trí này, không phải đoán theo tổng số lượng).
+function renderGiLogPopup(){
+  const el = document.getElementById('gi-log-content');
+  if(!el) return;
+  if(!giScanLog.length){
+    el.innerHTML = `<div style="text-align:center; color:var(--muted-2); font-style:italic; padding:24px 0;">Chưa quét GI nào.</div>`;
+    return;
+  }
+  const khoOrder = CC_KHO_LIST.map(k => k.label);
+  const byKho = new Map();
+  giScanLog.forEach(g => {
+    if(!byKho.has(g.kho)) byKho.set(g.kho, new Map());
+    const byLoc = byKho.get(g.kho);
+    if(!byLoc.has(g.locator)) byLoc.set(g.locator, new Map());
+    const byItem = byLoc.get(g.locator);
+    const key = g.item + '|' + (g.custpo || '') + '|' + g.oqc;
+    if(!byItem.has(key)) byItem.set(key, { item: g.item, custpo: g.custpo, oqc: g.oqc, gis: [] });
+    byItem.get(key).gis.push(g);
+  });
+  const khoKeys = [...byKho.keys()].sort((a, b) => khoOrder.indexOf(a) - khoOrder.indexOf(b));
+  let html = '';
+  khoKeys.forEach(kho => {
+    html += `<div class="ps-compact-kho">${escHtml(kho)}</div>`;
+    const byLoc = byKho.get(kho);
+    const locKeys = [...byLoc.keys()].sort((a, b) => String(a).localeCompare(String(b), 'vi', { numeric:true }));
+    locKeys.forEach(loc => {
+      const byItem = byLoc.get(loc);
+      const totalGi = [...byItem.values()].reduce((s, v) => s + v.gis.length, 0);
+      html += `<div class="ps-compact-loc"><span>📍 ${escHtml(loc)}</span><span class="ps-cl-sub">${fmt(totalGi)} GI</span></div>`;
+      [...byItem.values()].forEach(v => {
+        const poHtml = v.custpo ? ` <span class="po">(PO ${escHtml(v.custpo)})</span>` : '';
+        const giListHtml = v.gis.map(g => `${escHtml(g.gi.toUpperCase())} (${fmt(g.qty)})`).join(' &middot; ');
+        html += `<div class="ps-compact-item">
+          <div>
+            <div class="ps-ci-name"><b>${escHtml(v.item)}</b>${poHtml} ${oqcBadge(v.oqc)}</div>
+            <div class="ps-ci-detail">${giListHtml}</div>
+          </div>
+        </div>`;
+      });
+    });
+  });
+  el.innerHTML = html;
+}
+const btnViewGiLog = document.getElementById('btn-view-gi-log');
+if(btnViewGiLog) btnViewGiLog.addEventListener('click', () => {
+  renderGiLogPopup();
+  const overlay = document.getElementById('gi-log-overlay');
+  if(overlay) overlay.classList.add('show');
+});
+const giLogCloseBtn = document.getElementById('gi-log-close');
+if(giLogCloseBtn) giLogCloseBtn.addEventListener('click', () => {
+  const overlay = document.getElementById('gi-log-overlay');
+  if(overlay) overlay.classList.remove('show');
+});
 
 // Dùng chung cho cả nút trong overlay quét (qr-scan-clear-history-btn) lẫn nút ngoài trang chính
 // (qr-gi-clear-btn) — cùng 1 hành vi, chỉ khác nơi hiện thông báo kết quả.
@@ -8834,6 +8941,7 @@ function qrScanClearHistory(useOverlayStatus){
   if(!ok) return;
   const clearedCount = scannedGiSet.size;
   scannedGiSet.clear();
+  giScanLog = [];
   saveStateToStorage();
   updateQrGiClearBtn();
   if(useOverlayStatus){
@@ -10099,6 +10207,12 @@ function mergeConfirmedDataFromCloud(cloudData){
   }catch(e){ console.warn('Không gộp được scannedGiSet từ Cloud:', e); }
 
   try{
+    const cloudGiLog = cloudData[STORAGE_KEY_GI_LOG] ? JSON.parse(cloudData[STORAGE_KEY_GI_LOG]) : [];
+    const existingGis = new Set(giScanLog.map(g => g.gi));
+    cloudGiLog.forEach(g => { if(!existingGis.has(g.gi)){ giScanLog.push(g); existingGis.add(g.gi); } });
+  }catch(e){ console.warn('Không gộp được giScanLog từ Cloud:', e); }
+
+  try{
     const cloudHist = cloudData[STORAGE_KEY_CONFIRMED_HISTORY] ? JSON.parse(cloudData[STORAGE_KEY_CONFIRMED_HISTORY]) : {};
     Object.keys(cloudHist).forEach((dateKey) => {
       if(!confirmedHistory[dateKey]) confirmedHistory[dateKey] = [];
@@ -10163,6 +10277,7 @@ async function saveConfirmedSnapshotAndReset(){
     // quét lại đúng những pallet đó bình thường, không bị báo "đã quét trùng" nữa).
     ktInputValues = {};
     scannedGiSet.clear();
+    giScanLog = [];
     if(typeof updateQrGiClearBtn === 'function') updateQrGiClearBtn();
     saveStateToStorage();
     renderConfirmedList();
@@ -11093,6 +11208,39 @@ function ccRowKeyForItem(r){
   return r.item + '|' + (r.custpo || '') + '|' + r.locator + '|' + oqcNorm + '|' + r.qty;
 }
 
+// Xoá HẲN 1 dòng khỏi "Đề xuất kiểm hôm nay" (không phải "Xác nhận" — xoá thẳng, dùng khi 1 dòng bị
+// tạo sai, VD: quét nhầm sang locator khác mà quên bấm "Đổi vị trí" nên hệ thống tự tạo 1 dòng mới
+// không cần thiết). Dọn dẹp theo đúng 3 chỗ liên quan tới dòng này: bản nháp KT đang nhập
+// (ktInputValues), chính dòng đó trong ccKhoResults, và mọi GI No. đã quét gắn với dòng này — xoá
+// luôn khỏi scannedGiSet để có thể quét lại các GI đó vào đúng vị trí thực tế, không bị báo trùng.
+// Trả về số GI No. đã xoá kèm theo (để hiện trong thông báo), hoặc -1 nếu không tìm thấy dòng.
+function ccDeleteRow(khoLabel, rowKey){
+  const result = ccKhoResults[khoLabel];
+  if(!result) return -1;
+  let removed = false;
+  if(result.mode === 'locator'){
+    result.list.forEach(grp => {
+      const idx = grp.items.findIndex(r => ccRowKeyForItem(r) === rowKey);
+      if(idx !== -1){ grp.items.splice(idx, 1); removed = true; }
+    });
+  } else {
+    const idx = result.list.findIndex(r => ccRowKeyForItem(r) === rowKey);
+    if(idx !== -1){ result.list.splice(idx, 1); removed = true; }
+  }
+  if(!removed) return -1;
+  delete ktInputValues[rowKey];
+  delete confirmedKiemTonItems[rowKey];
+  const keepLog = [];
+  let removedGiCount = 0;
+  giScanLog.forEach(g => {
+    if(g.rowKey === rowKey){ scannedGiSet.delete(g.gi); removedGiCount++; }
+    else keepLog.push(g);
+  });
+  giScanLog = keepLog;
+  if(typeof updateQrGiClearBtn === 'function') updateQrGiClearBtn();
+  return removedGiCount;
+}
+
 // Danh sách locator hiện có trong danh sách "Đề xuất kiểm hôm nay" của 1 kho — dùng cho ô xổ xuống
 // Locator của dòng "sai vị trí" tự thêm khi quét QR.
 function ccAllLocatorsInResult(khoLabel){
@@ -11139,7 +11287,7 @@ function buildKtItemRowHtml(r, rowStyle, groupCls, locBorderStyle){
     : escHtml(r.locator);
 
   return `
-    <tr class="${(groupCls || '').trim()}${r.isScannedExtra ? ' row-scanned-extra' : ''}"${rowStyle || ''} data-wrong-location="${r.isWrongLocation ? '1' : '0'}" data-wms-locator="${escAttr(r.wmsLocator || '')}" data-wrong-oqc="${r.isWrongOqc ? '1' : '0'}" data-wms-oqc="${escAttr(r.wmsOqc || '')}">
+    <tr class="${(groupCls || '').trim()}${r.isScannedExtra ? ' row-scanned-extra' : ''}"${rowStyle || ''} data-wrong-location="${r.isWrongLocation ? '1' : '0'}" data-wms-locator="${escAttr(r.wmsLocator || '')}" data-wrong-oqc="${r.isWrongOqc ? '1' : '0'}" data-wms-oqc="${escAttr(r.wmsOqc || '')}" data-kho="${escAttr(r.kho || '')}">
       <td class="col-kho kt-card-hide" data-label="Kho">${escHtml((r.kho || '').replace('Kho ',''))}</td>
       <td class="loc-group-cell" data-label="Locator"${locBorderStyle || ''}>${locatorCellHtml}</td>
       <td data-label="OQC">${oqcBadge(r.oqc)}${r.isScannedExtra ? ` <span class="scanned-extra-badge" title="Được tự thêm khi quét QR — mã này không có sẵn trong danh sách kiểm tại vị trí/OQC hệ thống ghi nhận">${mismatchBadgeText}</span>` : ''}</td>
@@ -11168,6 +11316,7 @@ function buildKtItemRowHtml(r, rowStyle, groupCls, locBorderStyle){
             <span style="color:var(--muted-2);">)</span>
           </span>
           <button class="kt-confirm-btn" style="margin-left:8px; padding:2px 10px; border-radius:4px; border:1px solid var(--teal); background:var(--teal); color:white; font-size:11px; cursor:pointer; transition:all 0.2s; white-space:nowrap;" data-locked="false">Xác nhận</button>
+          <button type="button" class="kt-delete-btn" title="Xoá hẳn dòng này khỏi danh sách đề xuất kiểm (VD: dòng bị tạo sai do quét nhầm sang locator khác mà quên đổi vị trí) — các GI No. đã quét gắn với dòng này cũng sẽ được xoá khỏi lịch sử quét để có thể quét lại." style="margin-left:4px; padding:2px 8px; border-radius:4px; border:1px solid var(--red); background:transparent; color:var(--red); font-size:11px; cursor:pointer; transition:all 0.2s; white-space:nowrap;">🗑</button>
         </div>
       </td>
     </tr>`;
@@ -12091,6 +12240,27 @@ document.addEventListener('click', function(e) {
   }
 });
 
+// Sự kiện Xoá HẲN 1 dòng khỏi "Đề xuất kiểm hôm nay" (nút 🗑 cạnh "Xác nhận") — khác với Xác nhận,
+// đây là xoá thẳng không giữ lại gì, dùng khi 1 dòng bị tạo sai (VD: quét nhầm sang locator khác mà
+// quên bấm "Đổi vị trí" nên hệ thống tự tạo 1 dòng mới không cần thiết).
+document.addEventListener('click', function(e){
+  const btn = e.target.closest('.kt-delete-btn');
+  if(!btn) return;
+  const tr = btn.closest('tr');
+  if(!tr) return;
+  const khoLabel = tr.dataset.kho || '';
+  const rowKey = getRowKeyFromTr(tr);
+  const itemText = (tr.querySelector('td[data-label="Item No."]') || {}).textContent?.trim() || '';
+  const locText = (tr.querySelector('td[data-label="Locator"]') || {}).textContent?.trim() || '';
+  if(!confirm(`Xoá hẳn dòng "${itemText}" (${locText}) khỏi danh sách đề xuất kiểm?\n\nCác GI No. đã quét gắn với dòng này (nếu có) sẽ được xoá khỏi lịch sử quét, cho phép quét lại vào đúng vị trí thực tế nếu cần.`)) return;
+  const removedGiCount = ccDeleteRow(khoLabel, rowKey);
+  if(removedGiCount === -1) return;
+  saveStateToStorage();
+  renderKhoSearchPage();
+  scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CCRESULTS, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_SCANNED_GI, STORAGE_KEY_GI_LOG], 'Xoá dòng đề xuất kiểm');
+  if(typeof showAppToast === 'function') showAppToast(removedGiCount > 0 ? `✓ Đã xoá dòng (kèm ${removedGiCount} GI đã quét).` : '✓ Đã xoá dòng.');
+});
+
 // Bấm "✓✓ Cả vị trí" — xác nhận TẤT CẢ các dòng đang hiển thị cùng vị trí (locator) đó trong 1 lần,
 // dùng đúng số liệu đang nhập hiện tại của từng dòng (dòng nào chưa nhập gì thì tính bằng 0).
 document.addEventListener('click', function(e){
@@ -12293,6 +12463,7 @@ function initDashboard(){
   if(saved.manualKho && Object.keys(saved.manualKho).length > 0) manualKhoOverrides = saved.manualKho;
   if(saved.scannedExtra && Object.keys(saved.scannedExtra).length > 0) scannedExtraRows = saved.scannedExtra;
   if(saved.scannedGi && saved.scannedGi.length > 0) scannedGiSet = new Set(saved.scannedGi);
+  if(saved.giScanLog && saved.giScanLog.length > 0) giScanLog = saved.giScanLog;
   if(saved.confirmedHistory && Object.keys(saved.confirmedHistory).length > 0) confirmedHistory = saved.confirmedHistory;
   if(saved.ktInputs && Object.keys(saved.ktInputs).length > 0) ktInputValues = saved.ktInputs;
   if(saved.plans){
@@ -12446,6 +12617,20 @@ if(btnSaveCloud){
         const cloudData = await CloudVault.peek();
         if(cloudData){
           mergeConfirmedDataFromCloud(cloudData);
+          // Máy này KHÔNG tự tải file tồn kho mới nào — nếu Cloud đang có bản tồn kho KHÁC (do máy
+          // khác vừa Lưu file mới hơn), lấy đúng bản đó về trước, tránh việc Lưu ở đây (vì 1 lý do
+          // khác, VD: vừa xác nhận 1 dòng kiểm tồn) lỡ đẩy bản tồn kho CŨ đang cache trên máy này đè
+          // mất bản mới trên Cloud.
+          if(!_localInventoryDirty && cloudData[STORAGE_KEY_INVENTORY] !== undefined && cloudData[STORAGE_KEY_INVENTORY] !== _mem[STORAGE_KEY_INVENTORY]){
+            try{
+              currentData = cloudData[STORAGE_KEY_INVENTORY] ? JSON.parse(cloudData[STORAGE_KEY_INVENTORY], jsonReviver) : null;
+              renderDashboard(currentData);
+              const cloudMeta = cloudData[STORAGE_KEY_META] ? JSON.parse(cloudData[STORAGE_KEY_META]) : null;
+              currentFileName = cloudMeta && cloudMeta.inventoryFileName ? cloudMeta.inventoryFileName : currentFileName;
+              touchUpdatedAt(currentFileName || 'Dữ liệu mặc định');
+              if(Object.keys(ccKhoResults).length) ccRestoreResultsFromStorage(ccKhoResults);
+            }catch(e){ console.warn('Không lấy được tồn kho mới nhất từ Cloud trước khi lưu:', e); }
+          }
           saveStateToStorage();
           renderConfirmedList();
           renderKhoSearchPage();
