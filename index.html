@@ -3036,6 +3036,10 @@
       <span id="qr-scan-locator-badge" class="qr-scan-locator-badge">📍 Chưa xác lập vị trí — quét 1 mã bất kỳ để bắt đầu</span>
       <button type="button" class="qr-scan-reset-loc-btn" id="qr-scan-reset-loc-btn" title="Bấm khi bạn đã di chuyển sang 1 vị trí thực tế khác, để hệ thống xác lập lại đúng mốc vị trí đang quét">🔁 Đổi vị trí</button>
     </div>
+    <div class="qr-scan-locator-row">
+      <span id="qr-scan-item-lock-badge" class="qr-scan-locator-badge">🔓 Chưa khoá mã — quét lẫn nhiều mã hàng vẫn tính bình thường</span>
+      <button type="button" class="qr-scan-reset-loc-btn" id="qr-scan-item-lock-btn" title="Bật để CHỈ tính đúng 1 mã hàng: mã của lượt quét TIẾP THEO sẽ được khoá lại, các lượt quét sau nếu ra mã KHÁC sẽ bị bỏ qua (không tính) — dùng khi đang đếm riêng 1 mã, tránh lỡ tay quét lẫn mã khác vào">🔒 Khoá mã</button>
+    </div>
     <div class="qr-scan-oqc-row">
       <span class="qr-scan-oqc-label">OQC đang quét:</span>
       <div class="qr-scan-oqc-btns" id="qr-scan-oqc-btns">
@@ -8411,6 +8415,11 @@ let qrScanRAF = null;
 let qrScanCount = 0;
 let qrScanLastCode = null;
 let qrScanPhysicalLocator = null; // vị trí thực tế đang đứng quét trong phiên hiện tại — null = chưa xác lập
+// Khoá mã hàng: khi bật (qrScanItemLockEnabled), mã hàng của LƯỢT QUÉT TIẾP THEO sẽ được ghi vào
+// qrScanLockedItem — từ đó mọi lượt quét ra mã KHÁC mã đã khoá đều bị BỎ QUA (không tính, không cộng
+// vào bảng), dùng khi đang đếm riêng đúng 1 mã hàng, tránh lỡ tay quét lẫn pallet của mã khác vào.
+let qrScanItemLockEnabled = false;
+let qrScanLockedItem = null; // null = đã bật khoá nhưng CHƯA quét lượt nào để xác lập mã bị khoá
 // null = tin tưởng hoàn toàn OQC hệ thống ghi cho từng pallet (mặc định, không làm chậm quét hàng
 // loạt). Khi người quét CHỌN 1 trạng thái cụ thể (PASS/NG/Khac), mọi lượt quét sau đó sẽ dùng ĐÚNG
 // giá trị này thay vì tin OQC hệ thống — dùng khi biết trước cả cụm pallet đang cầm trên tay thực tế
@@ -8448,6 +8457,29 @@ function qrScanResetLocator(){
   qrScanPhysicalLocator = null;
   qrScanUpdateLocatorBadge();
   qrScanSetStatus('Đã đổi vị trí — quét pallet đầu tiên tại vị trí mới để xác lập lại mốc.', '');
+}
+function qrScanUpdateItemLockBadge(){
+  const el = document.getElementById('qr-scan-item-lock-badge');
+  const btn = document.getElementById('qr-scan-item-lock-btn');
+  if(el){
+    el.textContent = !qrScanItemLockEnabled
+      ? '🔓 Chưa khoá mã — quét lẫn nhiều mã hàng vẫn tính bình thường'
+      : (qrScanLockedItem
+        ? `🔒 Đang khoá mã: ${qrScanLockedItem} — mã khác sẽ bị bỏ qua`
+        : '🔒 Đã bật khoá — mã của lượt quét TIẾP THEO sẽ được khoá lại');
+  }
+  if(btn) btn.textContent = qrScanItemLockEnabled ? '🔓 Bỏ khoá' : '🔒 Khoá mã';
+}
+function qrScanToggleItemLock(){
+  qrScanItemLockEnabled = !qrScanItemLockEnabled;
+  qrScanLockedItem = null;
+  qrScanUpdateItemLockBadge();
+  qrScanSetStatus(
+    qrScanItemLockEnabled
+      ? 'Đã bật khoá mã — quét 1 pallet bất kỳ để xác lập mã cần khoá, các mã khác sau đó sẽ bị bỏ qua.'
+      : 'Đã tắt khoá mã — quét lẫn mã hàng nào cũng được tính bình thường.',
+    ''
+  );
 }
 function qrScanUpdateOqcBtns(){
   const wrap = document.getElementById('qr-scan-oqc-btns');
@@ -8504,9 +8536,14 @@ async function openQrScanOverlay(){
   qrScanLastCode = null;
   qrScanPhysicalLocator = null;
   qrScanOqcOverride = null;
+  // LƯU Ý: KHÔNG reset qrScanItemLockEnabled/qrScanLockedItem ở đây — khác với vị trí (mỗi lần mở lại
+  // là 1 vị trí thực tế mới nên phải xác lập lại), khoá mã hàng cần GIỮ NGUYÊN xuyên suốt nhiều lần
+  // thoát/mở lại màn hình quét (VD: quét xong 1 locator, thoát ra xem hàng đang ở locator nào, rồi mở
+  // lại quét tiếp CÙNG 1 mã đó) — chỉ tắt khi người dùng tự bấm "Bỏ khoá".
   qrScanUpdateCounter();
   qrScanUpdateLocatorBadge();
   qrScanUpdateOqcBtns();
+  qrScanUpdateItemLockBadge();
   qrScanSetStatus('Đưa mã vạch/QR (tem pallet) vào khung để quét…', '');
   const log = document.getElementById('qr-scan-log');
   if(log) log.innerHTML = '';
@@ -8738,6 +8775,18 @@ function handleQrScanReal(giNoRaw){
   const palletQty = Number(match[RAW_KEY_IDX.qty]) || 0;
   const khoObj = CC_KHO_LIST.find(k => k.label === kho);
 
+  // Đang bật "Khoá mã": lượt quét ĐẦU TIÊN sau khi bật xác lập mã bị khoá; các lượt quét sau đó nếu
+  // ra mã hàng KHÁC mã đã khoá thì BỎ QUA HOÀN TOÀN (không cộng vào bảng, không đánh dấu đã quét — để
+  // vẫn quét lại được bình thường nếu sau này tắt khoá hoặc khoá sang mã khác).
+  if(qrScanItemLockEnabled){
+    if(qrScanLockedItem === null){
+      qrScanLockedItem = item;
+      qrScanUpdateItemLockBadge();
+    } else if(qrScanLockedItem !== item){
+      return { ok:false, message:`🔒 Đang khoá mã ${qrScanLockedItem} — mã "${item}" quét được không khớp, đã BỎ QUA (không tính).` };
+    }
+  }
+
   // Lượt quét ĐẦU TIÊN trong phiên (hoặc sau khi bấm "Đổi vị trí") xác lập vị trí đang đứng quét.
   // Nếu Locator hệ thống của pallet KHÁC vị trí đang đứng quét -> pallet này đang bị đặt sai vị trí
   // ngoài thực tế; ghi nhận theo đúng vị trí THỰC TẾ đang quét, không phải vị trí hệ thống.
@@ -8958,6 +9007,8 @@ const qrScanCloseBtn = document.getElementById('qr-scan-close-btn');
 if(qrScanCloseBtn) qrScanCloseBtn.addEventListener('click', closeQrScanOverlay);
 const qrScanResetLocBtn = document.getElementById('qr-scan-reset-loc-btn');
 if(qrScanResetLocBtn) qrScanResetLocBtn.addEventListener('click', qrScanResetLocator);
+const qrScanItemLockBtn = document.getElementById('qr-scan-item-lock-btn');
+if(qrScanItemLockBtn) qrScanItemLockBtn.addEventListener('click', qrScanToggleItemLock);
 const qrScanOqcBtnsWrap = document.getElementById('qr-scan-oqc-btns');
 if(qrScanOqcBtnsWrap) qrScanOqcBtnsWrap.addEventListener('click', (e) => {
   const btn = e.target.closest('.qr-scan-oqc-btn');
@@ -10172,6 +10223,20 @@ function todayDMY(){
   return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`;
 }
 
+// Dành riêng cho lịch sử "Đã lưu theo ngày": ca đêm chạy 19h hôm nay -> 7h sáng hôm sau, nên dùng
+// NGÀY LỊCH thường ("hôm nay") sẽ bị SAI ngay sau nửa đêm — lúc đó ngày lịch đã tự nhảy sang hôm sau
+// dù vẫn đang trong ĐÚNG 1 CA làm việc bắt đầu từ tối hôm trước, làm kết quả kiểm nửa đầu ca (trước
+// 0h) và nửa sau ca (sau 0h) bị TÁCH thành 2 ngày khác nhau trong lịch sử, trong khi lẽ ra phải gộp
+// chung 1 ngày (đúng ngày ca ĐÓ bắt đầu). Quy ước: bất kỳ lúc nào TRƯỚC 12h TRƯA đều tính là còn
+// thuộc ca đêm bắt đầu từ TỐI HÔM TRƯỚC (vì ca đêm luôn kết thúc trước 7h sáng, không bao giờ kéo
+// dài tới trưa) — lùi lại đúng 1 ngày lịch để khớp đúng ngày ca đó thực sự bắt đầu.
+function shiftDateDMY(){
+  const p = n => String(n).padStart(2,'0');
+  const d = new Date();
+  if(d.getHours() < 12) d.setDate(d.getDate() - 1);
+  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()}`;
+}
+
 // So sánh 2 ngày dạng "dd/mm/yyyy" — trả về số để sort (mới nhất trước)
 function dmyToSortKey(dmy){
   const [d,m,y] = dmy.split('/').map(Number);
@@ -10231,7 +10296,7 @@ async function saveConfirmedSnapshotAndReset(){
     alert('Danh sách đã xác nhận đang trống, không có gì để lưu.');
     return;
   }
-  const dateKey = todayDMY();
+  const dateKey = shiftDateDMY();
   const records = keys.map(k => {
     const item = confirmedKiemTonItems[k];
     const total = (parseFloat(item.inputs[0]) || 0) * (parseFloat(item.inputs[1]) || 1) +
@@ -11429,7 +11494,13 @@ document.addEventListener('keydown', (e) => {
 function ccRefreshLocatorCardsIfActive(){
   CC_KHO_LIST.forEach(k => {
     const result = ccKhoResults[k.label];
-    if(result && result.mode === 'locator') ccRenderLocatorCards(k.code, k.label, result.list);
+    if(!result) return;
+    // TRƯỚC ĐÂY chỉ vẽ lại đúng chế độ Locator — chế độ Mã hàng/Pallet (ccRenderKhoResult) bị bỏ
+    // quên, nên sau khi Xác nhận/Xoá 1 dòng ở chế độ Mã hàng, dòng đó không tự cập nhật/biến mất như
+    // bên Locator, phải chuyển tab đi rồi quay lại mới thấy đúng. Giờ làm mới đúng theo chế độ hiện
+    // tại của từng kho, đồng bộ logic giữa cả 2 chế độ.
+    if(result.mode === 'locator') ccRenderLocatorCards(k.code, k.label, result.list);
+    else ccRenderKhoResult(k.code, k.label, result.mode, result.list);
   });
 }
 
