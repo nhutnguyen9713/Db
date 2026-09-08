@@ -3853,6 +3853,12 @@ const CloudVault = {
       const mergedKeys = keys.filter(k => k in partial);
       const bad = mergedKeys.filter(k => !bodyJson || !(k in bodyJson) || String(bodyJson[k]).length < String(partial[k]).length);
       if(bad.length) throw new Error('Cloud không lưu đủ (thiếu/thiếu bớt: ' + bad.join(', ') + ')');
+      // QUAN TRỌNG: vừa đẩy thành công state MỚI NHẤT của máy này lên Cloud — mọi snapshot realtime
+      // đang CHỜ (_pendingSnapshot, xem _onRealtimeValue) giờ đã CŨ hơn state vừa ghi, áp dụng nó vào
+      // lúc này sẽ VÔ TÌNH GHI ĐÈ MẤT thay đổi vừa lưu (VD: khôi phục 1 dòng đã xác nhận xong bấm Lưu,
+      // 1 lúc sau tự động áp dụng snapshot cũ làm dòng đó "hiện lại" trong Đã xác nhận). Huỷ pending
+      // luôn — an toàn hơn là để nó áp dụng nhầm dữ liệu cũ.
+      this._pendingSnapshot = null;
       this._retryCount = 0;
       clearTimeout(this._retryTimer);
     }catch(e){
@@ -3895,6 +3901,9 @@ const CloudVault = {
 
       this._retryCount = 0;
       clearTimeout(this._retryTimer);
+      // QUAN TRỌNG: vừa đẩy thành công TOÀN BỘ state mới nhất của máy này lên Cloud — huỷ mọi
+      // snapshot realtime đang CHỜ (xem _writeMergeNow ở trên để rõ lý do) vì giờ nó đã cũ hơn.
+      this._pendingSnapshot = null;
       if(this._hadError){ this._setStatus('✓ Đã đồng bộ lại lên Cloud.', 'ok'); this._hadError = false; }
     }catch(e){
       console.warn('CloudVault ghi lỗi:', e);
