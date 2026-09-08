@@ -3706,6 +3706,9 @@ const CloudVault = {
   // tra lại định kỳ, áp dụng ngay khi an toàn.
   _isSafeToApply(){
     if(typeof hasUnsavedChanges !== 'undefined' && hasUnsavedChanges) return false;
+    // Lớp bảo vệ thứ 2 (phòng khi hasUnsavedChanges lỡ bị xoá sớm ở đâu đó): còn BẤT KỲ hàng đợi tự
+    // lưu Cloud nào (Plan, Xác nhận, Đề xuất kiểm...) chưa hoàn tất thì tuyệt đối chưa an toàn.
+    if(typeof _pendingAutoSaveKeys !== 'undefined' && _pendingAutoSaveKeys.size > 0) return false;
     const ae = document.activeElement;
     if(!ae) return true;
     const tag = (ae.tagName || '').toLowerCase();
@@ -5648,11 +5651,19 @@ function aggregatePlanRows(rows, planType){
 // Cloud duy nhất, thay vì mỗi lần đổi gửi 1 request riêng — tránh mọi khả năng các request gần nhau
 // bị xử lý sai thứ tự (kể cả phía Cloud mà mình không kiểm soát được), vì chỉ còn lại 1 request thì
 // không có gì để tranh chấp thứ tự nữa. Dùng CHUNG cho mọi hành động "hay bị mất do quên bấm Lưu" —
-// mỗi loại (Plan, Đề xuất kiểm...) có timerKey riêng để không bị huỷ debounce chéo nhau.
+// mỗi loại (Plan, Đề xuất kiểm, Xác nhận...) có timerKey riêng để không bị huỷ debounce chéo nhau.
 const _autoSaveTimers = {};
+// TẤT CẢ các timerKey đang CÒN CHỜ (chưa lưu xong) — dùng để biết khi nào THỰC SỰ an toàn để báo
+// "đã lưu hết". QUAN TRỌNG: nếu 2 hành động khác nhau (VD: Xác nhận 1 dòng VÀ Xoá danh sách) xảy ra
+// gần nhau, mỗi cái có hàng đợi 2 giây RIÊNG — nếu hàng đợi A xong TRƯỚC gọi clearUnsavedChanges()
+// ngay, cờ "đã lưu" sẽ bị xoá dù hàng đợi B (Xoá danh sách) VẪN ĐANG CHỜ chưa gửi lên Cloud. Lúc đó
+// Realtime tưởng "an toàn" sẽ áp dụng nhầm dữ liệu Cloud CŨ (chưa có thay đổi B) đè lên, làm thay đổi
+// B "biến mất/sống lại" dù mới thao tác được 1-2 giây trước — đây chính là lỗi đã gặp phải.
+const _pendingAutoSaveKeys = new Set();
 function scheduleAutoSaveToCloud(timerKey, keys, label){
   if(typeof CloudVault === 'undefined' || !CloudVault.url || !CloudVault.token) return;
   clearTimeout(_autoSaveTimers[timerKey]);
+  _pendingAutoSaveKeys.add(timerKey);
   const statusEl = document.getElementById('upload-status');
   if(statusEl){ statusEl.className = 'upload-status'; statusEl.textContent = `● ${label} vừa đổi — chuẩn bị tự lưu lên Cloud…`; }
   _autoSaveTimers[timerKey] = setTimeout(async () => {
@@ -5660,9 +5671,13 @@ function scheduleAutoSaveToCloud(timerKey, keys, label){
       // Chỉ gửi ĐÚNG các mục liên quan (gói nhỏ) bằng writeMerge() — KHÔNG gửi kèm khối tồn kho/
       // lịch sử khổng lồ (có thể tới hàng MB), để không bị "chết chung" nếu mạng chậm/đứt giữa chừng.
       await CloudVault.writeMerge(keys);
-      if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
+      _pendingAutoSaveKeys.delete(timerKey);
+      // CHỈ báo "đã lưu hết" (mở khoá cho Realtime áp dụng dữ liệu mới) khi KHÔNG CÒN hàng đợi nào
+      // khác đang chờ — nếu còn, giữ nguyên cờ "chưa lưu" để Realtime tiếp tục chờ đúng.
+      if(_pendingAutoSaveKeys.size === 0 && typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
       if(statusEl){ statusEl.className = 'upload-status ok'; statusEl.textContent = `✓ ${label} đã lưu lên Cloud lúc ${fmtDateTime(new Date())}.`; }
     }catch(err){
+      _pendingAutoSaveKeys.delete(timerKey);
       if(statusEl){ statusEl.className = 'upload-status err'; statusEl.textContent = `⚠ ${label} CHƯA LƯU ĐƯỢC lên Cloud: ${err.message} — bấm nút "Lưu" ở đầu trang để thử lại, nếu không sẽ mất khi mở file/thiết bị khác.`; }
     }
   }, 2000);
