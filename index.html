@@ -854,14 +854,16 @@
      cảnh phụ (nền nhạt hơn hẳn) — ngược lại với chế độ Locator (KHO đậm, Locator nhạt, giữ nguyên). */
   .ps-compact-item-head{display:flex; justify-content:space-between; align-items:center; background:var(--violet); color:#fff; padding:7px 10px; font-weight:800; font-size:13.5px; border-radius:5px; margin-top:10px;}
   .ps-compact-item-head.surplus{background:#c9740a;}
-  .ps-compact-item-head .po{color:#e6ddfa; font-weight:500; font-size:12px;}
+  .ps-compact-item-head .po{color:#e6ddfa; font-weight:500; font-size:12px; background:transparent;}
   .ps-compact-item-head .ps-cl-sub-light{font-weight:700; font-size:11px; color:#fff; font-family:var(--mono);}
   .ps-compact-item-head > span, .ps-compact-loc > span{background:transparent;}
+  .ps-compact-item-head b, .ps-compact-loc b{background:transparent;}
   .ps-compact-kho-light{font-size:10px; font-weight:700; letter-spacing:.02em; color:#6b5a9e; background:#f3f0fb; padding:4px 10px; border-radius:5px; margin-top:10px; border:1px solid #e6def7;}
   .ps-compact-item{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 10px; border-bottom:1px solid #eee; flex-wrap:wrap;}
   .ps-compact-item.surplus{background:#fff8e6;}
   .ps-ci-name{font-size:13px; background:transparent;}
-  .ps-ci-name .po{color:#888; font-weight:400; font-size:12px;}
+  .ps-ci-name .po{color:#888; font-weight:400; font-size:12px; background:transparent;}
+  .ps-ci-name b{background:transparent;}
   .ps-ci-detail{font-size:11px; color:#888; margin-top:1px; font-family:var(--mono);}
   .ps-ci-qty{font-size:11px; color:#444; font-family:var(--mono); font-weight:800; text-align:left; white-space:nowrap; flex-shrink:0; margin-left:auto; width:175px; background:transparent;}
   .ps-compact-total{display:flex; justify-content:space-between; padding:10px; margin-top:8px; background:#fafafa; border-top:2px solid #111; font-weight:800; font-size:13px;}
@@ -3314,6 +3316,7 @@ const STORAGE_KEY_LABELS = {
   tn5_dashboard_scanned_extra_v1: 'Dòng tự thêm khi quét QR',
   tn5_dashboard_scanned_gi_v1: 'Danh sách GI đã quét',
   tn5_dashboard_gi_scan_log_v1: 'Nhật ký GI đã quét (theo vị trí)',
+  tn5_dashboard_cont_ship_v1: 'Dữ liệu Transaction (Ship)',
   tn5_dashboard_confirmed_history_v1: 'Lịch sử đã lưu theo ngày'
 };
 
@@ -3348,6 +3351,7 @@ function markUnsavedChanges(key){
 function clearUnsavedChanges(){
   hasUnsavedChanges = false;
   _localInventoryDirty = false;
+  _localShipDirty = false;
   const btn = document.getElementById('btn-save-cloud');
   if(btn) btn.classList.remove('has-changes');
 }
@@ -4136,6 +4140,9 @@ function saveStateToStorage(){
     if(giScanLog.length) LS.setItem(STORAGE_KEY_GI_LOG, JSON.stringify(giScanLog));
     else LS.removeItem(STORAGE_KEY_GI_LOG);
 
+    if(contShipData) LS.setItem(STORAGE_KEY_CONT_SHIP, JSON.stringify(contShipSerialize(contShipData)));
+    else LS.removeItem(STORAGE_KEY_CONT_SHIP);
+
     if(Object.keys(confirmedHistory).length) LS.setItem(STORAGE_KEY_CONFIRMED_HISTORY, JSON.stringify(confirmedHistory));
     else LS.removeItem(STORAGE_KEY_CONFIRMED_HISTORY);
   }catch(err){
@@ -4160,6 +4167,7 @@ function loadStateFromStorage(){
     const scannedExtraRaw = LS.getItem(STORAGE_KEY_SCANNED_EXTRA);
     const scannedGiRaw = LS.getItem(STORAGE_KEY_SCANNED_GI);
     const giLogRaw = LS.getItem(STORAGE_KEY_GI_LOG);
+    const contShipRaw = LS.getItem(STORAGE_KEY_CONT_SHIP);
     const confirmedHistoryRaw = LS.getItem(STORAGE_KEY_CONFIRMED_HISTORY);
     return {
       inv: invRaw ? JSON.parse(invRaw, jsonReviver) : null,
@@ -4176,11 +4184,12 @@ function loadStateFromStorage(){
       scannedExtra: scannedExtraRaw ? JSON.parse(scannedExtraRaw) : {},
       scannedGi: scannedGiRaw ? JSON.parse(scannedGiRaw) : [],
       giScanLog: giLogRaw ? JSON.parse(giLogRaw) : [],
+      contShip: contShipRaw ? contShipDeserialize(JSON.parse(contShipRaw)) : null,
       confirmedHistory: confirmedHistoryRaw ? JSON.parse(confirmedHistoryRaw) : {}
     };
   }catch(err){
     console.warn('Không đọc được dữ liệu đã lưu:', err);
-    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], confirmedHistory: {} };
+    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, confirmedHistory: {} };
   }
 }
 
@@ -4200,18 +4209,22 @@ function clearStoredState(){
   LS.removeItem(STORAGE_KEY_SCANNED_EXTRA);
   LS.removeItem(STORAGE_KEY_SCANNED_GI);
   LS.removeItem(STORAGE_KEY_GI_LOG);
+  LS.removeItem(STORAGE_KEY_CONT_SHIP);
   LS.removeItem(STORAGE_KEY_CONFIRMED_HISTORY);
 }
 
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.22';
+const APP_VERSION = 'v1.25';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
 let _localInventoryDirty = false;
+// Tương tự _localInventoryDirty nhưng cho dữ liệu Transaction (Ship) — TRUE khi CHÍNH máy này vừa tải
+// file Ship mới (chưa kịp Lưu lên Cloud).
+let _localShipDirty = false;
 
 /* ============ dữ liệu gốc nhúng sẵn (rút gọn để demo) ============ */
 const DEFAULT_DATA = {"snapshot_date": "—", "total_qty": 0, "distinct_items": 0, "distinct_locators": 0, "distinct_pallets": 0, "n_rows": 0, "pass_qty": 0, "ng_qty": 0, "kho_order": ["Kho 2B", "Kho 3A", "Kho 3B", "Kho DG1"], "qty_by_kho": {"Kho 2B": 0, "Kho 3A": 0, "Kho 3B": 0, "Kho DG1": 0}, "kho_oqc": {"Kho 2B": {"PASS": 0, "NG": 0}, "Kho 3A": {"PASS": 0, "NG": 0}, "Kho 3B": {"PASS": 0, "NG": 0}, "Kho DG1": {"PASS": 0, "NG": 0}}, "top_buyers": [], "other_buyers_qty": 0, "top_items": [], "top_locators": [], "aging": [], "kho_detail": {"Kho 2B": [], "Kho 3A": [], "Kho 3B": [], "Kho DG1": []}, "pallet_by_kho": {"Kho 2B": 0, "Kho 3A": 0, "Kho 3B": 0, "Kho DG1": 0}, "kho_oqc_pallet": {"Kho 2B": {"PASS": 0, "NG": 0}, "Kho 3A": {"PASS": 0, "NG": 0}, "Kho 3B": {"PASS": 0, "NG": 0}, "Kho DG1": {"PASS": 0, "NG": 0}}};
@@ -6204,6 +6217,27 @@ let contPickAllRows = [];
 // Đang Load/Đã Load Xong lên bảng Picking Status theo đúng Reference (khớp với cột CR của container).
 // Chỉ lưu trong phiên hiện tại (không đồng bộ Cloud/localStorage), không ảnh hưởng tới số liệu KPI.
 let contShipData = null; // { byRef: Map<REF, qty>, byRefItem: Map<REF, Map<item, qty>>, fileName, updatedAtText }
+const STORAGE_KEY_CONT_SHIP = 'tn5_dashboard_cont_ship_v1';
+
+// Map/Set không tự JSON.stringify được — chuyển qua lại dạng object thường để lưu trữ/đồng bộ Cloud.
+function contShipSerialize(data){
+  if(!data) return null;
+  return {
+    fileName: data.fileName, updatedAtText: data.updatedAtText,
+    byRef: Object.fromEntries(data.byRef),
+    byRefItem: Object.fromEntries([...data.byRefItem].map(([k, v]) => [k, Object.fromEntries(v)])),
+    byRefLocators: Object.fromEntries([...(data.byRefLocators || new Map())].map(([k, v]) => [k, [...v]]))
+  };
+}
+function contShipDeserialize(obj){
+  if(!obj) return null;
+  return {
+    fileName: obj.fileName, updatedAtText: obj.updatedAtText,
+    byRef: new Map(Object.entries(obj.byRef || {})),
+    byRefItem: new Map(Object.entries(obj.byRefItem || {}).map(([k, v]) => [k, new Map(Object.entries(v))])),
+    byRefLocators: new Map(Object.entries(obj.byRefLocators || {}).map(([k, v]) => [k, new Set(v)]))
+  };
+}
 
 function contShipBuildFromRecords(records){
   const byRef = new Map();
@@ -6247,6 +6281,23 @@ function contShipKhoLabelForRefs(refs, byRefLocators){
   });
   if(!khoSet.size) return '';
   return [...khoSet].sort().map(k => `Kho ${k}`).join(' + ');
+}
+
+// Trả về ĐÚNG 1 "Kho X" nếu dữ liệu Ship xác định được rõ ràng container này load từ đúng 1 kho — trả
+// về null nếu không có dữ liệu Ship khớp, hoặc dữ liệu Ship cho thấy nhiều hơn 1 kho (không đủ rõ ràng
+// để tự đổi). Dùng để tự chọn lại cột "Kho" theo bằng chứng THẬT (đã load ở đâu) thay vì chỉ đoán theo
+// SL tồn nhiều nhất.
+function contShipDetectSingleKho(csrsSet){
+  if(!contShipData || !contShipData.byRef.size || !csrsSet || !csrsSet.size) return null;
+  const refs = [];
+  csrsSet.forEach(csr => {
+    const ref = String(csr || '').trim().toUpperCase().replace(/[;,.\s]+$/, '');
+    if(contShipData.byRef.has(ref)) refs.push(ref);
+  });
+  if(!refs.length) return null;
+  const khoLabel = contShipKhoLabelForRefs(refs, contShipData.byRefLocators);
+  if(!khoLabel || khoLabel.includes('+')) return null;
+  return khoLabel;
 }
 
 // Đếm số CR trong bảng Picking Status thực sự khớp được với Reference trong dữ liệu Ship vừa tải —
@@ -6573,8 +6624,10 @@ function renderContainerPickingOverview(){
     });
 
     // Mã hàng nào "Thiếu" TÍNH RIÊNG cho container này (không gộp với container khác dùng chung mã):
-    // so SL kế hoạch của CHÍNH container này với SL tồn kho PASS hiện có của mã đó.
-    const shortItems = items
+    // so SL kế hoạch của CHÍNH container này với SL tồn kho PASS hiện có của mã đó. Container ĐÃ Pick
+    // xong (thủ công hoặc đã Load Xong theo Ship) thì KHÔNG còn cần lấy thêm gì nữa — bỏ qua cảnh báo
+    // Thiếu, tránh báo nhầm do tồn kho hiện tại đã giảm (vì chính lô hàng này vừa được lấy/xuất đi).
+    const shortItems = isManual ? [] : items
       .filter(it => it.qty > it.passOnHand)
       .map(it => ({ item: it.item, po: it.po, qty: it.qty, passOnHand: it.passOnHand, diff: it.passOnHand - it.qty }));
 
@@ -6591,6 +6644,15 @@ function renderContainerPickingOverview(){
       topKho = manualKhoOverrides[manualKey];
       topKhoQty = qtyByKho[topKho] || 0;
       isManualKho = true;
+    } else {
+      // Chưa ai chọn tay -> nếu dữ liệu Ship xác định rõ ràng ĐÚNG 1 kho đã thực sự load hàng cho
+      // container này mà KHÁC với kho đang tự đoán theo SL tồn nhiều nhất, tự đổi sang đúng kho đó —
+      // bằng chứng THẬT (đã load ở đâu) đáng tin hơn suy đoán theo số lượng tồn.
+      const shipKho = contShipDetectSingleKho(entry.csrs);
+      if(shipKho && shipKho !== topKho){
+        topKho = shipKho;
+        topKhoQty = qtyByKho[topKho] || 0;
+      }
     }
 
     detailRows.push({
@@ -12722,6 +12784,7 @@ function initDashboard(){
   if(saved.scannedExtra && Object.keys(saved.scannedExtra).length > 0) scannedExtraRows = saved.scannedExtra;
   if(saved.scannedGi && saved.scannedGi.length > 0) scannedGiSet = new Set(saved.scannedGi);
   if(saved.giScanLog && saved.giScanLog.length > 0) giScanLog = saved.giScanLog;
+  if(saved.contShip) contShipData = saved.contShip;
   if(saved.confirmedHistory && Object.keys(saved.confirmedHistory).length > 0) confirmedHistory = saved.confirmedHistory;
   if(saved.ktInputs && Object.keys(saved.ktInputs).length > 0) ktInputValues = saved.ktInputs;
   if(saved.plans){
@@ -12888,6 +12951,14 @@ if(btnSaveCloud){
               touchUpdatedAt(currentFileName || 'Dữ liệu mặc định');
               if(Object.keys(ccKhoResults).length) ccRestoreResultsFromStorage(ccKhoResults);
             }catch(e){ console.warn('Không lấy được tồn kho mới nhất từ Cloud trước khi lưu:', e); }
+          }
+          // Tương tự tồn kho: máy này KHÔNG tự tải file Ship mới nào — nếu Cloud đang có bản Ship KHÁC
+          // (do máy khác vừa cập nhật), lấy đúng bản đó về trước khi lưu.
+          if(!_localShipDirty && cloudData[STORAGE_KEY_CONT_SHIP] !== undefined && cloudData[STORAGE_KEY_CONT_SHIP] !== _mem[STORAGE_KEY_CONT_SHIP]){
+            try{
+              contShipData = cloudData[STORAGE_KEY_CONT_SHIP] ? contShipDeserialize(JSON.parse(cloudData[STORAGE_KEY_CONT_SHIP])) : null;
+              renderPlanPanel();
+            }catch(e){ console.warn('Không lấy được dữ liệu Ship mới nhất từ Cloud trước khi lưu:', e); }
           }
           saveStateToStorage();
           renderConfirmedList();
@@ -13972,10 +14043,15 @@ if(contShipFileInput){
       const { byRef, byRefItem, byRefLocators } = contShipBuildFromRecords(records);
       if(!byRef.size) throw new Error('Không tìm thấy dòng nào có Transaction Type = Ship trong file này.');
       contShipData = { byRef, byRefItem, byRefLocators, fileName: file.name, updatedAtText: `Cập nhật lúc ${fmtDateTime(new Date())}` };
-      // Gọi lại TOÀN BỘ renderContainerPickingOverview() (không chỉ renderContPickTable()) — vì KPI/
-      // trạng thái Pick xong giờ có tính thêm điều kiện "đã Load Xong theo Ship", cần build lại từ đầu
-      // mới cập nhật đúng số liệu KPI, không chỉ vẽ lại các dòng bảng.
-      renderContainerPickingOverview();
+      _localShipDirty = true;
+      // Gọi lại renderPlanPanel() (không chỉ renderContainerPickingOverview()) — vì "Tổng hợp 3 Plan"
+      // (so Đủ/Thiếu với tồn kho) cũng phụ thuộc container nào đã Pick xong, cần build lại luôn để
+      // không báo Thiếu nhầm cho hàng của container vừa được tính Đã Load Xong.
+      renderPlanPanel();
+      saveStateToStorage();
+      // Đẩy ngay lên Cloud để các máy/người khác đang mở dashboard cũng thấy đúng trạng thái Load mới
+      // nhất (realtime) — không cần đợi bấm nút "Lưu" ở đầu trang mới đồng bộ.
+      scheduleAutoSaveToCloud('contship', [STORAGE_KEY_CONT_SHIP], 'Cập nhật Transaction (Ship)');
       const matchedCount = contShipCountMatchedContainers(byRef);
       if(statusEl){
         statusEl.className = matchedCount ? 'upload-status ok' : 'upload-status err';
