@@ -846,7 +846,7 @@
   .ps-cc-cont{font-size:20px; font-weight:800;}
   .ps-cc-time{font-family:var(--mono); font-size:13px; color:#444; font-weight:600;}
   .ps-compact-header-sub{display:flex; justify-content:space-between; font-family:var(--mono); font-size:11px; color:#888; margin-top:2px;}
-  .ps-compact-kho{display:flex; justify-content:space-between; align-items:center; font-size:11px; font-weight:800; letter-spacing:.03em; text-transform:uppercase; color:#fff; background:var(--violet); padding:4px 10px; border-radius:5px; margin-top:10px;}
+  .ps-compact-kho{font-size:11px; font-weight:800; letter-spacing:.03em; text-transform:uppercase; color:#ffffff; background:var(--violet); padding:5px 10px; border-radius:5px; margin-top:10px;}
   .ps-compact-loc{display:flex; justify-content:space-between; align-items:center; background:#f3f0fb; padding:6px 10px; font-weight:800; font-size:12.5px; border-left:3px solid var(--violet);}
   .ps-compact-loc.surplus{background:#fff2da; border-left-color:#c9740a;}
   .ps-cl-sub{font-weight:700; font-size:11px; color:#666; font-family:var(--mono);}
@@ -855,7 +855,7 @@
   .ps-ci-name{font-size:13px;}
   .ps-ci-name .po{color:#888; font-weight:400; font-size:12px;}
   .ps-ci-detail{font-size:11px; color:#888; margin-top:1px; font-family:var(--mono);}
-  .ps-ci-qty{font-size:11px; color:#666; font-family:var(--mono); font-weight:700; text-align:right; white-space:nowrap; flex-shrink:0; margin-left:auto;}
+  .ps-ci-qty{font-size:11px; color:#444; font-family:var(--mono); font-weight:800; text-align:left; white-space:nowrap; flex-shrink:0; margin-left:auto; width:175px;}
   .ps-compact-total{display:flex; justify-content:space-between; padding:10px; margin-top:8px; background:#fafafa; border-top:2px solid #111; font-weight:800; font-size:13px;}
   .ps-footer{margin-top:20px; font-family:var(--mono); font-size:11px; color:#666; display:flex; justify-content:space-between;}
 
@@ -8990,6 +8990,7 @@ function qrScanClearHistory(useOverlayStatus){
   );
   if(!ok) return;
   const clearedCount = scannedGiSet.size;
+  scannedGiSet.forEach(g => _deletedGiKeys.add(g));
   scannedGiSet.clear();
   giScanLog = [];
   saveStateToStorage();
@@ -9381,7 +9382,7 @@ function buildPickSlipBodyByLocatorCompact(grouped){
     if(g.kho !== currentKho){
       currentKho = g.kho;
       const kt = khoTotals.get(currentKho);
-      bodyHtml += `<div class="ps-compact-kho"><span>${escHtml(currentKho)}</span><span>${fmt(kt.onHand)} Pcs &middot; ${fmt(kt.pallets)} plt</span></div>`;
+      bodyHtml += `<div class="ps-compact-kho">${escHtml(currentKho)} &nbsp;&mdash;&nbsp; ${fmt(kt.onHand)} Pcs &middot; ${fmt(kt.pallets)} plt</div>`;
     }
     if(g.locator !== currentLocator){
       currentLocator = g.locator;
@@ -9429,7 +9430,7 @@ function buildPickSlipBodyByItemCompact(grouped){
       // cách mỗi khối trong chế độ Mã hàng chỉ nói về 1 mã, giống hệt tổng mỗi locator ở chế độ Locator.
       const kt = { onHand: 0, pallets: 0 };
       grouped.forEach(x => { if(x.item + '||' + (x.po || '') === key && x.kho === currentKho){ kt.onHand += x.onHand; kt.pallets += x.pallets; } });
-      bodyHtml += `<div class="ps-compact-kho"><span>${escHtml(currentKho)}</span><span>${fmt(kt.onHand)} Pcs &middot; ${fmt(kt.pallets)} plt</span></div>`;
+      bodyHtml += `<div class="ps-compact-kho">${escHtml(currentKho)} &nbsp;&mdash;&nbsp; ${fmt(kt.onHand)} Pcs &middot; ${fmt(kt.pallets)} plt</div>`;
     }
     bodyHtml += `<div class="ps-compact-item">
       <div class="ps-ci-name"><b>📍 ${escHtml(g.locator)}</b> ${oqcBadge(g.oqc)}</div>
@@ -10116,6 +10117,10 @@ function renderConfirmedList(){
 // nó sẽ vô tình "hồi sinh" lại đúng dòng vừa khôi phục (vì Cloud vẫn còn giữ bản CŨ, chưa kịp cập nhật
 // bản đã xoá) — đây chính là lỗi "khôi phục xong bấm Lưu lại thấy dòng đó quay về".
 let _restoredConfirmedKeys = new Set();
+// "Bia mộ" cho các GI No. VỪA bị xoá (xoá 1 dòng đề xuất kiểm, hoặc bấm "Xoá lịch sử quét") — cùng lý
+// do với _restoredConfirmedKeys ở trên, dùng ở mergeConfirmedDataFromCloud để không bị Cloud (chưa
+// kịp cập nhật bản đã xoá) làm GI đó "hồi sinh" lại ngay khi Lưu/Làm mới dữ liệu.
+let _deletedGiKeys = new Set();
 function restoreConfirmedItem(rowKey){
   const entry = confirmedKiemTonItems[rowKey];
   if(!entry) return;
@@ -10281,13 +10286,16 @@ function mergeConfirmedDataFromCloud(cloudData){
 
   try{
     const cloudGi = cloudData[STORAGE_KEY_SCANNED_GI] ? JSON.parse(cloudData[STORAGE_KEY_SCANNED_GI]) : [];
-    cloudGi.forEach(g => scannedGiSet.add(g));
+    // Loại bỏ những GI VỪA bị xoá (xoá 1 dòng, hoặc bấm "Xoá lịch sử quét") ở máy này khỏi bản Cloud
+    // trước khi gộp — nếu không, Cloud (chưa kịp cập nhật bản đã xoá) sẽ làm GI đó "hồi sinh" lại ngay
+    // khi Lưu, y hệt lỗi đã gặp với "Khôi phục" dòng đã xác nhận (xem _restoredConfirmedKeys).
+    cloudGi.forEach(g => { if(!_deletedGiKeys.has(g)) scannedGiSet.add(g); });
   }catch(e){ console.warn('Không gộp được scannedGiSet từ Cloud:', e); }
 
   try{
     const cloudGiLog = cloudData[STORAGE_KEY_GI_LOG] ? JSON.parse(cloudData[STORAGE_KEY_GI_LOG]) : [];
     const existingGis = new Set(giScanLog.map(g => g.gi));
-    cloudGiLog.forEach(g => { if(!existingGis.has(g.gi)){ giScanLog.push(g); existingGis.add(g.gi); } });
+    cloudGiLog.forEach(g => { if(!existingGis.has(g.gi) && !_deletedGiKeys.has(g.gi)){ giScanLog.push(g); existingGis.add(g.gi); } });
   }catch(e){ console.warn('Không gộp được giScanLog từ Cloud:', e); }
 
   try{
@@ -10354,6 +10362,7 @@ async function saveConfirmedSnapshotAndReset(){
     // PO/SL với đợt trước sẽ tự điền sẵn số cũ, gây nhầm lẫn) và danh sách GI đã quét (để đợt sau vẫn
     // quét lại đúng những pallet đó bình thường, không bị báo "đã quét trùng" nữa).
     ktInputValues = {};
+    scannedGiSet.forEach(g => _deletedGiKeys.add(g));
     scannedGiSet.clear();
     giScanLog = [];
     if(typeof updateQrGiClearBtn === 'function') updateQrGiClearBtn();
@@ -11311,7 +11320,7 @@ function ccDeleteRow(khoLabel, rowKey){
   const keepLog = [];
   let removedGiCount = 0;
   giScanLog.forEach(g => {
-    if(g.rowKey === rowKey){ scannedGiSet.delete(g.gi); removedGiCount++; }
+    if(g.rowKey === rowKey){ scannedGiSet.delete(g.gi); _deletedGiKeys.add(g.gi); removedGiCount++; }
     else keepLog.push(g);
   });
   giScanLog = keepLog;
