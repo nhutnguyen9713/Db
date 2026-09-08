@@ -4190,7 +4190,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.11';
+const APP_VERSION = 'v1.14';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -11229,6 +11229,11 @@ function ccSearchTerm(item, locator){
   return loc ? item + ' ' + loc : item;
 }
 
+// Trạng thái sắp xếp cho bảng chế độ Mã hàng/Pallet (khác ccLocatorSortState dùng cho chế độ Locator)
+// — mặc định sắp theo Locator A→Z (dễ đi theo thứ tự vị trí thực tế trong kho), bấm vào tiêu đề cột
+// nào thì đổi sang sắp theo đúng cột đó, bấm lần 2 để đảo chiều.
+let ccItemModeSortState = {}; // { '2B': {key:'locator', dir:1}, ... }
+
 function ccRenderKhoResult(code, khoLabel, mode, list){
   // Dùng CHUNG đúng 1 form bảng với chế độ Locator (Locator/OQC/Cust PO/Item No/SL tồn/Kiểm thực tế
   // + nút Xác nhận) cho cả 3 chế độ Mã hàng / Locator / Pallet — để nhất quán khi kiểm tồn, không
@@ -11252,28 +11257,47 @@ function ccRenderKhoResult(code, khoLabel, mode, list){
     return;
   }
 
-  const rowsHtml = list.map(r => buildKtItemRowHtml(r, '', '', '')).join('');
+  const sortState = ccItemModeSortState[code] || { key: 'locator', dir: 1 };
+  const sortedList = [...list].sort((a, b) => {
+    if(sortState.key === 'qty') return ((a.qty || 0) - (b.qty || 0)) * sortState.dir;
+    return String(a[sortState.key] || '').localeCompare(String(b[sortState.key] || ''), 'vi', { numeric:true }) * sortState.dir;
+  });
+
+  const rowsHtml = sortedList.map(r => buildKtItemRowHtml(r, '', '', '')).join('');
   if(!rowsHtml.replace(/\s/g, '')){
     wrap.innerHTML = `<div style="text-align:center; color:var(--teal); font-weight:700; padding:14px 0;">✓ Đã kiểm xong toàn bộ danh sách này</div>`;
     return;
   }
 
+  const sortArrow = (key) => sortState.key === key ? (sortState.dir === 1 ? '▲' : '▼') : '↕';
   wrap.innerHTML = `
     <table class="kho-detail-table kt-mode-table">
       <thead>
         <tr>
           <th class="col-kho kt-card-hide">Kho</th>
-          <th>Locator</th>
+          <th class="cc-item-sort-th" data-cc-item-sort="${escAttr(code)}" data-sort-key="locator" style="cursor:pointer;" title="Bấm để sắp xếp theo Locator">Locator <span style="font-size:9px;">${sortArrow('locator')}</span></th>
           <th>OQC</th>
           <th>Cust PO</th>
-          <th>Item No.</th>
-          <th style="text-align:right">SL tồn</th>
+          <th class="cc-item-sort-th" data-cc-item-sort="${escAttr(code)}" data-sort-key="item" style="cursor:pointer;" title="Bấm để sắp xếp theo Item No.">Item No. <span style="font-size:9px;">${sortArrow('item')}</span></th>
+          <th class="cc-item-sort-th" data-cc-item-sort="${escAttr(code)}" data-sort-key="qty" style="cursor:pointer; text-align:right" title="Bấm để sắp xếp theo SL tồn">SL tồn <span style="font-size:9px;">${sortArrow('qty')}</span></th>
           <th style="text-align:left">Kiểm thực tế (6 số)</th>
         </tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
     </table>`;
 }
+document.addEventListener('click', (e) => {
+  const th = e.target.closest('.cc-item-sort-th');
+  if(!th) return;
+  const code = th.dataset.ccItemSort;
+  const sortKey = th.dataset.sortKey;
+  const khoObj = CC_KHO_LIST.find(k => k.code === code);
+  const result = khoObj ? ccKhoResults[khoObj.label] : null;
+  if(!result) return;
+  const cur = ccItemModeSortState[code] || { key: 'locator', dir: 1 };
+  ccItemModeSortState[code] = { key: sortKey, dir: (cur.key === sortKey) ? cur.dir * -1 : 1 };
+  ccRenderKhoResult(code, khoObj.label, result.mode, result.list);
+});
 
 /* ---------- Che do Locator: the vi tri thu gon (mac dinh dong), mo ra la danh sach Item No.
    kem o "Kiem thuc te" + nut "Xac nhan" cho tung ma - dung lai dung cau truc dong & cac
