@@ -5644,28 +5644,31 @@ function aggregatePlanRows(rows, planType){
   };
 }
 
-// Gộp NHIỀU lần tải Plan liên tiếp (VD: Row rồi FC rồi HCP trong vài giây) thành ĐÚNG 1 request
-// lưu lên Cloud duy nhất, thay vì mỗi lần tải gửi 1 request riêng — tránh mọi khả năng các
-// request gần nhau bị xử lý sai thứ tự (kể cả phía Cloud mà mình không kiểm soát
-// được), vì chỉ còn lại 1 request thì không có gì để tranh chấp thứ tự nữa.
-let _planAutoSaveTimer = null;
-function schedulePlanAutoSaveToCloud(){
+// Gộp NHIỀU thay đổi liên tiếp (VD: Row rồi FC rồi HCP trong vài giây) thành ĐÚNG 1 request lưu lên
+// Cloud duy nhất, thay vì mỗi lần đổi gửi 1 request riêng — tránh mọi khả năng các request gần nhau
+// bị xử lý sai thứ tự (kể cả phía Cloud mà mình không kiểm soát được), vì chỉ còn lại 1 request thì
+// không có gì để tranh chấp thứ tự nữa. Dùng CHUNG cho mọi hành động "hay bị mất do quên bấm Lưu" —
+// mỗi loại (Plan, Đề xuất kiểm...) có timerKey riêng để không bị huỷ debounce chéo nhau.
+const _autoSaveTimers = {};
+function scheduleAutoSaveToCloud(timerKey, keys, label){
   if(typeof CloudVault === 'undefined' || !CloudVault.url || !CloudVault.token) return;
-  clearTimeout(_planAutoSaveTimer);
+  clearTimeout(_autoSaveTimers[timerKey]);
   const statusEl = document.getElementById('upload-status');
-  if(statusEl){ statusEl.className = 'upload-status'; statusEl.textContent = '● Plan vừa tải — chuẩn bị tự lưu lên Cloud…'; }
-  _planAutoSaveTimer = setTimeout(async () => {
+  if(statusEl){ statusEl.className = 'upload-status'; statusEl.textContent = `● ${label} vừa đổi — chuẩn bị tự lưu lên Cloud…`; }
+  _autoSaveTimers[timerKey] = setTimeout(async () => {
     try{
-      // Chỉ gửi ĐÚNG mục Plan (gói rất nhỏ, vài chục KB) bằng writeMerge() — KHÔNG gửi kèm
-      // khối tồn kho/lịch sử khổng lồ (có thể tới hàng MB), để không bị "chết chung" nếu mạng
-      // chậm/đứt giữa chừng lúc gửi khối lớn đó. Firebase sẽ ghép (PATCH) vào dữ liệu Cloud hiện có.
-      await CloudVault.writeMerge([STORAGE_KEY_PLANS]);
+      // Chỉ gửi ĐÚNG các mục liên quan (gói nhỏ) bằng writeMerge() — KHÔNG gửi kèm khối tồn kho/
+      // lịch sử khổng lồ (có thể tới hàng MB), để không bị "chết chung" nếu mạng chậm/đứt giữa chừng.
+      await CloudVault.writeMerge(keys);
       if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
-      if(statusEl){ statusEl.className = 'upload-status ok'; statusEl.textContent = `✓ Plan vừa tải đã lưu lên Cloud lúc ${fmtDateTime(new Date())}.`; }
+      if(statusEl){ statusEl.className = 'upload-status ok'; statusEl.textContent = `✓ ${label} đã lưu lên Cloud lúc ${fmtDateTime(new Date())}.`; }
     }catch(err){
-      if(statusEl){ statusEl.className = 'upload-status err'; statusEl.textContent = `⚠ Plan vừa tải CHƯA LƯU ĐƯỢC lên Cloud: ${err.message} — bấm nút "Lưu" ở đầu trang để thử lại, nếu không sẽ mất khi mở file/thiết bị khác.`; }
+      if(statusEl){ statusEl.className = 'upload-status err'; statusEl.textContent = `⚠ ${label} CHƯA LƯU ĐƯỢC lên Cloud: ${err.message} — bấm nút "Lưu" ở đầu trang để thử lại, nếu không sẽ mất khi mở file/thiết bị khác.`; }
     }
   }, 2000);
+}
+function schedulePlanAutoSaveToCloud(){
+  scheduleAutoSaveToCloud('plan', [STORAGE_KEY_PLANS], 'Plan vừa tải/xoá');
 }
 
 document.querySelectorAll('.btn-plan').forEach(btn => {
@@ -9858,6 +9861,9 @@ function restoreConfirmedItem(rowKey){
   saveStateToStorage();
   renderKhoSearchPage(); // hiện lại dòng ở bảng Kiểm tồn kho, giữ nguyên số liệu đã nhập trước đó
   renderConfirmedList(); // ẩn dòng khỏi bảng Đã xác nhận
+  // Đẩy NGAY việc khôi phục lên Cloud — càng đẩy sớm càng thu hẹp khoảng thời gian có thể xảy ra
+  // tình huống "Cloud vẫn còn giữ bản cũ" (xem _restoredConfirmedKeys ở mergeConfirmedDataFromCloud).
+  scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS], 'Khôi phục dòng đã xác nhận');
 }
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.cki-restore-btn');
@@ -11355,6 +11361,10 @@ document.addEventListener('click', function(e){
   if(!confirm(`Xoá danh sách "Đề xuất kiểm hôm nay" đã tạo cho ${khoLabel}?`)) return;
   ccClearKhoResult(khoLabel);
   saveStateToStorage();
+  // Y HỆT lúc xoá Plan — nếu không tự đẩy lên Cloud ngay, Cloud vẫn còn giữ bản danh sách CŨ (chưa
+  // xoá), lần đọc lại tiếp theo (tải lại trang, đổi thiết bị, hay Realtime) sẽ kéo về làm danh sách
+  // "sống lại" y như cũ dù đã bấm Xoá.
+  scheduleAutoSaveToCloud('cc', [STORAGE_KEY_CCRESULTS, STORAGE_KEY_KT_INPUTS], 'Danh sách "Đề xuất kiểm hôm nay"');
 });
 
 // Dựng 1 sheet "Đề xuất kiểm" vào workbook đã có sẵn — dùng chung cho cả xuất riêng từng kho lẫn
@@ -11964,6 +11974,9 @@ document.addEventListener('click', function(e) {
     confirmSingleRow(tr);
     saveStateToStorage();
     renderKhoSearchPage(); // Sẽ tự động ẩn dòng này và hiển thị ở bảng confirm
+    // "Xác nhận" là hành động DÙNG NHIỀU NHẤT trong cả app — nếu không tự đẩy Cloud, kết quả kiểm
+    // vừa xác nhận có thể mất/hiện lại sai nếu người dùng tải lại trang trước khi kịp bấm "Lưu".
+    scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS], 'Kết quả vừa xác nhận');
   } else {
     const inputs = td.querySelectorAll('.kt-input');
     // Xóa khỏi biến confirm, nhưng giữ lại giá trị đã nhập để dòng hiện lại ở bảng chính
@@ -11980,6 +11993,7 @@ document.addEventListener('click', function(e) {
     
     saveStateToStorage();
     renderKhoSearchPage(); // Sẽ tự động hiện lại dòng này ở bảng chính
+    scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS], 'Huỷ xác nhận');
   }
 });
 
@@ -12002,6 +12016,7 @@ document.addEventListener('click', function(e){
   rowsToConfirm.forEach((tr) => { if(confirmSingleRow(tr)) count++; });
   saveStateToStorage();
   renderKhoSearchPage();
+  scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS], 'Kết quả vừa xác nhận');
   if(typeof showAppToast === 'function') showAppToast(`✓ Đã xác nhận ${count} dòng ở vị trí này.`);
 });
 
@@ -12016,6 +12031,7 @@ document.addEventListener('keydown', function(e){
   if(confirmSingleRow(tr)){
     saveStateToStorage();
     renderKhoSearchPage();
+    scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS], 'Kết quả vừa xác nhận');
   }
 });
 
