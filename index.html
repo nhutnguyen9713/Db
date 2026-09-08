@@ -2015,6 +2015,12 @@
     </div>
   </div>
 
+  <div style="text-align:center; padding:14px 0 4px;">
+    <button type="button" class="btn-export-excel" id="item-cbm-open-library" style="font-size:11px; padding:5px 12px; opacity:0.75;" title="Xem/xuất Excel thư viện CBM theo từng mã hàng — tự gom từ cột CBM mỗi lần tải Plan mới">
+      📦 Thư viện CBM
+    </button>
+  </div>
+
   <footer>
     <span id="foot-left">—</span>
     <span id="foot-right">Nguồn: sheet "Du lieu goc" · Kho phân loại theo Locator Name (3A/3B/2B/DG1)</span>
@@ -3029,6 +3035,42 @@
   </div>
 </div>
 
+<div class="pick-slip-overlay" id="item-cbm-conflict-overlay">
+  <div class="pick-slip-box">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;">⚖️ CBM khác với dữ liệu đã lưu</div>
+    </div>
+    <div class="pick-slip-content">
+      <div class="ps-note" id="item-cbm-conflict-note" style="margin-bottom:10px;"></div>
+      <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+        <button type="button" class="btn-export-excel" id="item-cbm-keep-all-old">Giữ tất cả bản CŨ</button>
+        <button type="button" class="btn-export-excel" id="item-cbm-keep-all-new">Giữ tất cả bản MỚI</button>
+      </div>
+      <div id="item-cbm-conflict-list"></div>
+    </div>
+    <div class="pick-slip-toolbar" style="border-top:0.5px solid var(--border); border-bottom:none;">
+      <button type="button" class="btn-update btn-ghost-outline" id="item-cbm-conflict-close" style="margin-left:auto;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        Xong (mã chưa chọn sẽ giữ bản cũ)
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="pick-slip-overlay" id="item-cbm-library-overlay">
+  <div class="pick-slip-box">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;">📦 Thư viện CBM theo mã hàng</div>
+      <button type="button" class="btn-export-excel" id="item-cbm-export-excel">↓ Xuất Excel</button>
+      <button type="button" class="btn-update btn-ghost-outline" id="item-cbm-library-close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        Đóng
+      </button>
+    </div>
+    <div class="pick-slip-content" id="item-cbm-library-content"></div>
+  </div>
+</div>
+
 <div class="gi-qr-overlay" id="gi-qr-overlay">
   <div class="gi-qr-box">
     <button type="button" class="gi-qr-close" id="gi-qr-close" title="Đóng">
@@ -3298,6 +3340,29 @@ async function fvIdbSet(key, val){
 
 // Bộ nhớ tạm thay cho localStorage — mọi module dùng LS.getItem/setItem/removeItem như cũ
 const _mem = {};
+// Tiền tố khoá localStorage THẬT của trình duyệt, dùng làm BẢN SAO LƯU CỤC BỘ của _mem — trước đây
+// _mem chỉ tồn tại trong bộ nhớ tạm (mất khi đóng tab), toàn bộ dữ liệu (tồn kho, Plan, đã xác nhận…)
+// phải phụ thuộc HOÀN TOÀN vào Cloud/File mỗi lần mở lại trang, không có gì dự phòng ở máy nếu Cloud
+// lỗi/chậm/mạng rớt. Giờ mọi thay đổi cũng được ghi thêm 1 bản y hệt vào localStorage thật của trình
+// duyệt này, và được nạp lại làm bản nền NGAY khi mở trang (trước khi Cloud/File kịp phản hồi) — nếu
+// Cloud đọc lỗi/chậm, người dùng vẫn thấy đúng dữ liệu gần nhất máy này từng có, không bị trắng trơn.
+const TN5_LOCAL_BACKUP_PREFIX = 'tn5_local_';
+function tn5SeedMemFromLocalBackup(){
+  try{
+    for(let i = 0; i < localStorage.length; i++){
+      const lsKey = localStorage.key(i);
+      if(lsKey && lsKey.indexOf(TN5_LOCAL_BACKUP_PREFIX) === 0){
+        _mem[lsKey.slice(TN5_LOCAL_BACKUP_PREFIX.length)] = localStorage.getItem(lsKey);
+      }
+    }
+  }catch(e){ console.warn('Không đọc được bản sao lưu cục bộ trong trình duyệt:', e); }
+}
+function tn5PersistMemToLocalBackup(){
+  try{
+    Object.keys(_mem).forEach(k => localStorage.setItem(TN5_LOCAL_BACKUP_PREFIX + k, _mem[k]));
+  }catch(e){ console.warn('Không ghi được bản sao lưu cục bộ vào trình duyệt (có thể do đầy dung lượng):', e); }
+}
+tn5SeedMemFromLocalBackup();
 let hasUnsavedChanges = false;
 // Tên hiển thị dễ hiểu cho từng loại dữ liệu — dùng để mô tả CHÍNH XÁC vừa thay đổi phần nào,
 // thay vì chỉ báo chung chung "có thay đổi chưa lưu".
@@ -3317,6 +3382,7 @@ const STORAGE_KEY_LABELS = {
   tn5_dashboard_scanned_gi_v1: 'Danh sách GI đã quét',
   tn5_dashboard_gi_scan_log_v1: 'Nhật ký GI đã quét (theo vị trí)',
   tn5_dashboard_cont_ship_v1: 'Dữ liệu Transaction (Ship)',
+  tn5_dashboard_item_cbm_v1: 'Thư viện CBM theo mã hàng',
   tn5_dashboard_confirmed_history_v1: 'Lịch sử đã lưu theo ngày'
 };
 
@@ -3352,6 +3418,7 @@ function clearUnsavedChanges(){
   hasUnsavedChanges = false;
   _localInventoryDirty = false;
   _localShipDirty = false;
+  _localContOverridesDirty = false;
   const btn = document.getElementById('btn-save-cloud');
   if(btn) btn.classList.remove('has-changes');
 }
@@ -3361,12 +3428,16 @@ const LS = {
   // Cloud khi người dùng bấm nút "Lưu" (xem btn-save-cloud). Lý do: cơ chế tự động ghi có debounce
   // trước đây từng làm mất dữ liệu nếu người dùng đóng tab ngay sau khi thao tác, hoặc bị ghi đè
   // ngoài ý muốn giữa nhiều tab/thiết bị. Ở đây chỉ đánh dấu "có thay đổi chưa lưu".
+  // Riêng bản sao lưu cục bộ (localStorage thật) thì ghi NGAY, không đợi bấm "Lưu" — đây chỉ là dự
+  // phòng cho MÁY NÀY, không phải đồng bộ Cloud, nên không có rủi ro ghi đè máy khác.
   setItem(k, v){
     _mem[k] = String(v);
+    try{ localStorage.setItem(TN5_LOCAL_BACKUP_PREFIX + k, _mem[k]); }catch(e){}
     markUnsavedChanges(k);
   },
   removeItem(k){
     delete _mem[k];
+    try{ localStorage.removeItem(TN5_LOCAL_BACKUP_PREFIX + k); }catch(e){}
     markUnsavedChanges(k);
   }
 };
@@ -3754,6 +3825,7 @@ const CloudVault = {
 
     Object.keys(_mem).forEach(k => delete _mem[k]);
     Object.assign(_mem, cloudData, preserved);
+    tn5PersistMemToLocalBackup(); // cập nhật luôn bản sao lưu cục bộ theo đúng dữ liệu Cloud mới nhất
 
     if(typeof FileVault !== 'undefined') FileVault._runReloaders();
 
@@ -4143,6 +4215,9 @@ function saveStateToStorage(){
     if(contShipData) LS.setItem(STORAGE_KEY_CONT_SHIP, JSON.stringify(contShipSerialize(contShipData)));
     else LS.removeItem(STORAGE_KEY_CONT_SHIP);
 
+    if(Object.keys(itemCbmLibrary).length) LS.setItem(STORAGE_KEY_ITEM_CBM, JSON.stringify(itemCbmLibrary));
+    else LS.removeItem(STORAGE_KEY_ITEM_CBM);
+
     if(Object.keys(confirmedHistory).length) LS.setItem(STORAGE_KEY_CONFIRMED_HISTORY, JSON.stringify(confirmedHistory));
     else LS.removeItem(STORAGE_KEY_CONFIRMED_HISTORY);
   }catch(err){
@@ -4168,6 +4243,7 @@ function loadStateFromStorage(){
     const scannedGiRaw = LS.getItem(STORAGE_KEY_SCANNED_GI);
     const giLogRaw = LS.getItem(STORAGE_KEY_GI_LOG);
     const contShipRaw = LS.getItem(STORAGE_KEY_CONT_SHIP);
+    const itemCbmRaw = LS.getItem(STORAGE_KEY_ITEM_CBM);
     const confirmedHistoryRaw = LS.getItem(STORAGE_KEY_CONFIRMED_HISTORY);
     return {
       inv: invRaw ? JSON.parse(invRaw, jsonReviver) : null,
@@ -4185,11 +4261,12 @@ function loadStateFromStorage(){
       scannedGi: scannedGiRaw ? JSON.parse(scannedGiRaw) : [],
       giScanLog: giLogRaw ? JSON.parse(giLogRaw) : [],
       contShip: contShipRaw ? contShipDeserialize(JSON.parse(contShipRaw)) : null,
+      itemCbm: itemCbmRaw ? JSON.parse(itemCbmRaw) : {},
       confirmedHistory: confirmedHistoryRaw ? JSON.parse(confirmedHistoryRaw) : {}
     };
   }catch(err){
     console.warn('Không đọc được dữ liệu đã lưu:', err);
-    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, confirmedHistory: {} };
+    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, confirmedHistory: {} };
   }
 }
 
@@ -4210,13 +4287,14 @@ function clearStoredState(){
   LS.removeItem(STORAGE_KEY_SCANNED_GI);
   LS.removeItem(STORAGE_KEY_GI_LOG);
   LS.removeItem(STORAGE_KEY_CONT_SHIP);
+  LS.removeItem(STORAGE_KEY_ITEM_CBM);
   LS.removeItem(STORAGE_KEY_CONFIRMED_HISTORY);
 }
 
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.25';
+const APP_VERSION = 'v1.28';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4225,6 +4303,11 @@ let _localInventoryDirty = false;
 // Tương tự _localInventoryDirty nhưng cho dữ liệu Transaction (Ship) — TRUE khi CHÍNH máy này vừa tải
 // file Ship mới (chưa kịp Lưu lên Cloud).
 let _localShipDirty = false;
+// Dùng chung cho 3 loại tuỳ chỉnh trên bảng Picking Status: Kho chọn tay (manualKhoOverrides), đánh
+// dấu Pick xong tay (manualPickedContainers), ẩn/khôi phục container (hiddenPlanContainers) — TRUE khi
+// CHÍNH máy này vừa tự đổi 1 trong 3 thứ này (chưa kịp Lưu lên Cloud), y hệt lý do có
+// _localInventoryDirty/_localShipDirty: tránh máy khác lỡ tay đẩy bản CŨ đè lên bản mới khi bấm Lưu.
+let _localContOverridesDirty = false;
 
 /* ============ dữ liệu gốc nhúng sẵn (rút gọn để demo) ============ */
 const DEFAULT_DATA = {"snapshot_date": "—", "total_qty": 0, "distinct_items": 0, "distinct_locators": 0, "distinct_pallets": 0, "n_rows": 0, "pass_qty": 0, "ng_qty": 0, "kho_order": ["Kho 2B", "Kho 3A", "Kho 3B", "Kho DG1"], "qty_by_kho": {"Kho 2B": 0, "Kho 3A": 0, "Kho 3B": 0, "Kho DG1": 0}, "kho_oqc": {"Kho 2B": {"PASS": 0, "NG": 0}, "Kho 3A": {"PASS": 0, "NG": 0}, "Kho 3B": {"PASS": 0, "NG": 0}, "Kho DG1": {"PASS": 0, "NG": 0}}, "top_buyers": [], "other_buyers_qty": 0, "top_items": [], "top_locators": [], "aging": [], "kho_detail": {"Kho 2B": [], "Kho 3A": [], "Kho 3B": [], "Kho DG1": []}, "pallet_by_kho": {"Kho 2B": 0, "Kho 3A": 0, "Kho 3B": 0, "Kho DG1": 0}, "kho_oqc_pallet": {"Kho 2B": {"PASS": 0, "NG": 0}, "Kho 3A": {"PASS": 0, "NG": 0}, "Kho 3B": {"PASS": 0, "NG": 0}, "Kho DG1": {"PASS": 0, "NG": 0}}};
@@ -5811,6 +5894,9 @@ document.querySelectorAll('.plan-file-input').forEach(input => {
       touchUpdatedAt();
       saveStateToStorage();
       if(statusEl){ statusEl.className = 'plan-status ok'; statusEl.textContent = `✓ ${file.name} · ${agg.itemCount} mã · ${fmt(agg.totalQty)} Pcs`; }
+      // Cập nhật thư viện CBM/đơn vị theo từng mã hàng — mã trùng có CBM khác rõ rệt sẽ hỏi lại qua
+      // popup, mã mới/khớp thì tự cập nhật luôn.
+      itemCbmMergeFromPlan(extractItemCbmFromPlanRows(agg.detailRows), `Plan ${type} — ${file.name}`);
       // Plan hay bị mất do quên bấm "Lưu" thủ công — lên lịch tự lưu lên Cloud (gộp các lần tải
       // gần nhau thành 1 request duy nhất, xem schedulePlanAutoSaveToCloud() ở trên).
       schedulePlanAutoSaveToCloud();
@@ -6134,7 +6220,9 @@ function togglePickedManual(type, cNo, loadDate, planTime){
   const key = contInstanceKey(type, cNo, loadDate, planTime);
   if(manualPickedContainers[key]) delete manualPickedContainers[key];
   else manualPickedContainers[key] = { at: Date.now() };
+  _localContOverridesDirty = true;
   saveStateToStorage();
+  scheduleAutoSaveToCloud('contoverride', [STORAGE_KEY_MANUAL_PICKED], 'Đánh dấu Pick xong tay');
   renderPlanPanel(); // vẽ lại cả bảng so sánh SL Plan vs Tồn kho để cập nhật ngay, không trễ nhịp
   if(typeof renderKioskPage === 'function' && document.getElementById('page-kiosk') && document.getElementById('page-kiosk').style.display !== 'none'){
     renderKioskPage();
@@ -6156,13 +6244,17 @@ function deleteContainerFromPlan(type, cNo, loadDate, planTime){
   );
   if(!ok) return;
   hiddenPlanContainers[key] = { at: Date.now(), type, cNo, loadDate: loadDate || '', planTime: planTime || '' };
+  _localContOverridesDirty = true;
   saveStateToStorage();
+  scheduleAutoSaveToCloud('contoverride', [STORAGE_KEY_HIDDEN_CONT], 'Ẩn container');
   renderPlanPanel();
 }
 function restoreHiddenContainer(type, cNo, loadDate, planTime){
   const key = contInstanceKey(type, cNo, loadDate, planTime);
   delete hiddenPlanContainers[key];
+  _localContOverridesDirty = true;
   saveStateToStorage();
+  scheduleAutoSaveToCloud('contoverride', [STORAGE_KEY_HIDDEN_CONT], 'Khôi phục container');
   renderPlanPanel();
 }
 
@@ -6208,7 +6300,9 @@ function setManualKho(type, cNo, loadDate, planTime, khoValue){
   } else {
     delete manualKhoOverrides[key];
   }
+  _localContOverridesDirty = true;
   saveStateToStorage();
+  scheduleAutoSaveToCloud('contoverride', [STORAGE_KEY_MANUAL_KHO], 'Đổi Kho thủ công');
   renderPlanPanel();
 }
 
@@ -6218,6 +6312,61 @@ let contPickAllRows = [];
 // Chỉ lưu trong phiên hiện tại (không đồng bộ Cloud/localStorage), không ảnh hưởng tới số liệu KPI.
 let contShipData = null; // { byRef: Map<REF, qty>, byRefItem: Map<REF, Map<item, qty>>, fileName, updatedAtText }
 const STORAGE_KEY_CONT_SHIP = 'tn5_dashboard_cont_ship_v1';
+
+// Thư viện CBM/đơn vị theo từng mã hàng — gom từ cột CBM trong các Plan đã tải (Row/FC/HCP), tự cập
+// nhật mỗi lần tải Plan mới. Khác cột CBM thô trong Plan (tổng CBM của cả lô), đây lưu CBM TÍNH TRÊN 1
+// ĐƠN VỊ (cbm/qty) — vốn là thuộc tính vật lý ổn định của mã hàng, dùng lại được lâu dài về sau dù
+// không còn Plan chứa mã đó nữa.
+let itemCbmLibrary = {}; // { item: { cbm, updatedAt (ISO), source } }
+const STORAGE_KEY_ITEM_CBM = 'tn5_dashboard_item_cbm_v1';
+
+// Từ detailRows của 1 Plan vừa tải, tính CBM/đơn vị bình quân gia quyền cho từng mã (gộp mọi PO/cont
+// cùng mã trong plan này lại: tổng CBM / tổng SL) — đáng tin hơn lấy đại 1 dòng vì nhiều dòng cùng mã
+// có thể lệch làm tròn nhỏ.
+function extractItemCbmFromPlanRows(detailRows){
+  const sums = {};
+  (detailRows || []).forEach(r => {
+    const item = normalizeItemCode(r.item || '');
+    const qty = Number(r.qty) || 0;
+    const cbm = Number(r.cbm);
+    if(!item || qty <= 0 || !isFinite(cbm) || cbm <= 0) return;
+    if(!sums[item]) sums[item] = { cbmSum: 0, qtySum: 0 };
+    sums[item].cbmSum += cbm;
+    sums[item].qtySum += qty;
+  });
+  const result = {};
+  Object.entries(sums).forEach(([item, s]) => { if(s.qtySum > 0) result[item] = s.cbmSum / s.qtySum; });
+  return result;
+}
+
+// Gộp bản CBM mới trích từ 1 Plan vừa tải vào thư viện đang có — mã CHƯA có hoặc gần như giống hệt (≤
+// 0.5% lệch, coi là sai số làm tròn) thì tự cập nhật luôn; mã có CBM KHÁC RÕ RỆT với bản đã lưu thì để
+// dành hỏi lại người dùng qua popup (itemCbmShowConflictPopup) thay vì âm thầm ghi đè.
+function itemCbmMergeFromPlan(newMap, sourceLabel){
+  const conflicts = [];
+  const now = new Date().toISOString();
+  let appliedCount = 0;
+  Object.entries(newMap).forEach(([item, cbmPerUnit]) => {
+    const existing = itemCbmLibrary[item];
+    if(!existing){
+      itemCbmLibrary[item] = { cbm: cbmPerUnit, updatedAt: now, source: sourceLabel };
+      appliedCount++;
+    } else {
+      const relDiff = existing.cbm > 0 ? Math.abs(existing.cbm - cbmPerUnit) / existing.cbm : 1;
+      if(relDiff > 0.005){
+        conflicts.push({ item, oldCbm: existing.cbm, newCbm: cbmPerUnit, oldSource: existing.source, newSource: sourceLabel });
+      } else {
+        itemCbmLibrary[item] = { cbm: cbmPerUnit, updatedAt: now, source: sourceLabel };
+        appliedCount++;
+      }
+    }
+  });
+  if(appliedCount){
+    saveStateToStorage();
+    scheduleAutoSaveToCloud('itemcbm', [STORAGE_KEY_ITEM_CBM], 'Cập nhật thư viện CBM');
+  }
+  if(conflicts.length) itemCbmShowConflictPopup(conflicts);
+}
 
 // Map/Set không tự JSON.stringify được — chuyển qua lại dạng object thường để lưu trữ/đồng bộ Cloud.
 function contShipSerialize(data){
@@ -9166,6 +9315,122 @@ if(giLogCloseBtn) giLogCloseBtn.addEventListener('click', () => {
   if(overlay) overlay.classList.remove('show');
 });
 
+/* ============ Thư viện CBM theo mã hàng (gom từ Plan) ============ */
+let _itemCbmPendingConflicts = [];
+
+function itemCbmShowConflictPopup(conflicts){
+  _itemCbmPendingConflicts = conflicts;
+  const noteEl = document.getElementById('item-cbm-conflict-note');
+  if(noteEl) noteEl.textContent = `Phát hiện ${conflicts.length} mã có CBM/đơn vị khác với dữ liệu đã lưu trước đó (lệch trên 0.5%) — chọn giữ bản cũ hay bản mới cho từng mã, hoặc dùng 2 nút gộp nhanh bên trên.`;
+  itemCbmRenderConflictList();
+  const overlay = document.getElementById('item-cbm-conflict-overlay');
+  if(overlay) overlay.classList.add('show');
+}
+
+function itemCbmRenderConflictList(){
+  const listEl = document.getElementById('item-cbm-conflict-list');
+  if(!listEl) return;
+  if(!_itemCbmPendingConflicts.length){
+    listEl.innerHTML = `<div style="text-align:center; color:var(--teal); font-weight:700; padding:16px 0;">✓ Đã xử lý xong tất cả.</div>`;
+    return;
+  }
+  listEl.innerHTML = _itemCbmPendingConflicts.map(c => `
+    <div class="ps-compact-item">
+      <div class="ps-ci-name"><b>${escHtml(c.item)}</b></div>
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <span style="font-size:11px; color:#888;">Cũ: <b>${fmtDec(c.oldCbm,4)}</b></span>
+        <span style="font-size:11px; color:#888;">Mới: <b>${fmtDec(c.newCbm,4)}</b></span>
+        <button type="button" class="btn-export-excel item-cbm-keep-old-btn" data-item="${escAttr(c.item)}" style="font-size:11px; padding:3px 8px;">Giữ cũ</button>
+        <button type="button" class="btn-export-excel item-cbm-keep-new-btn" data-item="${escAttr(c.item)}" style="font-size:11px; padding:3px 8px;">Giữ mới</button>
+      </div>
+    </div>`).join('');
+}
+
+function itemCbmResolveConflict(item, keepNew){
+  const idx = _itemCbmPendingConflicts.findIndex(c => c.item === item);
+  if(idx === -1) return;
+  const c = _itemCbmPendingConflicts[idx];
+  if(keepNew) itemCbmLibrary[item] = { cbm: c.newCbm, updatedAt: new Date().toISOString(), source: c.newSource };
+  _itemCbmPendingConflicts.splice(idx, 1);
+  saveStateToStorage();
+  scheduleAutoSaveToCloud('itemcbm', [STORAGE_KEY_ITEM_CBM], 'Cập nhật thư viện CBM');
+  itemCbmRenderConflictList();
+}
+
+document.addEventListener('click', (e) => {
+  const keepOldBtn = e.target.closest('.item-cbm-keep-old-btn');
+  if(keepOldBtn){ itemCbmResolveConflict(keepOldBtn.dataset.item, false); return; }
+  const keepNewBtn = e.target.closest('.item-cbm-keep-new-btn');
+  if(keepNewBtn){ itemCbmResolveConflict(keepNewBtn.dataset.item, true); return; }
+});
+const itemCbmKeepAllOldBtn = document.getElementById('item-cbm-keep-all-old');
+if(itemCbmKeepAllOldBtn) itemCbmKeepAllOldBtn.addEventListener('click', () => {
+  _itemCbmPendingConflicts = [];
+  itemCbmRenderConflictList();
+});
+const itemCbmKeepAllNewBtn = document.getElementById('item-cbm-keep-all-new');
+if(itemCbmKeepAllNewBtn) itemCbmKeepAllNewBtn.addEventListener('click', () => {
+  const now = new Date().toISOString();
+  _itemCbmPendingConflicts.forEach(c => { itemCbmLibrary[c.item] = { cbm: c.newCbm, updatedAt: now, source: c.newSource }; });
+  _itemCbmPendingConflicts = [];
+  saveStateToStorage();
+  scheduleAutoSaveToCloud('itemcbm', [STORAGE_KEY_ITEM_CBM], 'Cập nhật thư viện CBM');
+  itemCbmRenderConflictList();
+});
+const itemCbmConflictCloseBtn = document.getElementById('item-cbm-conflict-close');
+if(itemCbmConflictCloseBtn) itemCbmConflictCloseBtn.addEventListener('click', () => {
+  const overlay = document.getElementById('item-cbm-conflict-overlay');
+  if(overlay) overlay.classList.remove('show');
+});
+
+function itemCbmRenderLibrary(){
+  const el = document.getElementById('item-cbm-library-content');
+  if(!el) return;
+  const items = Object.keys(itemCbmLibrary).sort();
+  if(!items.length){
+    el.innerHTML = `<div style="text-align:center; color:var(--muted-2); font-style:italic; padding:24px 0;">Chưa có dữ liệu — tải 1 Plan (Row/FC/HCP) có cột CBM để bắt đầu gom.</div>`;
+    return;
+  }
+  el.innerHTML = `<table class="kho-detail-table"><thead><tr><th>Item No.</th><th style="text-align:right">CBM/đơn vị</th><th>Nguồn</th><th>Cập nhật lúc</th></tr></thead><tbody>
+    ${items.map(item => {
+      const e = itemCbmLibrary[item];
+      const dt = e.updatedAt ? new Date(e.updatedAt) : null;
+      return `<tr><td>${escHtml(item)}</td><td style="text-align:right">${fmtDec(e.cbm,4)}</td><td>${escHtml(e.source||'')}</td><td>${dt ? escHtml(fmtDateTime(dt)) : '—'}</td></tr>`;
+    }).join('')}
+  </tbody></table>`;
+}
+const itemCbmOpenBtn = document.getElementById('item-cbm-open-library');
+if(itemCbmOpenBtn) itemCbmOpenBtn.addEventListener('click', () => {
+  itemCbmRenderLibrary();
+  const overlay = document.getElementById('item-cbm-library-overlay');
+  if(overlay) overlay.classList.add('show');
+});
+const itemCbmLibCloseBtn = document.getElementById('item-cbm-library-close');
+if(itemCbmLibCloseBtn) itemCbmLibCloseBtn.addEventListener('click', () => {
+  const overlay = document.getElementById('item-cbm-library-overlay');
+  if(overlay) overlay.classList.remove('show');
+});
+const itemCbmExportBtn = document.getElementById('item-cbm-export-excel');
+if(itemCbmExportBtn) itemCbmExportBtn.addEventListener('click', () => {
+  if(!LIB_XLSX_OK){ alert('Không xuất được Excel: thư viện SheetJS chưa tải được (cần Internet). Hãy mở file này bằng Chrome có kết nối mạng rồi thử lại.'); return; }
+  const items = Object.keys(itemCbmLibrary).sort();
+  const header = ['Item No.', 'CBM/don vi', 'Nguon', 'Cap nhat luc'];
+  const rows = items.map(item => {
+    const e = itemCbmLibrary[item];
+    const dt = e.updatedAt ? new Date(e.updatedAt) : null;
+    return [item, e.cbm, e.source || '', dt ? fmtDateTime(dt) : ''];
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  ws['!cols'] = [{wch:16},{wch:14},{wch:32},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Thu vien CBM'.slice(0,31));
+  const pad = n => String(n).padStart(2,'0');
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+  XLSX.writeFile(wb, `Thu_vien_CBM_${stamp}.xlsx`);
+});
+
+
 // Dùng chung cho cả nút trong overlay quét (qr-scan-clear-history-btn) lẫn nút ngoài trang chính
 // (qr-gi-clear-btn) — cùng 1 hành vi, chỉ khác nơi hiện thông báo kết quả.
 function qrScanClearHistory(useOverlayStatus){
@@ -10488,6 +10753,19 @@ function mergeConfirmedDataFromCloud(cloudData){
     const existingGis = new Set(giScanLog.map(g => g.gi));
     cloudGiLog.forEach(g => { if(!existingGis.has(g.gi) && !_deletedGiKeys.has(g.gi)){ giScanLog.push(g); existingGis.add(g.gi); } });
   }catch(e){ console.warn('Không gộp được giScanLog từ Cloud:', e); }
+
+  try{
+    // Thư viện CBM: mỗi mã hàng gộp riêng theo mốc updatedAt mới nhất — mã nào Cloud có bản MỚI HƠN
+    // (do máy khác vừa tải Plan cập nhật) thì lấy theo Cloud; mã nào máy này có bản mới hơn thì giữ
+    // nguyên. Không dùng kiểu "toàn bộ ghi đè" vì đây là thư viện GÓP DẦN qua nhiều Plan/nhiều máy.
+    const cloudItemCbm = cloudData[STORAGE_KEY_ITEM_CBM] ? JSON.parse(cloudData[STORAGE_KEY_ITEM_CBM]) : {};
+    Object.entries(cloudItemCbm).forEach(([item, entry]) => {
+      const local = itemCbmLibrary[item];
+      if(!local || (entry && entry.updatedAt && (!local.updatedAt || entry.updatedAt > local.updatedAt))){
+        itemCbmLibrary[item] = entry;
+      }
+    });
+  }catch(e){ console.warn('Không gộp được thư viện CBM từ Cloud:', e); }
 
   try{
     const cloudHist = cloudData[STORAGE_KEY_CONFIRMED_HISTORY] ? JSON.parse(cloudData[STORAGE_KEY_CONFIRMED_HISTORY]) : {};
@@ -12785,6 +13063,7 @@ function initDashboard(){
   if(saved.scannedGi && saved.scannedGi.length > 0) scannedGiSet = new Set(saved.scannedGi);
   if(saved.giScanLog && saved.giScanLog.length > 0) giScanLog = saved.giScanLog;
   if(saved.contShip) contShipData = saved.contShip;
+  if(saved.itemCbm && Object.keys(saved.itemCbm).length > 0) itemCbmLibrary = saved.itemCbm;
   if(saved.confirmedHistory && Object.keys(saved.confirmedHistory).length > 0) confirmedHistory = saved.confirmedHistory;
   if(saved.ktInputs && Object.keys(saved.ktInputs).length > 0) ktInputValues = saved.ktInputs;
   if(saved.plans){
@@ -12959,6 +13238,22 @@ if(btnSaveCloud){
               contShipData = cloudData[STORAGE_KEY_CONT_SHIP] ? contShipDeserialize(JSON.parse(cloudData[STORAGE_KEY_CONT_SHIP])) : null;
               renderPlanPanel();
             }catch(e){ console.warn('Không lấy được dữ liệu Ship mới nhất từ Cloud trước khi lưu:', e); }
+          }
+          // Tương tự tồn kho/Ship: máy này KHÔNG tự đổi Kho thủ công/đánh dấu Pick xong tay/ẩn container
+          // nào — nếu Cloud đang có bản KHÁC (do máy khác vừa đổi), lấy đúng bản đó về trước khi lưu.
+          if(!_localContOverridesDirty){
+            try{
+              if(cloudData[STORAGE_KEY_MANUAL_KHO] !== undefined && cloudData[STORAGE_KEY_MANUAL_KHO] !== _mem[STORAGE_KEY_MANUAL_KHO]){
+                manualKhoOverrides = cloudData[STORAGE_KEY_MANUAL_KHO] ? JSON.parse(cloudData[STORAGE_KEY_MANUAL_KHO]) : {};
+              }
+              if(cloudData[STORAGE_KEY_MANUAL_PICKED] !== undefined && cloudData[STORAGE_KEY_MANUAL_PICKED] !== _mem[STORAGE_KEY_MANUAL_PICKED]){
+                manualPickedContainers = cloudData[STORAGE_KEY_MANUAL_PICKED] ? JSON.parse(cloudData[STORAGE_KEY_MANUAL_PICKED]) : {};
+              }
+              if(cloudData[STORAGE_KEY_HIDDEN_CONT] !== undefined && cloudData[STORAGE_KEY_HIDDEN_CONT] !== _mem[STORAGE_KEY_HIDDEN_CONT]){
+                hiddenPlanContainers = cloudData[STORAGE_KEY_HIDDEN_CONT] ? JSON.parse(cloudData[STORAGE_KEY_HIDDEN_CONT]) : {};
+              }
+              renderPlanPanel();
+            }catch(e){ console.warn('Không lấy được tuỳ chỉnh container mới nhất từ Cloud trước khi lưu:', e); }
           }
           saveStateToStorage();
           renderConfirmedList();
