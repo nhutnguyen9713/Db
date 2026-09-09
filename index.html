@@ -3451,6 +3451,67 @@ async function fvIdbSet(key, val){
   }catch(e){ return false; }
 }
 
+/* ============ Bản sao lưu cục bộ CỠ LỚN bằng IndexedDB (bổ sung cho localStorage) ============
+   localStorage giới hạn ~5-10MB/domain — với dữ liệu tồn kho + lịch sử tích luỹ lâu ngày có thể VƯỢT
+   hạn mức này (ghi bị lặng lẽ thất bại, xem catch trong tn5PersistMemToLocalBackup), khiến máy phải
+   phụ thuộc HOÀN TOÀN vào tải lại từ Cloud mỗi lần mở trang dù dữ liệu chưa đổi gì — tốn băng thông
+   Firebase (free tier chỉ 10GB/tháng). IndexedDB không có giới hạn nhỏ như vậy nên dùng làm bản sao
+   lưu ĐẦY ĐỦ hơn — BỔ SUNG cho bản sao lưu localStorage hiện có (không thay thế), mỗi bản là 1 lớp
+   dự phòng độc lập; xem tn5SeedMemFromLocalBackup() để rõ cách 2 lớp này kết hợp lúc khởi động. */
+const SC_DB_NAME = 'tn5_statecache_db';
+const SC_STORE = 'mem';
+function scIdbOpen(){
+  return new Promise((resolve, reject) => {
+    try{
+      const req = indexedDB.open(SC_DB_NAME, 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore(SC_STORE); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    }catch(e){ reject(e); }
+  });
+}
+async function scIdbSetKey(key, val){
+  try{
+    const db = await scIdbOpen();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(SC_STORE, 'readwrite');
+      tx.objectStore(SC_STORE).put(val, key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+    });
+  }catch(e){ return false; }
+}
+async function scIdbDeleteKey(key){
+  try{
+    const db = await scIdbOpen();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(SC_STORE, 'readwrite');
+      tx.objectStore(SC_STORE).delete(key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+    });
+  }catch(e){ return false; }
+}
+async function scIdbGetAll(){
+  try{
+    const db = await scIdbOpen();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(SC_STORE, 'readonly');
+      const store = tx.objectStore(SC_STORE);
+      const keysReq = store.getAllKeys();
+      const valsReq = store.getAll();
+      tx.oncomplete = () => {
+        const out = {};
+        const keys = keysReq.result || [];
+        const vals = valsReq.result || [];
+        keys.forEach((k, i) => { out[k] = vals[i]; });
+        resolve(out);
+      };
+      tx.onerror = () => reject(tx.error);
+    });
+  }catch(e){ return {}; }
+}
+
 // Bộ nhớ tạm thay cho localStorage — mọi module dùng LS.getItem/setItem/removeItem như cũ
 const _mem = {};
 // Tiền tố khoá localStorage THẬT của trình duyệt, dùng làm BẢN SAO LƯU CỤC BỘ của _mem — trước đây
@@ -3474,8 +3535,32 @@ function tn5PersistMemToLocalBackup(){
   try{
     Object.keys(_mem).forEach(k => localStorage.setItem(TN5_LOCAL_BACKUP_PREFIX + k, _mem[k]));
   }catch(e){ console.warn('Không ghi được bản sao lưu cục bộ vào trình duyệt (có thể do đầy dung lượng):', e); }
+  // Bản sao lưu IndexedDB (không giới hạn nhỏ như localStorage) — ghi bất đồng bộ, không chặn luồng
+  // chính; lỗi (nếu có) đã được nuốt bên trong scIdbSetKey.
+  Object.keys(_mem).forEach(k => scIdbSetKey(k, _mem[k]));
+}
+// Ghi mốc thời gian đồng bộ ("_meta_updatedAt") — dùng để CloudVault kiểm tra nhanh Cloud có gì mới
+// hơn máy này đang cache hay không (chỉ tải vài chục byte) TRƯỚC KHI quyết định có cần tải nguyên
+// khối dữ liệu lớn hay không. Cố tình KHÔNG đi qua LS.setItem() vì đây là mốc đồng bộ tự động, không
+// phải thay đổi của người dùng — không được làm bật cờ "có thay đổi chưa lưu".
+const STORAGE_KEY_META_STAMP = '_meta_updatedAt';
+function tn5SetMetaStamp(stamp){
+  _mem[STORAGE_KEY_META_STAMP] = String(stamp);
+  try{ localStorage.setItem(TN5_LOCAL_BACKUP_PREFIX + STORAGE_KEY_META_STAMP, _mem[STORAGE_KEY_META_STAMP]); }catch(e){}
+  scIdbSetKey(STORAGE_KEY_META_STAMP, _mem[STORAGE_KEY_META_STAMP]);
 }
 tn5SeedMemFromLocalBackup();
+// IndexedDB không giới hạn nhỏ như localStorage -> dùng làm lớp phục hồi BỔ SUNG, chạy bất đồng bộ
+// SAU khi đã nạp xong bản localStorage (không làm chậm/đổi thứ tự khởi động trang — trang vẫn render
+// ngay với dữ liệu localStorage như trước). Chỉ bổ sung những mục localStorage KHÔNG có (VD: từng bị
+// lỗi "đầy dung lượng" ở phiên trước) — không bao giờ ghi đè mục đã có sẵn, tránh dùng nhầm bản cũ hơn.
+scIdbGetAll().then(idbData => {
+  const missingKeys = Object.keys(idbData).filter(k => !(k in _mem));
+  if(!missingKeys.length) return;
+  missingKeys.forEach(k => { _mem[k] = idbData[k]; });
+  console.info('Đã khôi phục thêm ' + missingKeys.length + ' mục từ bản sao lưu IndexedDB (không có trong localStorage): ' + missingKeys.join(', '));
+  if(typeof FileVault !== 'undefined' && FileVault._runReloaders) FileVault._runReloaders();
+}).catch(e => console.warn('Không đọc được bản sao lưu IndexedDB:', e));
 let hasUnsavedChanges = false;
 // Tên hiển thị dễ hiểu cho từng loại dữ liệu — dùng để mô tả CHÍNH XÁC vừa thay đổi phần nào,
 // thay vì chỉ báo chung chung "có thay đổi chưa lưu".
@@ -3497,7 +3582,8 @@ const STORAGE_KEY_LABELS = {
   tn5_dashboard_cont_ship_v1: 'Dữ liệu Transaction (Ship)',
   tn5_dashboard_item_cbm_v1: 'Thư viện CBM theo mã hàng',
   tn5_dashboard_kho_grid_v1: 'Lưới sơ đồ kho tuỳ chỉnh',
-  tn5_dashboard_confirmed_history_v1: 'Lịch sử đã lưu theo ngày'
+  tn5_dashboard_confirmed_history_v1: 'Lịch sử đã lưu theo ngày',
+  _meta_updatedAt: 'Mốc đồng bộ (kiểm tra Cloud có gì mới trước khi tải)'
 };
 
 // Gộp nhiều thay đổi xảy ra gần nhau (VD: 1 thao tác ghi luôn nhiều mục cùng lúc) thành ĐÚNG 1 dòng
@@ -3548,11 +3634,13 @@ const LS = {
   setItem(k, v){
     _mem[k] = String(v);
     try{ localStorage.setItem(TN5_LOCAL_BACKUP_PREFIX + k, _mem[k]); }catch(e){}
+    scIdbSetKey(k, _mem[k]); // bản sao lưu IndexedDB — bổ sung, không giới hạn nhỏ như localStorage
     markUnsavedChanges(k);
   },
   removeItem(k){
     delete _mem[k];
     try{ localStorage.removeItem(TN5_LOCAL_BACKUP_PREFIX + k); }catch(e){}
+    scIdbDeleteKey(k);
     markUnsavedChanges(k);
   }
 };
@@ -3775,6 +3863,7 @@ const CloudVault = {
   _retryTimer: null,
   _retryCount: 0,
   _hadError: false,
+  _gotInitialData: false, // đã áp dụng được ít nhất 1 bản dữ liệu Cloud (qua REST hoặc realtime) chưa
   // --- Realtime (WebSocket, qua Firebase SDK) — lớp BỔ SUNG bên trên REST đã có sẵn ở trên. REST
   // vẫn là "xương sống" cho đọc/ghi chủ động (bấm Lưu, Kết nối, Kiểm tra...) vì đã có sẵn cơ chế
   // kiểm chứng & retry chắc chắn. Realtime CHỈ để tự phát hiện khi CÓ THIẾT BỊ KHÁC vừa ghi thay đổi
@@ -3804,17 +3893,26 @@ const CloudVault = {
     if(tokenInput) tokenInput.value = this.token;
     if(apiKeyInput) apiKeyInput.value = this.apiKey;
     if(this.url && this.token){
-      this._setStatus('Đang tải dữ liệu từ Cloud…', '');
       this._pushedLocalToEmptyCloud = false;
-      this.readAll().then(ok => {
-        const msg = ok
-          ? (this._pushedLocalToEmptyCloud
-              ? '✓ Cloud đang trống — đã tải dữ liệu hiện có trên máy này LÊN Cloud (không xoá mất dữ liệu cục bộ).'
-              : '✓ Đã đồng bộ với Cloud (Firebase).')
-          : '✗ Không tải được — kiểm tra lại Database URL / Database secret, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết.';
-        this._setStatus(msg, ok ? 'ok' : 'err');
-      });
-      try{ this._startRealtime(); }catch(e){ console.warn('CloudVault: lỗi khởi động realtime:', e); }
+      this._gotInitialData = false;
+      if(this.apiKey){
+        // CÓ Web API Key -> dùng THẲNG realtime (WebSocket) làm nguồn tải dữ liệu ban đầu, KHÔNG gọi
+        // thêm readAll() REST song song nữa — trước đây làm cả 2, tải trùng nguyên khối dữ liệu 2 lần
+        // ngay lúc mở trang (1 lần qua REST, 1 lần realtime tự tải khi vừa kết nối), tốn gấp đôi băng
+        // thông. _startRealtime() tự có phương án dự phòng gọi lại REST nếu realtime lỗi (xem bên dưới).
+        this._setStatus('Đang bật đồng bộ realtime…', '');
+        try{ this._startRealtime(); }catch(e){
+          console.warn('CloudVault: lỗi khởi động realtime:', e);
+          this._smartReadAll();
+        }
+      } else {
+        // KHÔNG có Web API Key -> chỉ còn REST. Trước khi tải TOÀN BỘ dữ liệu (có thể tới hàng MB),
+        // kiểm tra 1 mốc nhỏ (_meta_updatedAt, chỉ vài chục byte) xem Cloud có gì mới hơn bản đang
+        // cache cục bộ hay không — nếu không, dùng luôn cache, khỏi tải lại (tiết kiệm băng thông cho
+        // phần lớn các lần mở app khi chưa ai sửa gì kể từ lần trước).
+        this._setStatus('Đang kiểm tra dữ liệu Cloud…', '');
+        this._smartReadAll();
+      }
     } else {
       this._setStatus('Chưa kết nối Cloud — dán Database URL + Database secret rồi bấm "Kết nối".', '');
     }
@@ -3915,12 +4013,57 @@ const CloudVault = {
     }catch(e){ console.warn('CloudVault đọc lỗi:', e); return false; }
   },
 
+  // Đọc RIÊNG mốc "_meta_updatedAt" trên Cloud (chỉ vài chục byte) — KHÔNG đụng gì tới _mem/trạng
+  // thái cục bộ, chỉ để biết Cloud có mới hơn máy này đang cache hay không mà không cần tải nguyên
+  // khối dữ liệu lớn. Trả về null nếu không đọc được (mạng lỗi, node chưa từng có mốc này...) — khi
+  // đó _smartReadAll() coi như "chưa rõ" và tải đủ như bình thường, để an toàn không bỏ sót dữ liệu mới.
+  async _checkCloudStamp(){
+    try{
+      const url = this.url.replace(/\/+$/, '') + '/dashboard_data/' + STORAGE_KEY_META_STAMP + '.json';
+      const res = await fetch(url + '?auth=' + encodeURIComponent(this.token));
+      if(!res.ok) return null;
+      const stamp = await res.json();
+      return (stamp === null || stamp === undefined) ? null : String(stamp);
+    }catch(e){ return null; }
+  },
+
+  // Tải "thông minh": chỉ tải nguyên khối dữ liệu (readAll — có thể tới hàng MB) khi mốc trên Cloud
+  // THỰC SỰ khác mốc máy này đang cache cục bộ (đã cập nhật ở lần đồng bộ/ghi gần nhất) — nếu giống
+  // hệt, nghĩa là chưa ai (kể cả máy này) sửa gì kể từ lần đồng bộ trước, dùng thẳng cache là đủ,
+  // khỏi tải lại — đây chính là phần tiết kiệm băng thông Firebase nhiều nhất, vì phần lớn các lần mở
+  // app không ai vừa sửa gì cả. Chỉ dùng cho đường REST-only (không có Web API Key/realtime) — xem init().
+  async _smartReadAll(){
+    const localStamp = _mem[STORAGE_KEY_META_STAMP] || '';
+    const hasLocalData = Object.keys(_mem).some(k => k !== STORAGE_KEY_META_STAMP);
+    if(hasLocalData && localStamp){
+      const cloudStamp = await this._checkCloudStamp();
+      if(cloudStamp && cloudStamp === localStamp){
+        this._gotInitialData = true;
+        if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
+        this._setStatus('✓ Đã đồng bộ với Cloud (dữ liệu chưa đổi kể từ lần trước — dùng cache cục bộ, không tải lại để tiết kiệm băng thông).', 'ok');
+        return true;
+      }
+    }
+    const ok = await this.readAll();
+    const msg = ok
+      ? (this._pushedLocalToEmptyCloud
+          ? '✓ Cloud đang trống — đã tải dữ liệu hiện có trên máy này LÊN Cloud (không xoá mất dữ liệu cục bộ).'
+          : '✓ Đã đồng bộ với Cloud (Firebase).')
+      : '✗ Không tải được — kiểm tra lại Database URL / Database secret, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết.';
+    this._setStatus(msg, ok ? 'ok' : 'err');
+    return ok;
+  },
+
   // Áp dụng 1 bản dữ liệu Cloud (từ readAll() HOẶC từ listener realtime) vào _mem + render lại toàn
   // bộ trang — TÁCH RIÊNG ra khỏi readAll() để realtime dùng lại đúng 1 logic gộp duy nhất, không
   // viết 2 nơi dễ lệch nhau.
   async _applyCloudSnapshot(cloudData){
+    this._gotInitialData = true; // đã có ít nhất 1 bản dữ liệu Cloud thật sự áp dụng — dùng cho phương án dự phòng của realtime, xem _startRealtime()
     const cloudIsEmpty = Object.keys(cloudData).length === 0;
-    const localHasData = Object.keys(_mem).length > 0;
+    // Bỏ qua mốc _meta_updatedAt khi xét "máy này có dữ liệu thật hay không" — mốc này có thể còn
+    // sót lại (VD: sau khi bấm "Xoá dữ liệu" chỉ xoá các mục thật, không xoá riêng mốc) dù không còn
+    // dữ liệu thật nào, tránh đẩy nhầm 1 gói gần như rỗng (chỉ có mốc) lên Cloud.
+    const localHasData = Object.keys(_mem).some(k => k !== STORAGE_KEY_META_STAMP);
     if(cloudIsEmpty && localHasData){
       // Cloud đang TRỐNG (vd: mới tạo Database lần đầu, hoặc dữ liệu trên Cloud bị mất) nhưng
       // máy này đang có dữ liệu — đẩy dữ liệu hiện có trên máy LÊN Cloud thay vì xoá mất dữ liệu cục bộ
@@ -3979,10 +4122,15 @@ const CloudVault = {
     this._stopRealtime(); // huỷ kết nối realtime cũ (nếu có) trước khi mở kết nối mới
     if(!this.apiKey){
       this._setRealtimeStatus('ℹ Chưa nhập Web API Key — chỉ đồng bộ khi bấm nút (không tự động realtime). Xem hướng dẫn lấy Web API Key nếu muốn bật.', '');
+      // Không có Web API Key -> không thể dùng realtime làm nguồn tải ban đầu, phải tải qua REST
+      // (chỉ khi CHƯA có dữ liệu Cloud nào được áp dụng — tránh gọi lại REST thừa nếu init() hoặc
+      // connect() đã tải xong trước khi gọi hàm này).
+      if(!this._gotInitialData) this._smartReadAll();
       return;
     }
     if(typeof firebase === 'undefined'){
       this._setRealtimeStatus('⚠ Không tải được thư viện Firebase SDK (cần Internet) — không bật được realtime.', 'err');
+      if(!this._gotInitialData) this._smartReadAll(); // dự phòng: vẫn tải được dữ liệu qua REST bình thường
       return;
     }
     try{
@@ -3996,6 +4144,7 @@ const CloudVault = {
           this._fbRef.on('value', (snapshot) => this._onRealtimeValue(snapshot), (err) => {
             console.warn('CloudVault realtime lỗi:', err);
             this._setRealtimeStatus('⚠ Mất kết nối realtime: ' + err.message + ' — vẫn dùng được nút "Lưu"/"Làm mới dữ liệu" như bình thường.', 'err');
+            if(!this._gotInitialData) this._smartReadAll(); // chưa kịp tải được lần nào -> dự phòng REST
           });
           this._realtimeActive = true;
           this._setRealtimeStatus('✓ Đồng bộ realtime đang bật — thay đổi từ thiết bị khác sẽ tự cập nhật ngay.', 'ok');
@@ -4004,9 +4153,11 @@ const CloudVault = {
         })
         .catch(err => {
           this._setRealtimeStatus('⚠ Không đăng nhập ẩn danh được: ' + err.message + ' — kiểm tra đã bật "Anonymous" trong Firebase Authentication chưa, và Web API Key đã đúng chưa.', 'err');
+          if(!this._gotInitialData) this._smartReadAll(); // dự phòng: không bật được realtime, vẫn tải được dữ liệu qua REST
         });
     }catch(e){
       this._setRealtimeStatus('⚠ Lỗi khởi tạo Firebase SDK: ' + e.message, 'err');
+      if(!this._gotInitialData) this._smartReadAll(); // dự phòng
     }
   },
 
@@ -4030,9 +4181,14 @@ const CloudVault = {
     const val = snapshot.val();
     const cloudData = (val && typeof val === 'object') ? val : {};
     if(this._isSafeToApply()){
+      // Lần ĐẦU TIÊN nhận dữ liệu qua realtime (init() không còn tự gọi readAll() REST song song nữa
+      // khi có Web API Key, xem init()) -> đây chính là lần tải dữ liệu ban đầu, cập nhật luôn trạng
+      // thái chính (#cv-status) để không bị kẹt mãi ở "Đang bật đồng bộ realtime…".
+      const isFirstLoad = !this._gotInitialData;
       this._pendingSnapshot = null;
       this._applyCloudSnapshot(cloudData);
       this._setRealtimeStatus('✓ Realtime đang bật — vừa tự cập nhật dữ liệu mới nhất.', 'ok');
+      if(isFirstLoad) this._setStatus('✓ Đã đồng bộ với Cloud (Firebase, qua realtime — không tải REST trùng lặp).', 'ok');
     } else {
       // Đang gõ dở/chưa lưu -> KHÔNG áp dụng ngay, chờ tới lúc an toàn (xem _flushPendingSnapshot).
       this._pendingSnapshot = cloudData;
@@ -4098,6 +4254,11 @@ const CloudVault = {
     // 1 lúc/tải lại trang sẽ luôn thấy nó "sống lại" y như cũ, dù xoá trên máy vẫn chạy đúng.
     const partial = {};
     keys.forEach(k => { partial[k] = (k in _mem) ? _mem[k] : null; });
+    // Luôn kèm theo mốc đồng bộ mới nhất trong CHÍNH gói ghi này (không tốn thêm request riêng) — để
+    // các máy REST-only (xem _smartReadAll) biết chính xác lần ghi gần nhất là khi nào, dù ghi bằng
+    // writeMerge() (gói nhỏ) hay writeAll() (toàn bộ) đều cùng cập nhật đúng 1 mốc thống nhất.
+    const newStamp = String(Date.now());
+    partial[STORAGE_KEY_META_STAMP] = newStamp;
     try{
       const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token), {
         method: 'PATCH',
@@ -4116,6 +4277,7 @@ const CloudVault = {
         return !bodyJson || !(k in bodyJson) || String(bodyJson[k]).length < String(partial[k]).length;
       });
       if(bad.length) throw new Error('Cloud không lưu đủ (thiếu/thiếu bớt: ' + bad.join(', ') + ')');
+      tn5SetMetaStamp(newStamp); // ghi đúng mốc vừa gửi vào bản cache cục bộ, để lần mở app sau nhận ra đây LÀ bản mới nhất, khỏi tải lại
       // QUAN TRỌNG: vừa đẩy thành công state MỚI NHẤT của máy này lên Cloud — mọi snapshot realtime
       // đang CHỜ (_pendingSnapshot, xem _onRealtimeValue) giờ đã CŨ hơn state vừa ghi, áp dụng nó vào
       // lúc này sẽ VÔ TÌNH GHI ĐÈ MẤT thay đổi vừa lưu (VD: khôi phục 1 dòng đã xác nhận xong bấm Lưu,
@@ -4133,6 +4295,10 @@ const CloudVault = {
   async _writeAllNow(){
     if(!this.url || !this.token) return;
     try{
+      // Đưa mốc đồng bộ mới vào NGAY TRONG gói PUT này (không tốn thêm request riêng) — để các máy
+      // REST-only (xem _smartReadAll) biết chính xác lần ghi gần nhất là khi nào.
+      const newStamp = String(Date.now());
+      _mem[STORAGE_KEY_META_STAMP] = newStamp;
       const payload = JSON.stringify(_mem);
       // PUT ghi đè TOÀN BỘ node "dashboard_data" trên Firebase bằng đúng _mem hiện tại.
       const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token), {
@@ -4162,6 +4328,7 @@ const CloudVault = {
         }
       }
 
+      tn5SetMetaStamp(newStamp); // ghi đúng mốc vừa gửi vào bản cache cục bộ, để lần mở app sau nhận ra đây LÀ bản mới nhất, khỏi tải lại
       this._retryCount = 0;
       clearTimeout(this._retryTimer);
       // QUAN TRỌNG: vừa đẩy thành công TOÀN BỘ state mới nhất của máy này lên Cloud — huỷ mọi
@@ -4415,7 +4582,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.33';
+const APP_VERSION = 'v1.34';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
