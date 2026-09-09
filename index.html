@@ -4743,7 +4743,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.50';
+const APP_VERSION = 'v1.51';
 const APP_VERSION_DATE = '10/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -11988,7 +11988,7 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, skipPa
       categories: ['Match', 'Negative', 'Positive'],
       values: [matchCount, negativeCount, positiveCount],
       colors: ['00B050', 'FF0000', 'FFC000'],
-      title: `Kiểm kho ${khoLabel.replace('Kho ', '')} — ${flatRows.length} mã${titleExtra}`
+      title: `Kiểm kho ${khoLabel.replace('Kho ', '')} — ${flatRows.length} dòng${titleExtra}`
     }
   };
 }
@@ -12030,7 +12030,7 @@ async function injectRealPieCharts(buffer, chartSpecs){
       const chartXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <c:chart>
-<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${escapeXmlChart(info.title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
+<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1400" b="1"/></a:pPr><a:r><a:rPr lang="vi-VN" sz="1400" b="1"/><a:t>${escapeXmlChart(info.title)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
 <c:autoTitleDeleted val="0"/>
 <c:plotArea><c:layout/>
 <c:pieChart>
@@ -12059,9 +12059,13 @@ ${dPts}
       zip.file(chartPath, chartXml);
 
       // Chart tự co GIÃN CHIỀU RỘNG theo đúng độ dài chữ tiêu đề — tránh tiêu đề dài (kho nhiều dòng/
-      // vị trí/pallet) bị tự xuống 2 hàng làm chart cao lên xấu. ~8.5px/ký tự (cỡ chữ tiêu đề mặc định
-      // của Excel, đậm) + biên an toàn 2 bên; giữ trong khoảng 380–760px để không quá nhỏ hay quá khổ.
-      const chartWidthPx = Math.min(760, Math.max(380, 50 + info.title.length * 8.5));
+      // vị trí/pallet) bị tự xuống 2 hàng làm chart cao lên xấu. Trước đây KHÔNG ghim cỡ chữ tiêu đề
+      // (để Excel tự chọn cỡ chữ theo kích thước chart) nên không tính trước được chính xác cần bao
+      // nhiêu px — Excel thường tự chọn cỡ chữ LỚN hơn hẳn 8.5px/ký tự đã ước lượng, khiến tiêu đề vẫn
+      // bị xuống 2 hàng dù đã có công thức tự co giãn. Giờ GHIM CỨNG cỡ chữ tiêu đề = 14pt đậm (xem
+      // <c:title> phía trên) rồi tính px theo ĐÚNG cỡ chữ đã ghim đó (~10px/ký tự ở 14pt đậm, chữ có
+      // dấu tiếng Việt) — đảm bảo tiêu đề luôn nằm gọn 1 hàng. Biên 400–900px để không quá nhỏ/quá khổ.
+      const chartWidthPx = Math.min(900, Math.max(400, 60 + info.title.length * 10));
       const chartHeightPx = 330;
       const chartExtCx = Math.round(chartWidthPx * 9525); // 1px = 9525 EMU
       const chartExtCy = Math.round(chartHeightPx * 9525);
