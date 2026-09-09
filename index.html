@@ -2390,10 +2390,15 @@
           <h1 style="font-size:17px;">Đề xuất kiểm hôm nay</h1>
           <div class="sub" style="margin-top:2px;">Chọn kiểu tính (Mã hàng / Locator / Pallet) và % muốn kiểm cho từng kho, bấm "Tạo danh sách" để xếp hạng theo: lâu chưa kiểm · vận động nhanh (Transaction) · từng lệch WMS-ERP · SL tồn bất thường so với lịch sử. Tự động loại các vị trí PICK, Loading và PROD (khu trung chuyển/sản xuất) và loại nhóm SPP — các Item No. không bắt đầu bằng số 0. Yếu tố "SL tồn bất thường" cần vài lần cập nhật dữ liệu (khác ngày) mới đủ lịch sử để tính.</div>
         </div>
-        <button type="button" class="btn-export-excel" id="btn-export-combined-report" style="white-space:nowrap;" title="Gộp Tổng quan + Đề xuất kiểm + Đã xác nhận của các kho đã tạo danh sách vào 1 file Excel">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
-          📊 Xuất báo cáo tổng hợp (3 kho)
-        </button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+          <button type="button" class="btn-export-excel" id="btn-reset-kiemke-all" style="white-space:nowrap; border-color:var(--red); color:var(--red);" title="Xoá SẠCH toàn bộ dữ liệu nháp còn sót của đợt kiểm kê trước (danh sách Đề xuất kiểm cả 3 kho, ô KT= đang nhập dở, dòng quét QR sai vị trí, lịch sử GI đã quét) — dùng khi bảng vừa Tạo danh sách mà vẫn còn hiện số liệu cũ. KHÔNG đụng tới danh sách Đã xác nhận.">
+            🔄 Đặt lại toàn bộ
+          </button>
+          <button type="button" class="btn-export-excel" id="btn-export-combined-report" style="white-space:nowrap;" title="Gộp Tổng quan + Đề xuất kiểm + Đã xác nhận của các kho đã tạo danh sách vào 1 file Excel">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+            📊 Xuất báo cáo tổng hợp (3 kho)
+          </button>
+        </div>
       </div>
       <div class="cc-kho-grid" id="cc-kho-grid">
         <div class="cc-kho-card" data-kho="Kho 2B" data-kho-code="2B" data-mode="locator">
@@ -4767,7 +4772,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.55';
+const APP_VERSION = 'v1.56';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -12825,16 +12830,29 @@ function ccRowKeyForItem(r){
 // Trả về số GI No. đã xoá kèm theo (để hiện trong thông báo), hoặc -1 nếu không tìm thấy dòng.
 function ccDeleteRow(khoLabel, rowKey){
   const result = ccKhoResults[khoLabel];
-  if(!result) return -1;
   let removed = false;
-  if(result.mode === 'locator'){
-    result.list.forEach(grp => {
-      const idx = grp.items.findIndex(r => ccRowKeyForItem(r) === rowKey);
-      if(idx !== -1){ grp.items.splice(idx, 1); removed = true; }
-    });
-  } else {
-    const idx = result.list.findIndex(r => ccRowKeyForItem(r) === rowKey);
-    if(idx !== -1){ result.list.splice(idx, 1); removed = true; }
+  if(result){
+    if(result.mode === 'locator'){
+      result.list.forEach(grp => {
+        const idx = grp.items.findIndex(r => ccRowKeyForItem(r) === rowKey);
+        if(idx !== -1){ grp.items.splice(idx, 1); removed = true; }
+      });
+    } else {
+      const idx = result.list.findIndex(r => ccRowKeyForItem(r) === rowKey);
+      if(idx !== -1){ result.list.splice(idx, 1); removed = true; }
+    }
+  }
+  // Dòng "sai vị trí" tự thêm khi quét QR (scannedExtraRows) không nằm trong ccKhoResults — trước đây
+  // hàm này không hề tìm ở đây, nên bấm 🗑 trên đúng dạng dòng này không xoá được gì (âm thầm không
+  // làm gì, dữ liệu vẫn còn sót lại).
+  const extraList = scannedExtraRows[khoLabel];
+  if(extraList){
+    const exIdx = extraList.findIndex(r => ccRowKeyForItem(r) === rowKey);
+    if(exIdx !== -1){
+      extraList.splice(exIdx, 1);
+      removed = true;
+      if(!extraList.length) delete scannedExtraRows[khoLabel];
+    }
   }
   if(!removed) return -1;
   delete ktInputValues[rowKey];
@@ -13204,6 +13222,13 @@ function ccClearKhoResult(khoLabel){
     const flatItems = result.mode === 'locator' ? result.list.flatMap(g => g.items) : result.list;
     flatItems.forEach(r => { delete ktInputValues[ccRowKeyForItem(r)]; });
   }
+  // Dọn luôn các dòng "sai vị trí" tự thêm khi quét QR (scannedExtraRows) của đúng kho này — trước
+  // đây KHÔNG có chỗ nào xoá mảng này, nên các dòng tự thêm cứ tồn tại mãi và lẫn cả sang đợt
+  // "Tạo danh sách" mới, hiện lại y như dữ liệu cũ.
+  if(scannedExtraRows[khoLabel]){
+    scannedExtraRows[khoLabel].forEach(r => { delete ktInputValues[ccRowKeyForItem(r)]; });
+    delete scannedExtraRows[khoLabel];
+  }
   delete ccKhoResults[khoLabel];
   if(code){
     const blockWrap = document.getElementById('cc-result-block-' + code);
@@ -13230,7 +13255,57 @@ document.addEventListener('click', function(e){
   // Y HỆT lúc xoá Plan — nếu không tự đẩy lên Cloud ngay, Cloud vẫn còn giữ bản danh sách CŨ (chưa
   // xoá), lần đọc lại tiếp theo (tải lại trang, đổi thiết bị, hay Realtime) sẽ kéo về làm danh sách
   // "sống lại" y như cũ dù đã bấm Xoá.
-  scheduleAutoSaveToCloud('cc', [STORAGE_KEY_CCRESULTS, STORAGE_KEY_KT_INPUTS], 'Danh sách "Đề xuất kiểm hôm nay"');
+  scheduleAutoSaveToCloud('cc', [STORAGE_KEY_CCRESULTS, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_SCANNED_EXTRA], 'Danh sách "Đề xuất kiểm hôm nay"');
+});
+
+// Bấm "🔄 Đặt lại toàn bộ" (góc trên phải panel "Đề xuất kiểm hôm nay") — dọn SẠCH mọi dữ liệu nháp
+// còn sót của đợt kiểm kê trước: không chỉ xoá theo đúng các dòng đang có trong danh sách hiện tại
+// (như ccClearKhoResult vẫn làm), mà xoá TRẮNG hẳn ktInputValues/scannedExtraRows — vì rowKey được
+// ghép từ item+custpo+locator+oqc+qty (KHÔNG có dấu thời gian), nên nếu đợt kiểm kê mới trùng đúng
+// SL với đợt cũ, số liệu cũ sẽ tự điền lại y như đang thấy trong ảnh báo lỗi — chỉ xoá trắng toàn bộ
+// mới chắc chắn dọn hết, kể cả các dòng "mồ côi" còn sót từ rất lâu trước mà không rõ vì sao chưa
+// từng được dọn (VD: do lỗi cũ ở nút xoá 1 dòng đối với scannedExtraRows, đã sửa cùng đợt này).
+document.getElementById('btn-reset-kiemke-all').addEventListener('click', async () => {
+  const hasAnything = Object.keys(ccKhoResults).length || Object.keys(ktInputValues).length ||
+    Object.keys(scannedExtraRows).length || scannedGiSet.size || giScanLog.length;
+  if(!hasAnything){
+    alert('Không có dữ liệu nháp nào để đặt lại.');
+    return;
+  }
+  const ok = confirm(
+    'Đặt lại TOÀN BỘ dữ liệu nháp của "Đề xuất kiểm hôm nay" (cả 3 kho)?\n\n' +
+    'Sẽ xoá: danh sách Đề xuất kiểm đã tạo, mọi ô "KT =" đang nhập dở (kể cả số liệu cũ còn sót từ ' +
+    'đợt trước), các dòng quét QR sai vị trí, và lịch sử GI đã quét.\n\n' +
+    'KHÔNG đụng tới danh sách "Đã xác nhận" — dùng nút "Đặt lại" riêng ở khu đó nếu muốn xoá luôn.\n\n' +
+    'Thao tác này không thể hoàn tác.'
+  );
+  if(!ok) return;
+
+  const btn = document.getElementById('btn-reset-kiemke-all');
+  if(btn) btn.disabled = true;
+  try{
+    CC_KHO_LIST.forEach(k => ccClearKhoResult(k.label));
+    // Xoá TRẮNG, không chỉ những dòng thuộc danh sách vừa xoá ở trên.
+    ktInputValues = {};
+    scannedExtraRows = {};
+    scannedGiSet.forEach(g => _deletedGiKeys.add(g));
+    scannedGiSet.clear();
+    giScanLog = [];
+    if(typeof updateQrGiClearBtn === 'function') updateQrGiClearBtn();
+    saveStateToStorage();
+    renderKhoSearchPage();
+
+    if(typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token){
+      await CloudVault.writeAll();
+      if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
+    }
+    if(typeof showAppToast === 'function') showAppToast('✓ Đã đặt lại toàn bộ dữ liệu nháp của Đề xuất kiểm hôm nay.');
+  }catch(e){
+    console.warn('Đồng bộ Cloud sau khi Đặt lại toàn bộ thất bại:', e);
+    if(typeof showAppToast === 'function') showAppToast(`⚠ Đã đặt lại trên máy này nhưng CHƯA đồng bộ được lên Cloud (${e.message}). Bấm "Lưu" ở đầu trang để thử lại.`);
+  }finally{
+    if(btn) btn.disabled = false;
+  }
 });
 
 // Dựng 1 sheet "Đề xuất kiểm" vào workbook đã có sẵn — dùng chung cho cả xuất riêng từng kho lẫn
@@ -13899,7 +13974,7 @@ document.addEventListener('click', function(e){
   if(removedGiCount === -1) return;
   saveStateToStorage();
   renderKhoSearchPage();
-  scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CCRESULTS, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_SCANNED_GI, STORAGE_KEY_GI_LOG, STORAGE_KEY_LASTCHECK], 'Xoá dòng đề xuất kiểm');
+  scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CCRESULTS, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_SCANNED_GI, STORAGE_KEY_GI_LOG, STORAGE_KEY_LASTCHECK, STORAGE_KEY_SCANNED_EXTRA], 'Xoá dòng đề xuất kiểm');
   if(typeof showAppToast === 'function') showAppToast(removedGiCount > 0 ? `✓ Đã xoá dòng (kèm ${removedGiCount} GI đã quét).` : '✓ Đã xoá dòng.');
 });
 
