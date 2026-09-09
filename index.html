@@ -4767,8 +4767,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.54';
-const APP_VERSION_DATE = '10/09/2026';
+const APP_VERSION = 'v1.55';
+const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -7260,7 +7260,12 @@ function renderContainerPickingOverview(){
         passQty = pickingIdx[lookupKey] || 0;
       }
       const planQty = r.qty || 0;
-      const contribution = planQty > 0 ? Math.min(passQty, planQty) : 0;
+      let contribution = planQty > 0 ? Math.min(passQty, planQty) : 0;
+      // Mã SPP (không có GI nên không thể tự tính qua CSR/PASS) đã được tick "Đủ hàng" thủ công
+      // -> coi như đã pick đủ phần kế hoạch của mã này, để % Picking Status của container nhảy theo.
+      if(ccIsSppItem(r.item) && sppManualOk[sppOkKey(r.item, r.custPo)]){
+        contribution = planQty;
+      }
       let entry = contMap.get(key);
       if(!entry){ entry = { type, cNo, loadDate: loadDateStr, planTime: planTimeStr, planQty: 0, contribution: 0, invoices: new Set(), csrs: new Set(), loadDates: new Set(), planTimes: new Set(), items: new Map() }; contMap.set(key, entry); }
       entry.planQty += planQty;
@@ -7318,7 +7323,7 @@ function renderContainerPickingOverview(){
     // xong (thủ công hoặc đã Load Xong theo Ship) thì KHÔNG còn cần lấy thêm gì nữa — bỏ qua cảnh báo
     // Thiếu, tránh báo nhầm do tồn kho hiện tại đã giảm (vì chính lô hàng này vừa được lấy/xuất đi).
     const shortItems = isManual ? [] : items
-      .filter(it => it.qty > it.passOnHand)
+      .filter(it => it.qty > it.passOnHand && !(ccIsSppItem(it.item) && sppManualOk[sppOkKey(it.item, it.po)]))
       .map(it => ({ item: it.item, po: it.po, qty: it.qty, passOnHand: it.passOnHand, diff: it.passOnHand - it.qty }));
 
     // Kho có SL tồn (PASS+NG, gộp mọi vị trí) nhiều nhất cho các mã hàng của container này
@@ -7703,9 +7708,13 @@ function buildItemLocatorPopoverHtml(item, po){
     .map(kho => `<div class="cpt-loc-row"><span>${escHtml(kho.replace('Kho ', ''))}</span><b>${fmt(khoTotals.get(kho))}</b></div>`)
     .join('');
   const diff = totalOnHand - totalQty;
-  const diffHtml = diff >= 0
-    ? `<div class="cpt-total" style="color:var(--teal); font-weight:600;">Đủ (dư ${fmt(diff)} Pcs)</div>`
-    : `<div class="cpt-total" style="color:var(--red); font-weight:600;">Thiếu ${fmt(-diff)} Pcs</div>`;
+  const isSpp = ccIsSppItem(item);
+  const manualOk = isSpp && !!sppManualOk[sppOkKey(item, po)];
+  const diffHtml = manualOk
+    ? `<div class="cpt-total" style="color:var(--teal); font-weight:600;">Đủ ✓ (đã tick thủ công — SPP)</div>`
+    : diff >= 0
+      ? `<div class="cpt-total" style="color:var(--teal); font-weight:600;">Đủ (dư ${fmt(diff)} Pcs)</div>`
+      : `<div class="cpt-total" style="color:var(--red); font-weight:600;">Thiếu ${fmt(-diff)} Pcs</div>`;
   const rowsHtml = conts.map(c => {
     const dateTimeParts = [c.loadDate, c.planTime].filter(v => v && v !== '—');
     const subLine = dateTimeParts.length ? `<div class="cpt-loc-sub">${escHtml(dateTimeParts.join(' · '))}</div>` : '';
