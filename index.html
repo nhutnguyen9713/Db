@@ -104,6 +104,37 @@
   }
   body[data-theme="dark"] .sidebar{background:#0B0E14;}
   body[data-theme="dark"] .sidebar-logo{color:#0B0E14;}
+  /* ============ Thư viện giao diện (theme library) ============
+     Mỗi giao diện thêm sau này (ngoài Sáng/Tối mặc định) chỉ cần: 1 khối
+     body[data-theme="..."]{ ghi đè đúng các biến --bg/--panel/... đã có ở :root }
+     + 1 dòng trong mảng THEME_LIBRARY (JS, gần cuối file) — không phải sửa gì khác,
+     toàn bộ app tự đổi màu theo vì mọi nơi đều dùng var(--...) chứ không hardcode màu. */
+  body[data-theme="cyberpunk"]{
+    --bg: #0B0E14;
+    --panel: #171C27;
+    --panel-2: #1B2130;
+    --line: #2A3346;
+    --line-soft: #212838;
+    --text: #EAF0FF;
+    --muted: #8891AC;
+    --muted-2: #626C87;
+    --amber: #3FE1FF;
+    --amber-bright: #3FE1FF;
+    --teal: #33F0A8;
+    --red: #FF4D6D;
+    --blue: #5CC8FF;
+    --violet: #FF3EC9;
+  }
+  body[data-theme="cyberpunk"]{
+    background:
+      linear-gradient(180deg, rgba(63,225,255,0.07), transparent 300px),
+      repeating-linear-gradient(0deg, rgba(140,170,255,0.05) 0px, rgba(140,170,255,0.05) 1px, transparent 1px, transparent 40px),
+      repeating-linear-gradient(90deg, rgba(140,170,255,0.05) 0px, rgba(140,170,255,0.05) 1px, transparent 1px, transparent 40px),
+      var(--bg);
+  }
+  body[data-theme="cyberpunk"] .sidebar{background:#05070C; box-shadow:0 16px 34px rgba(63,225,255,0.10), 0 0 0 1px rgba(63,225,255,0.12);}
+  body[data-theme="cyberpunk"] .sidebar-logo{color:#05070C; box-shadow:0 0 16px -2px var(--amber-bright);}
+  body[data-theme="cyberpunk"] .sidebar-nav-btn.active{box-shadow:0 0 14px -2px var(--amber-bright);}
   *{box-sizing:border-box;}
   body{
     margin:0;
@@ -170,6 +201,29 @@
   .notif-item.notif-success .notif-item-text{color:var(--teal);}
   .sidebar-nav-btn-ghost{color:#4B5567; cursor:default;}
   .sidebar-nav-btn-ghost:hover{background:transparent; color:#4B5567;}
+
+  /* Bảng chọn giao diện (theme picker) — cùng khuôn mẫu với .notif-panel để nhất quán giao diện */
+  .theme-badge{
+    position:absolute; bottom:6px; right:6px; width:9px; height:9px; border-radius:50%;
+    border:2px solid #12161F; background:var(--amber-bright);
+  }
+  .theme-panel{
+    position:absolute; top:56px; right:14px; z-index:9000; width:min(240px, 92vw);
+    background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,0.25);
+    flex-direction:column; overflow:hidden;
+  }
+  .theme-panel-head{
+    padding:11px 14px; border-bottom:1px solid var(--line); font-weight:800; font-size:12.5px; color:var(--text);
+  }
+  .theme-option{
+    width:100%; display:flex; align-items:center; gap:10px; padding:10px 14px; border:none; background:transparent;
+    color:var(--text); font-family:var(--sans); font-size:13px; text-align:left; cursor:pointer;
+  }
+  .theme-option:hover{background:var(--panel-2);}
+  .theme-option-swatch{width:16px; height:16px; border-radius:50%; flex-shrink:0; border:1.5px solid rgba(127,127,127,0.35);}
+  .theme-option-check{margin-left:auto; width:16px; height:16px; color:var(--teal); flex-shrink:0; visibility:hidden;}
+  .theme-option.active .theme-option-check{visibility:visible;}
+  .theme-option.active{color:var(--text); font-weight:700;}
 
   .search-page-head{margin-bottom:20px;}
   .search-panel{padding:22px;}
@@ -1624,8 +1678,12 @@
 <script>
   (function(){
     try{
-      const saved = localStorage.getItem('tn5_theme'); // cache tức thời để tránh nháy sáng/tối khi vừa mở trang; nguồn dữ liệu thật là file đồng bộ (xem FileVault)
-      if(saved === 'dark'){ document.body.setAttribute('data-theme','dark'); }
+      // cache tức thời để tránh nháy giao diện khi vừa mở trang; nguồn dữ liệu thật là file đồng bộ (xem
+      // FileVault). "light" (mặc định) không gắn data-theme; giá trị khác 'light' áp thẳng luôn — an
+      // toàn với MỌI id trong thư viện giao diện (kể cả id thêm sau này), không chỉ riêng 'dark', vì lúc
+      // này (đầu trang) THEME_LIBRARY chưa kịp định nghĩa nên không kiểm tra hợp lệ được ở đây.
+      const saved = localStorage.getItem('tn5_theme');
+      if(saved && saved !== 'light'){ document.body.setAttribute('data-theme', saved); }
     }catch(e){}
   })();
 </script>
@@ -1679,10 +1737,16 @@
     <button class="sidebar-nav-btn" id="settings-open-btn" type="button" title="Cài đặt lưu trữ &amp; đồng bộ">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
-    <button class="sidebar-nav-btn" id="theme-toggle-btn" type="button" title="Chuyển giao diện Sáng / Tối">
+    <button class="sidebar-nav-btn" id="theme-toggle-btn" type="button" title="Chọn giao diện" style="position:relative;">
       <svg id="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
       <svg id="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      <svg id="theme-icon-custom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M12 2a10 10 0 1 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.4-.3-.4-.5-.9-.5-1.4 0-1.1.9-2 2-2h2.3c1.8 0 3.2-1.4 3.2-3.2C20.5 6.5 16.7 2 12 2Z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="7.5" r="1.2" fill="currentColor" stroke="none"/></svg>
+      <span class="theme-badge" id="theme-badge" style="display:none;"></span>
     </button>
+    <div id="theme-panel" class="theme-panel" style="display:none;">
+      <div class="theme-panel-head">Giao diện</div>
+      <div id="theme-panel-list"></div>
+    </div>
     <!-- Cố tình đặt XA nút "Lưu" ở trên — 2 nút Lưu/Làm mới dữ liệu nằm sát nhau rất dễ bấm lộn, mà bấm
          nhầm "Làm mới dữ liệu" (tải đè từ Cloud) khi đang có thay đổi CHƯA LƯU sẽ MẤT DỮ LIỆU đó. -->
     <button class="sidebar-nav-btn" id="btn-refresh-data" type="button" title="Tải lại dữ liệu mới nhất từ Cloud — giống bấm &quot;Kết nối&quot; ở mục Cloud — rồi làm mới toàn bộ bảng">
@@ -4615,7 +4679,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.41';
+const APP_VERSION = 'v1.42';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5873,33 +5937,87 @@ const statusEl = document.getElementById('upload-status');
 const overlay = document.getElementById('loading-overlay');
 const loadingMsg = document.getElementById('loading-msg');
 
-// ============ CHUYỂN GIAO DIỆN SÁNG / TỐI ============
-(function initThemeToggle(){
-  const themeBtn = document.getElementById('theme-toggle-btn');
+// ============ THƯ VIỆN GIAO DIỆN (theme library) ============
+// Mặc định vẫn là Sáng/Tối như trước giờ — bấm nút này giờ mở 1 bảng chọn thay vì đổi
+// thẳng Sáng↔Tối. Thêm giao diện mới sau này: thêm 1 khối CSS body[data-theme="<id>"]
+// (xem "cyberpunk" trong <style> làm ví dụ) rồi thêm đúng 1 dòng vào mảng bên dưới —
+// bảng chọn + toàn bộ logic tự nhận diện, không phải sửa gì khác.
+const THEME_LIBRARY = [
+  { id: 'light', label: 'Sáng', swatch: '#B76E00' }, // mặc định — không gắn data-theme
+  { id: 'dark', label: 'Tối', swatch: '#F5A623' },
+  { id: 'cyberpunk', label: 'Cyberpunk', swatch: '#3FE1FF' }
+];
+
+function tn5ValidThemeId(id){
+  return THEME_LIBRARY.some(t => t.id === id) ? id : 'light';
+}
+
+// Áp dụng 1 giao diện: gắn/gỡ data-theme, cập nhật icon + chấm màu trên nút, đánh dấu
+// đúng dòng đang chọn trong bảng, và (mặc định) lưu lại lựa chọn.
+function tn5ApplyTheme(id, opts){
+  opts = opts || {};
+  const themeId = tn5ValidThemeId(id);
+  if(themeId === 'light') document.body.removeAttribute('data-theme');
+  else document.body.setAttribute('data-theme', themeId);
+
   const iconSun = document.getElementById('theme-icon-sun');
   const iconMoon = document.getElementById('theme-icon-moon');
-  if(!themeBtn) return;
-
-  function applyIcons(isDark){
-    if(iconSun) iconSun.style.display = isDark ? 'none' : '';
-    if(iconMoon) iconMoon.style.display = isDark ? '' : 'none';
-    themeBtn.title = isDark ? 'Chuyển sang giao diện Sáng' : 'Chuyển sang giao diện Tối';
+  const iconCustom = document.getElementById('theme-icon-custom');
+  const badge = document.getElementById('theme-badge');
+  const themeBtn = document.getElementById('theme-toggle-btn');
+  const theme = THEME_LIBRARY.find(t => t.id === themeId);
+  if(iconSun) iconSun.style.display = themeId === 'light' ? '' : 'none';
+  if(iconMoon) iconMoon.style.display = themeId === 'dark' ? '' : 'none';
+  if(iconCustom) iconCustom.style.display = (themeId !== 'light' && themeId !== 'dark') ? '' : 'none';
+  if(badge){
+    badge.style.display = themeId === 'light' ? 'none' : '';
+    if(theme) badge.style.background = theme.swatch;
   }
+  if(themeBtn) themeBtn.title = 'Giao diện: ' + (theme ? theme.label : themeId) + ' — bấm để đổi';
 
-  applyIcons(document.body.getAttribute('data-theme') === 'dark');
+  document.querySelectorAll('#theme-panel-list .theme-option').forEach(el => {
+    el.classList.toggle('active', el.dataset.themeId === themeId);
+  });
 
-  themeBtn.addEventListener('click', () => {
-    const isDark = document.body.getAttribute('data-theme') === 'dark';
-    if(isDark){
-      document.body.removeAttribute('data-theme');
-      try{ LS.setItem('tn5_theme', 'light'); }catch(e){}
-      try{ localStorage.setItem('tn5_theme', 'light'); }catch(e){} // chỉ để tránh nháy giao diện khi mở lại trang
-      applyIcons(false);
-    } else {
-      document.body.setAttribute('data-theme', 'dark');
-      try{ LS.setItem('tn5_theme', 'dark'); }catch(e){}
-      try{ localStorage.setItem('tn5_theme', 'dark'); }catch(e){} // chỉ để tránh nháy giao diện khi mở lại trang
-      applyIcons(true);
+  if(opts.persist !== false){
+    try{ LS.setItem('tn5_theme', themeId); }catch(e){}
+    try{ localStorage.setItem('tn5_theme', themeId); }catch(e){} // chỉ để tránh nháy giao diện khi mở lại trang
+  }
+}
+
+function tn5RenderThemePanelList(){
+  const list = document.getElementById('theme-panel-list');
+  if(!list) return;
+  const current = tn5ValidThemeId(document.body.getAttribute('data-theme') || 'light');
+  list.innerHTML = THEME_LIBRARY.map(t => `
+    <button type="button" class="theme-option${t.id === current ? ' active' : ''}" data-theme-id="${t.id}">
+      <span class="theme-option-swatch" style="background:${t.swatch};"></span>
+      ${t.label}
+      <svg class="theme-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    </button>`).join('');
+}
+
+(function initThemePicker(){
+  const themeBtn = document.getElementById('theme-toggle-btn');
+  const panel = document.getElementById('theme-panel');
+  if(!themeBtn || !panel) return;
+
+  tn5RenderThemePanelList();
+  tn5ApplyTheme(document.body.getAttribute('data-theme') || 'light', { persist: false });
+
+  document.addEventListener('click', (e) => {
+    const opt = e.target.closest('.theme-option');
+    if(opt){
+      tn5ApplyTheme(opt.dataset.themeId);
+      panel.style.display = 'none';
+      return;
+    }
+    if(e.target.closest('#theme-toggle-btn')){
+      panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+      return;
+    }
+    if(panel.style.display !== 'none' && !e.target.closest('#theme-panel') && !e.target.closest('#theme-toggle-btn')){
+      panel.style.display = 'none';
     }
   });
 })();
@@ -15381,18 +15499,11 @@ function initComparePage(){
 initComparePage();
 FileVault.registerReloader(initComparePage);
 
-// Áp dụng lại giao diện Sáng/Tối mỗi khi trạng thái được nạp lại từ file đồng bộ
+// Áp dụng lại giao diện mỗi khi trạng thái được nạp lại từ file đồng bộ/Cloud (giữ đúng lựa chọn
+// giao diện của máy này — không phải dữ liệu đồng bộ giữa các máy, nên persist:false, khỏi ghi đè
+// ngược lại localStorage bằng giá trị vừa đọc ra từ chính localStorage).
 FileVault.registerReloader(function(){
-  const t = LS.getItem('tn5_theme');
-  const isDark = t === 'dark';
-  document.body.toggleAttribute('data-theme', isDark);
-  if(isDark) document.body.setAttribute('data-theme','dark');
-  const themeBtn = document.getElementById('theme-toggle-btn');
-  const iconSun = document.getElementById('theme-icon-sun');
-  const iconMoon = document.getElementById('theme-icon-moon');
-  if(iconSun) iconSun.style.display = isDark ? 'none' : '';
-  if(iconMoon) iconMoon.style.display = isDark ? '' : 'none';
-  if(themeBtn) themeBtn.title = isDark ? 'Chuyển sang giao diện Sáng' : 'Chuyển sang giao diện Tối';
+  if(typeof tn5ApplyTheme === 'function') tn5ApplyTheme(LS.getItem('tn5_theme') || 'light', { persist: false });
 });
 
 // Khởi động FileVault + CloudVault sau khi mọi module đã đăng ký hàm nạp lại (reloader)
