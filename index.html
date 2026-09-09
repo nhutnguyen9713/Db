@@ -2220,13 +2220,6 @@
     </div>
   </div>
 
-  <div class="panel row3" id="spp-pick-overview" style="display:none; margin-bottom:16px;">
-    <h2><span class="tag" style="background:var(--amber-bright)">SPP</span>Nhóm SPP — Pick thủ công</h2>
-    <div class="desc">Item No. không bắt đầu bằng số 0 — không có GI để tự nhận Pick xong như hàng thường, tick tay khi đã pick xong. Dòng đã tick sẽ tự trừ khỏi SL tồn khả dụng ở các bảng Thiếu/Đủ theo Plan phía dưới.</div>
-    <div class="kpis" id="spp-pick-kpi-strip" style="margin-bottom:0;"></div>
-    <div class="plan-table-wrap" id="spp-pick-table-wrap" style="margin-top:14px;"></div>
-  </div>
-
   <div class="grid">
     <div class="panel row3" id="plan-overview-row">
       <h2><span class="tag" style="background:var(--violet)">PLAN</span>Kế hoạch xuất cont</h2>
@@ -3655,7 +3648,6 @@ const STORAGE_KEY_LABELS = {
   tn5_dashboard_manual_picked_v1: 'Đánh dấu Pick thủ công',
   tn5_dashboard_hidden_cont_v1: 'Container đã ẩn',
   tn5_dashboard_manual_kho_v1: 'Chọn Kho thủ công',
-  tn5_dashboard_spp_picked_v1: 'Pick SPP thủ công',
   tn5_dashboard_kt_inputs_v1: 'Số liệu KT đang nhập',
   tn5_dashboard_scanned_extra_v1: 'Dòng tự thêm khi quét QR',
   tn5_dashboard_scanned_gi_v1: 'Danh sách GI đã quét',
@@ -4654,9 +4646,6 @@ function saveStateToStorage(){
     if(Object.keys(manualKhoOverrides).length) LS.setItem(STORAGE_KEY_MANUAL_KHO, JSON.stringify(manualKhoOverrides));
     else LS.removeItem(STORAGE_KEY_MANUAL_KHO);
 
-    if(Object.keys(sppManualPicked).length) LS.setItem(STORAGE_KEY_SPP_PICKED, JSON.stringify(sppManualPicked));
-    else LS.removeItem(STORAGE_KEY_SPP_PICKED);
-
     if(Object.keys(scannedExtraRows).length) LS.setItem(STORAGE_KEY_SCANNED_EXTRA, JSON.stringify(scannedExtraRows));
     else LS.removeItem(STORAGE_KEY_SCANNED_EXTRA);
 
@@ -4695,7 +4684,6 @@ function loadStateFromStorage(){
     const manualPickedRaw = LS.getItem(STORAGE_KEY_MANUAL_PICKED);
     const hiddenContRaw = LS.getItem(STORAGE_KEY_HIDDEN_CONT);
     const manualKhoRaw = LS.getItem(STORAGE_KEY_MANUAL_KHO);
-    const sppPickedRaw = LS.getItem(STORAGE_KEY_SPP_PICKED);
     const ktInputsRaw = LS.getItem(STORAGE_KEY_KT_INPUTS);
     const scannedExtraRaw = LS.getItem(STORAGE_KEY_SCANNED_EXTRA);
     const scannedGiRaw = LS.getItem(STORAGE_KEY_SCANNED_GI);
@@ -4715,7 +4703,6 @@ function loadStateFromStorage(){
       manualPicked: manualPickedRaw ? JSON.parse(manualPickedRaw) : {},
       hiddenContainers: hiddenContRaw ? JSON.parse(hiddenContRaw) : {},
       manualKho: manualKhoRaw ? JSON.parse(manualKhoRaw) : {},
-      sppPicked: sppPickedRaw ? JSON.parse(sppPickedRaw) : {},
       ktInputs: ktInputsRaw ? JSON.parse(ktInputsRaw) : {},
       scannedExtra: scannedExtraRaw ? JSON.parse(scannedExtraRaw) : {},
       scannedGi: scannedGiRaw ? JSON.parse(scannedGiRaw) : [],
@@ -4727,7 +4714,7 @@ function loadStateFromStorage(){
     };
   }catch(err){
     console.warn('Không đọc được dữ liệu đã lưu:', err);
-    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, sppPicked: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, khoGrid: {}, confirmedHistory: {} };
+    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, khoGrid: {}, confirmedHistory: {} };
   }
 }
 
@@ -4743,7 +4730,6 @@ function clearStoredState(){
   LS.removeItem(STORAGE_KEY_MANUAL_PICKED);
   LS.removeItem(STORAGE_KEY_HIDDEN_CONT);
   LS.removeItem(STORAGE_KEY_MANUAL_KHO);
-  LS.removeItem(STORAGE_KEY_SPP_PICKED);
   LS.removeItem(STORAGE_KEY_KT_INPUTS);
   LS.removeItem(STORAGE_KEY_SCANNED_EXTRA);
   LS.removeItem(STORAGE_KEY_SCANNED_GI);
@@ -4757,7 +4743,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.52';
+const APP_VERSION = 'v1.51';
 const APP_VERSION_DATE = '10/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6468,7 +6454,6 @@ function buildItemIndex(data){
       else idx[key].other += qty;
     }
   }
-  sppApplyPickedDeduction(idx, false); // false = gộp theo Item (mọi PO), khớp đúng cách idx này lên khoá
   return idx;
 }
 
@@ -6487,7 +6472,6 @@ function buildItemCustPoIndex(data){
       else idx[key].other += qty;
     }
   }
-  sppApplyPickedDeduction(idx, true); // true = tách riêng theo từng Cust PO, khớp đúng cách idx này lên khoá
   return idx;
 }
 
@@ -6827,27 +6811,6 @@ function setManualKho(type, cNo, loadDate, planTime, khoValue){
   _localContOverridesDirty = true;
   saveStateToStorage();
   scheduleAutoSaveToCloud('contoverride', [STORAGE_KEY_MANUAL_KHO], 'Đổi Kho thủ công');
-  renderPlanPanel();
-}
-
-// Nhóm SPP (Item No. không bắt đầu bằng số 0) không có GI để hệ thống tự nhận biết đã pick như hàng
-// thường (xem ccIsSppItem) — dùng tick tay thay thế, đánh dấu theo khoá Kho+Item+Cust PO (giống hệt
-// cơ chế manualPickedContainers ở trên). CHỈ lưu mốc "đã tick", KHÔNG lưu cứng số lượng — số lượng
-// trừ khỏi bảng Thiếu/Đủ theo Plan (xem sppApplyPickedDeduction) luôn tính lại theo tồn kho HIỆN TẠI
-// tại thời điểm xem, để nếu tải lại dữ liệu tồn kho mới thì số trừ đi vẫn khớp đúng thực tế, không bị
-// lệch theo số cũ đã có lúc tick.
-let sppManualPicked = {};
-const STORAGE_KEY_SPP_PICKED = 'tn5_dashboard_spp_picked_v1';
-function sppPickKey(kho, item, custpo){
-  return kho + '||' + item + '||' + (custpo || '');
-}
-function toggleSppPicked(kho, item, custpo){
-  const key = sppPickKey(kho, item, custpo);
-  if(sppManualPicked[key]) delete sppManualPicked[key];
-  else sppManualPicked[key] = { at: Date.now() };
-  _localContOverridesDirty = true;
-  saveStateToStorage();
-  scheduleAutoSaveToCloud('contoverride', [STORAGE_KEY_SPP_PICKED], 'Đánh dấu Pick SPP thủ công');
   renderPlanPanel();
 }
 
@@ -7822,59 +7785,11 @@ function isContainerHidden(type, cNo, loadDate, planTime){
   return !!hiddenPlanContainers[contInstanceKey(type, cNo || '', loadDate, planTime)];
 }
 
-// Vẽ bảng "Nhóm SPP — Pick thủ công" trên trang Picking Status — xem buildSppPickRows()/
-// sppApplyPickedDeduction() để rõ cách gộp dữ liệu và cách trừ vào bảng Thiếu/Đủ theo Plan.
-function renderSppPickPanel(){
-  const panelEl = document.getElementById('spp-pick-overview');
-  const kpiEl = document.getElementById('spp-pick-kpi-strip');
-  const wrapEl = document.getElementById('spp-pick-table-wrap');
-  if(!panelEl || !wrapEl) return;
-  const rows = buildSppPickRows();
-  if(!rows.length){ panelEl.style.display = 'none'; return; }
-  panelEl.style.display = '';
-  const pickedCount = rows.filter(r => sppManualPicked[sppPickKey(r.kho, r.item, r.custpo)]).length;
-  if(kpiEl){
-    kpiEl.innerHTML = `
-      <div class="kpi"><div class="label">TỔNG DÒNG SPP</div><div class="value">${fmt(rows.length)}</div></div>
-      <div class="kpi good"><div class="label">ĐÃ PICK</div><div class="value">${fmt(pickedCount)}</div></div>
-      <div class="kpi bad"><div class="label">CHƯA PICK</div><div class="value">${fmt(rows.length - pickedCount)}</div></div>
-    `;
-  }
-  const bodyRows = rows.map(r => {
-    const key = sppPickKey(r.kho, r.item, r.custpo);
-    const picked = !!sppManualPicked[key];
-    const poCell = r.custpo ? escHtml(r.custpo) : `<span class="po-any">Bất kỳ PO</span>`;
-    return `<tr${picked ? ' style="background:var(--teal-bg, rgba(46,167,140,0.08));"' : ''}>
-      <td>${escHtml(r.kho)}</td>
-      <td>${escHtml(r.item)}</td>
-      <td>${poCell}</td>
-      <td class="num">${fmt(r.qty)}</td>
-      <td style="text-align:center;">
-        <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; ${picked ? 'color:var(--teal);' : 'color:var(--muted-2);'}">
-          <input type="checkbox" data-spp-kho="${escAttr(r.kho)}" data-spp-item="${escAttr(r.item)}" data-spp-po="${escAttr(r.custpo)}" ${picked ? 'checked' : ''}>
-          ${picked ? '✓ Đã pick' : 'Chưa pick'}
-        </label>
-      </td>
-    </tr>`;
-  }).join('');
-  wrapEl.innerHTML = `
-    <table class="plan-detail-table">
-      <thead><tr><th>Kho</th><th>Item No.</th><th>Cust PO</th><th style="text-align:right">SL tồn (PASS)</th><th>Pick thủ công</th></tr></thead>
-      <tbody>${bodyRows}</tbody>
-    </table>`;
-}
-document.addEventListener('change', (e) => {
-  const cb = e.target.closest('input[data-spp-kho]');
-  if(!cb) return;
-  toggleSppPicked(cb.dataset.sppKho, cb.dataset.sppItem, cb.dataset.sppPo);
-});
-
 function renderPlanPanel(){
   const loadedTypes = PLAN_TYPES.filter(t => planData[t]);
   // Tính lại trạng thái Pick (contPickAllRows) TRƯỚC khi dựng các bảng so sánh SL Plan vs Tồn kho —
   // để các bảng so sánh biết chính xác container nào đã "Pick xong" ngay trong lần vẽ này, không bị
   // trễ 1 nhịp (nếu tính sau thì bảng so sánh vẫn dùng dữ liệu Pick cũ của lần vẽ trước).
-  renderSppPickPanel();
   renderContainerPickingOverview();
   renderCombinedPlanPanel();
 
@@ -12371,44 +12286,6 @@ function ccIsSppItem(item){
   return !/^0/.test(String(item || '').trim());
 }
 
-// Danh sách các dòng SPP (gộp theo Kho + Item No. + Cust PO, CHỈ tính SL PASS, loại vị trí "Prod")
-// — dùng CHUNG đúng 1 cách lọc/gộp với buildItemIndex/buildItemCustPoIndex (xem 2 hàm đó) để số
-// lượng ở đây LUÔN khớp chính xác với số sẽ bị trừ khỏi bảng Thiếu/Đủ theo Plan khi tick "Pick".
-function buildSppPickRows(){
-  const map = new Map();
-  if(!currentData || !currentData.kho_detail) return [];
-  for(const kho of Object.keys(currentData.kho_detail)){
-    for(const [item, custpo, locator, oqc, qty] of currentData.kho_detail[kho]){
-      if(PROD_LOCATOR_RE.test(locator || '')) continue;
-      if(!ccIsSppItem(item)) continue;
-      if((oqc || '').toUpperCase() !== 'PASS') continue;
-      const cp = custpo || '';
-      const key = kho + '||' + item + '||' + cp;
-      if(map.has(key)) map.get(key).qty += qty;
-      else map.set(key, { kho, item, custpo: cp, qty });
-    }
-  }
-  return Array.from(map.values()).sort((a,b) =>
-    a.kho.localeCompare(b.kho) || a.item.localeCompare(b.item) || a.custpo.localeCompare(b.custpo));
-}
-
-// Áp dụng phần trừ do đã tick "Pick SPP thủ công" vào 1 index tồn kho (itemIdx hoặc poIdx) — trừ
-// đúng SL PASS hiện tại của các dòng SPP ĐÃ TICK khỏi cả byKho[kho] lẫn tổng pass, để bảng Thiếu/Đủ
-// theo Plan không còn tính nhóm này là tồn khả dụng nữa (giống hệt cách container Pick xong đã trừ
-// khỏi phía "cần" — đây trừ khỏi phía "đang có", vì SPP không có GI để biết đã xuất hay chưa).
-// byCustPo=true -> khớp khoá kiểu buildItemCustPoIndex (item+PO); false -> khoá kiểu buildItemIndex (chỉ item).
-function sppApplyPickedDeduction(idx, byCustPo){
-  if(!sppManualPicked || !Object.keys(sppManualPicked).length) return;
-  buildSppPickRows().forEach(r => {
-    if(!sppManualPicked[sppPickKey(r.kho, r.item, r.custpo)]) return;
-    const idxKey = byCustPo ? (r.item.toLowerCase() + '␟' + r.custpo.toLowerCase()) : r.item.toLowerCase();
-    const entry = idx[idxKey];
-    if(!entry) return;
-    entry.byKho[r.kho] = Math.max(0, (entry.byKho[r.kho] || 0) - r.qty);
-    entry.pass = Math.max(0, (entry.pass || 0) - r.qty);
-  });
-}
-
 // Gộp theo kho+item+locator+Cust PO (mỗi Cust PO khác nhau tách thành 1 dòng riêng), cộng dồn SL tồn,
 // đếm số pallet THEO ĐÚNG SỐ DÒNG GI NO. GỐC (dùng raw_rows chi tiết từng dòng, không dùng kho_detail
 // vì kho_detail đã gộp sẵn theo item+custpo+locator+oqc+ref nên mất granularity GI No.).
@@ -14065,7 +13942,6 @@ function initDashboard(){
   if(saved.manualPicked && Object.keys(saved.manualPicked).length > 0) manualPickedContainers = saved.manualPicked;
   if(saved.hiddenContainers && Object.keys(saved.hiddenContainers).length > 0) hiddenPlanContainers = saved.hiddenContainers;
   if(saved.manualKho && Object.keys(saved.manualKho).length > 0) manualKhoOverrides = saved.manualKho;
-  if(saved.sppPicked && Object.keys(saved.sppPicked).length > 0) sppManualPicked = saved.sppPicked;
   if(saved.scannedExtra && Object.keys(saved.scannedExtra).length > 0) scannedExtraRows = saved.scannedExtra;
   if(saved.scannedGi && saved.scannedGi.length > 0) scannedGiSet = new Set(saved.scannedGi);
   if(saved.giScanLog && saved.giScanLog.length > 0) giScanLog = saved.giScanLog;
@@ -14287,9 +14163,6 @@ if(btnSaveCloud){
               }
               if(cloudData[STORAGE_KEY_HIDDEN_CONT] !== undefined && cloudData[STORAGE_KEY_HIDDEN_CONT] !== _mem[STORAGE_KEY_HIDDEN_CONT]){
                 hiddenPlanContainers = cloudData[STORAGE_KEY_HIDDEN_CONT] ? JSON.parse(cloudData[STORAGE_KEY_HIDDEN_CONT]) : {};
-              }
-              if(cloudData[STORAGE_KEY_SPP_PICKED] !== undefined && cloudData[STORAGE_KEY_SPP_PICKED] !== _mem[STORAGE_KEY_SPP_PICKED]){
-                sppManualPicked = cloudData[STORAGE_KEY_SPP_PICKED] ? JSON.parse(cloudData[STORAGE_KEY_SPP_PICKED]) : {};
               }
               renderPlanPanel();
             }catch(e){ console.warn('Không lấy được tuỳ chỉnh container mới nhất từ Cloud trước khi lưu:', e); }
