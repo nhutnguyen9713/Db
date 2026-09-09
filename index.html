@@ -4679,7 +4679,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.42';
+const APP_VERSION = 'v1.44';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -12795,10 +12795,18 @@ function ccSetCardLocked(khoLabel, locked){
 // mất khi tải lại trang — chỉ hiển thị lại đúng dữ liệu đã tính, không tính lại từ đầu.
 function ccRestoreResultsFromStorage(saved){
   if(!saved) return;
-  CC_KHO_LIST.forEach(k => {
-    const result = saved[k.label];
+  // Gán theo ĐÚNG thứ tự khoá đã lưu (Object.keys(saved) giữ nguyên thứ tự JSON.parse trả về) — TRƯỚC
+  // ĐÂY dựng lại ccKhoResults theo thứ tự CỐ ĐỊNH của CC_KHO_LIST (2B→3A→3B), khiến JSON.stringify()
+  // sau đó (mỗi lần render/lưu) ra chuỗi khác thứ tự khoá so với bản đã lưu — dù nội dung y hệt — nên
+  // luôn bị báo nhầm "có thay đổi chưa lưu (Đề xuất kiểm hôm nay)" ngay khi vừa mở lại trang.
+  Object.keys(saved).forEach(khoLabel => {
+    const result = saved[khoLabel];
     if(!result || !result.list || !result.list.length) return;
-    ccKhoResults[k.label] = result;
+    ccKhoResults[khoLabel] = result;
+  });
+  CC_KHO_LIST.forEach(k => {
+    const result = ccKhoResults[k.label];
+    if(!result) return;
     ccKhoMode[k.label] = result.mode;
     const card = document.querySelector(`.cc-kho-card[data-kho="${CSS.escape(k.label)}"]`);
     if(card){
