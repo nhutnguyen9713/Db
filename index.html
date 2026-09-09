@@ -3158,6 +3158,20 @@
   </div>
 </div>
 
+<div class="pick-slip-overlay" id="spp-plan-overlay">
+  <div class="pick-slip-box" style="width:min(1200px, 100%);">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;">Nhóm SPP — Đủ / Thiếu so với Tồn kho</div>
+      <button type="button" class="btn-update btn-ghost-outline" id="spp-plan-close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        Đóng
+      </button>
+    </div>
+    <div class="desc" style="padding:0 16px 10px;">Item No. không bắt đầu bằng số 0 — không có GI để hệ thống tự nhận Pick xong như hàng thường. Tick "Đủ hàng" khi đã pick xong thủ công (coi như đủ 100%) — tự cập nhật lại số Đủ/Thiếu ở ô KPI và bảng chính.</div>
+    <div class="pick-slip-content" id="spp-plan-content" style="overflow:auto;"></div>
+  </div>
+</div>
+
 <div class="pick-slip-overlay" id="kho-grid-settings-overlay">
   <div class="pick-slip-box" style="width:min(420px, 100%);">
     <div class="pick-slip-toolbar">
@@ -3648,6 +3662,7 @@ const STORAGE_KEY_LABELS = {
   tn5_dashboard_manual_picked_v1: 'Đánh dấu Pick thủ công',
   tn5_dashboard_hidden_cont_v1: 'Container đã ẩn',
   tn5_dashboard_manual_kho_v1: 'Chọn Kho thủ công',
+  tn5_dashboard_spp_ok_v1: 'Tick Đủ hàng SPP thủ công',
   tn5_dashboard_kt_inputs_v1: 'Số liệu KT đang nhập',
   tn5_dashboard_scanned_extra_v1: 'Dòng tự thêm khi quét QR',
   tn5_dashboard_scanned_gi_v1: 'Danh sách GI đã quét',
@@ -4646,6 +4661,9 @@ function saveStateToStorage(){
     if(Object.keys(manualKhoOverrides).length) LS.setItem(STORAGE_KEY_MANUAL_KHO, JSON.stringify(manualKhoOverrides));
     else LS.removeItem(STORAGE_KEY_MANUAL_KHO);
 
+    if(Object.keys(sppManualOk).length) LS.setItem(STORAGE_KEY_SPP_OK, JSON.stringify(sppManualOk));
+    else LS.removeItem(STORAGE_KEY_SPP_OK);
+
     if(Object.keys(scannedExtraRows).length) LS.setItem(STORAGE_KEY_SCANNED_EXTRA, JSON.stringify(scannedExtraRows));
     else LS.removeItem(STORAGE_KEY_SCANNED_EXTRA);
 
@@ -4684,6 +4702,7 @@ function loadStateFromStorage(){
     const manualPickedRaw = LS.getItem(STORAGE_KEY_MANUAL_PICKED);
     const hiddenContRaw = LS.getItem(STORAGE_KEY_HIDDEN_CONT);
     const manualKhoRaw = LS.getItem(STORAGE_KEY_MANUAL_KHO);
+    const sppOkRaw = LS.getItem(STORAGE_KEY_SPP_OK);
     const ktInputsRaw = LS.getItem(STORAGE_KEY_KT_INPUTS);
     const scannedExtraRaw = LS.getItem(STORAGE_KEY_SCANNED_EXTRA);
     const scannedGiRaw = LS.getItem(STORAGE_KEY_SCANNED_GI);
@@ -4703,6 +4722,7 @@ function loadStateFromStorage(){
       manualPicked: manualPickedRaw ? JSON.parse(manualPickedRaw) : {},
       hiddenContainers: hiddenContRaw ? JSON.parse(hiddenContRaw) : {},
       manualKho: manualKhoRaw ? JSON.parse(manualKhoRaw) : {},
+      sppOk: sppOkRaw ? JSON.parse(sppOkRaw) : {},
       ktInputs: ktInputsRaw ? JSON.parse(ktInputsRaw) : {},
       scannedExtra: scannedExtraRaw ? JSON.parse(scannedExtraRaw) : {},
       scannedGi: scannedGiRaw ? JSON.parse(scannedGiRaw) : [],
@@ -4714,7 +4734,7 @@ function loadStateFromStorage(){
     };
   }catch(err){
     console.warn('Không đọc được dữ liệu đã lưu:', err);
-    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, khoGrid: {}, confirmedHistory: {} };
+    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, sppOk: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, khoGrid: {}, confirmedHistory: {} };
   }
 }
 
@@ -4730,6 +4750,7 @@ function clearStoredState(){
   LS.removeItem(STORAGE_KEY_MANUAL_PICKED);
   LS.removeItem(STORAGE_KEY_HIDDEN_CONT);
   LS.removeItem(STORAGE_KEY_MANUAL_KHO);
+  LS.removeItem(STORAGE_KEY_SPP_OK);
   LS.removeItem(STORAGE_KEY_KT_INPUTS);
   LS.removeItem(STORAGE_KEY_SCANNED_EXTRA);
   LS.removeItem(STORAGE_KEY_SCANNED_GI);
@@ -4743,7 +4764,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.51';
+const APP_VERSION = 'v1.53';
 const APP_VERSION_DATE = '10/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -7468,12 +7489,29 @@ document.addEventListener('click', (e) => {
     if(pickingNavBtn && !pickingNavBtn.classList.contains('active')) pickingNavBtn.click();
     setTimeout(() => {
       const target = document.getElementById(shortBadge.dataset.jumpCombined);
+      const flash = (el) => {
+        const prevBg = el.style.background;
+        el.style.background = 'rgba(214,57,75,0.18)';
+        el.style.transition = 'background 0.3s';
+        setTimeout(() => { el.style.background = prevBg; }, 1800);
+      };
       if(target){
         target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const prevBg = target.style.background;
-        target.style.background = 'rgba(214,57,75,0.18)';
-        target.style.transition = 'background 0.3s';
-        setTimeout(() => { target.style.background = prevBg; }, 1800);
+        flash(target);
+      } else if(combinedPlanCache){
+        // Không thấy trong bảng chính -> mã này có thể thuộc nhóm SPP (đã tách riêng ra popup, xem
+        // renderSppPlanPopup) -> tự mở popup đó thay vì im lặng bỏ qua không tìm thấy gì.
+        const inSpp = combinedPlanCache.sppRows.some(r =>
+          combinedRowDomId(r.item, r.anyPO ? '' : r.custpo) === shortBadge.dataset.jumpCombined);
+        if(inSpp){
+          renderSppPlanPopup();
+          const overlay = document.getElementById('spp-plan-overlay');
+          if(overlay) overlay.classList.add('show');
+          setTimeout(() => {
+            const sppTarget = document.getElementById(shortBadge.dataset.jumpCombined);
+            if(sppTarget){ sppTarget.scrollIntoView({ behavior: 'smooth', block: 'center' }); flash(sppTarget); }
+          }, 80);
+        }
       }
     }, 60);
     return; // không cho nổi bọt lên xử lý click hàng container bên dưới
@@ -7961,20 +7999,134 @@ function buildCombinedPlanCompareTable(){
     const totalOnHand = inv.pass || 0;
     const itemAnyPO = khoOrder.reduce((s,k) => s + ((itemIdx[p.item.toLowerCase()]||{}).byKho?.[k] || 0), 0);
     const poMismatch = !anyPO && totalOnHand === 0 && itemAnyPO > 0;
+    // Nh\u00F3m SPP (Item No. kh\u00F4ng b\u1EAFt \u0111\u1EA7u b\u1EB1ng s\u1ED1 0) kh\u00F4ng c\u00F3 GI \u0111\u1EC3 t\u1EF1 nh\u1EADn bi\u1EBFt \u0111\u00E3 l\u1EA5y \u0111\u1EE7 h\u00E0ng nh\u01B0 m\u00E3
+    // th\u01B0\u1EDDng \u2014 cho ph\u00E9p tick tay "\u0110\u1EE7 h\u00E0ng" (coi nh\u01B0 \u0111\u00E3 pick 100%) thay th\u1EBF, xem sppManualOk/toggleSppOk.
+    const isSpp = ccIsSppItem(p.item);
+    const manualOk = isSpp && !!sppManualOk[sppOkKey(p.item, p.custpo)];
     return {
       item: p.item, custpo: p.custpo, anyPO,
       qtyByType: p.qtyByType, totalPlanQty: p.totalPlanQty,
       totalOnHand, pass: inv.pass, ng: inv.ng,
-      diff: totalOnHand - p.totalPlanQty, poMismatch, itemAnyPO
+      diff: totalOnHand - p.totalPlanQty, poMismatch, itemAnyPO,
+      isSpp, manualOk
     };
   }).sort((a,b) => a.diff - b.diff);
 
-  const shortCount = rows.filter(r => r.diff < 0).length;
+  // "Thi\u1EBFu" = c\u00F2n thi\u1EBFu th\u1EADt (diff < 0) V\u00C0 ch\u01B0a \u0111\u01B0\u1EE3c tick tay "\u0110\u1EE7 h\u00E0ng" \u2014 d\u00F2ng SPP \u0111\u00E3 tick coi nh\u01B0
+  // \u0111\u1EE7 (pick 100%) d\u00F9 s\u1ED1 Ch\u00EAnh l\u1EC7ch hi\u1EC3n th\u1ECB v\u1EABn gi\u1EEF nguy\u00EAn s\u1ED1 TH\u1EACT (kh\u00F4ng b\u1ECBa s\u1ED1 li\u1EC7u), ch\u1EC9 \u0111\u1ED5i
+  // c\u00E1ch T\u00CDNH \u0110\u1EBEM/HI\u1EC2N TH\u1ECA tr\u1EA1ng th\u00E1i.
+  const isShortRow = r => r.diff < 0 && !r.manualOk;
+  const shortCount = rows.filter(isShortRow).length;
   const okCount = rows.length - shortCount;
   const poMismatchCount = rows.filter(r => r.poMismatch).length;
+  // T\u00E1ch ri\u00EAng nh\u00F3m SPP ra kh\u1ECFi b\u1EA3ng ch\u00EDnh \u2014 hi\u1EC3n th\u1ECB g\u1ED9p trong popup ri\u00EAng (xem renderSppPlanPopup),
+  // tr\u00E1nh l\u00E0m nhi\u1EC5u b\u1EA3ng so s\u00E1nh ch\u00EDnh v\u1ED1n ch\u1EC9 \u0111\u00E1ng tin cho nh\u00F3m h\u00E0ng c\u00F3 GI theo d\u00F5i \u0111\u01B0\u1EE3c t\u1EF1 \u0111\u1ED9ng.
+  const mainRows = rows.filter(r => !r.isSpp);
+  const sppRows = rows.filter(r => r.isSpp);
 
-  return { rows, okCount, shortCount, poMismatchCount, loadedTypes, khoOrder };
+  return { rows, mainRows, sppRows, okCount, shortCount, poMismatchCount, loadedTypes, khoOrder };
 }
+
+// Dựng HTML 1 dòng so sánh — DÙNG CHUNG cho cả bảng chính (mainRows, không có cột tick) và popup
+// nhóm SPP (sppRows, showTick=true để tick tay "Đủ hàng") — cùng 1 cách hiển thị, không viết 2 nơi
+// dễ lệch nhau.
+function combinedCompareRowHtml(r, loadedTypes, showTick){
+  const typeCells = loadedTypes.map(t => `<td class="num">${r.qtyByType[t] ? fmt(r.qtyByType[t]) : '—'}</td>`).join('');
+  const short = r.diff < 0 && !r.manualOk;
+  const poCell = r.anyPO
+    ? `<span class="po-any">Bất kỳ PO</span>`
+    : (r.poMismatch
+      ? `${escHtml(r.custpo)} <span class="po-warn" title="Không tìm thấy PO này trong tồn kho, nhưng mã hàng còn ${fmt(r.itemAnyPO)} Pcs ở PO khác">⚠</span>`
+      : escHtml(r.custpo));
+  const statusBadge = r.manualOk
+    ? `<span class="compare-badge ok" title="Đã tick tay Đủ hàng (SPP) — coi như đã pick 100%">Đủ ✓</span>`
+    : `<span class="compare-badge ${short?'short':'ok'}">${short?'Thiếu':'Đủ'}</span>`;
+  const tickCell = showTick ? `
+      <td style="text-align:center;">
+        <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; ${r.manualOk?'color:var(--teal);':'color:var(--muted-2);'}">
+          <input type="checkbox" data-spp-ok-item="${escAttr(r.item)}" data-spp-ok-po="${escAttr(r.custpo)}" ${r.manualOk?'checked':''}>
+          Đủ hàng
+        </label>
+      </td>` : '';
+  return `<tr class="compare-row" id="${combinedRowDomId(r.item, r.anyPO ? '' : r.custpo)}">
+      <td><span class="item-link" data-item="${r.item}" data-po="${r.anyPO ? '' : r.custpo}">${escHtml(r.item)} <span class="item-link-arrow">▸</span></span></td>
+      <td>${poCell}</td>
+      ${typeCells}
+      <td class="num" style="font-weight:700;">${fmt(r.totalPlanQty)}</td>
+      <td class="num" style="color:var(--text); font-weight:700;">${fmt(r.totalOnHand)}</td>
+      <td class="num oqc-pass">${fmt(r.pass)}</td>
+      <td class="num oqc-ng">${fmt(r.ng)}</td>
+      <td class="num ${short?'diff-short':'diff-ok'}">${r.diff>=0?'+':''}${fmt(r.diff)}</td>
+      <td>${statusBadge}</td>
+      ${tickCell}
+    </tr>`;
+}
+
+// Popup liệt kê riêng nhóm SPP (mở từ ô "Nhóm SPP" trong KPI của Tổng hợp 3 Plan) — cùng cột như
+// bảng chính, kèm thêm cột tick "Đủ hàng" ở cuối.
+function renderSppPlanPopup(){
+  const el = document.getElementById('spp-plan-content');
+  if(!el) return;
+  const combined = combinedPlanCache;
+  if(!combined || !combined.sppRows.length){
+    el.innerHTML = `<div style="text-align:center; color:var(--muted-2); font-style:italic; padding:24px 0;">Không có mã SPP nào trong Tổng hợp 3 Plan hiện tại.</div>`;
+    return;
+  }
+  const { sppRows, loadedTypes } = combined;
+  const typeHead = loadedTypes.map(t => `<th style="text-align:right; color:${PLAN_COLORS[t]}">Plan ${t}</th>`).join('');
+  const bodyRows = sppRows.map(r => combinedCompareRowHtml(r, loadedTypes, true)).join('');
+  el.innerHTML = `
+    <table class="plan-detail-table compare-table">
+      <thead><tr>
+        <th>Item No.</th><th>Cust PO</th>${typeHead}
+        <th style="text-align:right">Tổng Plan</th>
+        <th style="text-align:right">Tổng tồn (PASS)</th>
+        <th style="text-align:right">PASS</th>
+        <th style="text-align:right">NG</th>
+        <th style="text-align:right">Chênh lệch</th>
+        <th>Trạng thái</th>
+        <th>Tick thủ công</th>
+      </tr></thead>
+      <tbody>${bodyRows}</tbody>
+    </table>`;
+}
+
+document.addEventListener('click', (e) => {
+  if(e.target.closest('#spp-plan-kpi-tile')){
+    renderSppPlanPopup();
+    const overlay = document.getElementById('spp-plan-overlay');
+    if(overlay) overlay.classList.add('show');
+    return;
+  }
+  if(e.target.id === 'spp-plan-overlay' || e.target.closest('#spp-plan-close')){
+    const overlay = document.getElementById('spp-plan-overlay');
+    if(overlay) overlay.classList.remove('show');
+  }
+});
+
+// Tick "Đủ hàng" cho 1 dòng SPP = coi như đã lấy đủ/pick 100% (vì nhóm này không có GI để hệ thống
+// tự nhận biết) — lưu theo khoá Item+Cust PO (đúng công thức key của planPairs, xem
+// buildCombinedPlanCompareTable), CHỈ lưu mốc đã tick, không đổi số Chênh lệch thật đang hiển thị.
+let sppManualOk = {};
+const STORAGE_KEY_SPP_OK = 'tn5_dashboard_spp_ok_v1';
+function sppOkKey(item, custpo){
+  return String(item || '').toLowerCase() + '␟' + String(custpo || '').toLowerCase();
+}
+function toggleSppOk(item, custpo){
+  const key = sppOkKey(item, custpo);
+  if(sppManualOk[key]) delete sppManualOk[key];
+  else sppManualOk[key] = { at: Date.now() };
+  _localContOverridesDirty = true;
+  saveStateToStorage();
+  scheduleAutoSaveToCloud('contoverride', [STORAGE_KEY_SPP_OK], 'Đánh dấu Đủ hàng SPP thủ công');
+  renderPlanPanel(); // renderCombinedPlanPanel() bên trong tự tính lại combinedPlanCache mới nhất
+  renderSppPlanPopup(); // vẽ lại ngay nội dung popup (nếu đang mở) để thấy cập nhật tức thì, không phải đóng/mở lại
+}
+document.addEventListener('change', (e) => {
+  const cb = e.target.closest('input[data-spp-ok-item]');
+  if(!cb) return;
+  toggleSppOk(cb.dataset.sppOkItem, cb.dataset.sppOkPo);
+});
 
 function renderCombinedPlanPanel(){
   const rowEl = document.getElementById('plan-combined-row');
@@ -7994,45 +8146,30 @@ function renderCombinedPlanPanel(){
   const combined = buildCombinedPlanCompareTable();
   combinedPlanCache = combined;
 
+  const sppOkCount = combined.sppRows.filter(r => r.manualOk).length;
   if(kpiEl){
     kpiEl.innerHTML = `
       <div class="kpi"><div class="label">MÃ + PO SO SÁNH</div><div class="value">${fmt(combined.rows.length)}</div><div class="foot">Gộp ${loadedTypes.map(t=>'Plan '+t).join(' + ')}</div></div>
       <div class="kpi good"><div class="label">ĐỦ HÀNG</div><div class="value">${fmt(combined.okCount)}</div><div class="foot">Tồn (PASS) ≥ Tổng SL Plan</div></div>
       <div class="kpi accent"><div class="label">THIẾU HÀNG</div><div class="value">${fmt(combined.shortCount)}</div><div class="foot">Tồn (PASS) &lt; Tổng SL Plan</div></div>
       <div class="kpi"><div class="label">PO KHÔNG KHỚP</div><div class="value">${fmt(combined.poMismatchCount)}</div><div class="foot">⚠ Không thấy đúng PO trong tồn kho</div></div>
+      <div class="kpi" id="spp-plan-kpi-tile" style="cursor:pointer;" title="Item No. không bắt đầu bằng số 0 — không có GI để tự nhận Pick xong, bấm để xem & tick tay">
+        <div class="label">NHÓM SPP ▸</div><div class="value">${fmt(combined.sppRows.length)}</div><div class="foot">${fmt(sppOkCount)} đã tick Đủ hàng — bấm xem</div>
+      </div>
     `;
   }
   if(summaryTextEl){
     summaryTextEl.innerHTML = `So sánh Tổng SL kế hoạch còn cần lấy (${loadedTypes.map(t=>'Plan '+t).join(' + ')}, đã trừ container Pick xong) vs SL tồn kho (theo Item + Cust PO) &nbsp; <span class="compare-summary"><span class="compare-badge ok">Đủ ${combined.okCount}</span> <span class="compare-badge short">Thiếu ${combined.shortCount}</span>${combined.poMismatchCount ? ` <span class="compare-badge warn">⚠ ${combined.poMismatchCount} PO không khớp tồn kho</span>` : ''}</span>`;
   }
 
-  if(!combined.rows.length){
-    tableWrap.innerHTML = `<div class="kho-empty" style="display:block;">Không có dữ liệu để so sánh.</div>`;
+  if(!combined.mainRows.length){
+    tableWrap.innerHTML = `<div class="kho-empty" style="display:block;">Không có dữ liệu để so sánh (ngoài nhóm SPP — xem ô "Nhóm SPP" phía trên).</div>`;
     return;
   }
 
   const typeHead = loadedTypes.map(t => `<th style="text-align:right; color:${PLAN_COLORS[t]}">Plan ${t}</th>`).join('');
   const colCount = 3 + loadedTypes.length + 5;
-  const bodyRows = combined.rows.map(r => {
-    const typeCells = loadedTypes.map(t => `<td class="num">${r.qtyByType[t] ? fmt(r.qtyByType[t]) : '—'}</td>`).join('');
-    const short = r.diff < 0;
-    const poCell = r.anyPO
-      ? `<span class="po-any">Bất kỳ PO</span>`
-      : (r.poMismatch
-        ? `${r.custpo} <span class="po-warn" title="Không tìm thấy PO này trong tồn kho, nhưng mã hàng còn ${fmt(r.itemAnyPO)} Pcs ở PO khác">⚠</span>`
-        : r.custpo);
-    return `<tr class="compare-row" id="${combinedRowDomId(r.item, r.anyPO ? '' : r.custpo)}">
-      <td><span class="item-link" data-item="${r.item}" data-po="${r.anyPO ? '' : r.custpo}">${r.item} <span class="item-link-arrow">▸</span></span></td>
-      <td>${poCell}</td>
-      ${typeCells}
-      <td class="num" style="font-weight:700;">${fmt(r.totalPlanQty)}</td>
-      <td class="num" style="color:var(--text); font-weight:700;">${fmt(r.totalOnHand)}</td>
-      <td class="num oqc-pass">${fmt(r.pass)}</td>
-      <td class="num oqc-ng">${fmt(r.ng)}</td>
-      <td class="num ${short?'diff-short':'diff-ok'}">${r.diff>=0?'+':''}${fmt(r.diff)}</td>
-      <td><span class="compare-badge ${short?'short':'ok'}">${short?'Thiếu':'Đủ'}</span></td>
-    </tr>`;
-  }).join('');
+  const bodyRows = combined.mainRows.map(r => combinedCompareRowHtml(r, loadedTypes, false)).join('');
 
   tableWrap.innerHTML = `
     <table class="plan-detail-table compare-table" data-colspan="${colCount}">
@@ -8058,12 +8195,14 @@ function exportCombinedPlanToExcel(){
   }
   const combined = combinedPlanCache || buildCombinedPlanCompareTable();
 
-  const summaryHeader = ['Item No.', 'Cust PO', ...loadedTypes.map(t => `Plan ${t}`), 'Tổng Plan', 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái'];
+  const summaryHeader = ['Item No.', 'Cust PO', ...loadedTypes.map(t => `Plan ${t}`), 'Tổng Plan', 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Nhóm'];
   const summaryRows = combined.rows.map(r => [
     r.item,
     r.anyPO ? 'Bất kỳ PO' : r.custpo + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
     ...loadedTypes.map(t => r.qtyByType[t] || 0),
-    r.totalPlanQty, r.totalOnHand, r.pass, r.ng, r.diff, r.diff >= 0 ? 'Đủ' : 'Thiếu'
+    r.totalPlanQty, r.totalOnHand, r.pass, r.ng, r.diff,
+    (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu',
+    r.isSpp ? (r.manualOk ? 'SPP - đã tick Đủ hàng tay' : 'SPP') : ''
   ]);
 
   const detailHeader = ['OQC', 'Kho', 'Item No.', 'Cust PO (tồn kho)', 'Locator', 'SL tồn'];
@@ -13942,6 +14081,7 @@ function initDashboard(){
   if(saved.manualPicked && Object.keys(saved.manualPicked).length > 0) manualPickedContainers = saved.manualPicked;
   if(saved.hiddenContainers && Object.keys(saved.hiddenContainers).length > 0) hiddenPlanContainers = saved.hiddenContainers;
   if(saved.manualKho && Object.keys(saved.manualKho).length > 0) manualKhoOverrides = saved.manualKho;
+  if(saved.sppOk && Object.keys(saved.sppOk).length > 0) sppManualOk = saved.sppOk;
   if(saved.scannedExtra && Object.keys(saved.scannedExtra).length > 0) scannedExtraRows = saved.scannedExtra;
   if(saved.scannedGi && saved.scannedGi.length > 0) scannedGiSet = new Set(saved.scannedGi);
   if(saved.giScanLog && saved.giScanLog.length > 0) giScanLog = saved.giScanLog;
@@ -14163,6 +14303,9 @@ if(btnSaveCloud){
               }
               if(cloudData[STORAGE_KEY_HIDDEN_CONT] !== undefined && cloudData[STORAGE_KEY_HIDDEN_CONT] !== _mem[STORAGE_KEY_HIDDEN_CONT]){
                 hiddenPlanContainers = cloudData[STORAGE_KEY_HIDDEN_CONT] ? JSON.parse(cloudData[STORAGE_KEY_HIDDEN_CONT]) : {};
+              }
+              if(cloudData[STORAGE_KEY_SPP_OK] !== undefined && cloudData[STORAGE_KEY_SPP_OK] !== _mem[STORAGE_KEY_SPP_OK]){
+                sppManualOk = cloudData[STORAGE_KEY_SPP_OK] ? JSON.parse(cloudData[STORAGE_KEY_SPP_OK]) : {};
               }
               renderPlanPanel();
             }catch(e){ console.warn('Không lấy được tuỳ chỉnh container mới nhất từ Cloud trước khi lưu:', e); }
