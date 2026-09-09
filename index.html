@@ -609,6 +609,31 @@
   }
   .wh3b-custom-gear:hover{background:rgba(110,79,224,0.16); color:var(--violet);}
 
+  /* Tay cầm kéo-thả để đổi kích thước ô trong lưới TUỲ CHỈNH — kéo viền phải = đổi độ rộng, kéo
+     viền dưới = đổi độ cao, kéo góc = đổi cả 2. Chỉ xuất hiện trong .wh3b-custom-grid. */
+  .wh3b-resize-handle{
+    position:absolute; z-index:3; touch-action:none; border-radius:3px;
+    background:rgba(110,79,224,0.28); opacity:.35;
+    transition:opacity .15s ease, background-color .15s ease;
+  }
+  .wh3b-box:hover .wh3b-resize-handle, .wh3b-box.wh3b-resizing .wh3b-resize-handle{opacity:1;}
+  .wh3b-resize-handle:hover{background:rgba(110,79,224,0.55);}
+  .wh3b-resize-e{top:4px; bottom:4px; right:-5px; width:9px; cursor:ew-resize;}
+  .wh3b-resize-s{left:4px; right:4px; bottom:-5px; height:9px; cursor:ns-resize;}
+  .wh3b-resize-se{right:-6px; bottom:-6px; width:14px; height:14px; cursor:nwse-resize; background:transparent;}
+  .wh3b-resize-se::after{
+    content:''; position:absolute; right:3px; bottom:3px; width:7px; height:7px;
+    border-right:2px solid var(--violet); border-bottom:2px solid var(--violet);
+  }
+  .wh3b-box.wh3b-resizing{border-color:var(--violet); box-shadow:0 0 0 2px rgba(110,79,224,0.25); z-index:5;}
+  .wh3b-resize-hint{
+    position:absolute; left:50%; bottom:-22px; transform:translateX(-50%); z-index:6;
+    font-family:var(--mono); font-size:10px; font-weight:700; color:#fff;
+    background:var(--violet); padding:2px 6px; border-radius:5px; white-space:nowrap;
+    opacity:0; pointer-events:none; transition:opacity .1s ease;
+  }
+  .wh3b-box.wh3b-resizing .wh3b-resize-hint{opacity:1;}
+
   /* Khối màu riêng cho từng phần của Sơ đồ kho 3B (PROD / A01-A33 / Picking / Loading) */
   #sodo3b-grid{display:flex; flex-direction:column; gap:16px;}
   .wh3b-block{border-radius:11px; padding:12px; border:1.5px solid; background:var(--panel);}
@@ -4390,7 +4415,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.32';
+const APP_VERSION = 'v1.33';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -7944,6 +7969,27 @@ function khoGridSave(){
   scheduleAutoSaveToCloud('khogrid', [STORAGE_KEY_KHO_GRID], 'Sửa lưới sơ đồ kho tuỳ chỉnh');
 }
 
+// Tập hợp toạ độ "hàng,cột" đang bị các ô khác chiếm — dùng để tìm ô trống ("+") và để chặn
+// resize/kéo-thả đè lên ô đã có sẵn. excludeId: bỏ qua chính ô đang được sửa/kéo (nếu có).
+function khoGridBuildOccupied(layout, excludeId){
+  const occupied = new Set();
+  layout.cells.forEach(cell => {
+    if(cell.id === excludeId) return;
+    for(let r = cell.row; r < cell.row + cell.rowSpan; r++){
+      for(let c = cell.col; c < cell.col + cell.colSpan; c++) occupied.add(r + ',' + c);
+    }
+  });
+  return occupied;
+}
+function khoGridRectOverlaps(occupied, row, col, rowSpan, colSpan){
+  for(let r = row; r < row + rowSpan; r++){
+    for(let c = col; c < col + colSpan; c++){
+      if(occupied.has(r + ',' + c)) return true;
+    }
+  }
+  return false;
+}
+
 function renderSodo3bCustomGrid(){
   const container = document.getElementById('sodo3b-custom-grid');
   if(!container) return;
@@ -7953,12 +7999,7 @@ function renderSodo3bCustomGrid(){
   container.style.gridTemplateRows = `repeat(${layout.rows}, minmax(90px, auto))`;
 
   const map = computeSodo3bByLocator();
-  const occupied = new Set();
-  layout.cells.forEach(cell => {
-    for(let r = cell.row; r < cell.row + cell.rowSpan; r++){
-      for(let c = cell.col; c < cell.col + cell.colSpan; c++) occupied.add(r + ',' + c);
-    }
-  });
+  const occupied = khoGridBuildOccupied(layout, null);
 
   let html = '';
   layout.cells.forEach(cell => {
@@ -7974,7 +8015,13 @@ function renderSodo3bCustomGrid(){
       `<button type="button" class="wh3b-custom-gear" data-cell-id="${escAttr(cell.id)}" title="Đổi tên/vị trí/kích thước hoặc xoá ô này khỏi lưới">
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
       </button><button type="button" class="wh3b-box-gear"`
-    );
+    // Tay cầm kéo-thả để đổi kích thước ô ngay trên sơ đồ, thay vì phải mở popover gõ số hàng/cột chiếm.
+    ).replace(/<\/div>$/, `
+      <div class="wh3b-resize-handle wh3b-resize-e" data-cell-id="${escAttr(cell.id)}" data-dir="e" title="Kéo để đổi độ rộng"></div>
+      <div class="wh3b-resize-handle wh3b-resize-s" data-cell-id="${escAttr(cell.id)}" data-dir="s" title="Kéo để đổi độ cao"></div>
+      <div class="wh3b-resize-handle wh3b-resize-se" data-cell-id="${escAttr(cell.id)}" data-dir="se" title="Kéo để đổi cả độ rộng lẫn độ cao"></div>
+      <span class="wh3b-resize-hint">${cell.colSpan}×${cell.rowSpan}</span>
+    </div>`);
     html += cellHtml;
   });
 
@@ -8041,6 +8088,75 @@ document.addEventListener('click', (e) => {
     return;
   }
 });
+
+/* Kéo-thả viền ô để đổi kích thước (chiều rộng/cao) trong lưới TUỲ CHỈNH — thay thế cho việc phải
+   mở popover gõ số hàng/cột chiếm. Kéo viền phải = đổi độ rộng (colSpan), viền dưới = đổi độ cao
+   (rowSpan), góc dưới-phải = đổi cả 2. Không cho đè lên ô khác đã có sẵn trên lưới. */
+let _khoGridResizeState = null;
+
+document.addEventListener('pointerdown', (e) => {
+  const handle = e.target.closest('.wh3b-resize-handle');
+  if(!handle) return;
+  const layout = khoGridGetLayout('Kho 3B');
+  const cell = layout.cells.find(c => c.id === handle.dataset.cellId);
+  const container = document.getElementById('sodo3b-custom-grid');
+  const boxEl = handle.closest('.wh3b-box');
+  if(!cell || !container || !boxEl) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  const colTracks = getComputedStyle(container).gridTemplateColumns.trim().split(/\s+/).map(parseFloat).filter(n => !isNaN(n));
+  const rowTracks = getComputedStyle(container).gridTemplateRows.trim().split(/\s+/).map(parseFloat).filter(n => !isNaN(n));
+  const colGap = parseFloat(getComputedStyle(container).columnGap) || 10;
+  const rowGap = parseFloat(getComputedStyle(container).rowGap) || 10;
+  const stepX = (colTracks.reduce((a, b) => a + b, 0) / (colTracks.length || 1)) + colGap;
+  const stepY = (rowTracks.reduce((a, b) => a + b, 0) / (rowTracks.length || 1)) + rowGap;
+
+  _khoGridResizeState = {
+    cell, boxEl, layout, dir: handle.dataset.dir, stepX, stepY,
+    occupied: khoGridBuildOccupied(layout, cell.id),
+    startX: e.clientX, startY: e.clientY,
+    origColSpan: cell.colSpan, origRowSpan: cell.rowSpan,
+    curColSpan: cell.colSpan, curRowSpan: cell.rowSpan,
+  };
+  boxEl.classList.add('wh3b-resizing');
+  try{ handle.setPointerCapture(e.pointerId); }catch(err){}
+});
+
+document.addEventListener('pointermove', (e) => {
+  const st = _khoGridResizeState;
+  if(!st) return;
+  const dx = e.clientX - st.startX;
+  const dy = e.clientY - st.startY;
+  let colSpan = st.origColSpan, rowSpan = st.origRowSpan;
+  if(st.dir === 'e' || st.dir === 'se') colSpan = st.origColSpan + Math.round(dx / st.stepX);
+  if(st.dir === 's' || st.dir === 'se') rowSpan = st.origRowSpan + Math.round(dy / st.stepY);
+  colSpan = Math.min(Math.max(colSpan, 1), st.layout.cols - st.cell.col + 1);
+  rowSpan = Math.min(Math.max(rowSpan, 1), st.layout.rows - st.cell.row + 1);
+  // Không cho lấn vào ô khác đã có sẵn — thu nhỏ dần tới khi hết chồng lấn.
+  while(colSpan > 1 && khoGridRectOverlaps(st.occupied, st.cell.row, st.cell.col, rowSpan, colSpan)) colSpan--;
+  while(rowSpan > 1 && khoGridRectOverlaps(st.occupied, st.cell.row, st.cell.col, rowSpan, colSpan)) rowSpan--;
+  st.curColSpan = colSpan; st.curRowSpan = rowSpan;
+  st.boxEl.style.gridColumn = `${st.cell.col} / span ${colSpan}`;
+  st.boxEl.style.gridRow = `${st.cell.row} / span ${rowSpan}`;
+  const hint = st.boxEl.querySelector('.wh3b-resize-hint');
+  if(hint) hint.textContent = `${colSpan}×${rowSpan}`;
+});
+
+function khoGridEndResize(){
+  const st = _khoGridResizeState;
+  if(!st) return;
+  _khoGridResizeState = null;
+  st.boxEl.classList.remove('wh3b-resizing');
+  if(st.curColSpan !== st.origColSpan || st.curRowSpan !== st.origRowSpan){
+    st.cell.colSpan = st.curColSpan;
+    st.cell.rowSpan = st.curRowSpan;
+    khoGridSave();
+  }
+  renderSodo3bCustomGrid(); // vẽ lại để cập nhật khung "+" trống theo kích thước mới
+}
+document.addEventListener('pointerup', khoGridEndResize);
+document.addEventListener('pointercancel', khoGridEndResize);
 
 const khoGridSettingsCloseBtn = document.getElementById('kho-grid-settings-close');
 if(khoGridSettingsCloseBtn) khoGridSettingsCloseBtn.addEventListener('click', () => {
