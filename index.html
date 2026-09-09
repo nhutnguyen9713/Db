@@ -3557,7 +3557,12 @@ tn5SeedMemFromLocalBackup();
 scIdbGetAll().then(idbData => {
   const missingKeys = Object.keys(idbData).filter(k => !(k in _mem));
   if(!missingKeys.length) return;
-  missingKeys.forEach(k => { _mem[k] = idbData[k]; });
+  missingKeys.forEach(k => {
+    _mem[k] = idbData[k];
+    // Ghi luôn vào bản sao lưu localStorage — để lần mở trang SAU không phải phục hồi lại từ
+    // IndexedDB nữa (tránh vẽ lại trang thêm 1 lần mỗi lần mở app), và để 2 lớp sao lưu luôn khớp nhau.
+    try{ localStorage.setItem(TN5_LOCAL_BACKUP_PREFIX + k, idbData[k]); }catch(e){}
+  });
   console.info('Đã khôi phục thêm ' + missingKeys.length + ' mục từ bản sao lưu IndexedDB (không có trong localStorage): ' + missingKeys.join(', '));
   if(typeof FileVault !== 'undefined' && FileVault._runReloaders) FileVault._runReloaders();
 }).catch(e => console.warn('Không đọc được bản sao lưu IndexedDB:', e));
@@ -3632,12 +3637,19 @@ const LS = {
   // Riêng bản sao lưu cục bộ (localStorage thật) thì ghi NGAY, không đợi bấm "Lưu" — đây chỉ là dự
   // phòng cho MÁY NÀY, không phải đồng bộ Cloud, nên không có rủi ro ghi đè máy khác.
   setItem(k, v){
-    _mem[k] = String(v);
-    try{ localStorage.setItem(TN5_LOCAL_BACKUP_PREFIX + k, _mem[k]); }catch(e){}
-    scIdbSetKey(k, _mem[k]); // bản sao lưu IndexedDB — bổ sung, không giới hạn nhỏ như localStorage
+    const strV = String(v);
+    // BỎ QUA nếu giá trị Y HỆT đang có — nhiều nơi (VD: saveStateToStorage() chạy lại mỗi lần vẽ
+    // dashboard) gọi setItem() cho gần như MỌI key dù nội dung chưa đổi gì, trước đây cứ gọi là báo
+    // "có thay đổi chưa lưu" (kể cả không đổi) -> chuông thông báo bị spam gần hết danh sách mỗi lần
+    // mở/tải lại trang. Chỉ thực sự ghi + báo khi nội dung khác trước.
+    if(_mem[k] === strV) return;
+    _mem[k] = strV;
+    try{ localStorage.setItem(TN5_LOCAL_BACKUP_PREFIX + k, strV); }catch(e){}
+    scIdbSetKey(k, strV); // bản sao lưu IndexedDB — bổ sung, không giới hạn nhỏ như localStorage
     markUnsavedChanges(k);
   },
   removeItem(k){
+    if(!(k in _mem)) return; // đã không có sẵn -> không có gì để xoá/báo thay đổi
     delete _mem[k];
     try{ localStorage.removeItem(TN5_LOCAL_BACKUP_PREFIX + k); }catch(e){}
     scIdbDeleteKey(k);
@@ -4456,7 +4468,9 @@ function saveStateToStorage(){
     else LS.removeItem(STORAGE_KEY_PLANS);
 
     LS.setItem(STORAGE_KEY_META, JSON.stringify({
-      savedAt: new Date().toISOString(),
+      // KHÔNG lưu "savedAt" (thời điểm ghi) ở đây nữa — trường này đổi theo từng mili-giây, không
+      // đọc lại ở đâu cả (chỉ tổ chiếm chỗ), nhưng lại khiến LS.setItem() LUÔN thấy "khác giá trị cũ"
+      // dù nội dung thật sự không đổi gì, làm mất tác dụng của việc kiểm tra trùng giá trị (xem LS.setItem).
       inventoryFileName: currentFileName || null,
       updatedAtText: document.getElementById('updated-at-line') ? document.getElementById('updated-at-line').textContent : '',
     }));
@@ -4582,7 +4596,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.34';
+const APP_VERSION = 'v1.35';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
