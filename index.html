@@ -3145,6 +3145,10 @@
   <div class="pick-slip-box">
     <div class="pick-slip-toolbar">
       <div style="font-weight:800; font-size:15px; margin-right:auto;">GI No. đã quét — theo vị trí</div>
+      <button type="button" class="btn-update btn-ghost-outline" id="gi-log-recover-btn" title="Dùng khi ô 'Kiểm thực tế' bị mất/về 0 dù đã quét QR xong (do lỗi đồng bộ Cloud) — tính lại đúng theo nhật ký GI đã quét bên dưới, không cần quét lại">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        Khôi phục Kiểm thực tế
+      </button>
       <button type="button" class="btn-update btn-ghost-outline" id="gi-log-close">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
         Đóng
@@ -4739,7 +4743,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.49';
+const APP_VERSION = 'v1.50';
 const APP_VERSION_DATE = '10/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -10047,7 +10051,16 @@ function handleQrScanReal(giNoRaw){
   // diễn ra RẤT dồn dập, dùng chung sẽ liên tục reset debounce của "Xác nhận"). Nếu mất mạng/đóng tab
   // giữa lúc đang quét cả loạt pallet, trước đây MẤT TOÀN BỘ tiến độ chưa kịp bấm "Lưu" — đây là thao
   // tác lặp lại nhiều nhất khi kiểm tồn kho nên cần tự lưu, không thể để phụ thuộc vào nhớ bấm Lưu.
-  scheduleAutoSaveToCloud('qrscan', [STORAGE_KEY_CCRESULTS, STORAGE_KEY_SCANNED_GI, STORAGE_KEY_GI_LOG], 'Kết quả quét QR');
+  // QUAN TRỌNG: PHẢI đẩy kèm STORAGE_KEY_KT_INPUTS — trước đây thiếu key này, nên mỗi lần quét QR chỉ
+  // cập nhật ktInputValues (ô "Kiểm thực tế") CỤC BỘ, không đẩy lên Cloud. Cloud vẫn giữ bản KT_INPUTS
+  // CŨ; nếu sau đó có 1 lượt realtime áp dụng lại dữ liệu (VD: do CHÍNH máy này ghi xong rồi Firebase
+  // báo lại — xem CloudVault._onData) đúng lúc hasUnsavedChanges vừa được xoá (ngay sau khi autosave ở
+  // đây chạy xong) và không có ô nào đang focus (màn hình quét QR không có input nào), _isSafeToApply()
+  // trả về true -> bản KT_INPUTS CŨ từ Cloud ghi đè mất tiến độ vừa quét trong bộ nhớ máy, dù dữ liệu
+  // vẫn còn nguyên trong ccKhoResults/giScanLog (nên "Xem GI đã quét" vẫn đúng) — khiến cột "KT =" hiện
+  // lại 0 dù vừa quét xong cả locator. Đây chính là lỗi user báo cáo (quét xong A27, thoát camera ra
+  // thấy KT = 0 hết dù "Xem GI đã quét" vẫn liệt kê đủ 26 GI của A27).
+  scheduleAutoSaveToCloud('qrscan', [STORAGE_KEY_CCRESULTS, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_SCANNED_GI, STORAGE_KEY_GI_LOG], 'Kết quả quét QR');
   updateQrGiClearBtn();
   return response;
 }
@@ -10111,6 +10124,37 @@ function renderGiLogPopup(){
   });
   el.innerHTML = html;
 }
+// Khôi phục lại TOÀN BỘ ô "Kiểm thực tế" (ktInputValues) theo ĐÚNG nhật ký GI đã quét (giScanLog) —
+// dùng khi gặp đúng lỗi vừa sửa ở trên (autosave quét QR trước đây thiếu STORAGE_KEY_KT_INPUTS, có
+// thể bị Cloud đè mất tiến độ dù giScanLog/ccKhoResults vẫn còn nguyên). Tính lại từ đầu theo đúng
+// thứ tự đã quét (mergePalletIntoKtTally) cho từng dòng CÓ MẶT trong nhật ký — không đụng tới các
+// dòng khác không liên quan.
+function ccRecoverKtInputsFromGiLog(){
+  if(!giScanLog.length){ alert('Chưa có nhật ký GI nào để khôi phục.'); return; }
+  const ok = confirm(`Tính lại ô "Kiểm thực tế" cho các dòng có trong nhật ký GI đã quét (tổng ${fmt(giScanLog.length)} GI)?\n\nDùng khi ô Kiểm thực tế bị mất/về 0 dù đã quét QR xong. Không ảnh hưởng tới các dòng khác không có trong nhật ký này.`);
+  if(!ok) return;
+  const affectedRowKeys = new Set();
+  giScanLog.forEach(g => { if(g.rowKey) affectedRowKeys.add(g.rowKey); });
+  // Xoá sạch giá trị cũ của ĐÚNG các dòng bị ảnh hưởng trước, rồi tính lại từ đầu theo thứ tự trong
+  // nhật ký — tránh cộng chồng lên phần có thể vẫn còn đúng, đảm bảo kết quả khớp 100% với nhật ký.
+  affectedRowKeys.forEach(k => { delete ktInputValues[k]; });
+  giScanLog.forEach(g => {
+    if(!g.rowKey) return;
+    ktInputValues[g.rowKey] = mergePalletIntoKtTally(ktInputValues[g.rowKey], g.qty);
+  });
+  saveStateToStorage();
+  CC_KHO_LIST.forEach(k => {
+    const result = ccKhoResults[k.label];
+    if(!result) return;
+    if(result.mode === 'locator') ccRenderLocatorCards(k.code, k.label, result.list);
+    else ccRenderKhoResult(k.code, k.label, result.mode, result.list);
+  });
+  scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_KT_INPUTS], 'Khôi phục ô Kiểm thực tế từ nhật ký quét');
+  alert(`✓ Đã khôi phục ${fmt(affectedRowKeys.size)} dòng theo đúng nhật ký ${fmt(giScanLog.length)} GI đã quét.`);
+}
+const giLogRecoverBtn = document.getElementById('gi-log-recover-btn');
+if(giLogRecoverBtn) giLogRecoverBtn.addEventListener('click', ccRecoverKtInputsFromGiLog);
+
 const btnViewGiLog = document.getElementById('btn-view-gi-log');
 if(btnViewGiLog) btnViewGiLog.addEventListener('click', () => {
   renderGiLogPopup();
