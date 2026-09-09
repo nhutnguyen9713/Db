@@ -4615,7 +4615,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.40';
+const APP_VERSION = 'v1.41';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -9865,6 +9865,11 @@ function handleQrScanReal(giNoRaw){
     });
   }
   saveStateToStorage();
+  // Đẩy lên Cloud sau 2 giây (dùng riêng timerKey 'qrscan' — không dùng chung 'confirm' vì quét QR
+  // diễn ra RẤT dồn dập, dùng chung sẽ liên tục reset debounce của "Xác nhận"). Nếu mất mạng/đóng tab
+  // giữa lúc đang quét cả loạt pallet, trước đây MẤT TOÀN BỘ tiến độ chưa kịp bấm "Lưu" — đây là thao
+  // tác lặp lại nhiều nhất khi kiểm tồn kho nên cần tự lưu, không thể để phụ thuộc vào nhớ bấm Lưu.
+  scheduleAutoSaveToCloud('qrscan', [STORAGE_KEY_CCRESULTS, STORAGE_KEY_SCANNED_GI, STORAGE_KEY_GI_LOG], 'Kết quả quét QR');
   updateQrGiClearBtn();
   return response;
 }
@@ -11215,7 +11220,7 @@ function restoreConfirmedItem(rowKey){
   renderConfirmedList(); // ẩn dòng khỏi bảng Đã xác nhận
   // Đẩy NGAY việc khôi phục lên Cloud — càng đẩy sớm càng thu hẹp khoảng thời gian có thể xảy ra
   // tình huống "Cloud vẫn còn giữ bản cũ" (xem _restoredConfirmedKeys ở mergeConfirmedDataFromCloud).
-  scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS], 'Khôi phục dòng đã xác nhận');
+  scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_LASTCHECK], 'Khôi phục dòng đã xác nhận');
 }
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('.cki-restore-btn');
@@ -13447,7 +13452,7 @@ document.addEventListener('click', function(e) {
     renderKhoSearchPage(); // Sẽ tự động ẩn dòng này và hiển thị ở bảng confirm
     // "Xác nhận" là hành động DÙNG NHIỀU NHẤT trong cả app — nếu không tự đẩy Cloud, kết quả kiểm
     // vừa xác nhận có thể mất/hiện lại sai nếu người dùng tải lại trang trước khi kịp bấm "Lưu".
-    scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS], 'Kết quả vừa xác nhận');
+    scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_LASTCHECK], 'Kết quả vừa xác nhận');
   } else {
     const inputs = td.querySelectorAll('.kt-input');
     // Xóa khỏi biến confirm, nhưng giữ lại giá trị đã nhập để dòng hiện lại ở bảng chính
@@ -13464,7 +13469,7 @@ document.addEventListener('click', function(e) {
     
     saveStateToStorage();
     renderKhoSearchPage(); // Sẽ tự động hiện lại dòng này ở bảng chính
-    scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS], 'Huỷ xác nhận');
+    scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_LASTCHECK], 'Huỷ xác nhận');
   }
 });
 
@@ -13485,7 +13490,7 @@ document.addEventListener('click', function(e){
   if(removedGiCount === -1) return;
   saveStateToStorage();
   renderKhoSearchPage();
-  scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CCRESULTS, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_SCANNED_GI, STORAGE_KEY_GI_LOG], 'Xoá dòng đề xuất kiểm');
+  scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CCRESULTS, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_SCANNED_GI, STORAGE_KEY_GI_LOG, STORAGE_KEY_LASTCHECK], 'Xoá dòng đề xuất kiểm');
   if(typeof showAppToast === 'function') showAppToast(removedGiCount > 0 ? `✓ Đã xoá dòng (kèm ${removedGiCount} GI đã quét).` : '✓ Đã xoá dòng.');
 });
 
@@ -13508,7 +13513,7 @@ document.addEventListener('click', function(e){
   rowsToConfirm.forEach((tr) => { if(confirmSingleRow(tr)) count++; });
   saveStateToStorage();
   renderKhoSearchPage();
-  scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS], 'Kết quả vừa xác nhận');
+  scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_LASTCHECK], 'Kết quả vừa xác nhận');
   if(typeof showAppToast === 'function') showAppToast(`✓ Đã xác nhận ${count} dòng ở vị trí này.`);
 });
 
@@ -13523,7 +13528,7 @@ document.addEventListener('keydown', function(e){
   if(confirmSingleRow(tr)){
     saveStateToStorage();
     renderKhoSearchPage();
-    scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS], 'Kết quả vừa xác nhận');
+    scheduleAutoSaveToCloud('confirm', [STORAGE_KEY_CONFIRMED, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_LASTCHECK], 'Kết quả vừa xác nhận');
   }
 });
 
