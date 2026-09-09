@@ -2490,16 +2490,14 @@
       <button type="button" class="wh3b-outside-warning" id="wh3b-outside-warning" style="display:none;" title="Bấm để xem chi tiết các dòng tồn kho nằm ở locator ngoài sơ đồ này"></button>
       <div class="cc-collapse-head" data-collapse-toggle>
         <div style="width:100%;">
-          <div class="brand-eyebrow" style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
-            <span><span class="dot"></span>SƠ ĐỒ KHO</span>
-            <span style="display:flex; gap:6px;">
-              <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-mode-toggle" title="Chuyển giữa sơ đồ mặc định và lưới tự sắp xếp theo đúng vị trí thật ngoài kho">🔲 Grid tuỳ chỉnh</button>
-              <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
-            </span>
-          </div>
+          <div class="brand-eyebrow"><span class="dot"></span>SƠ ĐỒ KHO</div>
           <h1 style="font-size:19px;">Sơ đồ kho 3B</h1>
           <div class="sub">Số pallet hiện có tại từng vị trí (locator) của Kho 3B — mỗi dòng GI No. trong dữ liệu tồn kho tính là 1 pallet. Sức chứa chuẩn mỗi vị trí: 26 pallet — số hiển thị là số pallet thực tế, thanh fill và màu sắc tính theo mức tối đa 26 (vượt quá vẫn tô đỏ/đầy như mức 26).</div>
           <div class="wh3b-summary" id="wh3b-summary"></div>
+          <div style="display:flex; gap:6px; margin-top:2px;">
+            <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-mode-toggle" title="Chuyển giữa sơ đồ mặc định và lưới tự sắp xếp theo đúng vị trí thật ngoài kho">🔲 Grid tuỳ chỉnh</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
+          </div>
         </div>
         <span class="cc-collapse-chevron">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
@@ -4392,7 +4390,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.30';
+const APP_VERSION = 'v1.32';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -7989,6 +7987,7 @@ function renderSodo3bCustomGrid(){
   }
 
   container.innerHTML = html || `<div class="wh3b-empty">Lưới trống — bấm "+" để bắt đầu thêm vị trí.</div>`;
+  whApplySearchFilter('sodo3b-custom-grid', computeSodo3bByLocator, 'sodo3b-search', 'sodo3b-oqc-pass', 'sodo3b-oqc-ng', 'sodo3b-detail');
 }
 
 function khoGridOpenCellPopover(cellId, prefillRow, prefillCol){
@@ -8009,7 +8008,7 @@ function khoGridOpenCellPopover(cellId, prefillRow, prefillCol){
 document.addEventListener('click', (e) => {
   const modeBtn = e.target.closest('#sodo3b-grid-mode-toggle');
   if(modeBtn){
-    e.stopPropagation();
+    e.stopImmediatePropagation(); // 2 nút này nằm trong vùng bấm-để-xẹp/mở panel — chặn hẳn để không vô tình đóng panel khi bấm
     sodo3bGridMode = !sodo3bGridMode;
     modeBtn.textContent = sodo3bGridMode ? '📋 Sơ đồ mặc định' : '🔲 Grid tuỳ chỉnh';
     document.getElementById('sodo3b-grid').style.display = sodo3bGridMode ? 'none' : '';
@@ -8017,11 +8016,12 @@ document.addEventListener('click', (e) => {
     document.getElementById('sodo3b-custom-grid-note').style.display = sodo3bGridMode ? '' : 'none';
     document.getElementById('sodo3b-grid-settings-btn').style.display = sodo3bGridMode ? '' : 'none';
     if(sodo3bGridMode) renderSodo3bCustomGrid();
+    else whApplySearchFilter('sodo3b-grid', computeSodo3bByLocator, 'sodo3b-search', 'sodo3b-oqc-pass', 'sodo3b-oqc-ng', 'sodo3b-detail');
     return;
   }
   const settingsBtn = e.target.closest('#sodo3b-grid-settings-btn');
   if(settingsBtn){
-    e.stopPropagation();
+    e.stopImmediatePropagation();
     const layout = khoGridGetLayout('Kho 3B');
     document.getElementById('kho-grid-rows-input').value = layout.rows;
     document.getElementById('kho-grid-cols-input').value = layout.cols;
@@ -8305,10 +8305,12 @@ function whApplySearchFilter(gridId, computeFn, searchInputId, passChkId, ngChkI
 }
 
 ['sodo3b', 'rack3a'].forEach(prefix => {
-  const gridId = prefix + '-grid';
   const detailId = prefix + '-detail';
   const computeFn = prefix === 'sodo3b' ? computeSodo3bByLocator : computeRack3AByLocator;
-  const apply = () => whApplySearchFilter(gridId, computeFn, prefix + '-search', prefix + '-oqc-pass', prefix + '-oqc-ng', detailId);
+  const apply = () => {
+    const gridId = (prefix === 'sodo3b' && sodo3bGridMode) ? 'sodo3b-custom-grid' : (prefix + '-grid');
+    whApplySearchFilter(gridId, computeFn, prefix + '-search', prefix + '-oqc-pass', prefix + '-oqc-ng', detailId);
+  };
   const searchEl = document.getElementById(prefix + '-search');
   if(searchEl) searchEl.addEventListener('input', apply);
   [prefix + '-oqc-pass', prefix + '-oqc-ng'].forEach(id => {
@@ -8320,7 +8322,8 @@ function whApplySearchFilter(gridId, computeFn, searchInputId, passChkId, ngChkI
 function renderSodo3B(){
   renderSodo3bBlocks();
   renderWhGrid('rack3a-grid');
-  whApplySearchFilter('sodo3b-grid', computeSodo3bByLocator, 'sodo3b-search', 'sodo3b-oqc-pass', 'sodo3b-oqc-ng', 'sodo3b-detail');
+  if(sodo3bGridMode) renderSodo3bCustomGrid();
+  else whApplySearchFilter('sodo3b-grid', computeSodo3bByLocator, 'sodo3b-search', 'sodo3b-oqc-pass', 'sodo3b-oqc-ng', 'sodo3b-detail');
   whApplySearchFilter('rack3a-grid', computeRack3AByLocator, 'rack3a-search', 'rack3a-oqc-pass', 'rack3a-oqc-ng', 'rack3a-detail');
 }
 
