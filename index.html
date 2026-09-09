@@ -4373,8 +4373,16 @@ const CloudVault = {
   // (dữ liệu còn thiếu) có thể phản hồi VỀ SAU request mới hơn và ghi đè mất dữ liệu đầy đủ hơn.
   // Xếp hàng đảm bảo lượt sau luôn đợi lượt trước xong mới gửi, nên luôn lấy đúng _mem mới nhất.
   async writeAll(){
-    this._writeChain = (this._writeChain || Promise.resolve()).then(() => this._writeAllNow());
-    return this._writeChain;
+    const attempt = (this._writeChain || Promise.resolve()).then(() => this._writeAllNow());
+    // QUAN TRỌNG: "chốt" hàng đợi (_writeChain) luôn ở trạng thái ĐÃ GIẢI QUYẾT (never rejected) —
+    // nếu để nguyên `attempt` (có thể bị reject khi ghi lỗi) làm baton cho lượt sau, mọi lượt gọi
+    // writeAll()/writeMerge() TIẾP THEO sẽ chain lên 1 promise ĐÃ REJECT, khiến .then() bị bỏ qua
+    // luôn — _writeAllNow()/_writeMergeNow() KHÔNG BAO GIỜ được gọi lại thật, chỉ lặp lại y nguyên
+    // lỗi CŨ mãi mãi (dù mạng đã khoẻ lại) cho tới khi tải lại trang (baton mới được tạo lại từ đầu).
+    // Đây chính là nguyên nhân "Lưu lên Cloud thất bại: Failed to fetch" cứ lặp lại giống nhau dù đã
+    // đổi sang wifi full sóng. Vẫn TRẢ VỀ đúng `attempt` (chứa lỗi thật) cho caller biết để báo đỏ.
+    this._writeChain = attempt.catch(() => {});
+    return attempt;
   },
 
   // Ghi 1 GÓI NHỎ, chỉ gồm đúng các key được chỉ định (VD: chỉ mỗi Plan) — dùng PATCH của Firebase,
@@ -4383,8 +4391,10 @@ const CloudVault = {
   // (tồn kho + lịch sử có thể lên tới hàng MB, dễ đứt giữa chừng trên mạng chậm) — cũng xếp hàng
   // chung 1 chuỗi với writeAll() để không bao giờ chạy chồng chéo nhau.
   async writeMerge(keys){
-    this._writeChain = (this._writeChain || Promise.resolve()).then(() => this._writeMergeNow(keys));
-    return this._writeChain;
+    const attempt = (this._writeChain || Promise.resolve()).then(() => this._writeMergeNow(keys));
+    // Cùng lý do với writeAll() ở trên — baton hàng đợi không bao giờ được để ở trạng thái reject.
+    this._writeChain = attempt.catch(() => {});
+    return attempt;
   },
 
   async _writeMergeNow(keys){
@@ -4729,8 +4739,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.48';
-const APP_VERSION_DATE = '09/09/2026';
+const APP_VERSION = 'v1.49';
+const APP_VERSION_DATE = '10/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
