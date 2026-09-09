@@ -4615,7 +4615,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.39';
+const APP_VERSION = 'v1.40';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5939,6 +5939,11 @@ if(fileInput){
         currentFileName = file.name;
         _localInventoryDirty = true;
         saveStateToStorage();
+        // Đẩy ngay lên Cloud sau 2 giây (giống hệt cơ chế đã dùng cho Ship ở tab Transaction) — để các
+        // máy/người khác đang mở dashboard cũng thấy đúng dữ liệu tồn kho mới nhất, không cần đợi bấm
+        // "Lưu" ở đầu trang. Kèm STORAGE_KEY_META (tên file/"cập nhật lúc") để tên file hiển thị đúng
+        // trên các máy khác luôn, không lệch với dữ liệu tồn kho vừa cập nhật.
+        scheduleAutoSaveToCloud('inventory', [STORAGE_KEY_INVENTORY, STORAGE_KEY_META], 'Dữ liệu tồn kho vừa tải');
         renderKhoSearchPage();
         // Vẽ lại các danh sách "Đề xuất kiểm hôm nay" đã tạo trước đó (nếu có) — tránh trường hợp
         // các khối kết quả (Kho 2B/3A/3B) bị mất khỏi màn hình sau khi cập nhật dữ liệu tồn kho mới,
