@@ -3884,6 +3884,8 @@ const CloudVault = {
   _retryCount: 0,
   _hadError: false,
   _gotInitialData: false, // đã áp dụng được ít nhất 1 bản dữ liệu Cloud (qua REST hoặc realtime) chưa
+  _lastReadBytes: 0, // dung lượng (byte) bản Cloud vừa tải/nhận gần nhất — hiện kèm trong thông báo
+  _lastWriteBytes: 0, // dung lượng (byte) gói vừa GHI lên Cloud gần nhất — hiện kèm trong thông báo
   // --- Realtime (WebSocket, qua Firebase SDK) — lớp BỔ SUNG bên trên REST đã có sẵn ở trên. REST
   // vẫn là "xương sống" cho đọc/ghi chủ động (bấm Lưu, Kết nối, Kiểm tra...) vì đã có sẵn cơ chế
   // kiểm chứng & retry chắc chắn. Realtime CHỈ để tự phát hiện khi CÓ THIẾT BỊ KHÁC vừa ghi thay đổi
@@ -3964,8 +3966,8 @@ const CloudVault = {
       this.saveCreds();
       this._setStatus(
         this._pushedLocalToEmptyCloud
-          ? '✓ Cloud đang trống — đã tải dữ liệu hiện có trên máy này LÊN Cloud (không xoá mất dữ liệu cục bộ).'
-          : '✓ Đã kết nối & tải dữ liệu từ Cloud.',
+          ? `✓ Cloud đang trống — đã tải dữ liệu hiện có trên máy này LÊN Cloud (${fmtBytes(this._lastWriteBytes)}, không xoá mất dữ liệu cục bộ).`
+          : `✓ Đã kết nối & tải dữ liệu từ Cloud (${fmtBytes(this._lastReadBytes)}).`,
         'ok'
       );
       try{ this._startRealtime(); }catch(e){ console.warn('CloudVault: lỗi khởi động realtime:', e); }
@@ -4042,7 +4044,9 @@ const CloudVault = {
       const url = this.url.replace(/\/+$/, '') + '/dashboard_data/' + STORAGE_KEY_META_STAMP + '.json';
       const res = await fetch(url + '?auth=' + encodeURIComponent(this.token));
       if(!res.ok) return null;
-      const stamp = await res.json();
+      const text = await res.text();
+      this._lastReadBytes = new Blob([text]).size; // chỉ vài chục byte — hiện kèm trong thông báo "dữ liệu chưa đổi"
+      const stamp = JSON.parse(text);
       return (stamp === null || stamp === undefined) ? null : String(stamp);
     }catch(e){ return null; }
   },
@@ -4060,15 +4064,15 @@ const CloudVault = {
       if(cloudStamp && cloudStamp === localStamp){
         this._gotInitialData = true;
         if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
-        this._setStatus('✓ Đã đồng bộ với Cloud (dữ liệu chưa đổi kể từ lần trước — dùng cache cục bộ, không tải lại để tiết kiệm băng thông).', 'ok');
+        this._setStatus(`✓ Đã đồng bộ với Cloud (dữ liệu chưa đổi kể từ lần trước — dùng cache cục bộ, chỉ kiểm tra ${fmtBytes(this._lastReadBytes)} thay vì tải lại).`, 'ok');
         return true;
       }
     }
     const ok = await this.readAll();
     const msg = ok
       ? (this._pushedLocalToEmptyCloud
-          ? '✓ Cloud đang trống — đã tải dữ liệu hiện có trên máy này LÊN Cloud (không xoá mất dữ liệu cục bộ).'
-          : '✓ Đã đồng bộ với Cloud (Firebase).')
+          ? `✓ Cloud đang trống — đã tải dữ liệu hiện có trên máy này LÊN Cloud (${fmtBytes(this._lastWriteBytes)}, không xoá mất dữ liệu cục bộ).`
+          : `✓ Đã đồng bộ với Cloud (Firebase, đã tải ${fmtBytes(this._lastReadBytes)}).`)
       : '✗ Không tải được — kiểm tra lại Database URL / Database secret, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết.';
     this._setStatus(msg, ok ? 'ok' : 'err');
     return ok;
@@ -4079,6 +4083,10 @@ const CloudVault = {
   // viết 2 nơi dễ lệch nhau.
   async _applyCloudSnapshot(cloudData){
     this._gotInitialData = true; // đã có ít nhất 1 bản dữ liệu Cloud thật sự áp dụng — dùng cho phương án dự phòng của realtime, xem _startRealtime()
+    // Dung lượng bản Cloud vừa nhận (qua REST hay realtime đều tính chung ở đây) — để các thông báo
+    // tải/đồng bộ hiện kèm số KB thực tế, giúp tự theo dõi băng thông đang dùng mà không cần vào
+    // Firebase Console. Dùng Blob để tính đúng byte UTF-8 (tiếng Việt có dấu chiếm nhiều hơn 1 byte/ký tự).
+    try{ this._lastReadBytes = new Blob([JSON.stringify(cloudData)]).size; }catch(e){ this._lastReadBytes = 0; }
     const cloudIsEmpty = Object.keys(cloudData).length === 0;
     // Bỏ qua mốc _meta_updatedAt khi xét "máy này có dữ liệu thật hay không" — mốc này có thể còn
     // sót lại (VD: sau khi bấm "Xoá dữ liệu" chỉ xoá các mục thật, không xoá riêng mốc) dù không còn
@@ -4207,8 +4215,8 @@ const CloudVault = {
       const isFirstLoad = !this._gotInitialData;
       this._pendingSnapshot = null;
       this._applyCloudSnapshot(cloudData);
-      this._setRealtimeStatus('✓ Realtime đang bật — vừa tự cập nhật dữ liệu mới nhất.', 'ok');
-      if(isFirstLoad) this._setStatus('✓ Đã đồng bộ với Cloud (Firebase, qua realtime — không tải REST trùng lặp).', 'ok');
+      this._setRealtimeStatus(`✓ Realtime đang bật — vừa tự cập nhật dữ liệu mới nhất (${fmtBytes(this._lastReadBytes)}).`, 'ok');
+      if(isFirstLoad) this._setStatus(`✓ Đã đồng bộ với Cloud (Firebase, qua realtime — không tải REST trùng lặp, ${fmtBytes(this._lastReadBytes)}).`, 'ok');
     } else {
       // Đang gõ dở/chưa lưu -> KHÔNG áp dụng ngay, chờ tới lúc an toàn (xem _flushPendingSnapshot).
       this._pendingSnapshot = cloudData;
@@ -4222,7 +4230,7 @@ const CloudVault = {
     const data = this._pendingSnapshot;
     this._pendingSnapshot = null;
     this._applyCloudSnapshot(data);
-    this._setRealtimeStatus('✓ Realtime đang bật — vừa tự áp dụng dữ liệu mới từ thiết bị khác.', 'ok');
+    this._setRealtimeStatus(`✓ Realtime đang bật — vừa tự áp dụng dữ liệu mới từ thiết bị khác (${fmtBytes(this._lastReadBytes)}).`, 'ok');
   },
 
   // Đọc dữ liệu THÔ hiện có trên Cloud, KHÔNG đụng gì tới _mem/trạng thái cục bộ — chỉ để "nhìn
@@ -4279,11 +4287,12 @@ const CloudVault = {
     // writeMerge() (gói nhỏ) hay writeAll() (toàn bộ) đều cùng cập nhật đúng 1 mốc thống nhất.
     const newStamp = String(Date.now());
     partial[STORAGE_KEY_META_STAMP] = newStamp;
+    const payload = JSON.stringify(partial);
     try{
       const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(partial)
+        body: payload
       });
       const bodyJson = await res.json().catch(() => null);
       if(!res.ok) throw new Error('HTTP ' + res.status + (bodyJson && bodyJson.error ? ' — ' + bodyJson.error : ''));
@@ -4298,6 +4307,7 @@ const CloudVault = {
       });
       if(bad.length) throw new Error('Cloud không lưu đủ (thiếu/thiếu bớt: ' + bad.join(', ') + ')');
       tn5SetMetaStamp(newStamp); // ghi đúng mốc vừa gửi vào bản cache cục bộ, để lần mở app sau nhận ra đây LÀ bản mới nhất, khỏi tải lại
+      this._lastWriteBytes = new Blob([payload]).size; // để caller hiện kèm dung lượng vừa gửi trong thông báo
       // QUAN TRỌNG: vừa đẩy thành công state MỚI NHẤT của máy này lên Cloud — mọi snapshot realtime
       // đang CHỜ (_pendingSnapshot, xem _onRealtimeValue) giờ đã CŨ hơn state vừa ghi, áp dụng nó vào
       // lúc này sẽ VÔ TÌNH GHI ĐÈ MẤT thay đổi vừa lưu (VD: khôi phục 1 dòng đã xác nhận xong bấm Lưu,
@@ -4349,6 +4359,7 @@ const CloudVault = {
       }
 
       tn5SetMetaStamp(newStamp); // ghi đúng mốc vừa gửi vào bản cache cục bộ, để lần mở app sau nhận ra đây LÀ bản mới nhất, khỏi tải lại
+      this._lastWriteBytes = new Blob([payload]).size; // để caller hiện kèm dung lượng vừa gửi trong thông báo
       this._retryCount = 0;
       clearTimeout(this._retryTimer);
       // QUAN TRỌNG: vừa đẩy thành công TOÀN BỘ state mới nhất của máy này lên Cloud — huỷ mọi
@@ -4604,7 +4615,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.38';
+const APP_VERSION = 'v1.39';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6167,7 +6178,7 @@ function scheduleAutoSaveToCloud(timerKey, keys, label){
       // CHỈ báo "đã lưu hết" (mở khoá cho Realtime áp dụng dữ liệu mới) khi KHÔNG CÒN hàng đợi nào
       // khác đang chờ — nếu còn, giữ nguyên cờ "chưa lưu" để Realtime tiếp tục chờ đúng.
       if(_pendingAutoSaveKeys.size === 0 && typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
-      if(statusEl){ statusEl.className = 'upload-status ok'; statusEl.textContent = `✓ ${label} đã lưu lên Cloud lúc ${fmtDateTime(new Date())}.`; }
+      if(statusEl){ statusEl.className = 'upload-status ok'; statusEl.textContent = `✓ ${label} đã lưu lên Cloud lúc ${fmtDateTime(new Date())} (${fmtBytes(CloudVault._lastWriteBytes)}).`; }
     }catch(err){
       _pendingAutoSaveKeys.delete(timerKey);
       if(statusEl){ statusEl.className = 'upload-status err'; statusEl.textContent = `⚠ ${label} CHƯA LƯU ĐƯỢC lên Cloud: ${err.message} — bấm nút "Lưu" ở đầu trang để thử lại, nếu không sẽ mất khi mở file/thiết bị khác.`; }
@@ -12706,7 +12717,7 @@ function scheduleCcAutoSaveToCloud(){
     try{
       await CloudVault.writeMerge([STORAGE_KEY_CCRESULTS, STORAGE_KEY_KT_INPUTS]);
       if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
-      if(statusEl){ statusEl.className = 'upload-status ok'; statusEl.textContent = `✓ Danh sách kiểm đã lưu lên Cloud lúc ${fmtDateTime(new Date())}.`; }
+      if(statusEl){ statusEl.className = 'upload-status ok'; statusEl.textContent = `✓ Danh sách kiểm đã lưu lên Cloud lúc ${fmtDateTime(new Date())} (${fmtBytes(CloudVault._lastWriteBytes)}).`; }
     }catch(err){
       if(statusEl){ statusEl.className = 'upload-status err'; statusEl.textContent = `⚠ Danh sách kiểm CHƯA LƯU ĐƯỢC lên Cloud: ${err.message} — bấm nút "Lưu" ở đầu trang để thử lại.`; }
     }
@@ -13796,7 +13807,7 @@ if(btnRefreshData){
       if(ok && Object.keys(ccKhoResults).length) ccRestoreResultsFromStorage(ccKhoResults);
       if(statusEl){
         statusEl.className = ok ? 'upload-status ok' : 'upload-status err';
-        statusEl.textContent = ok ? '✓ Đã tải lại dữ liệu mới nhất từ Cloud và làm mới bảng.' : '✗ Không tải lại được từ Cloud — kiểm tra lại kết nối.';
+        statusEl.textContent = ok ? `✓ Đã tải lại dữ liệu mới nhất từ Cloud và làm mới bảng (${fmtBytes(CloudVault._lastReadBytes)}).` : '✗ Không tải lại được từ Cloud — kiểm tra lại kết nối.';
       }
       if(ok) clearUnsavedChanges();
     }catch(err){
@@ -13890,7 +13901,7 @@ if(btnSaveCloud){
         if(statusEl){ statusEl.className = 'upload-status'; statusEl.textContent = 'Đang lưu lên Cloud…'; }
         await CloudVault.writeAll();
         clearUnsavedChanges();
-        if(statusEl){ statusEl.className = 'upload-status ok'; statusEl.textContent = `✓ Đã gộp dữ liệu mới nhất và lưu lên Cloud lúc ${fmtDateTime(new Date())}.`; }
+        if(statusEl){ statusEl.className = 'upload-status ok'; statusEl.textContent = `✓ Đã gộp dữ liệu mới nhất và lưu lên Cloud lúc ${fmtDateTime(new Date())} (${fmtBytes(CloudVault._lastWriteBytes)}).`; }
       }catch(err){
         console.error('Lỗi khi lưu lên Cloud:', err);
         if(statusEl){ statusEl.className = 'upload-status err'; statusEl.textContent = `✗ Lưu lên Cloud thất bại: ${err.message} — dữ liệu vẫn đang giữ ở "chưa lưu", thử bấm Lưu lại.`; }
