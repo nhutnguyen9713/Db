@@ -3692,6 +3692,28 @@ function clearUnsavedChanges(){
   const btn = document.getElementById('btn-save-cloud');
   if(btn) btn.classList.remove('has-changes');
 }
+// So sánh 2 chuỗi có THỰC SỰ khác nhau về NỘI DUNG hay không — nếu cả 2 đều là JSON hợp lệ, so sánh
+// sau khi sắp lại thứ tự khoá object (đệ quy), bỏ qua khác biệt thuần tuý do THỨ TỰ CHÈN KHOÁ khác
+// nhau (VD: 1 nơi dựng lại object theo thứ tự cố định, nơi khác theo đúng thứ tự đã lưu — nội dung y
+// hệt nhưng JSON.stringify() ra chuỗi khác nhau). Đây chính là nguyên nhân bị báo nhầm "có thay đổi
+// chưa lưu" mỗi lần mở lại trang dù chưa ai sửa gì — nặng hơn là còn chặn luôn cả Realtime (coi là
+// "đang có thay đổi chưa lưu" nên không bao giờ dám tự áp dụng dữ liệu mới từ thiết bị khác).
+// KHÔNG đổi thứ tự phần tử trong mảng (thứ tự đó có ý nghĩa thật), chỉ sắp lại khoá của OBJECT.
+function tn5StableStringify(value){
+  if(Array.isArray(value)) return '[' + value.map(tn5StableStringify).join(',') + ']';
+  if(value && typeof value === 'object'){
+    return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + tn5StableStringify(value[k])).join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
+function tn5ValuesEqual(oldStr, newStr){
+  if(oldStr === newStr) return true;
+  if(oldStr === null || oldStr === undefined) return false;
+  try{
+    return tn5StableStringify(JSON.parse(oldStr)) === tn5StableStringify(JSON.parse(newStr));
+  }catch(e){ return false; } // không phải JSON (VD chuỗi thường như tn5_theme='dark') -> đã so sánh === ở trên rồi, tới đây là THỰC SỰ khác
+}
+
 const LS = {
   getItem(k){ return Object.prototype.hasOwnProperty.call(_mem, k) ? _mem[k] : null; },
   // KHÔNG còn tự động đẩy lên Cloud/file mỗi khi có thay đổi — dữ liệu chỉ thực sự được ghi lên
@@ -3706,7 +3728,7 @@ const LS = {
     // dashboard) gọi setItem() cho gần như MỌI key dù nội dung chưa đổi gì, trước đây cứ gọi là báo
     // "có thay đổi chưa lưu" (kể cả không đổi) -> chuông thông báo bị spam gần hết danh sách mỗi lần
     // mở/tải lại trang. Chỉ thực sự ghi + báo khi nội dung khác trước.
-    if(_mem[k] === strV) return;
+    if(tn5ValuesEqual(_mem[k], strV)) return;
     _mem[k] = strV;
     try{ localStorage.setItem(TN5_LOCAL_BACKUP_PREFIX + k, strV); }catch(e){}
     scIdbSetKey(k, strV); // bản sao lưu IndexedDB — bổ sung, không giới hạn nhỏ như localStorage
@@ -4679,7 +4701,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.44';
+const APP_VERSION = 'v1.45';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
