@@ -3955,7 +3955,7 @@ const FileVault = {
      lớp ĐỒNG BỘ REALTIME THẬT (WebSocket qua Firebase SDK, đăng nhập ẩn danh) — thiết bị khác vừa
      ghi thay đổi lên Cloud sẽ TỰ ĐỘNG kéo về máy này ngay, không cần bấm "Làm mới dữ liệu" nữa. Có
      bảo vệ: KHÔNG BAO GIỜ tự ghi đè trong lúc người dùng đang gõ dở/chưa lưu — sẽ tự áp dụng ngay
-     khi an toàn (xem _isSafeToApply/_pendingSnapshot). Cần bật "Anonymous" trong Firebase
+     khi an toàn (xem _isSafeToApply/_pendingStampDirty). Cần bật "Anonymous" trong Firebase
      Authentication → Sign-in method trước khi dùng được. */
 const CV_LS_URL = 'tn5_cloud_gas_url';
 const CV_LS_TOKEN = 'tn5_cloud_gas_token';
@@ -3978,7 +3978,8 @@ const CloudVault = {
   // lên Cloud, rồi tự kéo về máy này ngay — không cần đợi người dùng bấm "Làm mới dữ liệu" nữa.
   _fbRef: null,
   _realtimeActive: false,
-  _pendingSnapshot: null, // dữ liệu mới từ thiết bị khác đang CHỜ, vì máy này đang gõ dở/chưa lưu
+  _pendingStampDirty: false, // TRUE = mốc realtime vừa báo có gì mới trên Cloud nhưng máy này đang
+  // gõ dở/chưa lưu nên chưa tải, sẽ tự tải đủ (qua REST) ngay khi an toàn — xem _flushPendingSnapshot.
   _safeCheckTimer: null,
 
   // Đường dẫn REST cố định trong Realtime Database — gộp mọi dữ liệu dashboard vào 1 node riêng
@@ -4212,8 +4213,8 @@ const CloudVault = {
   // ============ Realtime (WebSocket qua Firebase SDK) ============
   // An toàn: KHÔNG BAO GIỜ tự áp dụng dữ liệu mới trong lúc người dùng đang gõ dở (đang có ô nhập
   // liệu nào đó đang được focus) hoặc đang có thay đổi CHƯA LƯU trên máy này — tránh ghi đè mất số
-  // liệu đang nhập ngay dưới tay người dùng. Nếu chưa an toàn, giữ lại (_pendingSnapshot) và tự kiểm
-  // tra lại định kỳ, áp dụng ngay khi an toàn.
+  // liệu đang nhập ngay dưới tay người dùng. Nếu chưa an toàn, giữ lại cờ chờ (_pendingStampDirty) và
+  // tự kiểm tra lại định kỳ, tải/áp dụng ngay khi an toàn.
   _isSafeToApply(){
     if(typeof hasUnsavedChanges !== 'undefined' && hasUnsavedChanges) return false;
     // Lớp bảo vệ thứ 2 (phòng khi hasUnsavedChanges lỡ bị xoá sớm ở đâu đó): còn BẤT KỲ hàng đợi tự
@@ -4254,8 +4255,12 @@ const CloudVault = {
       this._setRealtimeStatus('Đang bật đồng bộ realtime…', '');
       firebase.auth().signInAnonymously()
         .then(() => {
-          this._fbRef = firebase.database().ref('dashboard_data');
-          this._fbRef.on('value', (snapshot) => this._onRealtimeValue(snapshot), (err) => {
+          // CHỈ lắng nghe đúng 1 mốc nhỏ (_meta_updatedAt, vài chục byte) thay vì lắng nghe thẳng
+          // TOÀN BỘ dữ liệu — xem _onRealtimeStampValue() để rõ lý do (Firebase SDK luôn tải nguyên
+          // khối dữ liệu tại đường dẫn đang lắng nghe ngay khi vừa gắn listener, kể cả khi chẳng ai
+          // sửa gì cả — nếu lắng nghe thẳng gốc, MỖI LẦN mở/tải lại trang sẽ luôn tốn lại hàng MB).
+          this._fbRef = firebase.database().ref('dashboard_data/' + STORAGE_KEY_META_STAMP);
+          this._fbRef.on('value', (snapshot) => this._onRealtimeStampValue(snapshot), (err) => {
             console.warn('CloudVault realtime lỗi:', err);
             this._setRealtimeStatus('⚠ Mất kết nối realtime: ' + err.message + ' — vẫn dùng được nút "Lưu"/"Làm mới dữ liệu" như bình thường.', 'err');
             if(!this._gotInitialData) this._smartReadAll(); // chưa kịp tải được lần nào -> dự phòng REST
@@ -4279,7 +4284,7 @@ const CloudVault = {
     if(this._fbRef){ try{ this._fbRef.off(); }catch(e){} this._fbRef = null; }
     clearInterval(this._safeCheckTimer);
     this._safeCheckTimer = null;
-    this._pendingSnapshot = null;
+    this._pendingStampDirty = false;
     this._realtimeActive = false;
     // Xoá app Firebase cũ (nếu có) để lần _startRealtime() sau luôn khởi tạo lại ĐÚNG url/apiKey mới
     // nhất — phòng trường hợp người dùng đổi Database URL/Web API Key rồi bấm "Kết nối" lại.
@@ -4289,34 +4294,57 @@ const CloudVault = {
     this._setRealtimeStatus('', '');
   },
 
-  // Có dữ liệu mới từ Cloud (do THIẾT BỊ KHÁC vừa ghi, hoặc do CHÍNH máy này vừa ghi — Firebase báo
-  // lại luôn cả 2 trường hợp, vô hại vì gộp lại dữ liệu giống hệt cũng không đổi gì).
-  _onRealtimeValue(snapshot){
-    const val = snapshot.val();
-    const cloudData = (val && typeof val === 'object') ? val : {};
-    if(this._isSafeToApply()){
-      // Lần ĐẦU TIÊN nhận dữ liệu qua realtime (init() không còn tự gọi readAll() REST song song nữa
-      // khi có Web API Key, xem init()) -> đây chính là lần tải dữ liệu ban đầu, cập nhật luôn trạng
-      // thái chính (#cv-status) để không bị kẹt mãi ở "Đang bật đồng bộ realtime…".
-      const isFirstLoad = !this._gotInitialData;
-      this._pendingSnapshot = null;
-      this._applyCloudSnapshot(cloudData);
+  // Mốc "_meta_updatedAt" vừa được Cloud gửi về (do THIẾT BỊ KHÁC vừa ghi, do CHÍNH máy này vừa ghi,
+  // HOẶC đơn giản là lần đầu gắn listener khi vừa mở trang — Firebase LUÔN gửi giá trị hiện tại ngay
+  // khi vừa attach). Chỉ so sánh mốc (vài chục byte) với bản đang cache cục bộ TRƯỚC — GIỐNG HỆT nhau
+  // thì coi như chưa ai sửa gì kể từ lần đồng bộ trước, KHÔNG tải lại nguyên khối dữ liệu; chỉ khi
+  // mốc thực sự khác mới tải đủ 1 lần qua REST (_fetchFullSnapshotViaStamp) — đây chính là điểm tiết
+  // kiệm băng thông: trước đây lắng nghe thẳng gốc dữ liệu nên MỖI LẦN mở/tải lại trang đều tải lại
+  // toàn bộ (có thể tới vài MB) dù chẳng ai vừa sửa gì, giờ chỉ còn tốn vài chục byte cho phần lớn
+  // các lần mở app.
+  _onRealtimeStampValue(snapshot){
+    const cloudStampRaw = snapshot.val();
+    const cloudStamp = (cloudStampRaw === null || cloudStampRaw === undefined) ? '' : String(cloudStampRaw);
+    const localStamp = _mem[STORAGE_KEY_META_STAMP] || '';
+    const hasLocalData = Object.keys(_mem).some(k => k !== STORAGE_KEY_META_STAMP);
+    try{ this._lastReadBytes = new Blob([JSON.stringify(cloudStampRaw === undefined ? null : cloudStampRaw)]).size; }catch(e){ this._lastReadBytes = 0; }
+    if(hasLocalData && cloudStamp && cloudStamp === localStamp){
+      this._gotInitialData = true;
+      this._pendingStampDirty = false;
+      if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
+      this._setRealtimeStatus('✓ Đồng bộ realtime đang bật — thay đổi từ thiết bị khác sẽ tự cập nhật ngay.', 'ok');
+      this._setStatus(`✓ Đã đồng bộ với Cloud (dữ liệu chưa đổi kể từ lần trước — dùng cache cục bộ, chỉ kiểm tra ${fmtBytes(this._lastReadBytes)} qua realtime).`, 'ok');
+      return;
+    }
+    // Mốc khác bản cache (hoặc máy này chưa có dữ liệu nào) -> thực sự có gì đó mới, cần tải đủ 1 lần.
+    this._fetchFullSnapshotViaStamp();
+  },
+
+  // Tải đủ 1 lần qua REST khi mốc realtime báo có gì mới — TÁI SỬ DỤNG readAll()/_applyCloudSnapshot()
+  // (đúng 1 logic gộp duy nhất, không viết 2 nơi dễ lệch nhau).
+  async _fetchFullSnapshotViaStamp(){
+    if(!this._isSafeToApply()){
+      // Đang gõ dở/chưa lưu -> KHÔNG tải/áp dụng ngay, chờ tới lúc an toàn (xem _flushPendingSnapshot).
+      this._pendingStampDirty = true;
+      this._setRealtimeStatus('🔄 Có dữ liệu mới từ thiết bị khác — sẽ tự áp dụng ngay khi bạn ngừng nhập/đã lưu xong.', '');
+      return;
+    }
+    this._pendingStampDirty = false;
+    // Lần ĐẦU TIÊN nhận được dữ liệu qua realtime (init() không còn tự gọi readAll() REST song song
+    // nữa khi có Web API Key, xem init()) -> đây chính là lần tải dữ liệu ban đầu, cập nhật luôn
+    // trạng thái chính (#cv-status) để không bị kẹt mãi ở "Đang bật đồng bộ realtime…".
+    const isFirstLoad = !this._gotInitialData;
+    const ok = await this.readAll();
+    if(ok){
       this._setRealtimeStatus(`✓ Realtime đang bật — vừa tự cập nhật dữ liệu mới nhất (${fmtBytes(this._lastReadBytes)}).`, 'ok');
       if(isFirstLoad) this._setStatus(`✓ Đã đồng bộ với Cloud (Firebase, qua realtime — không tải REST trùng lặp, ${fmtBytes(this._lastReadBytes)}).`, 'ok');
-    } else {
-      // Đang gõ dở/chưa lưu -> KHÔNG áp dụng ngay, chờ tới lúc an toàn (xem _flushPendingSnapshot).
-      this._pendingSnapshot = cloudData;
-      this._setRealtimeStatus('🔄 Có dữ liệu mới từ thiết bị khác — sẽ tự áp dụng ngay khi bạn ngừng nhập/đã lưu xong.', '');
     }
   },
 
   _flushPendingSnapshot(){
-    if(!this._pendingSnapshot) return;
+    if(!this._pendingStampDirty) return;
     if(!this._isSafeToApply()) return;
-    const data = this._pendingSnapshot;
-    this._pendingSnapshot = null;
-    this._applyCloudSnapshot(data);
-    this._setRealtimeStatus(`✓ Realtime đang bật — vừa tự áp dụng dữ liệu mới từ thiết bị khác (${fmtBytes(this._lastReadBytes)}).`, 'ok');
+    this._fetchFullSnapshotViaStamp();
   },
 
   // Đọc dữ liệu THÔ hiện có trên Cloud, KHÔNG đụng gì tới _mem/trạng thái cục bộ — chỉ để "nhìn
@@ -4394,12 +4422,12 @@ const CloudVault = {
       if(bad.length) throw new Error('Cloud không lưu đủ (thiếu/thiếu bớt: ' + bad.join(', ') + ')');
       tn5SetMetaStamp(newStamp); // ghi đúng mốc vừa gửi vào bản cache cục bộ, để lần mở app sau nhận ra đây LÀ bản mới nhất, khỏi tải lại
       this._lastWriteBytes = new Blob([payload]).size; // để caller hiện kèm dung lượng vừa gửi trong thông báo
-      // QUAN TRỌNG: vừa đẩy thành công state MỚI NHẤT của máy này lên Cloud — mọi snapshot realtime
-      // đang CHỜ (_pendingSnapshot, xem _onRealtimeValue) giờ đã CŨ hơn state vừa ghi, áp dụng nó vào
-      // lúc này sẽ VÔ TÌNH GHI ĐÈ MẤT thay đổi vừa lưu (VD: khôi phục 1 dòng đã xác nhận xong bấm Lưu,
-      // 1 lúc sau tự động áp dụng snapshot cũ làm dòng đó "hiện lại" trong Đã xác nhận). Huỷ pending
-      // luôn — an toàn hơn là để nó áp dụng nhầm dữ liệu cũ.
-      this._pendingSnapshot = null;
+      // QUAN TRỌNG: vừa đẩy thành công state MỚI NHẤT của máy này lên Cloud — mọi tín hiệu realtime
+      // đang CHỜ tải lại (_pendingStampDirty, xem _onRealtimeStampValue) giờ đã CŨ hơn state vừa ghi,
+      // tải lại vào lúc này sẽ VÔ TÌNH GHI ĐÈ MẤT thay đổi vừa lưu (VD: khôi phục 1 dòng đã xác nhận
+      // xong bấm Lưu, 1 lúc sau tự động tải lại bản cũ làm dòng đó "hiện lại" trong Đã xác nhận). Huỷ
+      // cờ chờ luôn — an toàn hơn là để nó tải nhầm dữ liệu cũ.
+      this._pendingStampDirty = false;
       this._retryCount = 0;
       clearTimeout(this._retryTimer);
     }catch(e){
@@ -4449,8 +4477,8 @@ const CloudVault = {
       this._retryCount = 0;
       clearTimeout(this._retryTimer);
       // QUAN TRỌNG: vừa đẩy thành công TOÀN BỘ state mới nhất của máy này lên Cloud — huỷ mọi
-      // snapshot realtime đang CHỜ (xem _writeMergeNow ở trên để rõ lý do) vì giờ nó đã cũ hơn.
-      this._pendingSnapshot = null;
+      // cờ chờ tải lại qua realtime (xem _writeMergeNow ở trên để rõ lý do) vì giờ nó đã cũ hơn.
+      this._pendingStampDirty = false;
       if(this._hadError){ this._setStatus('✓ Đã đồng bộ lại lên Cloud.', 'ok'); this._hadError = false; }
     }catch(e){
       console.warn('CloudVault ghi lỗi:', e);
@@ -4701,7 +4729,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.46';
+const APP_VERSION = 'v1.47';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
