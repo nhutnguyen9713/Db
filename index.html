@@ -4604,7 +4604,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.36';
+const APP_VERSION = 'v1.37';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13681,7 +13681,11 @@ function initDashboard(){
   }
 
   if(saved.inv){
-    renderDashboard(saved.inv);
+    // QUAN TRỌNG (giống lý do ở trên): khôi phục currentFileName/dòng "Cập nhật lúc" TRƯỚC khi gọi
+    // renderDashboard() — trước đây gọi SAU, nên lượt saveStateToStorage() ĐẦU TIÊN (side-effect của
+    // renderDashboard()) luôn ghi currentFileName=null + dòng cập nhật rỗng vào _mem (khác hẳn bản đã
+    // lưu), khiến mục "Thông tin file đã tải" LUÔN báo "có thay đổi chưa lưu" ngay khi vừa mở trang,
+    // dù chẳng ai sửa gì cả.
     if(saved.meta && saved.meta.inventoryFileName){
       currentFileName = saved.meta.inventoryFileName;
       const fEl = document.getElementById('uploaded-file-line');
@@ -13689,6 +13693,7 @@ function initDashboard(){
     }
     const uEl = document.getElementById('updated-at-line');
     if(uEl && saved.meta && saved.meta.updatedAtText) uEl.textContent = saved.meta.updatedAtText;
+    renderDashboard(saved.inv);
     const statusEl0 = document.getElementById('upload-status');
     if(statusEl0){ statusEl0.className = 'upload-status ok'; statusEl0.textContent = '✓ Đã khôi phục dữ liệu đã lưu trong trình duyệt này'; }
   } else {
