@@ -1795,6 +1795,46 @@
     </div>
   </div>
 
+  <!-- Bản NHÁP (phác thảo) — "Gợi ý cân bằng tồn kho": so % sức chứa giữa 3 kho, chỉ mang tính tham
+       khảo, KHÔNG tự động chuyển gì cả. Cần người xác nhận mã hàng thực sự chuyển kho được. -->
+  <div class="panel search-panel cc-collapse-panel open" id="ov-rebalance-panel" style="margin-bottom:16px;">
+    <div class="cc-collapse-head" data-collapse-toggle>
+      <div style="width:100%;">
+        <div class="brand-eyebrow"><span class="dot" style="background:var(--violet); box-shadow:0 0 8px var(--violet);"></span>GỢI Ý (BẢN NHÁP)</div>
+        <h1 style="font-size:17px;">Gợi ý cân bằng tồn kho</h1>
+        <div class="sub">So % sức chứa giữa 3 kho — chỉ tham khảo, cần tự xác nhận mã hàng chuyển kho được trước khi làm.</div>
+      </div>
+      <span class="cc-collapse-chevron">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </span>
+    </div>
+    <div class="cc-collapse-body">
+      <div id="ov-rebalance-body"></div>
+    </div>
+  </div>
+
+  <!-- Bản NHÁP — "Hỏi nhanh": nhận dạng theo MẪU CÂU CỐ ĐỊNH (không phải AI trả lời tự do). -->
+  <div class="panel search-panel cc-collapse-panel open" id="ov-ask-panel" style="margin-bottom:16px;">
+    <div class="cc-collapse-head" data-collapse-toggle>
+      <div style="width:100%;">
+        <div class="brand-eyebrow"><span class="dot" style="background:var(--teal); box-shadow:0 0 8px var(--teal);"></span>HỎI NHANH (BẢN NHÁP)</div>
+        <h1 style="font-size:17px;">Hỏi nhanh về dữ liệu kho</h1>
+        <div class="sub">Nhận dạng theo mẫu câu cố định — chưa phải AI trả lời tự do.</div>
+      </div>
+      <span class="cc-collapse-chevron">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </span>
+    </div>
+    <div class="cc-collapse-body">
+      <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+        <input type="text" id="ov-ask-input" class="cc-custom-filter-input" style="flex:1; min-width:200px;" placeholder="VD: kho nào đầy nhất? container nào chưa pick? mã ABC123 còn bao nhiêu?">
+        <button type="button" class="btn-update" id="ov-ask-btn">Hỏi</button>
+      </div>
+      <div id="ov-ask-answer" class="sub" style="min-height:20px;"></div>
+      <div class="sub" style="margin-top:10px; opacity:.75;">Mẫu đang nhận dạng: "kho nào đầy/trống nhất", "container nào chưa pick", "mã &lt;mã hàng&gt; còn bao nhiêu".</div>
+    </div>
+  </div>
+
   <div class="ov-wrap">
     <div class="ov-wrap-head">
       <div>
@@ -4679,7 +4719,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.42';
+const APP_VERSION = 'v1.43';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5531,7 +5571,148 @@ function renderCapacityOverviews(){
   ovRenderNgSection('2B', ov2B.pallets, ngSum2B);
   if(typeof renderUtilizationTrendChart === 'function') renderUtilizationTrendChart();
   if(typeof renderAlertsPanel === 'function') renderAlertsPanel();
+  renderOvRebalance();
 }
+
+/* ============================================================
+   ============  BẢN NHÁP: "Gợi ý cân bằng tồn kho" + "Hỏi nhanh"  ============
+   ============================================================
+   2 tính năng thử nghiệm — tính toán HOÀN TOÀN cục bộ từ dữ liệu đã tải (không gọi
+   mạng/API ngoài nào). "Hỏi nhanh" nhận dạng theo mẫu câu cố định (không phải AI trả
+   lời tự do — muốn vậy cần quyết định phương án gọi API AI kèm khoá, xem trao đổi). */
+
+// Snapshot % sức chứa 3 kho — dùng lại đúng logic render bảng "Tổng quan sức chứa" ở trên
+// (kể cả khi đang dùng danh sách vị trí TUỲ CHỈNH), để số liệu luôn khớp nhau.
+function computeKhoUtilSnapshot(){
+  const counts = ovBuildLocatorCounts();
+  const cfg = ovLocatorConfig || {};
+  const cfg3B = ovMigrateCfgShape(cfg['3B']);
+  const cfg3A = ovMigrateCfgShape(cfg['3A']);
+  const cfg2B = ovMigrateCfgShape(cfg['2B']);
+  const list = [
+    { code: '3B', label: 'Kho 3B', ov: cfg3B ? ovGenericOverview(cfg3B, counts) : ovB3Overview(counts) },
+    { code: '3A', label: 'Kho 3A', ov: cfg3A ? ovGenericOverview(cfg3A, counts) : ov3AOverview(counts) },
+    { code: '2B', label: 'Kho 2B', ov: cfg2B ? ovGenericOverview(cfg2B, counts) : ov2BOverview(counts) }
+  ];
+  return list.map(e => ({
+    code: e.code, label: e.label, pallets: e.ov.pallets, capacity: e.ov.capacity,
+    util: e.ov.capacity ? (e.ov.pallets / e.ov.capacity * 100) : 0
+  }));
+}
+
+const OV_REBALANCE_HIGH_PCT = 75; // kho từ mức này trở lên mới coi là "gần đầy" đáng gợi ý
+const OV_REBALANCE_GAP_PCT = 15;  // chênh lệch tối thiểu (điểm %) giữa kho đầy nhất/trống nhất mới đáng gợi ý
+
+function renderOvRebalance(){
+  const bodyEl = document.getElementById('ov-rebalance-body');
+  if(!bodyEl) return;
+  if(!currentData){ bodyEl.innerHTML = '<div class="cpt-empty">Chưa có dữ liệu tồn kho.</div>'; return; }
+
+  const snapshot = computeKhoUtilSnapshot().sort((a,b) => b.util - a.util);
+  const fullest = snapshot[0], emptiest = snapshot[snapshot.length - 1];
+  const gap = fullest.util - emptiest.util;
+
+  if(!(fullest.util >= OV_REBALANCE_HIGH_PCT && gap >= OV_REBALANCE_GAP_PCT)){
+    bodyEl.innerHTML = `<div class="cpt-empty">Các kho đang khá cân bằng (${snapshot.map(s => escHtml(s.label) + ' ' + s.util.toFixed(1) + '%').join(' · ')}) — chưa cần điều chỉnh.</div>`;
+    return;
+  }
+
+  // Ứng viên để dời bớt: mã hàng (item+PO) đang ở kho ĐẦY NHẤT, CHƯA nằm trong Plan xuất cont nào
+  // (typeof buildItemContainerList — nếu đã có Plan thì sắp xuất rồi, dời đi lại phải dời về, vô ích),
+  // gộp theo item+PO, xếp SL pallet nhiều nhất lên đầu.
+  const map = new Map();
+  getRawRows(currentData).forEach(r => {
+    if(r[RAW_KEY_IDX.kho] !== fullest.label) return;
+    const item = r[RAW_KEY_IDX.item], custpo = r[RAW_KEY_IDX.custpo] || '', locator = r[RAW_KEY_IDX.locator];
+    const qty = Number(r[RAW_KEY_IDX.qty]) || 0;
+    if(!item || !locator) return;
+    const key = item + '||' + custpo;
+    if(!map.has(key)) map.set(key, { item, custpo, qty: 0, pallets: 0, locators: new Set() });
+    const e = map.get(key);
+    e.qty += qty; e.pallets += 1; e.locators.add(locator);
+  });
+  const candidates = Array.from(map.values())
+    .filter(e => !(typeof buildItemContainerList === 'function' && buildItemContainerList(e.item, e.custpo).length > 0))
+    .sort((a,b) => b.pallets - a.pallets)
+    .slice(0, 5);
+
+  const rowsHtml = candidates.length
+    ? candidates.map(c => `
+      <div class="ov-ng-row">
+        <span class="ov-ng-item" title="${escAttr(c.item)}">${escHtml(c.item)}${c.custpo ? ` <span class="ov-ng-po">(PO ${escHtml(c.custpo)})</span>` : ''}</span>
+        <span class="ov-ng-loc">${escHtml(Array.from(c.locators).slice(0, 2).join(', '))}${c.locators.size > 2 ? '…' : ''}</span>
+        <span class="ov-ng-qty">${fmt(c.qty)} Pcs <span class="ov-ng-pallet">(${fmt(c.pallets)} pallet)</span></span>
+      </div>`).join('')
+    : '<div class="cpt-empty">Không tìm được mã hàng nào chưa nằm trong Plan xuất cont để gợi ý.</div>';
+
+  bodyEl.innerHTML = `
+    <div class="sub" style="margin-bottom:10px;">
+      <b>${escHtml(fullest.label)}</b> đang <b>${fullest.util.toFixed(1)}%</b> sức chứa (${fmt(fullest.pallets)}/${fmt(fullest.capacity)} pallet),
+      trong khi <b>${escHtml(emptiest.label)}</b> chỉ <b>${emptiest.util.toFixed(1)}%</b> (${fmt(emptiest.pallets)}/${fmt(emptiest.capacity)} pallet)
+      — chênh <b>${gap.toFixed(1)} điểm %</b>. Vài mã hàng số lượng lớn ở ${escHtml(fullest.label)} chưa nằm trong Plan xuất cont, có thể cân nhắc dời bớt sang ${escHtml(emptiest.label)}:
+    </div>
+    ${rowsHtml}
+    <div class="sub" style="margin-top:10px; opacity:.75;">⚠ Chỉ là gợi ý dựa trên số liệu tồn — cần tự xác nhận các mã này thực sự chuyển kho được (đúng khách hàng/loại hàng) trước khi thực hiện.</div>
+  `;
+}
+
+// "Hỏi nhanh" — nhận dạng vài mẫu câu cố định bằng regex, trả lời từ dữ liệu đã có sẵn trong app.
+// KHÔNG gọi AI/API ngoài nào — không hiểu câu hỏi tự do, chỉ khớp đúng vài mẫu bên dưới.
+function ovAnswerQuestion(qRaw){
+  const qLower = String(qRaw || '').trim().toLowerCase();
+  if(!qLower) return 'Bạn chưa nhập câu hỏi.';
+  if(!currentData) return 'Chưa có dữ liệu tồn kho để trả lời.';
+
+  if(/kho.*(trống|còn.*chỗ|ít hàng)/.test(qLower)){
+    const s = computeKhoUtilSnapshot().sort((a,b) => a.util - b.util)[0];
+    return `${s.label} đang trống nhất: ${s.util.toFixed(1)}% sức chứa (${fmt(s.pallets)}/${fmt(s.capacity)} pallet).`;
+  }
+  if(/kho.*(đầy|full)/.test(qLower)){
+    const s = computeKhoUtilSnapshot().sort((a,b) => b.util - a.util)[0];
+    return `${s.label} đang đầy nhất: ${s.util.toFixed(1)}% sức chứa (${fmt(s.pallets)}/${fmt(s.capacity)} pallet).`;
+  }
+
+  if(/(container|cont).*(trễ|chưa pick|chưa xong)/.test(qLower)){
+    const rows = (typeof contPickAllRows !== 'undefined' ? contPickAllRows : []).filter(r => r.status === 'notStarted')
+      .sort((a,b) => (a.loadDateKey + '|' + a.planTimeKey).localeCompare(b.loadDateKey + '|' + b.planTimeKey));
+    if(!rows.length) return 'Không có container nào đang "Chưa pick" — mọi container đều đã bắt đầu hoặc pick xong.';
+    const top = rows.slice(0, 5).map(r => `${r.type}-${r.cNo} (Load ${r.loadDate}${r.planTime && r.planTime !== '—' ? ' ' + r.planTime : ''})`);
+    return `Có ${fmt(rows.length)} container "Chưa pick", sớm nhất: ${top.join('; ')}${rows.length > 5 ? '…' : ''}.`;
+  }
+
+  const itemMatch = qLower.match(/mã\s*(?:hàng\s*)?([a-z0-9._-]{3,})/i);
+  if(itemMatch){
+    const needle = itemMatch[1].toUpperCase();
+    const byKho = {};
+    let totalQty = 0;
+    getRawRows(currentData).forEach(r => {
+      const item = String(r[RAW_KEY_IDX.item] || '').toUpperCase();
+      if(!item.includes(needle)) return;
+      const kho = r[RAW_KEY_IDX.kho] || '—';
+      const qty = Number(r[RAW_KEY_IDX.qty]) || 0;
+      byKho[kho] = (byKho[kho] || 0) + qty;
+      totalQty += qty;
+    });
+    if(!totalQty) return `Không tìm thấy mã hàng nào khớp "${needle}" trong dữ liệu tồn kho hiện tại.`;
+    const parts = Object.entries(byKho).map(([kho, qty]) => `${kho}: ${fmt(qty)} Pcs`);
+    return `Mã khớp "${needle}" — tổng ${fmt(totalQty)} Pcs. Theo kho: ${parts.join(', ')}.`;
+  }
+
+  return 'Chưa nhận ra câu hỏi này. Thử theo mẫu: "kho nào đầy nhất", "kho nào trống nhất", "container nào chưa pick", hoặc "mã ABC123 còn bao nhiêu".';
+}
+
+document.addEventListener('click', (e) => {
+  if(!e.target.closest('#ov-ask-btn')) return;
+  const input = document.getElementById('ov-ask-input');
+  const answerEl = document.getElementById('ov-ask-answer');
+  if(!input || !answerEl) return;
+  answerEl.textContent = ovAnswerQuestion(input.value);
+});
+document.addEventListener('keydown', (e) => {
+  if(e.key !== 'Enter' || !e.target.closest('#ov-ask-input')) return;
+  const answerEl = document.getElementById('ov-ask-answer');
+  if(answerEl) answerEl.textContent = ovAnswerQuestion(e.target.value);
+});
 
 // Danh sách mã hàng + locator đang có hàng NG trong 1 kho (gộp theo item+PO+locator).
 function ovGetNgRowsForKho(khoLabel){
