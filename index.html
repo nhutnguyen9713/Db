@@ -585,6 +585,30 @@
   .wh3b-summary b{font-family:var(--mono); font-size:17px; color:var(--text);}
   .wh3b-summary span{font-family:var(--mono); font-size:9.5px; color:var(--muted-2); text-transform:uppercase; letter-spacing:.04em;}
 
+  .wh3b-grid-mode-btn{
+    font-family:var(--mono); font-size:10.5px; font-weight:700; padding:5px 9px; border-radius:7px;
+    border:1px solid var(--line); background:var(--panel-2, var(--bg)); color:var(--muted); cursor:pointer;
+    white-space:nowrap;
+  }
+  .wh3b-grid-mode-btn:hover{border-color:var(--violet); color:var(--violet);}
+  .wh3b-custom-grid{display:grid; gap:10px; margin-bottom:6px;}
+  .wh3b-custom-grid-note{
+    font-family:var(--mono); font-size:11px; color:var(--violet); background:rgba(110,79,224,0.08);
+    border:1px solid rgba(110,79,224,0.25); border-radius:8px; padding:8px 12px; margin-bottom:12px;
+  }
+  .wh3b-custom-add-cell{
+    border:1.5px dashed var(--line); border-radius:9px; background:transparent; color:var(--muted-2);
+    font-size:22px; font-weight:300; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    min-height:90px; transition:border-color .15s ease, color .15s ease;
+  }
+  .wh3b-custom-add-cell:hover{border-color:var(--violet); color:var(--violet);}
+  .wh3b-custom-gear{
+    position:absolute; top:7px; right:28px; width:19px; height:19px; border-radius:50%;
+    border:none; background:rgba(22,32,46,0.06); color:var(--muted-2);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;
+  }
+  .wh3b-custom-gear:hover{background:rgba(110,79,224,0.16); color:var(--violet);}
+
   /* Khối màu riêng cho từng phần của Sơ đồ kho 3B (PROD / A01-A33 / Picking / Loading) */
   #sodo3b-grid{display:flex; flex-direction:column; gap:16px;}
   .wh3b-block{border-radius:11px; padding:12px; border:1.5px solid; background:var(--panel);}
@@ -2466,7 +2490,13 @@
       <button type="button" class="wh3b-outside-warning" id="wh3b-outside-warning" style="display:none;" title="Bấm để xem chi tiết các dòng tồn kho nằm ở locator ngoài sơ đồ này"></button>
       <div class="cc-collapse-head" data-collapse-toggle>
         <div style="width:100%;">
-          <div class="brand-eyebrow"><span class="dot"></span>SƠ ĐỒ KHO</div>
+          <div class="brand-eyebrow" style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+            <span><span class="dot"></span>SƠ ĐỒ KHO</span>
+            <span style="display:flex; gap:6px;">
+              <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-mode-toggle" title="Chuyển giữa sơ đồ mặc định và lưới tự sắp xếp theo đúng vị trí thật ngoài kho">🔲 Grid tuỳ chỉnh</button>
+              <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
+            </span>
+          </div>
           <h1 style="font-size:19px;">Sơ đồ kho 3B</h1>
           <div class="sub">Số pallet hiện có tại từng vị trí (locator) của Kho 3B — mỗi dòng GI No. trong dữ liệu tồn kho tính là 1 pallet. Sức chứa chuẩn mỗi vị trí: 26 pallet — số hiển thị là số pallet thực tế, thanh fill và màu sắc tính theo mức tối đa 26 (vượt quá vẫn tô đỏ/đầy như mức 26).</div>
           <div class="wh3b-summary" id="wh3b-summary"></div>
@@ -2490,6 +2520,8 @@
           <span><i style="background:var(--red)"></i>Đầy / gần đầy (≥ 80%)</span>
         </div>
         <div class="wh3b-grid" id="sodo3b-grid"></div>
+        <div class="wh3b-custom-grid-note" id="sodo3b-custom-grid-note" style="display:none;">Đang dùng danh sách vị trí TUỲ CHỈNH — bấm "Cài đặt lưới" (bánh răng) ở đầu mục này để xem/sửa lại.</div>
+        <div class="wh3b-custom-grid" id="sodo3b-custom-grid" style="display:none;"></div>
         <div id="sodo3b-detail"></div>
       </div>
     </div>
@@ -3035,6 +3067,64 @@
   </div>
 </div>
 
+<div class="pick-slip-overlay" id="kho-grid-settings-overlay">
+  <div class="pick-slip-box" style="width:min(420px, 100%);">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;">⚙️ Cài đặt lưới</div>
+      <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-settings-close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="pick-slip-content">
+      <div class="ps-note" style="margin-bottom:12px;">Kích thước lưới chỉ để đủ chỗ đặt ô — không giới hạn số vị trí thật, có thể đổi lại bất cứ lúc nào mà không mất các ô đã đặt (trừ khi ô đó nằm ngoài kích thước mới).</div>
+      <div style="display:flex; gap:10px; margin-bottom:14px;">
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Số hàng
+          <input type="number" id="kho-grid-rows-input" min="1" max="30" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Số cột
+          <input type="number" id="kho-grid-cols-input" min="1" max="30" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+      </div>
+      <button type="button" class="btn-update" id="kho-grid-apply-size" style="width:100%; margin-bottom:10px;">Áp dụng kích thước</button>
+      <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-reset-all" style="width:100%; border-color:var(--red); color:var(--red);">🗑 Xoá toàn bộ lưới tuỳ chỉnh</button>
+    </div>
+  </div>
+</div>
+
+<div class="pick-slip-overlay" id="kho-grid-cell-overlay">
+  <div class="pick-slip-box" style="width:min(420px, 100%);">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;" id="kho-grid-cell-title">Thêm vị trí vào lưới</div>
+      <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-cell-close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="pick-slip-content">
+      <label style="display:block; font-size:12px; color:var(--muted-2); margin-bottom:14px;">Mã Locator (phải gõ ĐÚNG tên có trong dữ liệu tồn kho/WMS, VD: D3B-FG-A01)
+        <input type="text" id="kho-grid-cell-locator" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px; font-family:var(--mono);" placeholder="D3B-FG-A01">
+      </label>
+      <div style="display:flex; gap:10px; margin-bottom:14px;">
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Hàng (từ 1)
+          <input type="number" id="kho-grid-cell-row" min="1" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Cột (từ 1)
+          <input type="number" id="kho-grid-cell-col" min="1" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+      </div>
+      <div style="display:flex; gap:10px; margin-bottom:16px;">
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Chiếm mấy hàng
+          <input type="number" id="kho-grid-cell-rowspan" min="1" value="1" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Chiếm mấy cột
+          <input type="number" id="kho-grid-cell-colspan" min="1" value="1" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+      </div>
+      <button type="button" class="btn-update" id="kho-grid-cell-save" style="width:100%; margin-bottom:10px;">Lưu</button>
+      <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-cell-delete" style="width:100%; border-color:var(--red); color:var(--red); display:none;">🗑 Xoá khỏi lưới</button>
+    </div>
+  </div>
+</div>
+
 <div class="pick-slip-overlay" id="item-cbm-conflict-overlay">
   <div class="pick-slip-box">
     <div class="pick-slip-toolbar">
@@ -3383,6 +3473,7 @@ const STORAGE_KEY_LABELS = {
   tn5_dashboard_gi_scan_log_v1: 'Nhật ký GI đã quét (theo vị trí)',
   tn5_dashboard_cont_ship_v1: 'Dữ liệu Transaction (Ship)',
   tn5_dashboard_item_cbm_v1: 'Thư viện CBM theo mã hàng',
+  tn5_dashboard_kho_grid_v1: 'Lưới sơ đồ kho tuỳ chỉnh',
   tn5_dashboard_confirmed_history_v1: 'Lịch sử đã lưu theo ngày'
 };
 
@@ -3419,6 +3510,7 @@ function clearUnsavedChanges(){
   _localInventoryDirty = false;
   _localShipDirty = false;
   _localContOverridesDirty = false;
+  _localKhoGridDirty = false;
   const btn = document.getElementById('btn-save-cloud');
   if(btn) btn.classList.remove('has-changes');
 }
@@ -4218,6 +4310,9 @@ function saveStateToStorage(){
     if(Object.keys(itemCbmLibrary).length) LS.setItem(STORAGE_KEY_ITEM_CBM, JSON.stringify(itemCbmLibrary));
     else LS.removeItem(STORAGE_KEY_ITEM_CBM);
 
+    if(Object.keys(khoGridLayouts).length) LS.setItem(STORAGE_KEY_KHO_GRID, JSON.stringify(khoGridLayouts));
+    else LS.removeItem(STORAGE_KEY_KHO_GRID);
+
     if(Object.keys(confirmedHistory).length) LS.setItem(STORAGE_KEY_CONFIRMED_HISTORY, JSON.stringify(confirmedHistory));
     else LS.removeItem(STORAGE_KEY_CONFIRMED_HISTORY);
   }catch(err){
@@ -4244,6 +4339,7 @@ function loadStateFromStorage(){
     const giLogRaw = LS.getItem(STORAGE_KEY_GI_LOG);
     const contShipRaw = LS.getItem(STORAGE_KEY_CONT_SHIP);
     const itemCbmRaw = LS.getItem(STORAGE_KEY_ITEM_CBM);
+    const khoGridRaw = LS.getItem(STORAGE_KEY_KHO_GRID);
     const confirmedHistoryRaw = LS.getItem(STORAGE_KEY_CONFIRMED_HISTORY);
     return {
       inv: invRaw ? JSON.parse(invRaw, jsonReviver) : null,
@@ -4262,11 +4358,12 @@ function loadStateFromStorage(){
       giScanLog: giLogRaw ? JSON.parse(giLogRaw) : [],
       contShip: contShipRaw ? contShipDeserialize(JSON.parse(contShipRaw)) : null,
       itemCbm: itemCbmRaw ? JSON.parse(itemCbmRaw) : {},
+      khoGrid: khoGridRaw ? JSON.parse(khoGridRaw) : {},
       confirmedHistory: confirmedHistoryRaw ? JSON.parse(confirmedHistoryRaw) : {}
     };
   }catch(err){
     console.warn('Không đọc được dữ liệu đã lưu:', err);
-    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, confirmedHistory: {} };
+    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, khoGrid: {}, confirmedHistory: {} };
   }
 }
 
@@ -4288,13 +4385,14 @@ function clearStoredState(){
   LS.removeItem(STORAGE_KEY_GI_LOG);
   LS.removeItem(STORAGE_KEY_CONT_SHIP);
   LS.removeItem(STORAGE_KEY_ITEM_CBM);
+  LS.removeItem(STORAGE_KEY_KHO_GRID);
   LS.removeItem(STORAGE_KEY_CONFIRMED_HISTORY);
 }
 
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.28';
+const APP_VERSION = 'v1.30';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -7695,7 +7793,7 @@ function whApplyCapOverride(loc, baseCap){
 /* Vẽ 1 ô locator (dùng chung cho Sơ đồ kho 3B và Sơ đồ Rack 3A) — gồm: tên, số pallet/sức chứa,
    thanh fill màu theo mức lấp đầy, nút bánh răng để ghi đè sức chứa tối đa riêng cho vị trí đó,
    và badge "NG" nếu vị trí đang có hàng NG. */
-function buildLocatorBoxHtml(loc, rows, defaultMaxPallet, extraClass){
+function computeLocatorBoxStats(loc, rows, defaultMaxPallet){
   const overrides = whLoadCapOverrides();
   const maxPallet = overrides[loc] || defaultMaxPallet;
   const count = rows.length;
@@ -7706,10 +7804,15 @@ function buildLocatorBoxHtml(loc, rows, defaultMaxPallet, extraClass){
   else if(cappedForFill < maxPallet * 0.5) level = 'low';
   else if(cappedForFill < maxPallet * 0.8) level = 'mid';
   else level = 'full';
+  const hasNG = rows.some(r => String(r[RAW_KEY_IDX.oqc] || '').toUpperCase().includes('NG'));
+  return { count, maxPallet, pct, level, hasNG };
+}
+
+function buildLocatorBoxHtml(loc, rows, defaultMaxPallet, extraClass){
+  const { count, maxPallet, pct, level, hasNG } = computeLocatorBoxStats(loc, rows, defaultMaxPallet);
   const overNote = count > maxPallet
     ? `<span class="wh3b-over" title="Vượt sức chứa chuẩn ${maxPallet} pallet/vị trí">VƯỢT</span>`
     : '';
-  const hasNG = rows.some(r => String(r[RAW_KEY_IDX.oqc] || '').toUpperCase().includes('NG'));
   const ngBadge = hasNG ? `<span class="wh3b-ng-badge" title="Vị trí này đang có hàng NG">NG</span>` : '';
   return {
     level,
@@ -7821,6 +7924,201 @@ function renderSodo3bBlocks(){
   }
 }
 let sodo3bOutsideData = { locators: [], rows: [] };
+
+/* ============ GRID TUỲ CHỈNH cho Sơ đồ kho (hiện áp dụng cho Kho 3B) ============
+   Cho phép tự sắp xếp các vị trí (locator) THẬT theo đúng bố cục vật lý ngoài kho, khác với sơ đồ
+   mặc định (cố định theo code). Số liệu (SL pallet, OQC, sức chứa...) vẫn tra đúng theo dữ liệu tồn
+   kho thật qua đúng mã locator đã gõ — KHÔNG tạo dữ liệu giả, chỉ đổi cách hiển thị/vị trí trên màn
+   hình. Lưu trữ + đồng bộ Cloud như các phần khác. */
+let khoGridLayouts = {}; // { 'Kho 3B': { rows, cols, cells: [{id, locator, row, col, rowSpan, colSpan}] } }
+const STORAGE_KEY_KHO_GRID = 'tn5_dashboard_kho_grid_v1';
+let sodo3bGridMode = false;
+let _localKhoGridDirty = false;
+let _khoGridEditingCellId = null; // null = đang THÊM ô mới; có giá trị = đang SỬA ô đã có
+
+function khoGridGetLayout(khoLabel){
+  if(!khoGridLayouts[khoLabel]) khoGridLayouts[khoLabel] = { rows: 5, cols: 5, cells: [] };
+  return khoGridLayouts[khoLabel];
+}
+function khoGridSave(){
+  _localKhoGridDirty = true;
+  saveStateToStorage();
+  scheduleAutoSaveToCloud('khogrid', [STORAGE_KEY_KHO_GRID], 'Sửa lưới sơ đồ kho tuỳ chỉnh');
+}
+
+function renderSodo3bCustomGrid(){
+  const container = document.getElementById('sodo3b-custom-grid');
+  if(!container) return;
+  const layout = khoGridGetLayout('Kho 3B');
+  container.className = 'wh3b-custom-grid wh3b-grid';
+  container.style.gridTemplateColumns = `repeat(${layout.cols}, minmax(90px, 1fr))`;
+  container.style.gridTemplateRows = `repeat(${layout.rows}, minmax(90px, auto))`;
+
+  const map = computeSodo3bByLocator();
+  const occupied = new Set();
+  layout.cells.forEach(cell => {
+    for(let r = cell.row; r < cell.row + cell.rowSpan; r++){
+      for(let c = cell.col; c < cell.col + cell.colSpan; c++) occupied.add(r + ',' + c);
+    }
+  });
+
+  let html = '';
+  layout.cells.forEach(cell => {
+    const rows = map[cell.locator] || [];
+    const b = buildLocatorBoxHtml(cell.locator, rows, WH3B_MAX_PALLET, '');
+    // Chèn nút bánh răng RIÊNG (đổi tên/vị trí/kích thước/xoá) — khác nút bánh răng mặc định (chỉnh
+    // sức chứa), đặt thêm ở góc trái để không đè lên nút mặc định ở góc phải.
+    const cellHtml = b.html.replace(
+      '<div class="wh3b-box',
+      `<div style="grid-row:${cell.row} / span ${cell.rowSpan}; grid-column:${cell.col} / span ${cell.colSpan};" class="wh3b-box`
+    ).replace(
+      '<button type="button" class="wh3b-box-gear"',
+      `<button type="button" class="wh3b-custom-gear" data-cell-id="${escAttr(cell.id)}" title="Đổi tên/vị trí/kích thước hoặc xoá ô này khỏi lưới">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      </button><button type="button" class="wh3b-box-gear"`
+    );
+    html += cellHtml;
+  });
+
+  // Ô trống trong phạm vi lưới hiện tại — hiện nút "+" để thêm vị trí mới vào đúng chỗ đó.
+  for(let r = 1; r <= layout.rows; r++){
+    for(let c = 1; c <= layout.cols; c++){
+      if(occupied.has(r + ',' + c)) continue;
+      html += `<button type="button" class="wh3b-custom-add-cell" style="grid-row:${r}; grid-column:${c};" data-row="${r}" data-col="${c}" title="Thêm vị trí vào ô hàng ${r}, cột ${c}">+</button>`;
+    }
+  }
+
+  container.innerHTML = html || `<div class="wh3b-empty">Lưới trống — bấm "+" để bắt đầu thêm vị trí.</div>`;
+}
+
+function khoGridOpenCellPopover(cellId, prefillRow, prefillCol){
+  _khoGridEditingCellId = cellId || null;
+  const layout = khoGridGetLayout('Kho 3B');
+  const cell = cellId ? layout.cells.find(c => c.id === cellId) : null;
+  document.getElementById('kho-grid-cell-title').textContent = cell ? `Sửa vị trí "${cell.locator}"` : 'Thêm vị trí vào lưới';
+  document.getElementById('kho-grid-cell-locator').value = cell ? cell.locator : '';
+  document.getElementById('kho-grid-cell-row').value = cell ? cell.row : (prefillRow || 1);
+  document.getElementById('kho-grid-cell-col').value = cell ? cell.col : (prefillCol || 1);
+  document.getElementById('kho-grid-cell-rowspan').value = cell ? cell.rowSpan : 1;
+  document.getElementById('kho-grid-cell-colspan').value = cell ? cell.colSpan : 1;
+  document.getElementById('kho-grid-cell-delete').style.display = cell ? '' : 'none';
+  const overlay = document.getElementById('kho-grid-cell-overlay');
+  if(overlay) overlay.classList.add('show');
+}
+
+document.addEventListener('click', (e) => {
+  const modeBtn = e.target.closest('#sodo3b-grid-mode-toggle');
+  if(modeBtn){
+    e.stopPropagation();
+    sodo3bGridMode = !sodo3bGridMode;
+    modeBtn.textContent = sodo3bGridMode ? '📋 Sơ đồ mặc định' : '🔲 Grid tuỳ chỉnh';
+    document.getElementById('sodo3b-grid').style.display = sodo3bGridMode ? 'none' : '';
+    document.getElementById('sodo3b-custom-grid').style.display = sodo3bGridMode ? 'grid' : 'none';
+    document.getElementById('sodo3b-custom-grid-note').style.display = sodo3bGridMode ? '' : 'none';
+    document.getElementById('sodo3b-grid-settings-btn').style.display = sodo3bGridMode ? '' : 'none';
+    if(sodo3bGridMode) renderSodo3bCustomGrid();
+    return;
+  }
+  const settingsBtn = e.target.closest('#sodo3b-grid-settings-btn');
+  if(settingsBtn){
+    e.stopPropagation();
+    const layout = khoGridGetLayout('Kho 3B');
+    document.getElementById('kho-grid-rows-input').value = layout.rows;
+    document.getElementById('kho-grid-cols-input').value = layout.cols;
+    document.getElementById('kho-grid-settings-overlay').classList.add('show');
+    return;
+  }
+  const addBtn = e.target.closest('.wh3b-custom-add-cell');
+  if(addBtn){
+    e.stopPropagation();
+    khoGridOpenCellPopover(null, Number(addBtn.dataset.row), Number(addBtn.dataset.col));
+    return;
+  }
+  const gearBtn = e.target.closest('.wh3b-custom-gear');
+  if(gearBtn){
+    e.stopPropagation();
+    khoGridOpenCellPopover(gearBtn.dataset.cellId);
+    return;
+  }
+});
+
+const khoGridSettingsCloseBtn = document.getElementById('kho-grid-settings-close');
+if(khoGridSettingsCloseBtn) khoGridSettingsCloseBtn.addEventListener('click', () => {
+  document.getElementById('kho-grid-settings-overlay').classList.remove('show');
+});
+const khoGridApplySizeBtn = document.getElementById('kho-grid-apply-size');
+if(khoGridApplySizeBtn) khoGridApplySizeBtn.addEventListener('click', () => {
+  const layout = khoGridGetLayout('Kho 3B');
+  const newRows = Math.max(1, Math.round(Number(document.getElementById('kho-grid-rows-input').value) || layout.rows));
+  const newCols = Math.max(1, Math.round(Number(document.getElementById('kho-grid-cols-input').value) || layout.cols));
+  const outOfBounds = layout.cells.filter(c => (c.row + c.rowSpan - 1) > newRows || (c.col + c.colSpan - 1) > newCols);
+  if(outOfBounds.length){
+    if(!confirm(`Kích thước mới sẽ làm ${outOfBounds.length} ô (${outOfBounds.map(c => c.locator).join(', ')}) nằm NGOÀI lưới và bị xoá khỏi lưới. Vẫn áp dụng?`)) return;
+    layout.cells = layout.cells.filter(c => !outOfBounds.includes(c));
+  }
+  layout.rows = newRows; layout.cols = newCols;
+  khoGridSave();
+  renderSodo3bCustomGrid();
+  document.getElementById('kho-grid-settings-overlay').classList.remove('show');
+});
+const khoGridResetAllBtn = document.getElementById('kho-grid-reset-all');
+if(khoGridResetAllBtn) khoGridResetAllBtn.addEventListener('click', () => {
+  if(!confirm('Xoá TOÀN BỘ lưới tuỳ chỉnh của Kho 3B (mọi vị trí đã đặt)? Không ảnh hưởng tới dữ liệu tồn kho thật.')) return;
+  khoGridLayouts['Kho 3B'] = { rows: 5, cols: 5, cells: [] };
+  khoGridSave();
+  renderSodo3bCustomGrid();
+  document.getElementById('kho-grid-settings-overlay').classList.remove('show');
+});
+const khoGridCellCloseBtn = document.getElementById('kho-grid-cell-close');
+if(khoGridCellCloseBtn) khoGridCellCloseBtn.addEventListener('click', () => {
+  document.getElementById('kho-grid-cell-overlay').classList.remove('show');
+});
+const khoGridCellSaveBtn = document.getElementById('kho-grid-cell-save');
+if(khoGridCellSaveBtn) khoGridCellSaveBtn.addEventListener('click', () => {
+  const layout = khoGridGetLayout('Kho 3B');
+  const locator = document.getElementById('kho-grid-cell-locator').value.trim().toUpperCase();
+  const row = Math.round(Number(document.getElementById('kho-grid-cell-row').value));
+  const col = Math.round(Number(document.getElementById('kho-grid-cell-col').value));
+  const rowSpan = Math.max(1, Math.round(Number(document.getElementById('kho-grid-cell-rowspan').value) || 1));
+  const colSpan = Math.max(1, Math.round(Number(document.getElementById('kho-grid-cell-colspan').value) || 1));
+  if(!locator){ alert('Chưa nhập mã Locator.'); return; }
+  if(!row || row < 1 || !col || col < 1){ alert('Hàng/Cột phải là số ≥ 1.'); return; }
+  if(row + rowSpan - 1 > layout.rows || col + colSpan - 1 > layout.cols){
+    alert(`Vị trí này vượt ra ngoài lưới hiện tại (${layout.rows} hàng × ${layout.cols} cột) — hãy tăng kích thước lưới ở "Cài đặt lưới" trước, hoặc giảm số hàng/cột chiếm.`);
+    return;
+  }
+  // Kiểm tra chồng lấn với các ô KHÁC (bỏ qua chính ô đang sửa)
+  const newCells = new Set();
+  for(let r = row; r < row + rowSpan; r++) for(let c = col; c < col + colSpan; c++) newCells.add(r + ',' + c);
+  const conflict = layout.cells.find(cell => {
+    if(cell.id === _khoGridEditingCellId) return false;
+    for(let r = cell.row; r < cell.row + cell.rowSpan; r++)
+      for(let c = cell.col; c < cell.col + cell.colSpan; c++)
+        if(newCells.has(r + ',' + c)) return true;
+    return false;
+  });
+  if(conflict){ alert(`Vị trí này đè lên ô "${conflict.locator}" đã có sẵn trên lưới — hãy chọn hàng/cột khác.`); return; }
+
+  if(_khoGridEditingCellId){
+    const cell = layout.cells.find(c => c.id === _khoGridEditingCellId);
+    if(cell){ cell.locator = locator; cell.row = row; cell.col = col; cell.rowSpan = rowSpan; cell.colSpan = colSpan; }
+  } else {
+    layout.cells.push({ id: 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), locator, row, col, rowSpan, colSpan });
+  }
+  khoGridSave();
+  renderSodo3bCustomGrid();
+  document.getElementById('kho-grid-cell-overlay').classList.remove('show');
+});
+const khoGridCellDeleteBtn = document.getElementById('kho-grid-cell-delete');
+if(khoGridCellDeleteBtn) khoGridCellDeleteBtn.addEventListener('click', () => {
+  if(!_khoGridEditingCellId) return;
+  if(!confirm('Xoá ô này khỏi lưới? (không ảnh hưởng dữ liệu tồn kho thật, chỉ bỏ khỏi cách hiển thị)')) return;
+  const layout = khoGridGetLayout('Kho 3B');
+  layout.cells = layout.cells.filter(c => c.id !== _khoGridEditingCellId);
+  khoGridSave();
+  renderSodo3bCustomGrid();
+  document.getElementById('kho-grid-cell-overlay').classList.remove('show');
+});
 
 /* ============ SƠ ĐỒ RACK 3A ============
    Chỉ gồm locator dạng "3A-##-T#" (VD: 3A-C12-T1) thuộc Kho 3A — mỗi dòng GI No. tính là 1 pallet.
@@ -8029,6 +8327,9 @@ function renderSodo3B(){
 WH_GRID_CONFIGS['sodo3b-grid'] = {
   detailId: 'sodo3b-detail', computeFn: computeSodo3bByLocator
 }; // dùng bởi handler click chi tiết bên dưới — renderWhGrid() không còn dùng cho id này
+WH_GRID_CONFIGS['sodo3b-custom-grid'] = {
+  detailId: 'sodo3b-detail', computeFn: computeSodo3bByLocator
+}; // grid TUỲ CHỈNH — dùng chung computeFn/detailId với sơ đồ mặc định, chỉ khác cách bố trí ô
 WH_GRID_CONFIGS['rack3a-grid'] = {
   detailId: 'rack3a-detail', summaryId: 'rack3a-summary',
   computeFn: computeRack3AByLocator, sortFn: rack3aLocatorSortKey, maxPallet: RACK3A_MAX_PALLET,
@@ -9391,11 +9692,11 @@ function itemCbmRenderLibrary(){
     el.innerHTML = `<div style="text-align:center; color:var(--muted-2); font-style:italic; padding:24px 0;">Chưa có dữ liệu — tải 1 Plan (Row/FC/HCP) có cột CBM để bắt đầu gom.</div>`;
     return;
   }
-  el.innerHTML = `<table class="kho-detail-table"><thead><tr><th>Item No.</th><th style="text-align:right">CBM/đơn vị</th><th>Nguồn</th><th>Cập nhật lúc</th></tr></thead><tbody>
+  el.innerHTML = `<table class="kho-detail-table"><thead><tr><th>Item No.</th><th style="text-align:right">CBM/đơn vị</th><th>Cập nhật lúc</th></tr></thead><tbody>
     ${items.map(item => {
       const e = itemCbmLibrary[item];
       const dt = e.updatedAt ? new Date(e.updatedAt) : null;
-      return `<tr><td>${escHtml(item)}</td><td style="text-align:right">${fmtDec(e.cbm,4)}</td><td>${escHtml(e.source||'')}</td><td>${dt ? escHtml(fmtDateTime(dt)) : '—'}</td></tr>`;
+      return `<tr><td>${escHtml(item)}</td><td style="text-align:right">${fmtDec(e.cbm,4)}</td><td>${dt ? escHtml(fmtDateTime(dt)) : '—'}</td></tr>`;
     }).join('')}
   </tbody></table>`;
 }
@@ -9414,15 +9715,15 @@ const itemCbmExportBtn = document.getElementById('item-cbm-export-excel');
 if(itemCbmExportBtn) itemCbmExportBtn.addEventListener('click', () => {
   if(!LIB_XLSX_OK){ alert('Không xuất được Excel: thư viện SheetJS chưa tải được (cần Internet). Hãy mở file này bằng Chrome có kết nối mạng rồi thử lại.'); return; }
   const items = Object.keys(itemCbmLibrary).sort();
-  const header = ['Item No.', 'CBM/don vi', 'Nguon', 'Cap nhat luc'];
+  const header = ['Item No.', 'CBM/don vi', 'Cap nhat luc'];
   const rows = items.map(item => {
     const e = itemCbmLibrary[item];
     const dt = e.updatedAt ? new Date(e.updatedAt) : null;
-    return [item, e.cbm, e.source || '', dt ? fmtDateTime(dt) : ''];
+    return [item, e.cbm, dt ? fmtDateTime(dt) : ''];
   });
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-  ws['!cols'] = [{wch:16},{wch:14},{wch:32},{wch:18}];
+  ws['!cols'] = [{wch:16},{wch:14},{wch:18}];
   XLSX.utils.book_append_sheet(wb, ws, 'Thu vien CBM'.slice(0,31));
   const pad = n => String(n).padStart(2,'0');
   const now = new Date();
@@ -13064,6 +13365,7 @@ function initDashboard(){
   if(saved.giScanLog && saved.giScanLog.length > 0) giScanLog = saved.giScanLog;
   if(saved.contShip) contShipData = saved.contShip;
   if(saved.itemCbm && Object.keys(saved.itemCbm).length > 0) itemCbmLibrary = saved.itemCbm;
+  if(saved.khoGrid && Object.keys(saved.khoGrid).length > 0) khoGridLayouts = saved.khoGrid;
   if(saved.confirmedHistory && Object.keys(saved.confirmedHistory).length > 0) confirmedHistory = saved.confirmedHistory;
   if(saved.ktInputs && Object.keys(saved.ktInputs).length > 0) ktInputValues = saved.ktInputs;
   if(saved.plans){
@@ -13238,6 +13540,14 @@ if(btnSaveCloud){
               contShipData = cloudData[STORAGE_KEY_CONT_SHIP] ? contShipDeserialize(JSON.parse(cloudData[STORAGE_KEY_CONT_SHIP])) : null;
               renderPlanPanel();
             }catch(e){ console.warn('Không lấy được dữ liệu Ship mới nhất từ Cloud trước khi lưu:', e); }
+          }
+          // Tương tự: máy này KHÔNG tự sửa Grid sơ đồ kho tuỳ chỉnh nào — nếu Cloud đang có bản KHÁC,
+          // lấy đúng bản đó về trước khi lưu.
+          if(!_localKhoGridDirty && cloudData[STORAGE_KEY_KHO_GRID] !== undefined && cloudData[STORAGE_KEY_KHO_GRID] !== _mem[STORAGE_KEY_KHO_GRID]){
+            try{
+              khoGridLayouts = cloudData[STORAGE_KEY_KHO_GRID] ? JSON.parse(cloudData[STORAGE_KEY_KHO_GRID]) : {};
+              if(sodo3bGridMode) renderSodo3bCustomGrid();
+            }catch(e){ console.warn('Không lấy được lưới sơ đồ kho mới nhất từ Cloud trước khi lưu:', e); }
           }
           // Tương tự tồn kho/Ship: máy này KHÔNG tự đổi Kho thủ công/đánh dấu Pick xong tay/ẩn container
           // nào — nếu Cloud đang có bản KHÁC (do máy khác vừa đổi), lấy đúng bản đó về trước khi lưu.
