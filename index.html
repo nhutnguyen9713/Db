@@ -3280,7 +3280,7 @@
           </button>
         </div>
         <div class="settings-status-block">
-          <div class="upload-status" id="fv-status">Đang khởi tạo lưu trữ…</div>
+          <div class="upload-status" id="fv-status">Dự phòng cục bộ — chỉ cần chọn file khi chưa dùng Cloud ở mục bên dưới.</div>
           <div class="autosave-note" id="autosave-note">Trạng thái tự đồng bộ vào file đã chọn trên máy — không dùng bộ nhớ trình duyệt (localStorage). Nếu đã kết nối Cloud bên dưới, hệ thống ưu tiên ghi lên Cloud; file trên máy chỉ được dùng làm phương án dự phòng khi Cloud mất kết nối.</div>
         </div>
       </div>
@@ -3689,7 +3689,15 @@ const FileVault = {
           this._setStatus('Cần cấp lại quyền cho file đồng bộ "' + saved.name + '" — bấm "Kết nối lại".', 'err');
         }
       } else {
-        this._setStatus('Chưa chọn file đồng bộ — bấm "Chọn file đồng bộ" để bắt đầu tự lưu trạng thái vào 1 file trên máy.', '');
+        // File trên máy chỉ là PHƯƠNG ÁN DỰ PHÒNG khi đã có Cloud (xem đầu module) — nếu Cloud đã
+        // được cấu hình rồi thì "chưa chọn file đồng bộ" không phải vấn đề gì cả, không cần báo (mỗi
+        // lần mở app đều thấy dòng này dù chẳng phải làm gì — gây spam thông báo). Chỉ thực sự nhắc
+        // khi CHƯA có Cloud để dự phòng — lúc đó file trên máy là chỗ lưu duy nhất, mới đáng chú ý.
+        let cloudConfigured = false;
+        try{ cloudConfigured = !!(localStorage.getItem(CV_LS_URL) && localStorage.getItem(CV_LS_TOKEN)); }catch(e){}
+        if(!cloudConfigured){
+          this._setStatus('Chưa chọn file đồng bộ — bấm "Chọn file đồng bộ" để bắt đầu tự lưu trạng thái vào 1 file trên máy.', '');
+        }
       }
     }catch(e){ console.warn('FileVault init lỗi:', e); }
   },
@@ -4596,7 +4604,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.35';
+const APP_VERSION = 'v1.36';
 const APP_VERSION_DATE = '09/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
