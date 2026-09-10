@@ -4772,7 +4772,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.57';
+const APP_VERSION = 'v1.58';
 const APP_VERSION_DATE = '10/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13267,23 +13267,40 @@ document.addEventListener('click', function(e){
 // "mồ côi" còn sót từ rất lâu trước. Đẩy thẳng lên Cloud ngay sau khi xoá (writeAll — ghi đè TOÀN BỘ
 // state), để lần "Làm mới dữ liệu" tiếp theo (kể cả từ máy/ca khác) không kéo lại đúng bản CŨ đã xoá.
 document.getElementById('btn-reset-kiemke-all').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-reset-kiemke-all');
+  const cloudActive = typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token;
+
+  // QUAN TRỌNG: đọc thử (peek) bản MỚI NHẤT trên Cloud và gộp vào trước khi xoá — máy này có thể
+  // đang có bản CŨ HƠN Cloud (VD: người khác vừa "Xác nhận" thêm dòng ở máy/ca khác mà máy này chưa
+  // kịp "Làm mới dữ liệu"). Nếu không gộp trước, "Đặt lại toàn bộ" chỉ xoá đúng những gì máy NÀY
+  // đang thấy rồi ghi đè lên Cloud — vô tình xoá mất luôn cả phần người khác vừa làm mà máy này
+  // chưa từng biết tới.
+  if(cloudActive){
+    if(btn) btn.disabled = true;
+    try{
+      const cloudData = await CloudVault.peek();
+      if(cloudData) mergeConfirmedDataFromCloud(cloudData);
+    }catch(e){ console.warn('Không gộp được dữ liệu Cloud trước khi Đặt lại toàn bộ:', e); }
+    finally{ if(btn) btn.disabled = false; }
+  }
+
   const hasAnything = Object.keys(ccKhoResults).length || Object.keys(ktInputValues).length ||
     Object.keys(scannedExtraRows).length || scannedGiSet.size || giScanLog.length ||
     Object.keys(confirmedKiemTonItems).length;
   if(!hasAnything){
-    alert('Không có dữ liệu nào để đặt lại.');
+    alert('Không có dữ liệu nào để đặt lại (đã kiểm tra cả bản mới nhất trên Cloud).');
     return;
   }
   const ok = confirm(
     'Đặt lại TOÀN BỘ dữ liệu của "Đề xuất kiểm hôm nay" VÀ "Đã xác nhận" (cả 3 kho)?\n\n' +
     'Sẽ xoá: danh sách Đề xuất kiểm đã tạo, mọi ô "KT =" đang nhập dở (kể cả số liệu cũ còn sót từ ' +
-    'đợt trước), các dòng quét QR sai vị trí, lịch sử GI đã quét, VÀ TOÀN BỘ danh sách "Đã xác nhận" ' +
-    '(các dòng đã bấm "Xác nhận" nhưng CHƯA bấm "Lưu" để lưu vào lịch sử sẽ bị MẤT hẳn, không khôi phục được).\n\n' +
+    'đợt trước — đã gộp thêm bản mới nhất từ Cloud để không sót phần máy/ca khác vừa làm), các dòng ' +
+    'quét QR sai vị trí, lịch sử GI đã quét, VÀ TOÀN BỘ danh sách "Đã xác nhận" (các dòng đã bấm ' +
+    '"Xác nhận" nhưng CHƯA bấm "Lưu" để lưu vào lịch sử sẽ bị MẤT hẳn, không khôi phục được).\n\n' +
     'Thao tác này không thể hoàn tác — và sẽ đồng bộ lên Cloud ngay, các máy/ca khác cũng sẽ thấy bảng trống.'
   );
   if(!ok) return;
 
-  const btn = document.getElementById('btn-reset-kiemke-all');
   if(btn) btn.disabled = true;
   try{
     CC_KHO_LIST.forEach(k => ccClearKhoResult(k.label));
