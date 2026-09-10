@@ -2197,6 +2197,7 @@
         🚚 Cập nhật Transaction (Ship)
       </button>
       <input type="file" id="cont-ship-file-input" accept=".xlsx,.xls,.csv,.tsv,.txt" style="display:none">
+      <span id="cont-ship-updated-line" style="font-size:12px; color:var(--muted); white-space:nowrap;"></span>
       <span class="upload-status" id="cont-ship-status" style="display:none;"></span>
     </div>
     <div class="kpis" id="cont-picking-kpi-strip" style="margin-bottom:0;"></div>
@@ -4772,7 +4773,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.58';
+const APP_VERSION = 'v1.59';
 const APP_VERSION_DATE = '10/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6021,7 +6022,13 @@ function renderDashboard(DATA){
 
   if(typeof renderPlanPanel === 'function') renderPlanPanel();
   if(typeof renderCapacityOverviews === 'function') renderCapacityOverviews();
-  touchUpdatedAt();
+  // KHÔNG tự gọi touchUpdatedAt() ở đây — hàm renderDashboard() này được gọi ở NHIỀU nơi không phải
+  // là thời điểm người dùng vừa tải file mới lên (VD: khôi phục dữ liệu đã lưu lúc mở lại trang, tải
+  // lại từ Cloud, đồng bộ realtime...). Trước đây gọi vô điều kiện ở đây khiến dòng "Cập nhật lúc"
+  // luôn bị ghi đè thành THỜI ĐIỂM VỪA RENDER (VD: lúc mở lại app) thay vì đúng thời điểm file dữ
+  // liệu THỰC SỰ được tải lên — dòng "Cập nhật lúc" hiện sai be bét dù đã khôi phục đúng giá trị đã
+  // lưu ngay trước khi gọi hàm này. Giờ chỉ nơi nào THỰC SỰ vừa xử lý xong 1 file mới (tìm
+  // touchUpdatedAt(file.name) ở nơi gọi renderDashboard()) mới được cập nhật dòng này.
 }
 
 const btnUpdate = document.getElementById('sidebar-logo-update');
@@ -14275,6 +14282,7 @@ function initDashboard(){
 
   renderKhoSearchPage();
   if(typeof updateQrGiClearBtn === 'function') updateQrGiClearBtn();
+  if(typeof renderContShipUpdatedLine === 'function') renderContShipUpdatedLine();
 }
 initDashboard();
 FileVault.registerReloader(initDashboard);
@@ -14311,6 +14319,8 @@ document.getElementById('btn-reset-data').addEventListener('click', () => {
   if(statusEl0){ statusEl0.className = 'upload-status'; statusEl0.textContent = 'Đã đặt lại — Tải file .xlsx / .csv / .tsv mới để làm mới dashboard'; }
   const fEl = document.getElementById('uploaded-file-line');
   if(fEl){ fEl.textContent = 'File: Dữ liệu mặc định'; fEl.title = ''; }
+  const uEl0 = document.getElementById('updated-at-line');
+  if(uEl0) uEl0.textContent = 'Cập nhật lúc —';
 });
 
 // Nút "Làm mới" — chỉ tải lại dữ liệu mới nhất từ Cloud (giống bấm "Kết nối" ở mục Cloud
@@ -14389,7 +14399,13 @@ if(btnSaveCloud){
               renderDashboard(currentData);
               const cloudMeta = cloudData[STORAGE_KEY_META] ? JSON.parse(cloudData[STORAGE_KEY_META]) : null;
               currentFileName = cloudMeta && cloudMeta.inventoryFileName ? cloudMeta.inventoryFileName : currentFileName;
-              touchUpdatedAt(currentFileName || 'Dữ liệu mặc định');
+              const fEl2 = document.getElementById('uploaded-file-line');
+              if(fEl2){ fEl2.textContent = `File: ${currentFileName || 'Dữ liệu mặc định'}`; fEl2.title = currentFileName || ''; }
+              // Lấy ĐÚNG dòng "Cập nhật lúc" theo bản Cloud vừa tải về (thời điểm file đó THỰC SỰ
+              // được tải lên ở máy khác) — KHÔNG dùng touchUpdatedAt() ở đây vì hàm đó luôn ghi giờ
+              // HIỆN TẠI (lúc máy này đang bấm Lưu), sai với thời điểm tải lên thật.
+              const uEl2 = document.getElementById('updated-at-line');
+              if(uEl2) uEl2.textContent = (cloudMeta && cloudMeta.updatedAtText) || uEl2.textContent;
               if(Object.keys(ccKhoResults).length) ccRestoreResultsFromStorage(ccKhoResults);
             }catch(e){ console.warn('Không lấy được tồn kho mới nhất từ Cloud trước khi lưu:', e); }
           }
@@ -14399,6 +14415,7 @@ if(btnSaveCloud){
             try{
               contShipData = cloudData[STORAGE_KEY_CONT_SHIP] ? contShipDeserialize(JSON.parse(cloudData[STORAGE_KEY_CONT_SHIP])) : null;
               renderPlanPanel();
+              if(typeof renderContShipUpdatedLine === 'function') renderContShipUpdatedLine();
             }catch(e){ console.warn('Không lấy được dữ liệu Ship mới nhất từ Cloud trước khi lưu:', e); }
           }
           // Tương tự: máy này KHÔNG tự sửa Grid sơ đồ kho tuỳ chỉnh nào — nếu Cloud đang có bản KHÁC,
@@ -15489,6 +15506,18 @@ if(txFileInput){
   });
 }
 
+// Dòng hiển thị THƯỜNG TRỰC "đã cập nhật Ship lúc mấy giờ, file nào" cạnh nút "🚚 Cập nhật Transaction
+// (Ship)" — trước đây chỉ có dòng thông báo tạm #cont-ship-status (biến mất/đổi nội dung ngay khi có
+// thao tác khác), không có chỗ nào cho biết lần cập nhật GẦN NHẤT là lúc nào khi quay lại xem sau —
+// gọi hàm này ở MỌI nơi contShipData được gán (tải file mới, khôi phục đã lưu, đồng bộ Cloud).
+function renderContShipUpdatedLine(){
+  const el = document.getElementById('cont-ship-updated-line');
+  if(!el) return;
+  if(!contShipData){ el.textContent = 'Chưa cập nhật Ship'; return; }
+  el.textContent = `${contShipData.updatedAtText || 'Đã cập nhật'}${contShipData.fileName ? ' · ' + contShipData.fileName : ''}`;
+  el.title = contShipData.fileName || '';
+}
+
 // Nút "🚚 Cập nhật Transaction (Ship)" ở panel Picking Status — tái dùng ĐÚNG cơ chế đọc file của
 // trang Transaction (txReadFileAsRows/txParseTransactionRecords), chỉ lọc riêng Transaction Type =
 // Ship để phủ trạng thái Đang Load/Đã Load Xong lên bảng, không tạo state Transaction đầy đủ.
@@ -15512,6 +15541,7 @@ if(contShipFileInput){
       if(!byRef.size) throw new Error('Không tìm thấy dòng nào có Transaction Type = Ship trong file này.');
       contShipData = { byRef, byRefItem, byRefLocators, fileName: file.name, updatedAtText: `Cập nhật lúc ${fmtDateTime(new Date())}` };
       _localShipDirty = true;
+      renderContShipUpdatedLine();
       // Gọi lại renderPlanPanel() (không chỉ renderContainerPickingOverview()) — vì "Tổng hợp 3 Plan"
       // (so Đủ/Thiếu với tồn kho) cũng phụ thuộc container nào đã Pick xong, cần build lại luôn để
       // không báo Thiếu nhầm cho hàng của container vừa được tính Đã Load Xong.
