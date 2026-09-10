@@ -4773,7 +4773,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.61';
+const APP_VERSION = 'v1.60';
 const APP_VERSION_DATE = '10/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -12057,22 +12057,16 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
     horizontalCentered: true, margins: { left:0.35, right:0.35, top:0.5, bottom:0.5, header:0.2, footer:0.2 }
   };
 
-  // Cột 8 "Kết quả" — PHÂN LOẠI Match/Negative/Positive của từng dòng, ẨN khỏi bảng hiển thị (chỉ
-  // dùng làm nguồn dữ liệu thật cho PivotTable ở cột J:K — xem pivotInfo bên dưới). Excel PivotTable
-  // BẮT BUỘC phải có 1 cột nguồn chứa đúng giá trị phân loại để gộp nhóm/đếm theo, không thể tự suy
-  // ra từ việc so sánh 2 cột Số lượng/Kết quả kiểm thực tế như JS đang làm.
-  const headers = ['STT', 'Locator', 'Số pallet', 'Cust PO', 'Item No.', 'Số lượng', 'Kết quả kiểm thực tế', 'Kết quả'];
+  const headers = ['STT', 'Locator', 'Số pallet', 'Cust PO', 'Item No.', 'Số lượng', 'Kết quả kiểm thực tế'];
   const thin = { style:'thin', color:{ argb:'FF999999' } };
   const thick = { style:'medium', color:{ argb:'FF222222' } };
 
-  // Merge tiêu đề chỉ tới cột 7 (G) — cột 8 (H) là cột ẩn "Kết quả" chỉ dùng làm nguồn PivotTable,
-  // không thuộc bảng hiển thị.
-  ws.mergeCells(1,1,1,7);
+  ws.mergeCells(1,1,1,headers.length);
   const titleCell = ws.getCell(1,1);
   titleCell.value = `Danh sách đã xác nhận kiểm — ${khoLabel}`;
   titleCell.font = { bold:true, size:13 };
 
-  ws.mergeCells(2,1,2,7);
+  ws.mergeCells(2,1,2,headers.length);
   const dateCell = ws.getCell(2,1);
   dateCell.value = `Ngày in: ${new Date().toLocaleDateString('vi-VN')} · Tổng số dòng: ${flatRows.length}`;
   dateCell.font = { italic:true, color:{ argb:'FF666666' } };
@@ -12090,7 +12084,7 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
   });
 
   ws.columns = [
-    { width:5 }, { width:14 }, { width:9 }, { width:14 }, { width:14 }, { width:9 }, { width:22 }, { width:9, hidden:true }
+    { width:5 }, { width:14 }, { width:9 }, { width:14 }, { width:14 }, { width:9 }, { width:22 }
   ];
 
   let mismatchCount = 0, okCount = 0, shortCount = 0, surplusCount = 0;
@@ -12099,22 +12093,14 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
     const isLastOfGroup = (i === flatRows.length - 1) || (flatRows[i+1].locator !== r.locator);
     const isFirstOfGroup = (i === 0) || (flatRows[i-1].locator !== r.locator);
     const row = ws.getRow(excelRowNum);
-    const qtyNum = typeof r.qty === 'number' ? r.qty : (parseFloat(r.qty) || 0);
-    const mismatch = Math.round(qtyNum) !== Math.round(r.actualResult);
-    let classification;
-    if(Math.round(r.actualResult) === Math.round(qtyNum)){ okCount++; classification = 'Match'; }
-    else if(Math.round(r.actualResult) < Math.round(qtyNum)){ shortCount++; classification = 'Negative'; }
-    else { surplusCount++; classification = 'Positive'; }
-    if(mismatch) mismatchCount++;
     row.values = [
       i + 1,
       r.locator,
       r.palletCount || '',
       r.custpo || '',
       r.item,
-      qtyNum,
-      r.actualResult,
-      classification
+      typeof r.qty === 'number' ? r.qty : (parseFloat(r.qty) || 0),
+      r.actualResult
     ];
     row.alignment = { vertical:'middle' };
     for(let c = 1; c <= headers.length; c++){
@@ -12123,12 +12109,18 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
         top: isFirstOfGroup ? thick : thin,
         bottom: isLastOfGroup ? thick : thin,
         left: (c === 1) ? thick : thin,
-        right: (c === 7) ? thick : thin
+        right: (c === headers.length) ? thick : thin
       };
       if(c === 2 || c === 3 || c === 4 || c === 5) cell.alignment = { vertical:'middle', horizontal:'left', wrapText:true };
       else if(c === 6 || c === 7) cell.alignment = { vertical:'middle', horizontal:'right' };
       else cell.alignment = { vertical:'middle', horizontal:'center' };
     }
+    const qtyNum = typeof r.qty === 'number' ? r.qty : (parseFloat(r.qty) || 0);
+    const mismatch = Math.round(qtyNum) !== Math.round(r.actualResult);
+    if(mismatch) mismatchCount++;
+    if(Math.round(r.actualResult) === Math.round(qtyNum)) okCount++;
+    else if(Math.round(r.actualResult) < Math.round(qtyNum)) shortCount++;
+    else surplusCount++;
     row.getCell(7).font = mismatch
       ? { bold:true, color:{ argb:'FFD6394B' } }
       : { bold:false, color:{ argb:'FF000000' } };
@@ -12164,14 +12156,12 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
 
   // Tổng SL pallet + tổng số vị trí (locator) KHÁC NHAU — hiện thêm vào tiêu đề chart tròn, bên
   // cạnh số dòng, để nhìn tiêu đề là biết ngay quy mô đợt kiểm (không phải mở bảng đếm tay).
-  // palletCountMode='stored' (xuất Lịch sử của bản ghi cũ chưa có Số pallet) có thể không có đủ số
-  // liệu Số pallet đáng tin -> bỏ qua phần này khỏi tiêu đề, tránh hiện sai.
-  const hasReliablePalletSum = palletCountMode !== 'stored' || flatRows.every(r => typeof r.palletCount === 'number');
+  // skipPalletCount=true (xuất Lịch sử) không tính lại được Số pallet -> bỏ qua phần này khỏi tiêu đề.
   const locatorCount = new Set(flatRows.map(r => r.locator)).size;
   const palletSum = flatRows.reduce((s, r) => s + (typeof r.palletCount === 'number' ? r.palletCount : 0), 0);
-  const titleExtra = hasReliablePalletSum
-    ? ` · ${fmt(locatorCount)} vị trí · ${fmt(palletSum)} pallet`
-    : ` · ${fmt(locatorCount)} vị trí`;
+  const titleExtra = skipPalletCount
+    ? ` · ${fmt(locatorCount)} vị trí`
+    : ` · ${fmt(locatorCount)} vị trí · ${fmt(palletSum)} pallet`;
 
   return {
     rowCount: flatRows.length, mismatchCount, okCount, shortCount, surplusCount, matchCount, negativeCount, positiveCount,
@@ -12184,19 +12174,6 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
       values: [matchCount, negativeCount, positiveCount],
       colors: ['00B050', 'FF0000', 'FFC000'],
       title: `Kiểm kho ${khoLabel.replace('Kho ', '')} — ${flatRows.length} dòng${titleExtra}`
-    },
-    // Nguồn dữ liệu THẬT cho PivotTable Excel (thay cho các ô J:K tự tính sẵn bằng JS trước đây) —
-    // xem injectRealPieCharts(). sourceRef trỏ đúng vùng bảng A:H (bao gồm cả cột ẩn "Kết quả").
-    // fieldNames đi kèm luôn (thay vì hardcode lại ở injectRealPieCharts) để 2 nơi không lệch nhau.
-    pivotInfo: {
-      sheetName: ws.name,
-      sourceRef: `A${headerExcelRow}:H${headerExcelRow + flatRows.length}`,
-      fieldNames: headers,
-      outputAnchorCell: `J${chartDataRow}`,
-      categoryFieldIndex: 7, // 0-based — cột H "Kết quả"
-      countFieldIndex: 7,
-      categories: ['Match', 'Negative', 'Positive'],
-      counts: [matchCount, negativeCount, positiveCount]
     }
   };
 }
@@ -12210,135 +12187,15 @@ function escapeXmlChart(s){
 // chuẩn OOXML; ở đây tự tay ghép thêm phần chart{N}.xml + drawing{N}.xml + các file quan hệ
 // (.rels) cần thiết, tham chiếu đúng vào các ô dữ liệu thật đã ghi sẵn trong sheet (cột J:K) — nên
 // khi mở trong Excel, chart này bấm vào sửa/xem số liệu gốc được như chart tạo tay bình thường.
-//
-// Nếu spec có kèm pivotInfo, hàm này CÒN ghép thêm 1 PivotTable Excel THẬT (pivotCacheDefinition +
-// pivotCacheRecords + pivotTable, đúng chuẩn ECMA-376/ISO-29500 — đã kiểm tra khớp XSD gốc) — bảng
-// Row Labels/Count of Result ở cột J:K không còn là số JS tính sẵn ghi cứng vào ô nữa, mà là kết quả
-// THẬT của 1 PivotTable đọc từ đúng bảng dữ liệu (cột A:H, cột H "Kết quả" ẩn dùng làm nguồn nhóm) —
-// bấm phải chuột vào bảng trong Excel sẽ thấy đúng menu PivotTable (Refresh, Field List...).
-// LƯU Ý KHÁC BIỆT VỚI CHART: PivotTable không cần thẻ XML nào trong bản thân sheet.xml (không như
-// <drawing> của chart) — chỉ cần khai báo qua quan hệ (.rels) của đúng sheet đó trỏ tới pivotTableN.xml,
-// cộng với đăng ký pivotCache dùng chung ở xl/workbook.xml + xl/_rels/workbook.xml.rels.
-// chartSpecs: [{ sheetPosition (số thứ tự sheet trong workbook, 1 = sheet đầu tiên), chartInfo, pivotInfo? }]
+// chartSpecs: [{ sheetPosition (số thứ tự sheet trong workbook, 1 = sheet đầu tiên), chartInfo }]
 // Nếu thiếu JSZip hoặc có lỗi khi ghép XML, trả về nguyên buffer gốc (file vẫn mở được, chỉ là
-// không có chart/pivot) để không làm hỏng cả file xuất ra.
-function pivotXmlAttr(s){
-  return escapeXmlChart(s).replace(/\n/g, '&#10;');
-}
-function buildPivotCacheDefinitionXml(pivotInfo, fieldNames, recordCount, rId){
-  const catFieldIdx = pivotInfo.categoryFieldIndex;
-  const cacheFields = fieldNames.map((name, idx) => {
-    if(idx === catFieldIdx){
-      const items = pivotInfo.categories.map(c => `<s v="${pivotXmlAttr(c)}"/>`).join('');
-      return `<cacheField name="${pivotXmlAttr(name)}" numFmtId="0"><sharedItems count="${pivotInfo.categories.length}">${items}</sharedItems></cacheField>`;
-    }
-    return `<cacheField name="${pivotXmlAttr(name)}" numFmtId="0"><sharedItems/></cacheField>`;
-  }).join('');
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="${rId}" refreshOnLoad="1" recordCount="${recordCount}"><cacheSource type="worksheet"><worksheetSource ref="${pivotInfo.sourceRef}" sheet="${pivotXmlAttr(pivotInfo.sheetName)}"/></cacheSource><cacheFields count="${fieldNames.length}">${cacheFields}</cacheFields></pivotCacheDefinition>`;
-}
-function buildPivotCacheRecordsXml(dataRows){
-  const recs = dataRows.map(row => {
-    const cells = row.map(v => {
-      if(v === '' || v === null || v === undefined) return '<m/>';
-      if(typeof v === 'number' && isFinite(v)) return `<n v="${v}"/>`;
-      return `<s v="${pivotXmlAttr(v)}"/>`;
-    }).join('');
-    return `<r>${cells}</r>`;
-  }).join('');
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<pivotCacheRecords xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" count="${dataRows.length}">${recs}</pivotCacheRecords>`;
-}
-function excelColLettersToIdx(letters){ let n=0; for(const ch of letters) n = n*26 + (ch.charCodeAt(0)-64); return n; }
-function excelIdxToColLetters(n){ let s=''; while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); } return s; }
-function buildPivotTableXml(pivotInfo, fieldCount, tableName, cacheId){
-  const catIdx = pivotInfo.categoryFieldIndex;
-  const pivotFields = [];
-  for(let i=0;i<fieldCount;i++){
-    if(i === catIdx){
-      const items = pivotInfo.categories.map((c,ci) => `<item x="${ci}"/>`).join('') + '<item t="default"/>';
-      pivotFields.push(`<pivotField axis="axisRow" showAll="0"><items count="${pivotInfo.categories.length+1}">${items}</items></pivotField>`);
-    } else {
-      pivotFields.push(`<pivotField showAll="0"/>`);
-    }
-  }
-  const rowItems = pivotInfo.categories.map((c,i) => i===0 ? '<i><x/></i>' : `<i><x v="${i}"/></i>`).join('') + '<i t="grand"><x/></i>';
-  const m = pivotInfo.outputAnchorCell.match(/^([A-Z]+)(\d+)$/);
-  const colLetters = m[1], rowNum = parseInt(m[2],10);
-  const endColLetters = excelIdxToColLetters(excelColLettersToIdx(colLetters) + 1); // 2 cột: nhãn + số đếm
-  const endRow = rowNum + 1 + pivotInfo.categories.length; // dòng tiêu đề + N nhóm + Grand Total
-  const ref = `${colLetters}${rowNum}:${endColLetters}${endRow}`;
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<pivotTableDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" name="${tableName}" cacheId="${cacheId}" applyNumberFormats="0" applyBorderFormats="0" applyFontFormats="0" applyPatternFormats="0" applyAlignmentFormats="0" applyWidthHeightFormats="1" dataCaption="Values" updatedVersion="6" minRefreshableVersion="3" useAutoFormatting="1" itemPrintTitles="1" createdVersion="6" indent="0" outline="1" outlineData="1" multipleFieldFilters="0"><location ref="${ref}" firstHeaderRow="1" firstDataRow="1" firstDataCol="1"/><pivotFields count="${fieldCount}">${pivotFields.join('')}</pivotFields><rowFields count="1"><field x="${catIdx}"/></rowFields><rowItems count="${pivotInfo.categories.length+1}">${rowItems}</rowItems><dataFields count="1"><dataField name="Count of Result" fld="${pivotInfo.countFieldIndex}" subtotal="count" baseField="0" baseItem="0"/></dataFields><pivotTableStyleInfo name="PivotStyleLight16" showRowHeaders="1" showColHeaders="1" showRowStripes="0" showColStripes="0" showLastColumn="1"/></pivotTableDefinition>`;
-}
-// Đọc lại đúng các ô A:H (đã ghi ở ccBuildDaXacNhanSheetFromRecords) từ sheet XML thật vừa xuất —
-// để dữ liệu nạp vào PivotCacheRecords khớp TUYỆT ĐỐI với những gì đang hiển thị trong bảng, không
-// lệch dù chỉ 1 ô (đọc lại từ cell thật thay vì dựng lại từ mảng JS gốc, tránh 2 nguồn có thể lệch nhau).
-function readPivotSourceRowsFromSheetXml(sheetXml, sourceRef, sharedStrings){
-  const m = sourceRef.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
-  const startCol = excelColLettersToIdx(m[1]), startRow = parseInt(m[2],10) + 1; // bỏ dòng tiêu đề
-  const endCol = excelColLettersToIdx(m[3]), endRow = parseInt(m[4],10);
-  const cellMap = new Map(); // 'A5' -> {t, v}
-  const rowRe = /<row r="(\d+)"[^>]*>([\s\S]*?)<\/row>/g;
-  let rowMatch;
-  while((rowMatch = rowRe.exec(sheetXml))){
-    const rNum = parseInt(rowMatch[1], 10);
-    if(rNum < startRow || rNum > endRow) continue;
-    const cellRe = /<c r="([A-Z]+\d+)"([^>]*)>(?:<v>([\s\S]*?)<\/v>)?<\/c>|<c r="([A-Z]+\d+)"([^>]*)\/>/g;
-    let cellMatch;
-    while((cellMatch = cellRe.exec(rowMatch[2]))){
-      const ref = cellMatch[1] || cellMatch[4];
-      const attrs = cellMatch[2] !== undefined ? cellMatch[2] : cellMatch[5];
-      const isString = /\st="s"/.test(attrs || '');
-      const rawV = cellMatch[3];
-      cellMap.set(ref, { isString, v: rawV });
-    }
-  }
-  const rows = [];
-  for(let r = startRow; r <= endRow; r++){
-    const row = [];
-    for(let c = startCol; c <= endCol; c++){
-      const ref = excelIdxToColLetters(c) + r;
-      const cell = cellMap.get(ref);
-      if(!cell || cell.v === undefined){ row.push(''); continue; }
-      if(cell.isString){
-        const idx = parseInt(cell.v, 10);
-        row.push(sharedStrings[idx] !== undefined ? sharedStrings[idx] : '');
-      } else {
-        const num = parseFloat(cell.v);
-        row.push(isFinite(num) ? num : cell.v);
-      }
-    }
-    rows.push(row);
-  }
-  return rows;
-}
-// Đọc mảng chuỗi dùng chung (sharedStrings.xml) — cột chữ (Locator/Item No./Kết quả...) trong sheet
-// đa phần được ExcelJS lưu qua bảng chuỗi dùng chung này (t="s", trỏ theo chỉ số) thay vì ghi thẳng.
-function parseSharedStringsXml(xml){
-  if(!xml) return [];
-  const out = [];
-  const siRe = /<si>([\s\S]*?)<\/si>/g;
-  let m;
-  while((m = siRe.exec(xml))){
-    const body = m[1];
-    const texts = [...body.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(t => t[1]);
-    out.push(texts.join('')
-      .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&apos;/g,"'").replace(/&quot;/g,'"'));
-  }
-  return out;
-}
+// không có chart) để không làm hỏng cả file xuất ra.
 async function injectRealPieCharts(buffer, chartSpecs){
   if(!LIB_JSZIP_OK || !chartSpecs || !chartSpecs.length) return buffer;
   try{
     const zip = await JSZip.loadAsync(buffer);
     let contentTypesXml = await zip.file('[Content_Types].xml').async('string');
     let chartIndex = 0;
-    let pivotIndex = 0;
-    const sharedStringsFile = zip.file('xl/sharedStrings.xml');
-    const sharedStrings = sharedStringsFile ? parseSharedStringsXml(await sharedStringsFile.async('string')) : [];
-    const workbookPivotCacheEntries = []; // { cacheId, rId }
-    let workbookRelsXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
 
     for(const spec of chartSpecs){
       chartIndex++;
@@ -12443,76 +12300,10 @@ ${dPts}
         : sheetXml.replace('</worksheet>', drawingTag + '</worksheet>');
       zip.file(sheetFile, sheetXml);
 
-      let overrideEntries =
+      const overrideEntries =
         `<Override PartName="/${drawingPath}" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>` +
         `<Override PartName="/${chartPath}" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`;
-
-      // ---- PivotTable thật (nếu spec có pivotInfo) — KHÔNG cần sửa gì thêm trong sheetXml (khác
-      // với <drawing> của chart ở trên): PivotTable gắn vào 1 sheet CHỈ qua quan hệ (.rels) của
-      // chính sheet đó, không có thẻ XML tương ứng nào bên trong bản thân sheet.xml. ----
-      if(spec.pivotInfo){
-        pivotIndex++;
-        const pInfo = spec.pivotInfo;
-        const pivotCacheDefPath = `xl/pivotCache/pivotCacheDefinition${pivotIndex}.xml`;
-        const pivotCacheRecPath = `xl/pivotCache/pivotCacheRecords${pivotIndex}.xml`;
-        const pivotCacheDefRelsPath = `xl/pivotCache/_rels/pivotCacheDefinition${pivotIndex}.xml.rels`;
-        const pivotTablePath = `xl/pivotTables/pivotTable${pivotIndex}.xml`;
-        const pivotTableRelsPath = `xl/pivotTables/_rels/pivotTable${pivotIndex}.xml.rels`;
-
-        const dataRows = readPivotSourceRowsFromSheetXml(sheetXml, pInfo.sourceRef, sharedStrings);
-        const cacheDefXml = buildPivotCacheDefinitionXml(pInfo, pInfo.fieldNames, dataRows.length, 'rId1');
-        const cacheRecordsXml = buildPivotCacheRecordsXml(dataRows);
-        zip.file(pivotCacheDefPath, cacheDefXml);
-        zip.file(pivotCacheRecPath, cacheRecordsXml);
-        zip.file(pivotCacheDefRelsPath, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords" Target="pivotCacheRecords${pivotIndex}.xml"/></Relationships>`);
-
-        const pivotTableXml = buildPivotTableXml(pInfo, pInfo.fieldNames.length, `PivotTable${pivotIndex}`, pivotIndex);
-        zip.file(pivotTablePath, pivotTableXml);
-        zip.file(pivotTableRelsPath, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="../pivotCache/pivotCacheDefinition${pivotIndex}.xml"/></Relationships>`);
-
-        // Quan hệ pivotTable -> ĐÚNG sheet đang xử lý (dùng lại đúng file .rels vừa cập nhật ở trên
-        // cho <drawing>, cộng thêm 1 quan hệ mới — không tạo file .rels riêng lần 2 kẻo ghi đè mất).
-        const ptIds = [...sheetRelsXml.matchAll(/Id="rId(\d+)"/g)].map(x => parseInt(x[1], 10));
-        const ptNextRid = ptIds.length ? Math.max(...ptIds) + 1 : 1;
-        sheetRelsXml = sheetRelsXml.replace('</Relationships>',
-          `<Relationship Id="rId${ptNextRid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable${pivotIndex}.xml"/></Relationships>`);
-        zip.file(sheetRelsPath, sheetRelsXml);
-
-        // pivotCache dùng chung toàn workbook — đăng ký relationship workbook -> pivotCacheDefinition
-        // NGAY Ở ĐÂY (gộp thêm entry vào xl/_rels/workbook.xml.rels đang giữ trong bộ nhớ), rồi ghi
-        // 1 LẦN <pivotCaches> hoàn chỉnh vào xl/workbook.xml sau khi đã lặp hết mọi spec.
-        const wbIds = [...workbookRelsXml.matchAll(/Id="rId(\d+)"/g)].map(x => parseInt(x[1], 10));
-        const wbNextRid = wbIds.length ? Math.max(...wbIds) + 1 : 1;
-        workbookRelsXml = workbookRelsXml.replace('</Relationships>',
-          `<Relationship Id="rId${wbNextRid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="pivotCache/pivotCacheDefinition${pivotIndex}.xml"/></Relationships>`);
-        workbookPivotCacheEntries.push({ cacheId: pivotIndex, rId: `rId${wbNextRid}` });
-
-        overrideEntries +=
-          `<Override PartName="/${pivotCacheDefPath}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml"/>` +
-          `<Override PartName="/${pivotCacheRecPath}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml"/>` +
-          `<Override PartName="/${pivotTablePath}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml"/>`;
-      }
-
       contentTypesXml = contentTypesXml.replace('</Types>', overrideEntries + '</Types>');
-    }
-
-    if(workbookPivotCacheEntries.length){
-      let workbookXml = await zip.file('xl/workbook.xml').async('string');
-      const pivotCacheTags = workbookPivotCacheEntries.map(e => `<pivotCache cacheId="${e.cacheId}" r:id="${e.rId}"/>`).join('');
-      // <pivotCaches> phải nằm SAU <calcPr> (nếu có) theo đúng thứ tự CT_Workbook — ExcelJS luôn ghi
-      // <calcPr>, nhưng vẫn có phương án dự phòng chèn trước </workbook> để không bao giờ lặng lẽ
-      // bỏ sót (thà pivot lệch vị trí schema còn hơn hoàn toàn không đăng ký được cache).
-      if(workbookXml.includes('<pivotCaches>')){
-        workbookXml = workbookXml.replace('</pivotCaches>', pivotCacheTags + '</pivotCaches>');
-      } else if(/<calcPr\b[^>]*\/>/.test(workbookXml)){
-        workbookXml = workbookXml.replace(/(<calcPr\b[^>]*\/>)/, `$1<pivotCaches>${pivotCacheTags}</pivotCaches>`);
-      } else {
-        workbookXml = workbookXml.replace('</workbook>', `<pivotCaches>${pivotCacheTags}</pivotCaches></workbook>`);
-      }
-      zip.file('xl/workbook.xml', workbookXml);
-      zip.file('xl/_rels/workbook.xml.rels', workbookRelsXml);
     }
 
     zip.file('[Content_Types].xml', contentTypesXml);
@@ -12531,7 +12322,7 @@ async function exportConfirmedKhoExcel(khoLabel){
   const summary = ccBuildDaXacNhanSheet(workbook, khoLabel);
   if(!summary){ alert(`Chưa có dòng nào đã xác nhận cho ${khoLabel}.`); return; }
   const buffer = await workbook.xlsx.writeBuffer();
-  const chartSpecs = summary.chartInfo ? [{ sheetPosition: 1, chartInfo: summary.chartInfo, pivotInfo: summary.pivotInfo }] : [];
+  const chartSpecs = summary.chartInfo ? [{ sheetPosition: 1, chartInfo: summary.chartInfo }] : [];
   const processed = await injectRealPieCharts(buffer, chartSpecs);
   const blob = processed instanceof Blob ? processed : new Blob([processed], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
@@ -12574,7 +12365,7 @@ async function exportConfirmedHistoryExcel(dateKey){
     const khoRecords = byKho[k.label].map(r => ({ locator: r.locator, custpo: r.custpo, item: r.item, qty: r.qty, actualResult: r.actualResult, palletCount: r.palletCount }));
     const stats = ccBuildDaXacNhanSheetFromRecords(workbook, k.label, khoRecords, 'stored');
     if(stats){
-      chartSpecs.push({ sheetPosition: nextSheetPosition, chartInfo: stats.chartInfo, pivotInfo: stats.pivotInfo });
+      chartSpecs.push({ sheetPosition: nextSheetPosition, chartInfo: stats.chartInfo });
       nextSheetPosition++;
       summaryRows.push({ kho: k.label.replace('Kho ', ''), rowCount: stats.rowCount, mismatchCount: stats.mismatchCount, matchCount: stats.matchCount, negativeCount: stats.negativeCount, positiveCount: stats.positiveCount });
     }
@@ -13701,7 +13492,7 @@ async function exportCombinedReportAllKho(){
     const confirmedCount = xacNhanStats ? xacNhanStats.rowCount : 0;
     const mismatchCount = xacNhanStats ? xacNhanStats.mismatchCount : 0;
     if(xacNhanStats){
-      chartSpecs.push({ sheetPosition: nextSheetPosition, chartInfo: xacNhanStats.chartInfo, pivotInfo: xacNhanStats.pivotInfo });
+      chartSpecs.push({ sheetPosition: nextSheetPosition, chartInfo: xacNhanStats.chartInfo });
       nextSheetPosition++;
     }
     summaryRows.push({
