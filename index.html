@@ -4773,7 +4773,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.62';
+const APP_VERSION = 'v1.63';
 const APP_VERSION_DATE = '10/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -12126,29 +12126,43 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
       : { bold:false, color:{ argb:'FF000000' } };
   });
 
-  // Biểu đồ tròn Match (khớp, xanh lá) / Negative (thiếu, đỏ) / Positive (dư, vàng cam) — đúng 3
-  // nhóm như mẫu Pivot Chart bạn gửi. Ghi dữ liệu vào các ô thật (cột J:K) để bước hậu xử lý
-  // injectRealPieCharts() gắn 1 chart Excel THẬT tham chiếu đúng vào các ô này (không phải ảnh tĩnh
-  // — bấm vào chart trong Excel vẫn xem/sửa số liệu gốc được).
+  // Biểu đồ tròn Match (khớp, xanh lá) / Negative (thiếu, đỏ) / Positive (dư, vàng cam). Ghi vào
+  // các ô thật (cột J:K) để bước hậu xử lý injectRealPieCharts() gắn 1 chart Excel THẬT tham chiếu
+  // đúng vào các ô này (không phải ảnh tĩnh — bấm vào chart trong Excel vẫn xem/sửa số liệu được).
+  // 3 số Match/Negative/Positive + Grand Total dùng CÔNG THỨC EXCEL THẬT (SUMPRODUCT/SUM) so trực
+  // tiếp cột F "Số lượng" với cột G "Kết quả kiểm thực tế" của CHÍNH bảng dữ liệu — không ghi cứng
+  // số JS tính sẵn vào ô nữa: sửa/thêm dòng trong bảng ở Excel thì các số này (và cả chart) tự cập
+  // nhật theo khi mở lại/tính toán lại, không cần PivotTable thật (đã thử ở bản trước, bị Excel báo
+  // lỗi nội dung do OOXML PivotTable quá phức tạp để tự ghép tay an toàn — dùng công thức thường an
+  // toàn tuyệt đối vì không đụng gì tới cấu trúc nội bộ ngoài chuẩn của Excel).
   const matchCount = okCount;
   const negativeCount = shortCount;   // thiếu so với SL tồn
   const positiveCount = surplusCount; // dư so với SL tồn
   const chartDataRow = headerExcelRow; // hàng 4 — cùng hàng với tiêu đề cột của bảng chính
+  const dataFirstRow = headerExcelRow + 1;
+  const dataLastRow = headerExcelRow + flatRows.length;
+  const fRange = `$F$${dataFirstRow}:$F$${dataLastRow}`; // cột "Số lượng"
+  const gRange = `$G$${dataFirstRow}:$G$${dataLastRow}`; // cột "Kết quả kiểm thực tế"
   ws.getCell(chartDataRow, 10).value = 'Row Labels';
   ws.getCell(chartDataRow, 11).value = 'Count of Result';
   ws.getRow(chartDataRow).getCell(10).font = { bold:true };
   ws.getRow(chartDataRow).getCell(11).font = { bold:true };
-  const chartRows = [
-    ['Match', matchCount],
-    ['Negative', negativeCount],
-    ['Positive', positiveCount]
+  const chartRowLabels = ['Match', 'Negative', 'Positive'];
+  const chartRowFormulas = [
+    `SUMPRODUCT((${fRange}=${gRange})*1)`,   // Match: Số lượng = Kết quả kiểm thực tế
+    `SUMPRODUCT((${gRange}<${fRange})*1)`,   // Negative: kiểm được ÍT hơn SL tồn (thiếu)
+    `SUMPRODUCT((${gRange}>${fRange})*1)`    // Positive: kiểm được NHIỀU hơn SL tồn (dư)
   ];
-  chartRows.forEach((pair, i) => {
-    ws.getCell(chartDataRow + 1 + i, 10).value = pair[0];
-    ws.getCell(chartDataRow + 1 + i, 11).value = pair[1];
+  const chartRowResults = [matchCount, negativeCount, positiveCount];
+  chartRowLabels.forEach((label, i) => {
+    ws.getCell(chartDataRow + 1 + i, 10).value = label;
+    ws.getCell(chartDataRow + 1 + i, 11).value = { formula: chartRowFormulas[i], result: chartRowResults[i] };
   });
   ws.getCell(chartDataRow + 4, 10).value = 'Grand Total';
-  ws.getCell(chartDataRow + 4, 11).value = matchCount + negativeCount + positiveCount;
+  ws.getCell(chartDataRow + 4, 11).value = {
+    formula: `SUM($K$${chartDataRow + 1}:$K$${chartDataRow + 3})`,
+    result: matchCount + negativeCount + positiveCount
+  };
   ws.getRow(chartDataRow + 4).getCell(10).font = { bold:true };
   ws.getRow(chartDataRow + 4).getCell(11).font = { bold:true };
   ws.getColumn(10).width = 18;
@@ -12156,12 +12170,14 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
 
   // Tổng SL pallet + tổng số vị trí (locator) KHÁC NHAU — hiện thêm vào tiêu đề chart tròn, bên
   // cạnh số dòng, để nhìn tiêu đề là biết ngay quy mô đợt kiểm (không phải mở bảng đếm tay).
-  // skipPalletCount=true (xuất Lịch sử) không tính lại được Số pallet -> bỏ qua phần này khỏi tiêu đề.
+  // palletCountMode='stored' (xuất Lịch sử của bản ghi cũ chưa có Số pallet) có thể không có đủ số
+  // liệu Số pallet đáng tin -> bỏ qua phần này khỏi tiêu đề, tránh hiện sai.
+  const hasReliablePalletSum = palletCountMode !== 'stored' || flatRows.every(r => typeof r.palletCount === 'number');
   const locatorCount = new Set(flatRows.map(r => r.locator)).size;
   const palletSum = flatRows.reduce((s, r) => s + (typeof r.palletCount === 'number' ? r.palletCount : 0), 0);
-  const titleExtra = skipPalletCount
-    ? ` · ${fmt(locatorCount)} vị trí`
-    : ` · ${fmt(locatorCount)} vị trí · ${fmt(palletSum)} pallet`;
+  const titleExtra = hasReliablePalletSum
+    ? ` · ${fmt(locatorCount)} vị trí · ${fmt(palletSum)} pallet`
+    : ` · ${fmt(locatorCount)} vị trí`;
 
   return {
     rowCount: flatRows.length, mismatchCount, okCount, shortCount, surplusCount, matchCount, negativeCount, positiveCount,
