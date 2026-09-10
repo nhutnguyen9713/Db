@@ -4773,7 +4773,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.59';
+const APP_VERSION = 'v1.60';
 const APP_VERSION_DATE = '10/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -11817,10 +11817,17 @@ async function saveConfirmedSnapshotAndReset(){
     const total = (parseFloat(item.inputs[0]) || 0) * (parseFloat(item.inputs[1]) || 1) +
                   (parseFloat(item.inputs[2]) || 0) * (parseFloat(item.inputs[3]) || 1) +
                   (parseFloat(item.inputs[4]) || 0) * (parseFloat(item.inputs[5]) || 1);
+    // Chụp lại "Số pallet" NGAY TẠI THỜI ĐIỂM LƯU (dựa theo tồn kho hiện tại currentData, cùng cách
+    // tính với cột "Số pallet" ở bảng Đã xác nhận) — phải chụp lại và LƯU KÈM vào bản ghi lịch sử
+    // luôn, vì qua ngày khác tồn kho hiện tại đã đổi (upload file mới), không thể tính lại đúng SL
+    // pallet của đúng thời điểm kiểm này nữa. Trước đây không lưu trường này nên "Lịch sử" luôn thiếu
+    // cột Số pallet.
+    const khoLabelFull = (item.data.kho || '').startsWith('Kho ') ? item.data.kho : 'Kho ' + (item.data.kho || '');
+    const palletCount = computePalletCountFor(khoLabelFull, item.data.item, item.data.locator, item.data.custpo);
     return {
       kho: item.data.kho, item: item.data.item, custpo: item.data.custpo,
       locator: item.data.locator, oqc: item.data.oqc, qty: item.data.qty,
-      actualResult: Math.round(total),
+      actualResult: Math.round(total), palletCount,
       isWrongLocation: !!item.data.isWrongLocation, wmsLocator: item.data.wmsLocator || '',
       isWrongOqc: !!item.data.isWrongOqc, wmsOqc: item.data.wmsOqc || ''
     };
@@ -11906,6 +11913,7 @@ function renderConfirmedHistoryPopup(){
       <td>${escHtml(r.locator)}</td>
       <td>${oqcBadge(r.oqc)}</td>
       <td class="num">${fmt(r.qty)}</td>
+      <td class="num">${r.palletCount !== undefined && r.palletCount !== '' ? fmt(r.palletCount) : '—'}</td>
       <td class="num" style="color:var(--violet); font-weight:700;">${fmt(r.actualResult)}</td>
     </tr>`).join('');
   popup.innerHTML = `
@@ -11913,9 +11921,9 @@ function renderConfirmedHistoryPopup(){
       <div class="confirmed-history-tabs" style="margin-bottom:0;">${tabsHtml}</div>
       <button type="button" class="btn-update btn-ghost-outline" id="btn-export-confirmed-history" data-history-export-date="${escAttr(confirmedHistoryActiveTab)}" style="font-size:11.5px; padding:5px 10px; white-space:nowrap;">⬇ Xuất Excel</button>
     </div>
-    <div style="font-size:11px; color:var(--muted-2); margin-bottom:8px;">${fmt(records.length)} dòng đã lưu ngày ${escHtml(confirmedHistoryActiveTab)} — chỉ giữ ${CONFIRMED_HISTORY_MAX_DAYS} ngày gần nhất.</div>
+    <div style="font-size:11px; color:var(--muted-2); margin-bottom:8px;">${fmt(records.length)} dòng đã lưu ngày ${escHtml(confirmedHistoryActiveTab)} — chỉ giữ ${CONFIRMED_HISTORY_MAX_DAYS} ngày gần nhất. ${records.some(r => r.palletCount === undefined) ? '"—" ở cột Số pallet là các dòng lưu TRƯỚC bản cập nhật này, chưa có sẵn số liệu.' : ''}</div>
     <table class="kho-detail-table" style="width:100%;">
-      <thead><tr><th>Kho</th><th>Item No.</th><th>Cust PO</th><th>Locator</th><th>OQC</th><th style="text-align:right">SL tồn</th><th style="text-align:right">Kết quả KT</th></tr></thead>
+      <thead><tr><th>Kho</th><th>Item No.</th><th>Cust PO</th><th>Locator</th><th>OQC</th><th style="text-align:right">SL tồn</th><th style="text-align:right">Số pallet</th><th style="text-align:right">Kết quả KT</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`;
 }
@@ -12015,15 +12023,19 @@ function ccBuildDaXacNhanSheet(workbook, khoLabel){
 }
 
 // Dựng sheet "Đã xác nhận" từ 1 mảng bản ghi phẳng có sẵn {locator,custpo,item,qty,actualResult} —
-// dùng chung cho cả xuất trực tiếp (từ confirmedKiemTonItems, có tính lại Số pallet theo tồn kho
-// hiện tại) lẫn xuất LỊCH SỬ theo ngày đã lưu (skipPalletCount=true — vì tồn kho hiện tại có thể đã
-// khác thời điểm lưu, không tính lại Số pallet cho chính xác được nữa, để trống thay vì hiện sai).
-function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, skipPalletCount){
+// dùng chung cho cả xuất trực tiếp (từ confirmedKiemTonItems, palletCountMode=false -> tính SỐNG
+// theo tồn kho HIỆN TẠI) lẫn xuất LỊCH SỬ theo ngày đã lưu (palletCountMode='stored' -> dùng đúng
+// giá trị r.palletCount đã LƯU KÈM SẴN trong bản ghi lịch sử tại đúng thời điểm bấm "Lưu" — không
+// tính lại theo tồn kho hiện tại, vì tồn kho hiện tại có thể đã khác xa thời điểm lưu; bản ghi lịch
+// sử cũ chưa từng có trường này thì để trống thay vì hiện sai).
+function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, palletCountMode){
   if(!rawRecords || !rawRecords.length) return null;
 
   let flatRows = rawRecords.map(r => ({
     locator: r.locator,
-    palletCount: skipPalletCount ? '' : computePalletCountFor(khoLabel, r.item, r.locator, r.custpo),
+    palletCount: palletCountMode === 'stored'
+      ? (r.palletCount !== undefined && r.palletCount !== '' ? r.palletCount : '')
+      : computePalletCountFor(khoLabel, r.item, r.locator, r.custpo),
     custpo: r.custpo,
     item: r.item,
     qty: r.qty,
@@ -12350,8 +12362,8 @@ async function exportConfirmedHistoryExcel(dateKey){
   const chartSpecs = [];
   let nextSheetPosition = 2; // sheet 1 = Tổng quan
   khoList.forEach(k => {
-    const khoRecords = byKho[k.label].map(r => ({ locator: r.locator, custpo: r.custpo, item: r.item, qty: r.qty, actualResult: r.actualResult }));
-    const stats = ccBuildDaXacNhanSheetFromRecords(workbook, k.label, khoRecords, true);
+    const khoRecords = byKho[k.label].map(r => ({ locator: r.locator, custpo: r.custpo, item: r.item, qty: r.qty, actualResult: r.actualResult, palletCount: r.palletCount }));
+    const stats = ccBuildDaXacNhanSheetFromRecords(workbook, k.label, khoRecords, 'stored');
     if(stats){
       chartSpecs.push({ sheetPosition: nextSheetPosition, chartInfo: stats.chartInfo });
       nextSheetPosition++;
