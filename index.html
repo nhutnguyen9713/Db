@@ -2391,7 +2391,7 @@
           <div class="sub" style="margin-top:2px;">Chọn kiểu tính (Mã hàng / Locator / Pallet) và % muốn kiểm cho từng kho, bấm "Tạo danh sách" để xếp hạng theo: lâu chưa kiểm · vận động nhanh (Transaction) · từng lệch WMS-ERP · SL tồn bất thường so với lịch sử. Tự động loại các vị trí PICK, Loading và PROD (khu trung chuyển/sản xuất) và loại nhóm SPP — các Item No. không bắt đầu bằng số 0. Yếu tố "SL tồn bất thường" cần vài lần cập nhật dữ liệu (khác ngày) mới đủ lịch sử để tính.</div>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
-          <button type="button" class="btn-export-excel" id="btn-reset-kiemke-all" style="white-space:nowrap; border-color:var(--red); color:var(--red);" title="Xoá SẠCH toàn bộ dữ liệu nháp còn sót của đợt kiểm kê trước (danh sách Đề xuất kiểm cả 3 kho, ô KT= đang nhập dở, dòng quét QR sai vị trí, lịch sử GI đã quét) — dùng khi bảng vừa Tạo danh sách mà vẫn còn hiện số liệu cũ. KHÔNG đụng tới danh sách Đã xác nhận.">
+          <button type="button" class="btn-export-excel" id="btn-reset-kiemke-all" style="white-space:nowrap; border-color:var(--red); color:var(--red);" title="Xoá SẠCH toàn bộ dữ liệu còn sót của đợt kiểm kê trước — CẢ danh sách Đề xuất kiểm (cả 3 kho, ô KT= đang nhập dở, dòng quét QR sai vị trí, lịch sử GI đã quét) LẪN danh sách Đã xác nhận — rồi đồng bộ ngay lên Cloud. Dùng khi bắt đầu ca/đợt kiểm kê mới mà bảng vẫn còn hiện số liệu ca trước.">
             🔄 Đặt lại toàn bộ
           </button>
           <button type="button" class="btn-export-excel" id="btn-export-combined-report" style="white-space:nowrap;" title="Gộp Tổng quan + Đề xuất kiểm + Đã xác nhận của các kho đã tạo danh sách vào 1 file Excel">
@@ -4772,8 +4772,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.56';
-const APP_VERSION_DATE = '09/09/2026';
+const APP_VERSION = 'v1.57';
+const APP_VERSION_DATE = '10/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -13258,26 +13258,28 @@ document.addEventListener('click', function(e){
   scheduleAutoSaveToCloud('cc', [STORAGE_KEY_CCRESULTS, STORAGE_KEY_KT_INPUTS, STORAGE_KEY_SCANNED_EXTRA], 'Danh sách "Đề xuất kiểm hôm nay"');
 });
 
-// Bấm "🔄 Đặt lại toàn bộ" (góc trên phải panel "Đề xuất kiểm hôm nay") — dọn SẠCH mọi dữ liệu nháp
-// còn sót của đợt kiểm kê trước: không chỉ xoá theo đúng các dòng đang có trong danh sách hiện tại
-// (như ccClearKhoResult vẫn làm), mà xoá TRẮNG hẳn ktInputValues/scannedExtraRows — vì rowKey được
-// ghép từ item+custpo+locator+oqc+qty (KHÔNG có dấu thời gian), nên nếu đợt kiểm kê mới trùng đúng
-// SL với đợt cũ, số liệu cũ sẽ tự điền lại y như đang thấy trong ảnh báo lỗi — chỉ xoá trắng toàn bộ
-// mới chắc chắn dọn hết, kể cả các dòng "mồ côi" còn sót từ rất lâu trước mà không rõ vì sao chưa
-// từng được dọn (VD: do lỗi cũ ở nút xoá 1 dòng đối với scannedExtraRows, đã sửa cùng đợt này).
+// Bấm "🔄 Đặt lại toàn bộ" (góc trên phải panel "Đề xuất kiểm hôm nay") — dọn SẠCH mọi dữ liệu còn
+// sót của đợt kiểm kê trước, CẢ 2 bảng (Đề xuất kiểm hôm nay + Đã xác nhận): không chỉ xoá theo đúng
+// các dòng đang có trong danh sách hiện tại (như ccClearKhoResult vẫn làm), mà xoá TRẮNG hẳn
+// ktInputValues/scannedExtraRows/confirmedKiemTonItems — vì rowKey được ghép từ item+custpo+locator+
+// oqc+qty (KHÔNG có dấu thời gian), nên nếu đợt kiểm kê mới trùng đúng SL với đợt cũ, số liệu cũ sẽ
+// tự điền/hiện lại y như đợt trước — chỉ xoá trắng toàn bộ mới chắc chắn dọn hết, kể cả các dòng
+// "mồ côi" còn sót từ rất lâu trước. Đẩy thẳng lên Cloud ngay sau khi xoá (writeAll — ghi đè TOÀN BỘ
+// state), để lần "Làm mới dữ liệu" tiếp theo (kể cả từ máy/ca khác) không kéo lại đúng bản CŨ đã xoá.
 document.getElementById('btn-reset-kiemke-all').addEventListener('click', async () => {
   const hasAnything = Object.keys(ccKhoResults).length || Object.keys(ktInputValues).length ||
-    Object.keys(scannedExtraRows).length || scannedGiSet.size || giScanLog.length;
+    Object.keys(scannedExtraRows).length || scannedGiSet.size || giScanLog.length ||
+    Object.keys(confirmedKiemTonItems).length;
   if(!hasAnything){
-    alert('Không có dữ liệu nháp nào để đặt lại.');
+    alert('Không có dữ liệu nào để đặt lại.');
     return;
   }
   const ok = confirm(
-    'Đặt lại TOÀN BỘ dữ liệu nháp của "Đề xuất kiểm hôm nay" (cả 3 kho)?\n\n' +
+    'Đặt lại TOÀN BỘ dữ liệu của "Đề xuất kiểm hôm nay" VÀ "Đã xác nhận" (cả 3 kho)?\n\n' +
     'Sẽ xoá: danh sách Đề xuất kiểm đã tạo, mọi ô "KT =" đang nhập dở (kể cả số liệu cũ còn sót từ ' +
-    'đợt trước), các dòng quét QR sai vị trí, và lịch sử GI đã quét.\n\n' +
-    'KHÔNG đụng tới danh sách "Đã xác nhận" — dùng nút "Đặt lại" riêng ở khu đó nếu muốn xoá luôn.\n\n' +
-    'Thao tác này không thể hoàn tác.'
+    'đợt trước), các dòng quét QR sai vị trí, lịch sử GI đã quét, VÀ TOÀN BỘ danh sách "Đã xác nhận" ' +
+    '(các dòng đã bấm "Xác nhận" nhưng CHƯA bấm "Lưu" để lưu vào lịch sử sẽ bị MẤT hẳn, không khôi phục được).\n\n' +
+    'Thao tác này không thể hoàn tác — và sẽ đồng bộ lên Cloud ngay, các máy/ca khác cũng sẽ thấy bảng trống.'
   );
   if(!ok) return;
 
@@ -13288,18 +13290,20 @@ document.getElementById('btn-reset-kiemke-all').addEventListener('click', async 
     // Xoá TRẮNG, không chỉ những dòng thuộc danh sách vừa xoá ở trên.
     ktInputValues = {};
     scannedExtraRows = {};
+    confirmedKiemTonItems = {};
     scannedGiSet.forEach(g => _deletedGiKeys.add(g));
     scannedGiSet.clear();
     giScanLog = [];
     if(typeof updateQrGiClearBtn === 'function') updateQrGiClearBtn();
     saveStateToStorage();
     renderKhoSearchPage();
+    renderConfirmedList();
 
     if(typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token){
       await CloudVault.writeAll();
       if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
     }
-    if(typeof showAppToast === 'function') showAppToast('✓ Đã đặt lại toàn bộ dữ liệu nháp của Đề xuất kiểm hôm nay.');
+    if(typeof showAppToast === 'function') showAppToast('✓ Đã đặt lại toàn bộ dữ liệu Đề xuất kiểm + Đã xác nhận, đã đồng bộ Cloud.');
   }catch(e){
     console.warn('Đồng bộ Cloud sau khi Đặt lại toàn bộ thất bại:', e);
     if(typeof showAppToast === 'function') showAppToast(`⚠ Đã đặt lại trên máy này nhưng CHƯA đồng bộ được lên Cloud (${e.message}). Bấm "Lưu" ở đầu trang để thử lại.`);
