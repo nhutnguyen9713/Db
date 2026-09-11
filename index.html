@@ -4847,7 +4847,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.64';
+const APP_VERSION = 'v1.65';
 const APP_VERSION_DATE = '11/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -8594,6 +8594,7 @@ let _khoGridEditingCellId = null;
 let _khoGridActiveKho = 'Kho 3B';
 let _khoGridDragState = null;
 let _khoGridSuppressClick = false;
+let _khoGridResizeState = null; // trạng thái kéo-thả resize viền ô (khác _khoGridDragState là kéo di chuyển cả ô)
 
 const KHO_CUSTOM_GRID_CONFIG = {
   'Kho 3B': {
@@ -8848,7 +8849,7 @@ document.addEventListener('pointerdown',(e)=>{
   boxEl.classList.add('wh3b-resizing'); try{handle.setPointerCapture(e.pointerId);}catch(err){}
 });
 document.addEventListener('pointermove',(e)=>{
-  const st=window._khoGridResizeState || _khoGridResizeState; if(!st) return;
+  const st=_khoGridResizeState; if(!st) return;
   const dx=e.clientX-st.startX,dy=e.clientY-st.startY;
   let colSpan=st.origColSpan,rowSpan=st.origRowSpan;
   if(st.dir==='e'||st.dir==='se') colSpan=st.origColSpan+Math.round(dx/st.stepX);
