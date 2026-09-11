@@ -4868,7 +4868,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.68';
+const APP_VERSION = 'v1.69';
 const APP_VERSION_DATE = '11/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -11309,13 +11309,11 @@ async function exportPickSlipExcel(){
     let locOnHand = 0, locPallet = 0, locCbm = 0, khoOnHand = 0, khoPallet = 0, khoCbm = 0, stt = 0;
     sorted.forEach((g, i) => {
       if(g.kho !== currentKho){
-        if(currentLocator !== null) writeSubtotalRow('Tổng ' + currentLocator, locOnHand, locPallet, roundCbm(locCbm));
         if(currentKho !== null) writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, roundCbm(khoCbm), true);
         currentKho = g.kho; currentLocator = null; khoOnHand = 0; khoPallet = 0; khoCbm = 0;
         writeGroupHeaderRow(currentKho, KHO_COLOR);
       }
       if(g.locator !== currentLocator){
-        if(currentLocator !== null) writeSubtotalRow('Tổng ' + currentLocator, locOnHand, locPallet, roundCbm(locCbm));
         currentLocator = g.locator; locOnHand = 0; locPallet = 0; locCbm = 0; stt = 0;
         writeGroupHeaderRow(currentLocator, g.isSurplus ? GROUP_COLOR_WARN : GROUP_COLOR);
         writeMiniHeaderRow();
@@ -11326,7 +11324,6 @@ async function exportPickSlipExcel(){
       const itemLabel = g.item + (g.po ? ` (PO ${g.po})` : '') + (g.itemPoCount > 1 ? ` — Có ${g.itemPoCount} PO` : '') + (g.isSurplus ? ` — DƯ ${g.surplusQty} (KH ${g.planQty})` : '');
       writeDataRow([stt, itemLabel, g.oqc || '', g.onHand, g.pallets, roundCbm(g.cbm)], { warn: g.isSurplus });
       if(i === sorted.length - 1){
-        writeSubtotalRow('Tổng ' + currentLocator, locOnHand, locPallet, roundCbm(locCbm));
         writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, roundCbm(khoCbm), true);
       }
     });
