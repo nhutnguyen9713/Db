@@ -1699,11 +1699,16 @@
   function overrideActive(){
     try{ return Number(localStorage.getItem('tn5_gate_override_until') || 0) > Date.now(); }catch(e){ return false; }
   }
+  // Cờ "khoá trang ngay" — bật thủ công từ nút 🔒 trong Cài đặt (btn-gate-lock-now). Khi cờ này bật,
+  // LUÔN chặn — bất kể đang trong giờ ca hay không — cho tới khi mở lại đúng mật khẩu ở lock.html.
+  function manuallyLocked(){
+    try{ return localStorage.getItem('tn5_gate_manual_lock') === '1'; }catch(e){ return false; }
+  }
   const gioVN = new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' });
   const gio = new Date(gioVN).getHours();
   const mode = shiftMode();
   const trongCa = mode === 'day' ? (gio >= 7 && gio < 19) : (gio >= 19 || gio < 7);
-  const choPhep = trongCa || overrideActive();
+  const choPhep = !manuallyLocked() && (trongCa || overrideActive());
   if(!choPhep) location.replace('lock.html' + location.search);
 })();
 </script>
@@ -3525,6 +3530,14 @@
       </div>
 
       <div class="settings-section">
+        <div class="settings-section-label">Khoá trang ngoài giờ</div>
+        <div class="desc" style="margin-bottom:8px;">Khoá truy cập trang NGAY LẬP TỨC, dù đang trong giờ ca — dùng khi muốn chủ động kết thúc ca sớm/đóng máy. Mở lại được bằng đúng mật khẩu ở màn hình khoá (giống nút "Mở truy cập ngay"/"Đổi lịch ca").</div>
+        <div class="settings-btn-row">
+          <button class="btn-update btn-ghost-outline" id="btn-gate-lock-now" type="button" title="Khoá trang ngay lập tức, chuyển sang màn hình 'Ngoài giờ truy cập'">🔒 Khoá trang ngay</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
         <div class="settings-section-label">Phiên bản</div>
         <div class="desc" style="margin-bottom:8px;">Xem đang chạy đúng bản mới nhất chưa — so với ngày bạn vừa cập nhật file, để biết trình duyệt/PWA đã tải bản mới hay còn đang dùng bản cache cũ.</div>
         <div class="upload-status" id="app-version-status">—</div>
@@ -4908,7 +4921,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.81';
+const APP_VERSION = 'v1.82';
 const APP_VERSION_DATE = '12/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5090,6 +5103,18 @@ const appLockLockBtn = document.getElementById('app-lock-lock-btn');
 if(appLockLockBtn) appLockLockBtn.addEventListener('click', appLockLockAgain);
 const appLockPasswordInput = document.getElementById('app-lock-password-input');
 if(appLockPasswordInput) appLockPasswordInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') appLockTryUnlock(); });
+
+// Nút "🔒 Khoá trang ngay" (mục Cài đặt) — khoá truy cập NGAY LẬP TỨC, dù đang trong giờ ca, bằng
+// cách bật cờ tn5_gate_manual_lock (đọc bởi khối chặn ca ở đầu <body> và ở lock.html) rồi điều
+// hướng thẳng sang lock.html — điều hướng thật sự là cách DUY NHẤT chặn chắc chắn (xem lý do đầy đủ
+// ở khối chặn ca đầu file). Mở lại được bằng đúng mật khẩu ở lock.html (nút "Mở truy cập ngay"/"Đổi
+// lịch ca" đều tự xoá cờ này luôn, xem lock.html).
+const btnGateLockNow = document.getElementById('btn-gate-lock-now');
+if(btnGateLockNow) btnGateLockNow.addEventListener('click', () => {
+  if(!confirm('Khoá trang ngay lập tức? Mọi người (kể cả bạn) sẽ cần đúng mật khẩu để mở lại.')) return;
+  try{ localStorage.setItem('tn5_gate_manual_lock', '1'); }catch(e){}
+  location.replace('lock.html');
+});
 
 const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
 
