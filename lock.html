@@ -10,7 +10,7 @@
     <div style="font-size:40px;margin-bottom:12px">🌙</div>
     <h2 style="margin:0 0 8px">Ngoài giờ truy cập</h2>
     <p id="lock-desc" style="margin:0 0 20px;color:#aaa">Đang kiểm tra lịch ca…</p>
-    <button id="gate-unlock-btn" style="padding:10px 18px;border-radius:8px;border:none;background:#444;color:#fff;font-size:15px;cursor:pointer">🔓 Nhập mật khẩu để mở</button>
+    <button id="gate-unlock-btn" style="padding:10px 18px;border-radius:8px;border:none;background:#444;color:#fff;font-size:15px;cursor:pointer;display:none">🔓 Nhập mật khẩu để mở</button>
     <div id="gate-actions" style="display:none;margin-top:16px;flex-direction:column;gap:8px">
       <button id="gate-open-now" style="padding:10px 14px;border-radius:8px;border:none;background:#2e7d32;color:#fff;font-size:14px;cursor:pointer"></button>
       <button id="gate-switch-mode" style="padding:10px 14px;border-radius:8px;border:none;background:#1565c0;color:#fff;font-size:14px;cursor:pointer"></button>
@@ -31,6 +31,46 @@ const LS_MANUAL_LOCK = 'tn5_gate_manual_lock'; // '1' = vừa bị khoá thủ c
 const GATE_PASSWORD = 'qqqwww';
 const OVERRIDE_HOURS = 12; // mở tạm ngoài giờ có hiệu lực trong 12 giờ kể từ lúc bấm
 
+// ĐỒNG BỘ ĐA THIẾT BỊ: lịch ca/mở-tạm/khoá-thủ-công lấy TỪ CLOUD (Firebase, đúng databaseURL/token
+// đã cấu hình cho CloudVault, lưu ở khoá riêng "_gate_config" — không đụng dữ liệu chính app) là
+// nguồn xác thực chính — localStorage chỉ là bản sao cục bộ (dùng khi mất mạng/chưa cấu hình Cloud).
+function gateCloudCreds(){
+  try{
+    const url = localStorage.getItem('tn5_cloud_gas_url');
+    const token = localStorage.getItem('tn5_cloud_gas_token');
+    return (url && token) ? { url, token } : null;
+  }catch(e){ return null; }
+}
+async function gateFetchCloudConfig(){
+  const creds = gateCloudCreds();
+  if(!creds) return null;
+  try{
+    const url = creds.url.replace(/\/+$/, '') + '/dashboard_data/_gate_config.json?auth=' + encodeURIComponent(creds.token) + '&_ts=' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const res = await fetch(url, { cache: 'no-store' });
+    if(!res.ok) return null;
+    const data = await res.json();
+    return (data && typeof data === 'object') ? data : null;
+  }catch(e){ return null; }
+}
+function gateApplyCloudConfig(cfg){
+  if(!cfg) return;
+  try{
+    if(cfg.mode === 'day' || cfg.mode === 'night') localStorage.setItem(LS_SHIFT_MODE, cfg.mode);
+    if(typeof cfg.overrideUntil === 'number') localStorage.setItem(LS_OVERRIDE_UNTIL, String(cfg.overrideUntil));
+    localStorage.setItem(LS_MANUAL_LOCK, cfg.manualLock ? '1' : '0');
+  }catch(e){}
+}
+async function gateWriteCloudConfig(partial){
+  const creds = gateCloudCreds();
+  if(!creds) return false;
+  try{
+    const url = creds.url.replace(/\/+$/, '') + '/dashboard_data/_gate_config.json?auth=' + encodeURIComponent(creds.token);
+    const payload = Object.assign({ updatedAt: Date.now() }, partial);
+    const res = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), cache: 'no-store' });
+    return res.ok;
+  }catch(e){ return false; }
+}
+
 function shiftMode(){
   try{ return localStorage.getItem(LS_SHIFT_MODE) === 'day' ? 'day' : 'night'; }catch(e){ return 'night'; }
 }
@@ -49,20 +89,36 @@ function dangChoPhep(){
   return trongCa || overrideActive();
 }
 
-// Nếu đã tới lúc được vào (VD: mở nhầm link này, hoặc vừa qua đúng giờ ca bắt đầu) -> về thẳng app.
-if(dangChoPhep()){
-  location.replace('index.html' + location.search);
+function renderLockScreen(){
+  const mode = shiftMode();
+  const caHienTai = mode === 'day' ? 'Ca ngày (07:00 – 19:00)' : 'Ca đêm (19:00 – 07:00)';
+  const caKhac = mode === 'day' ? 'night' : 'day';
+  const caKhacLabel = mode === 'day' ? 'Ca đêm (19:00 – 07:00)' : 'Ca ngày (07:00 – 19:00)';
+
+  document.getElementById('lock-desc').innerHTML = (manualLocked() ? 'Trang vừa được <b>khoá thủ công</b>. ' : '') +
+    'Dashboard đang áp dụng lịch: <b>' + caHienTai + '</b> (giờ Việt Nam).';
+  document.getElementById('gate-open-now').textContent = '✓ Mở truy cập ngay (hiệu lực ' + OVERRIDE_HOURS + ' giờ)';
+  document.getElementById('gate-switch-mode').textContent = '🔁 Đổi lịch sang: ' + caKhacLabel;
+  document.getElementById('gate-unlock-btn').style.display = '';
+
+  document.getElementById('gate-open-now').onclick = async function(){
+    const until = Date.now() + OVERRIDE_HOURS * 3600 * 1000;
+    try{
+      localStorage.removeItem(LS_MANUAL_LOCK); // mật khẩu đúng -> tự xoá luôn cờ khoá thủ công (nếu có)
+      localStorage.setItem(LS_OVERRIDE_UNTIL, String(until));
+    }catch(e){}
+    try{ await gateWriteCloudConfig({ manualLock: false, overrideUntil: until }); }catch(e){}
+    location.replace('index.html' + location.search);
+  };
+  document.getElementById('gate-switch-mode').onclick = async function(){
+    try{
+      localStorage.removeItem(LS_MANUAL_LOCK); // mật khẩu đúng -> tự xoá luôn cờ khoá thủ công (nếu có)
+      localStorage.setItem(LS_SHIFT_MODE, caKhac);
+    }catch(e){}
+    try{ await gateWriteCloudConfig({ manualLock: false, mode: caKhac }); }catch(e){}
+    location.replace('index.html' + location.search);
+  };
 }
-
-const mode = shiftMode();
-const caHienTai = mode === 'day' ? 'Ca ngày (07:00 – 19:00)' : 'Ca đêm (19:00 – 07:00)';
-const caKhac = mode === 'day' ? 'night' : 'day';
-const caKhacLabel = mode === 'day' ? 'Ca đêm (19:00 – 07:00)' : 'Ca ngày (07:00 – 19:00)';
-
-document.getElementById('lock-desc').innerHTML = (manualLocked() ? 'Trang vừa được <b>khoá thủ công</b>. ' : '') +
-  'Dashboard đang áp dụng lịch: <b>' + caHienTai + '</b> (giờ Việt Nam).';
-document.getElementById('gate-open-now').textContent = '✓ Mở truy cập ngay (hiệu lực ' + OVERRIDE_HOURS + ' giờ)';
-document.getElementById('gate-switch-mode').textContent = '🔁 Đổi lịch sang: ' + caKhacLabel;
 
 document.getElementById('gate-unlock-btn').addEventListener('click', function(){
   const pass = prompt('Nhập mật khẩu:');
@@ -75,25 +131,31 @@ document.getElementById('gate-unlock-btn').addEventListener('click', function(){
   document.getElementById('gate-unlock-btn').style.display = 'none';
   document.getElementById('gate-actions').style.display = 'flex';
 });
-document.getElementById('gate-open-now').addEventListener('click', function(){
-  try{
-    localStorage.removeItem(LS_MANUAL_LOCK); // mật khẩu đúng -> tự xoá luôn cờ khoá thủ công (nếu có)
-    localStorage.setItem(LS_OVERRIDE_UNTIL, String(Date.now() + OVERRIDE_HOURS * 3600 * 1000));
-  }catch(e){}
-  location.replace('index.html' + location.search);
-});
-document.getElementById('gate-switch-mode').addEventListener('click', function(){
-  try{
-    localStorage.removeItem(LS_MANUAL_LOCK); // mật khẩu đúng -> tự xoá luôn cờ khoá thủ công (nếu có)
-    localStorage.setItem(LS_SHIFT_MODE, caKhac);
-  }catch(e){}
-  location.replace('index.html' + location.search);
-});
 
-// Tự kiểm tra lại mỗi 30 giây — nếu đúng lúc ca bắt đầu (hoặc lịch/mở-tạm vừa được cấu hình từ tab
-// khác) thì tự động quay lại app, không bắt người dùng phải tự bấm tải lại.
-setInterval(function(){
-  if(dangChoPhep()) location.replace('index.html' + location.search);
+// Kiểm tra ngay khi vào trang: chờ đồng bộ Cloud xong (nếu có cấu hình) rồi mới quyết định — tránh
+// trường hợp máy khác vừa mở lại quyền/đổi ca mà trang này còn dùng bản cục bộ cũ, hiện nhầm màn
+// hình khoá dù thực ra đã tới lúc được vào (hoặc ngược lại).
+(async function(){
+  const cfg = await gateFetchCloudConfig();
+  if(cfg) gateApplyCloudConfig(cfg);
+  if(dangChoPhep()){
+    location.replace('index.html' + location.search);
+    return;
+  }
+  renderLockScreen();
+})();
+
+// Tự kiểm tra lại mỗi 30 giây (kèm đồng bộ Cloud) — nếu đúng lúc ca bắt đầu, hoặc lịch/mở-tạm/khoá
+// vừa được cấu hình từ thiết bị khác, thì tự động quay lại app hoặc cập nhật đúng màn hình khoá,
+// không bắt người dùng phải tự bấm tải lại.
+setInterval(async function(){
+  const cfg = await gateFetchCloudConfig();
+  if(cfg) gateApplyCloudConfig(cfg);
+  if(dangChoPhep()){
+    location.replace('index.html' + location.search);
+  } else {
+    renderLockScreen();
+  }
 }, 30000);
 </script>
 </body>

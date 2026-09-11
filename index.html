@@ -1692,24 +1692,80 @@
 // được gì cả về mặt thực chất. Điều hướng sang 1 trang khác là cách DUY NHẤT chặn chắc chắn 100%:
 // khi trình duyệt điều hướng, nó luôn dừng hẳn việc phân tích/chạy tiếp trang hiện tại.
 // Xem đầy đủ logic mật khẩu/đổi ca (đêm 19h-7h / ngày 7h-19h) trong lock.html.
-(function(){
-  function shiftMode(){
-    try{ return localStorage.getItem('tn5_shift_mode') === 'day' ? 'day' : 'night'; }catch(e){ return 'night'; }
-  }
-  function overrideActive(){
-    try{ return Number(localStorage.getItem('tn5_gate_override_until') || 0) > Date.now(); }catch(e){ return false; }
-  }
-  // Cờ "khoá trang ngay" — bật thủ công từ nút 🔒 trong Cài đặt (btn-gate-lock-now). Khi cờ này bật,
-  // LUÔN chặn — bất kể đang trong giờ ca hay không — cho tới khi mở lại đúng mật khẩu ở lock.html.
-  function manuallyLocked(){
-    try{ return localStorage.getItem('tn5_gate_manual_lock') === '1'; }catch(e){ return false; }
-  }
+//
+// ĐỒNG BỘ ĐA THIẾT BỊ: lịch ca/mở-tạm/khoá-thủ-công được lưu CHÍNH ở Cloud (Firebase, đúng
+// databaseURL/token đã cấu hình cho CloudVault) tại khoá "_gate_config" — RIÊNG BIỆT với dữ liệu
+// chính của app (dashboard_data), không đụng chạm gì tới đồng bộ tồn kho/kiểm kê. localStorage chỉ
+// là BẢN SAO CỤC BỘ (đọc nhanh, dùng khi mất mạng) — mỗi lần vào trang đều kiểm tra lại với Cloud ở
+// NỀN, nếu phát hiện lệch (VD: máy khác vừa "Khoá trang ngay") sẽ điều hướng lại ngay lập tức.
+function gateCloudCreds(){
+  try{
+    const url = localStorage.getItem('tn5_cloud_gas_url');
+    const token = localStorage.getItem('tn5_cloud_gas_token');
+    return (url && token) ? { url, token } : null;
+  }catch(e){ return null; }
+}
+async function gateFetchCloudConfig(){
+  const creds = gateCloudCreds();
+  if(!creds) return null;
+  try{
+    const url = creds.url.replace(/\/+$/, '') + '/dashboard_data/_gate_config.json?auth=' + encodeURIComponent(creds.token) + '&_ts=' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const res = await fetch(url, { cache: 'no-store' });
+    if(!res.ok) return null;
+    const data = await res.json();
+    return (data && typeof data === 'object') ? data : null;
+  }catch(e){ return null; }
+}
+function gateApplyCloudConfig(cfg){
+  if(!cfg) return;
+  try{
+    if(cfg.mode === 'day' || cfg.mode === 'night') localStorage.setItem('tn5_shift_mode', cfg.mode);
+    if(typeof cfg.overrideUntil === 'number') localStorage.setItem('tn5_gate_override_until', String(cfg.overrideUntil));
+    localStorage.setItem('tn5_gate_manual_lock', cfg.manualLock ? '1' : '0');
+  }catch(e){}
+}
+async function gateWriteCloudConfig(partial){
+  const creds = gateCloudCreds();
+  if(!creds) return false;
+  try{
+    const url = creds.url.replace(/\/+$/, '') + '/dashboard_data/_gate_config.json?auth=' + encodeURIComponent(creds.token);
+    const payload = Object.assign({ updatedAt: Date.now() }, partial);
+    const res = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), cache: 'no-store' });
+    return res.ok;
+  }catch(e){ return false; }
+}
+function gateShiftMode(){
+  try{ return localStorage.getItem('tn5_shift_mode') === 'day' ? 'day' : 'night'; }catch(e){ return 'night'; }
+}
+function gateOverrideActive(){
+  try{ return Number(localStorage.getItem('tn5_gate_override_until') || 0) > Date.now(); }catch(e){ return false; }
+}
+// Cờ "khoá trang ngay" — bật thủ công từ nút 🔒 trong Cài đặt (btn-gate-lock-now). Khi cờ này bật,
+// LUÔN chặn — bất kể đang trong giờ ca hay không — cho tới khi mở lại đúng mật khẩu ở lock.html.
+function gateManuallyLocked(){
+  try{ return localStorage.getItem('tn5_gate_manual_lock') === '1'; }catch(e){ return false; }
+}
+function gateEvalChoPhep(){
   const gioVN = new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' });
   const gio = new Date(gioVN).getHours();
-  const mode = shiftMode();
+  const mode = gateShiftMode();
   const trongCa = mode === 'day' ? (gio >= 7 && gio < 19) : (gio >= 19 || gio < 7);
-  const choPhep = !manuallyLocked() && (trongCa || overrideActive());
-  if(!choPhep) location.replace('lock.html' + location.search);
+  return !gateManuallyLocked() && (trongCa || gateOverrideActive());
+}
+(function(){
+  if(!gateEvalChoPhep()){
+    location.replace('lock.html' + location.search);
+    return;
+  }
+  // Đã cho vào theo dữ liệu CỤC BỘ (nhanh, không chờ mạng) — kiểm tra lại với Cloud Ở NỀN, không
+  // chặn tải trang: nếu máy khác vừa "Khoá trang ngay"/đổi lịch ca mà máy này chưa kịp biết (dữ
+  // liệu cục bộ cũ), điều hướng NGAY dù trang đã bắt đầu tải — chấp nhận 1 khoảng nhoáng ngắn hiển
+  // thị nội dung, đổi lại việc khoá thực sự ĐỒNG BỘ được nhiều thiết bị.
+  gateFetchCloudConfig().then(cfg => {
+    if(!cfg) return;
+    gateApplyCloudConfig(cfg);
+    if(!gateEvalChoPhep()) location.replace('lock.html' + location.search);
+  });
 })();
 </script>
 
@@ -3531,7 +3587,7 @@
 
       <div class="settings-section">
         <div class="settings-section-label">Khoá trang ngoài giờ</div>
-        <div class="desc" style="margin-bottom:8px;">Khoá truy cập trang NGAY LẬP TỨC, dù đang trong giờ ca — dùng khi muốn chủ động kết thúc ca sớm/đóng máy. Mở lại được bằng đúng mật khẩu ở màn hình khoá (giống nút "Mở truy cập ngay"/"Đổi lịch ca").</div>
+        <div class="desc" style="margin-bottom:8px;">Khoá truy cập trang NGAY LẬP TỨC, dù đang trong giờ ca — dùng khi muốn chủ động kết thúc ca sớm/đóng máy. Nếu đã kết nối Cloud, áp dụng cho TẤT CẢ thiết bị đang mở app (đồng bộ qua Cloud, có thể mất tới ~30 giây để các máy khác tự nhận ra); nếu chưa kết nối Cloud, chỉ khoá được máy này. Mở lại được bằng đúng mật khẩu ở màn hình khoá (giống nút "Mở truy cập ngay"/"Đổi lịch ca").</div>
         <div class="settings-btn-row">
           <button class="btn-update btn-ghost-outline" id="btn-gate-lock-now" type="button" title="Khoá trang ngay lập tức, chuyển sang màn hình 'Ngoài giờ truy cập'">🔒 Khoá trang ngay</button>
         </div>
@@ -4431,6 +4487,17 @@ const CloudVault = {
             this._setRealtimeStatus('⚠ Mất kết nối realtime: ' + err.message + ' — vẫn dùng được nút "Lưu"/"Làm mới dữ liệu" như bình thường.', 'err');
             if(!this._gotInitialData) this._smartReadAll(); // chưa kịp tải được lần nào -> dự phòng REST
           });
+          // Lắng nghe RIÊNG khoá "_gate_config" (lịch ca/mở-tạm/khoá-thủ-công, xem khối chặn ca đầu
+          // <body>) — để khi 1 thiết bị khác bấm "🔒 Khoá trang ngay"/đổi lịch ca, các thiết bị ĐANG
+          // MỞ SẴN app (không chỉ thiết bị vừa tải trang) cũng bị đẩy ra màn hình khoá NGAY LẬP TỨC
+          // qua kênh realtime — không phải đợi tự tải lại trang mới biết.
+          this._gateRef = firebase.database().ref('dashboard_data/_gate_config');
+          this._gateRef.on('value', (snapshot) => {
+            const cfg = snapshot.val();
+            if(!cfg || typeof gateApplyCloudConfig !== 'function') return;
+            gateApplyCloudConfig(cfg);
+            if(typeof gateEvalChoPhep === 'function' && !gateEvalChoPhep()) location.replace('lock.html');
+          });
           this._realtimeActive = true;
           this._setRealtimeStatus('✓ Đồng bộ realtime đang bật — thay đổi từ thiết bị khác sẽ tự cập nhật ngay.', 'ok');
           clearInterval(this._safeCheckTimer);
@@ -4448,6 +4515,7 @@ const CloudVault = {
 
   _stopRealtime(){
     if(this._fbRef){ try{ this._fbRef.off(); }catch(e){} this._fbRef = null; }
+    if(this._gateRef){ try{ this._gateRef.off(); }catch(e){} this._gateRef = null; }
     clearInterval(this._safeCheckTimer);
     this._safeCheckTimer = null;
     this._pendingStampDirty = false;
@@ -4921,7 +4989,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.82';
+const APP_VERSION = 'v1.83';
 const APP_VERSION_DATE = '12/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5110,9 +5178,24 @@ if(appLockPasswordInput) appLockPasswordInput.addEventListener('keydown', (e) =>
 // ở khối chặn ca đầu file). Mở lại được bằng đúng mật khẩu ở lock.html (nút "Mở truy cập ngay"/"Đổi
 // lịch ca" đều tự xoá cờ này luôn, xem lock.html).
 const btnGateLockNow = document.getElementById('btn-gate-lock-now');
-if(btnGateLockNow) btnGateLockNow.addEventListener('click', () => {
-  if(!confirm('Khoá trang ngay lập tức? Mọi người (kể cả bạn) sẽ cần đúng mật khẩu để mở lại.')) return;
+if(btnGateLockNow) btnGateLockNow.addEventListener('click', async () => {
+  const cloudActive = typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token;
+  const msg = cloudActive
+    ? 'Khoá trang ngay lập tức trên TẤT CẢ thiết bị đang dùng chung Cloud? Mọi người (kể cả bạn) sẽ cần đúng mật khẩu để mở lại.'
+    : 'Khoá trang ngay lập tức TRÊN MÁY NÀY? (chưa kết nối Cloud nên chỉ khoá được máy này, không đồng bộ sang máy khác). Cần đúng mật khẩu để mở lại.';
+  if(!confirm(msg)) return;
   try{ localStorage.setItem('tn5_gate_manual_lock', '1'); }catch(e){}
+  // Đẩy lên Cloud để các thiết bị khác cũng bị khoá theo (nếu có kết nối Cloud) — đợi TỐI ĐA 2 giây,
+  // không để lỡ mạng chậm làm treo mãi nút này; máy khác vẫn sẽ tự bắt được cờ khoá qua kiểm tra nền
+  // (gateFetchCloudConfig) ngay lần tải trang / mỗi 30 giây tiếp theo dù request này có kịp hay không.
+  if(cloudActive){
+    try{
+      await Promise.race([
+        gateWriteCloudConfig({ manualLock: true }),
+        new Promise(resolve => setTimeout(resolve, 2000))
+      ]);
+    }catch(e){}
+  }
   location.replace('lock.html');
 });
 
