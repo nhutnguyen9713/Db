@@ -10,7 +10,10 @@
     <div style="font-size:40px;margin-bottom:12px">🌙</div>
     <h2 style="margin:0 0 8px">Ngoài giờ truy cập</h2>
     <p id="lock-desc" style="margin:0 0 20px;color:#aaa">Đang kiểm tra lịch ca…</p>
-    <button id="gate-unlock-btn" style="padding:10px 18px;border-radius:8px;border:none;background:#444;color:#fff;font-size:15px;cursor:pointer;display:none">🔓 Nhập mật khẩu để mở</button>
+    <div id="gate-pass-wrap" style="display:none;flex-direction:column;gap:8px">
+      <input type="password" id="gate-pass-input" placeholder="Nhập mật khẩu" autocomplete="off" style="padding:10px 12px;border-radius:8px;border:1px solid #555;background:#222;color:#fff;font-size:15px;box-sizing:border-box;width:100%">
+      <button id="gate-unlock-btn" style="padding:10px 18px;border-radius:8px;border:none;background:#444;color:#fff;font-size:15px;cursor:pointer">🔓 Mở khoá</button>
+    </div>
     <div id="gate-actions" style="display:none;margin-top:16px;flex-direction:column;gap:8px">
       <button id="gate-open-now" style="padding:10px 14px;border-radius:8px;border:none;background:#2e7d32;color:#fff;font-size:14px;cursor:pointer"></button>
       <button id="gate-switch-mode" style="padding:10px 14px;border-radius:8px;border:none;background:#1565c0;color:#fff;font-size:14px;cursor:pointer"></button>
@@ -99,7 +102,7 @@ function renderLockScreen(){
     'Dashboard đang áp dụng lịch: <b>' + caHienTai + '</b> (giờ Việt Nam).';
   document.getElementById('gate-open-now').textContent = '✓ Mở truy cập ngay (hiệu lực ' + OVERRIDE_HOURS + ' giờ)';
   document.getElementById('gate-switch-mode').textContent = '🔁 Đổi lịch sang: ' + caKhacLabel;
-  document.getElementById('gate-unlock-btn').style.display = '';
+  document.getElementById('gate-pass-wrap').style.display = 'flex';
 
   document.getElementById('gate-open-now').onclick = async function(){
     const until = Date.now() + OVERRIDE_HOURS * 3600 * 1000;
@@ -120,17 +123,18 @@ function renderLockScreen(){
   };
 }
 
-document.getElementById('gate-unlock-btn').addEventListener('click', function(){
-  const pass = prompt('Nhập mật khẩu:');
-  if(pass === null) return;
+function gateTryUnlock(){
+  const pass = document.getElementById('gate-pass-input').value;
   if(pass !== GATE_PASSWORD){
     document.getElementById('gate-msg').textContent = '✗ Sai mật khẩu.';
     return;
   }
   document.getElementById('gate-msg').textContent = '';
-  document.getElementById('gate-unlock-btn').style.display = 'none';
+  document.getElementById('gate-pass-wrap').style.display = 'none';
   document.getElementById('gate-actions').style.display = 'flex';
-});
+}
+document.getElementById('gate-unlock-btn').addEventListener('click', gateTryUnlock);
+document.getElementById('gate-pass-input').addEventListener('keydown', function(e){ if(e.key === 'Enter') gateTryUnlock(); });
 
 // Kiểm tra ngay khi vào trang: chờ đồng bộ Cloud xong (nếu có cấu hình) rồi mới quyết định — tránh
 // trường hợp máy khác vừa mở lại quyền/đổi ca mà trang này còn dùng bản cục bộ cũ, hiện nhầm màn
