@@ -4873,7 +4873,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.70';
+const APP_VERSION = 'v1.71';
 const APP_VERSION_DATE = '11/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -12080,6 +12080,25 @@ async function saveConfirmedSnapshotAndReset(){
   if(btn) btn.disabled = true;
   const cloudActive = typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token;
 
+  // QUAN TRỌNG: huỷ các lượt tự lưu (autosave) còn đang chờ TRƯỚC khi lưu trữ + xoá trắng — giống hệt
+  // lý do đã sửa ở nút "Đặt lại toàn bộ". Nếu vừa "Xác nhận" 1 dòng ngay trước khi bấm "Lưu", timer
+  // tự lưu 2 giây (scheduleAutoSaveToCloud('confirm', ...)) của thao tác đó có thể vẫn còn đang chờ —
+  // nếu không huỷ, nó sẽ tự chạy SAU khi "Lưu" đã xoá trắng + ghi lên Cloud, gửi writeMerge() bằng
+  // đúng bộ khoá vừa xoá (KT đang nhập/lastCheck...) và có thể khiến Realtime tưởng lầm còn thay đổi
+  // đang chờ hoặc kéo lại đúng lúc dữ liệu chưa ổn định — đây chính là nguyên nhân "bấm Lưu xong vài
+  // giây sau bảng lại đầy như cũ" dù chỉ dùng 1 máy, không cần máy khác mở cùng lúc.
+  ['cc','confirm','qrscan'].forEach(k => {
+    if(typeof _autoSaveTimers !== 'undefined' && _autoSaveTimers[k]){
+      clearTimeout(_autoSaveTimers[k]);
+      _autoSaveTimers[k] = null;
+    }
+    if(typeof _pendingAutoSaveKeys !== 'undefined') _pendingAutoSaveKeys.delete(k);
+  });
+  if(typeof _ccAutoSaveTimer !== 'undefined' && _ccAutoSaveTimer){
+    clearTimeout(_ccAutoSaveTimer);
+    _ccAutoSaveTimer = null;
+  }
+
   try{
     // Gộp trước phần "Đã xác nhận / KT đang nhập dở / GI đã quét / Lịch sử" MỚI NHẤT từ Cloud (đề
     // phòng người khác vừa xác nhận thêm dòng trên thiết bị khác) — TRƯỚC khi xoá trắng ở đây, để
@@ -14346,6 +14365,21 @@ document.getElementById('btn-reset-confirmed').addEventListener('click', async (
   }
   const ok = confirm(`Xoá toàn bộ ${keys.length} dòng đã xác nhận và mở khoá lại ở bảng Kiểm tồn kho?\n\nThao tác này không thể hoàn tác.`);
   if(!ok) return;
+
+  // QUAN TRỌNG: huỷ các lượt tự lưu (autosave) còn đang chờ TRƯỚC khi xoá — cùng lý do như nút "Lưu"/
+  // "Đặt lại toàn bộ": nếu không huỷ, 1 timer tự lưu cũ (từ thao tác "Xác nhận" ngay trước đó) có thể
+  // chạy SAU khi đã xoá trắng ở đây, gửi lại đúng bộ khoá vừa xoá lên Cloud và làm danh sách "sống lại".
+  ['cc','confirm','qrscan'].forEach(k => {
+    if(typeof _autoSaveTimers !== 'undefined' && _autoSaveTimers[k]){
+      clearTimeout(_autoSaveTimers[k]);
+      _autoSaveTimers[k] = null;
+    }
+    if(typeof _pendingAutoSaveKeys !== 'undefined') _pendingAutoSaveKeys.delete(k);
+  });
+  if(typeof _ccAutoSaveTimer !== 'undefined' && _ccAutoSaveTimer){
+    clearTimeout(_ccAutoSaveTimer);
+    _ccAutoSaveTimer = null;
+  }
 
   // Trả lại đúng số liệu KT đã nhập trước đó cho từng dòng (giống hệt restoreConfirmedItem) — không
   // để trống, vì các dòng này vẫn còn nguyên trong danh sách "Đề xuất kiểm hôm nay", chỉ là mở khoá
