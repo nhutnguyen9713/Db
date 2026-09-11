@@ -4908,7 +4908,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.80';
+const APP_VERSION = 'v1.81';
 const APP_VERSION_DATE = '12/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13419,19 +13419,35 @@ function ccSetCardLocked(khoLabel, locked){
 // Khôi phục lại các danh sách "Tạo danh sách" đã tạo trước đó (lưu trong trình duyệt), để không bị
 // mất khi tải lại trang — chỉ hiển thị lại đúng dữ liệu đã tính, không tính lại từ đầu.
 function ccRestoreResultsFromStorage(saved){
-  if(!saved) return;
   // Gán theo ĐÚNG thứ tự khoá đã lưu (Object.keys(saved) giữ nguyên thứ tự JSON.parse trả về) — TRƯỚC
   // ĐÂY dựng lại ccKhoResults theo thứ tự CỐ ĐỊNH của CC_KHO_LIST (2B→3A→3B), khiến JSON.stringify()
   // sau đó (mỗi lần render/lưu) ra chuỗi khác thứ tự khoá so với bản đã lưu — dù nội dung y hệt — nên
   // luôn bị báo nhầm "có thay đổi chưa lưu (Đề xuất kiểm hôm nay)" ngay khi vừa mở lại trang.
-  Object.keys(saved).forEach(khoLabel => {
-    const result = saved[khoLabel];
-    if(!result || !result.list || !result.list.length) return;
-    ccKhoResults[khoLabel] = result;
-  });
+  if(saved){
+    Object.keys(saved).forEach(khoLabel => {
+      const result = saved[khoLabel];
+      if(!result || !result.list || !result.list.length) return;
+      ccKhoResults[khoLabel] = result;
+    });
+  }
+  // LUÔN xét ĐỦ cả 3 kho (kể cả khi "saved" không có/rỗng) — không chỉ những kho có trong "saved" —
+  // để kho nào KHÔNG (còn) có danh sách cũng được vẽ lại đúng về trạng thái RỖNG. Trước đây hàm này
+  // chỉ XỬ LÝ (vẽ) những kho CÓ kết quả, bỏ qua hẳn kho nào không có — nên khi initDashboard() chạy
+  // lại giữa phiên (VD: máy khác vừa "Xoá danh sách" 1 kho và đồng bộ Cloud xong), khối kết quả CŨ
+  // của kho đó vẫn còn nguyên trên MÀN HÌNH (không ai bảo nó ẩn đi/xoá đi cả), dù ccKhoResults (biến)
+  // đã đúng là không còn kho đó nữa — y hệt lỗi đã sửa ở renderConfirmedList()/"Đã xác nhận".
   CC_KHO_LIST.forEach(k => {
     const result = ccKhoResults[k.label];
-    if(!result) return;
+    if(!result){
+      const blockWrap = document.getElementById('cc-result-block-' + k.code);
+      const tbody = document.getElementById('cc-tbody-' + k.code);
+      const cardsWrap = document.getElementById('cc-loc-cards-' + k.code);
+      if(blockWrap) blockWrap.style.display = 'none';
+      if(tbody) tbody.innerHTML = '';
+      if(cardsWrap) cardsWrap.innerHTML = '';
+      ccSetCardLocked(k.label, false);
+      return;
+    }
     ccKhoMode[k.label] = result.mode;
     const card = document.querySelector(`.cc-kho-card[data-kho="${CSS.escape(k.label)}"]`);
     if(card){
@@ -13588,6 +13604,13 @@ document.addEventListener('click', function(e){
   const code = CC_KHO_LIST.find(k => k.label === khoLabel)?.code;
   if(!ccKhoResults[khoLabel] && !(code && document.getElementById('cc-result-block-' + code))) return;
   if(!confirm(`Xoá danh sách "Đề xuất kiểm hôm nay" đã tạo cho ${khoLabel}?`)) return;
+  // Huỷ hẹn giờ tự lưu riêng (_ccAutoSaveTimer, dùng khi "Tạo danh sách") nếu còn đang chờ từ thao
+  // tác NGAY TRƯỚC đó — cùng lý do đã sửa ở nút "Lưu"/"Đặt lại toàn bộ": tránh 1 hẹn giờ cũ tự chạy
+  // sau khi đã xoá ở đây.
+  if(typeof _ccAutoSaveTimer !== 'undefined' && _ccAutoSaveTimer){
+    clearTimeout(_ccAutoSaveTimer);
+    _ccAutoSaveTimer = null;
+  }
   ccClearKhoResult(khoLabel);
   saveStateToStorage();
   // Y HỆT lúc xoá Plan — nếu không tự đẩy lên Cloud ngay, Cloud vẫn còn giữ bản danh sách CŨ (chưa
@@ -14656,11 +14679,11 @@ function initDashboard(){
     renderPlanPanel();
   }
 
-  // Khôi phục các danh sách "Tạo danh sách" (Đề xuất kiểm hôm nay) đã tạo trước đó
-  if(saved.ccResults && Object.keys(saved.ccResults).length > 0){
-    ccInitKhoTotalsAndLabels();
-    ccRestoreResultsFromStorage(saved.ccResults);
-  }
+  // Khôi phục các danh sách "Tạo danh sách" (Đề xuất kiểm hôm nay) đã tạo trước đó — LUÔN gọi (kể cả
+  // khi rỗng), cùng lý do đã sửa ở renderConfirmedList(): để kho nào không còn danh sách cũng được
+  // vẽ lại đúng về trạng thái rỗng trên màn hình, không giữ sót khối kết quả cũ từ lần vẽ trước.
+  ccInitKhoTotalsAndLabels();
+  ccRestoreResultsFromStorage(saved.ccResults);
 
   renderKhoSearchPage();
   if(typeof updateQrGiClearBtn === 'function') updateQrGiClearBtn();
