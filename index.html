@@ -4295,7 +4295,16 @@ const CloudVault = {
     // Cloud có dữ liệu nhưng có thể THIẾU 1 số mục mà máy này đang có (VD: vừa tải lên 1
     // file Plan trước khi kịp đẩy lên Cloud lần đầu) — giữ lại các mục chỉ-có-ở-máy này
     // thay vì ghi đè mất, rồi đẩy chúng lên Cloud luôn để đồng bộ đầy đủ trở lại.
-    const localOnlyKeys = Object.keys(_mem).filter(k => !(k in cloudData));
+    // CHỈ làm việc này khi máy đang THẬT SỰ có thay đổi chưa lưu (hasUnsavedChanges) — nếu không,
+    // 1 mục "chỉ-có-ở-máy này" nhiều khả năng là do máy KHÁC vừa XOÁ đúng mục đó trên Cloud (VD:
+    // "Đặt lại toàn bộ" ở máy khác) mà máy này chỉ đơn giản CHƯA kịp nhận, không phải do máy này có
+    // dữ liệu mới chưa kịp đẩy lên — nếu cứ đẩy lại như cũ sẽ VÔ TÌNH "hồi sinh" đúng dữ liệu vừa bị
+    // xoá đó lên lại Cloud (bug thật đã gặp: 2 thiết bị cùng mở app, máy A "Đặt lại toàn bộ" xong,
+    // máy B — dù không bấm gì — tự nhận snapshot mới, thấy thiếu key "Đã xác nhận" so với _mem cũ
+    // của nó, tưởng là dữ liệu mới nên đẩy ngược lại Cloud, làm 2 dòng vừa xoá ở máy A "sống lại").
+    const localOnlyKeys = (typeof hasUnsavedChanges !== 'undefined' && hasUnsavedChanges)
+      ? Object.keys(_mem).filter(k => !(k in cloudData))
+      : [];
     const preserved = {};
     localOnlyKeys.forEach(k => { preserved[k] = _mem[k]; });
 
@@ -4856,7 +4865,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.66';
+const APP_VERSION = 'v1.67';
 const APP_VERSION_DATE = '11/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
