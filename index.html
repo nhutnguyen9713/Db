@@ -4306,38 +4306,32 @@ const CloudVault = {
       return true;
     }
 
-    // Cloud có dữ liệu nhưng có thể THIẾU 1 số mục mà máy này đang có (VD: vừa tải lên 1 file Plan
-    // trước khi kịp đẩy lên Cloud lần đầu) — giữ lại HIỂN THỊ các mục chỉ-có-ở-máy này thay vì mất
-    // trắng, để người dùng không bị "biến mất" dữ liệu vừa làm ngay trước mắt.
+    // Cloud ĐÃ CÓ dữ liệu thật -> Cloud là NGUỒN XÁC THỰC DUY NHẤT, áp dụng NGUYÊN VẸN — không còn
+    // giữ lại bất kỳ mục nào "chỉ-có-ở-máy-này" nữa (khác hẳn cách làm cũ, xem lý do dưới đây).
     //
-    // QUAN TRỌNG — KHÔNG BAO GIỜ tự đẩy các mục này ngược lên Cloud nữa (trước đây CÓ tự đẩy, đã gây
-    // bug thật xảy ra ít nhất 2 lần): máy A xoá 1 danh sách (VD: "Đặt lại toàn bộ", hoặc bấm "Lưu" để
-    // lưu trữ + làm mới bảng) và đồng bộ lên Cloud xong xuôi; máy B đang mở sẵn, KHÔNG bấm gì, đang
-    // giữ bản CŨ (còn dữ liệu vừa bị máy A xoá) trong bộ nhớ — nếu ngay lúc đó máy B nhận được snapshot
-    // mới từ Cloud (do máy A vừa ghi) mà máy B lại code coi "mục nào Cloud thiếu so với bộ nhớ máy B"
-    // là "dữ liệu mới của máy B", rồi TỰ ĐỘNG đẩy ngược nó lên Cloud — dữ liệu máy A vừa xoá liền
-    // "sống lại". Từng thử chỉ chặn khi hasUnsavedChanges=false (v1.67) nhưng máy B có thể có
-    // hasUnsavedChanges=true vì MỘT LÝ DO HOÀN TOÀN KHÁC (VD: side-effect tự ghi snapshot tồn kho
-    // hôm nay khi render lại trang) đúng ngay lúc đó — không đủ chắc chắn. Giờ đơn giản hoá: KHÔNG
-    // TỰ ĐẨY LÊN CLOUD trong bất kỳ trường hợp nào ở đây nữa — chỉ Cloud mới là nguồn xác thực khi đã
-    // có dữ liệu thật; nếu máy này thật sự có dữ liệu mới, người dùng tự bấm "Lưu" để đẩy lên như
-    // thiết kế ban đầu của cả app ("dữ liệu chỉ thực sự ghi lên Cloud khi bấm Lưu").
-    const localOnlyKeys = Object.keys(_mem).filter(k => !(k in cloudData));
-    const preserved = {};
-    localOnlyKeys.forEach(k => { preserved[k] = _mem[k]; });
-
+    // LỊCH SỬ — TẠI SAO BỎ HẲN, không chỉ bỏ phần tự đẩy lên Cloud (đã bỏ ở v1.70) mà bỏ LUÔN cả phần
+    // "giữ lại hiển thị": bug "dữ liệu đã xoá tự sống lại" tái diễn nhiều lần dù đã bỏ tự đẩy — máy A
+    // xoá 1 danh sách (Đặt lại toàn bộ / bấm Lưu) và đồng bộ Cloud thành công; máy B đang mở sẵn,
+    // KHÔNG bấm gì, vẫn đang giữ bản CŨ trong bộ nhớ (_mem) — khi máy B nhận snapshot mới từ Cloud
+    // (do máy A vừa ghi, đã KHÔNG còn mục đó nữa), code cũ coi "mục nào Cloud thiếu so với _mem máy B"
+    // là "dữ liệu mới của máy B chưa kịp lên Cloud", rồi giữ lại đưa NGƯỢC vào _mem để HIỂN THỊ — làm
+    // đúng danh sách máy A vừa xoá lại hiện ra trên MÀN HÌNH máy B, dù không còn tự đẩy lên Cloud nữa.
+    // Code không có cách nào phân biệt "dữ liệu mới máy này vừa làm, Cloud chưa kịp có" với "dữ liệu
+    // Cloud đã bị XOÁ ở máy khác, máy này chỉ đơn giản CHƯA CẬP NHẬT" — 2 trường hợp nhìn y hệt nhau
+    // (đều là "mục _mem có mà cloudData không có"), nên mọi cách "giữ lại" đều có rủi ro hồi sinh nhầm.
+    //
+    // An toàn vì: hàm này chỉ chạy tới đây khi _isSafeToApply() đã cho phép (xem _fetchFullSnapshotViaStamp)
+    // — nghĩa là máy này KHÔNG có hasUnsavedChanges=true, nên không có dữ liệu mới thật sự đang dang dở
+    // bị mất. Nếu máy này thật sự có dữ liệu mới, người dùng luôn phải tự bấm "Lưu" để đẩy lên (đúng
+    // thiết kế app "dữ liệu chỉ thực sự ghi lên Cloud khi bấm Lưu") — lúc đó hasUnsavedChanges=true sẽ
+    // tự chặn mọi snapshot Cloud ghi đè giữa chừng cho tới khi Lưu xong.
     Object.keys(_mem).forEach(k => delete _mem[k]);
-    Object.assign(_mem, cloudData, preserved);
+    Object.assign(_mem, cloudData);
     tn5PersistMemToLocalBackup(); // cập nhật luôn bản sao lưu cục bộ theo đúng dữ liệu Cloud mới nhất
 
     if(typeof FileVault !== 'undefined') FileVault._runReloaders();
 
-    // Chỉ coi là "đã lưu" (xoá cờ hasUnsavedChanges) khi KHÔNG có mục nào chỉ-có-ở-máy-này bị giữ lại
-    // — nếu có, để nguyên cờ "chưa lưu" cho người dùng thấy rõ còn dữ liệu cục bộ chưa lên Cloud, tự
-    // quyết định có bấm "Lưu" hay không (không âm thầm tự đẩy nữa — xem lý do ở trên).
-    // Đặt SAU _runReloaders() vì việc render lại có thể tự động ghi snapshot tồn kho hôm nay
-    // (đánh dấu "chưa lưu" lại) — ta muốn trạng thái sạch phản ánh đúng lúc này.
-    if(!localOnlyKeys.length && typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
+    if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
     return true;
   },
 
@@ -4886,7 +4880,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.72';
+const APP_VERSION = 'v1.73';
 const APP_VERSION_DATE = '11/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
