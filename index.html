@@ -649,6 +649,21 @@
   }
   .wh3b-grid-mode-btn:hover{border-color:var(--violet); color:var(--violet);}
   .wh3b-custom-grid{display:grid; gap:10px; margin-bottom:6px;}
+  .wh3b-custom-grid{touch-action:pan-y; overscroll-behavior-x:contain;}
+  .wh3b-custom-grid .wh3b-box{touch-action:none; user-select:none;}
+  .wh3b-custom-grid .wh3b-box.wh3b-dragging{opacity:.78; transform:scale(1.02); border-color:var(--violet); box-shadow:0 0 0 2px rgba(110,79,224,.28), 0 10px 24px rgba(0,0,0,.14); cursor:grabbing; z-index:20;}
+  .wh3b-drag-hint{font-family:var(--mono);font-size:10px;color:var(--violet);background:rgba(110,79,224,.08);border:1px solid rgba(110,79,224,.2);padding:6px 9px;border-radius:7px;margin:0 0 10px;}
+  .wh3b-custom-grid .wh3b-box-main{cursor:grab;}
+  .wh3b-custom-grid .wh3b-box.wh3b-dragging .wh3b-box-main{cursor:grabbing;}
+  .wh3b-custom-grid .wh3b-box-main:active{cursor:grabbing;}
+  @media (max-width:760px){
+    .wh3b-custom-grid{gap:7px;overflow-x:auto;padding:2px 2px 8px;align-items:stretch;}
+    .wh3b-custom-grid .wh3b-box,.wh3b-custom-grid .wh3b-custom-add-cell{min-width:72px;}
+    .wh3b-custom-grid .wh3b-box{padding:8px 8px 7px;}
+    .wh3b-custom-grid .wh3b-box-name{font-size:10px;}
+    .wh3b-custom-grid .wh3b-box-count{font-size:14px;}
+  }
+
   .wh3b-custom-grid-note{
     font-family:var(--mono); font-size:11px; color:var(--violet); background:rgba(110,79,224,0.08);
     border:1px solid rgba(110,79,224,0.25); border-radius:8px; padding:8px 12px; margin-bottom:12px;
@@ -2626,8 +2641,12 @@
       <div class="cc-collapse-head" data-collapse-toggle>
         <div style="width:100%;">
           <div class="brand-eyebrow"><span class="dot" style="background:var(--violet); box-shadow:0 0 8px var(--violet);"></span>SƠ ĐỒ RACK</div>
-          <h1 style="font-size:19px;">Sơ đồ Rack 3A</h1>
+          <h1 style="font-size:19px;">Sơ đồ 3A</h1>
           <div class="wh3b-summary" id="rack3a-summary"></div>
+          <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
+            <button type="button" class="wh3b-grid-mode-btn" id="rack3a-grid-mode-toggle" title="Chuyển giữa sơ đồ mặc định và grid tuỳ chỉnh">🔲 Grid tuỳ chỉnh</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="rack3a-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
+          </div>
         </div>
         <span class="cc-collapse-chevron">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
@@ -2648,7 +2667,47 @@
           <span><i style="background:var(--red)"></i>Đầy / gần đầy (≥ 80%)</span>
         </div>
         <div class="wh3b-grid" id="rack3a-grid"></div>
+        <div class="wh3b-custom-grid-note" id="rack3a-custom-grid-note" style="display:none;">Đang dùng grid tuỳ chỉnh — kéo trực tiếp locator để di chuyển, bấm ⚙ để sửa, bấm "+" để thêm vị trí.</div>
+        <div class="wh3b-drag-hint" id="rack3a-drag-hint" style="display:none;">↔ Kéo locator để sắp xếp theo đúng vị trí thực tế. Khi di chuyển, ô sẽ tự tìm vị trí gần nhất và không cho chồng lên ô khác.</div>
+        <div class="wh3b-custom-grid" id="rack3a-custom-grid" style="display:none;"></div>
         <div id="rack3a-detail"></div>
+      </div>
+    </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="sodo2b-panel" style="margin-top:16px;">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div style="width:100%;">
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--blue); box-shadow:0 0 8px var(--blue);"></span>SƠ ĐỒ KHO</div>
+          <h1 style="font-size:19px;">Sơ đồ 2B</h1>
+          <div class="wh3b-summary" id="sodo2b-summary"></div>
+          <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
+            <button type="button" class="wh3b-grid-mode-btn" id="sodo2b-grid-mode-toggle" title="Chuyển giữa sơ đồ mặc định và grid tuỳ chỉnh">🔲 Grid tuỳ chỉnh</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="sodo2b-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
+          </div>
+        </div>
+        <span class="cc-collapse-chevron">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </span>
+      </div>
+      <div class="cc-collapse-body">
+        <div class="wh3b-search-row">
+          <textarea class="wh3b-search-input" id="sodo2b-search" rows="1" placeholder="Tìm theo Item No., Cust PO, Locator… (mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng — trong cùng 1 dòng, cách nhau bằng khoảng trắng để kết hợp nhiều điều kiện)"></textarea>
+          <div class="wh3b-oqc-toggle">
+            <label><input type="checkbox" id="sodo2b-oqc-pass" checked> PASS</label>
+            <label><input type="checkbox" id="sodo2b-oqc-ng" checked> NG</label>
+          </div>
+        </div>
+        <div class="wh3b-legend">
+          <span><i style="background:var(--muted-2)"></i>Trống (0 pallet)</span>
+          <span><i style="background:var(--teal)"></i>Thấp (&lt; 50%)</span>
+          <span><i style="background:var(--amber-bright)"></i>Vừa (50–79%)</span>
+          <span><i style="background:var(--red)"></i>Đầy / gần đầy (≥ 80%)</span>
+        </div>
+        <div class="wh3b-grid" id="sodo2b-grid"></div>
+        <div class="wh3b-custom-grid-note" id="sodo2b-custom-grid-note" style="display:none;">Đang dùng grid tuỳ chỉnh — kéo trực tiếp locator để di chuyển, bấm ⚙ để sửa, bấm "+" để thêm vị trí.</div>
+        <div class="wh3b-drag-hint" id="sodo2b-drag-hint" style="display:none;">↔ Kéo locator để sắp xếp theo đúng vị trí thực tế. Khi di chuyển, ô sẽ tự tìm vị trí gần nhất và không cho chồng lên ô khác.</div>
+        <div class="wh3b-custom-grid" id="sodo2b-custom-grid" style="display:none;"></div>
+        <div id="sodo2b-detail"></div>
       </div>
     </div>
 
@@ -3214,7 +3273,7 @@
       </button>
     </div>
     <div class="pick-slip-content">
-      <label style="display:block; font-size:12px; color:var(--muted-2); margin-bottom:14px;">Mã Locator (phải gõ ĐÚNG tên có trong dữ liệu tồn kho/WMS, VD: D3B-FG-A01)
+      <label style="display:block; font-size:12px; color:var(--muted-2); margin-bottom:14px;">Mã Locator (phải gõ ĐÚNG tên có trong dữ liệu tồn kho/WMS)
         <input type="text" id="kho-grid-cell-locator" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px; font-family:var(--mono);" placeholder="D3B-FG-A01">
       </label>
       <div style="display:flex; gap:10px; margin-bottom:14px;">
@@ -8523,74 +8582,114 @@ function renderSodo3bBlocks(){
 }
 let sodo3bOutsideData = { locators: [], rows: [] };
 
-/* ============ GRID TUỲ CHỈNH cho Sơ đồ kho (hiện áp dụng cho Kho 3B) ============
-   Cho phép tự sắp xếp các vị trí (locator) THẬT theo đúng bố cục vật lý ngoài kho, khác với sơ đồ
-   mặc định (cố định theo code). Số liệu (SL pallet, OQC, sức chứa...) vẫn tra đúng theo dữ liệu tồn
-   kho thật qua đúng mã locator đã gõ — KHÔNG tạo dữ liệu giả, chỉ đổi cách hiển thị/vị trí trên màn
-   hình. Lưu trữ + đồng bộ Cloud như các phần khác. */
-let khoGridLayouts = {}; // { 'Kho 3B': { rows, cols, cells: [{id, locator, row, col, rowSpan, colSpan}] } }
+/* ============ GRID TUỲ CHỈNH CHUNG cho 3B / 3A / 2B ============
+   Dữ liệu locator vẫn lấy trực tiếp từ currentData. Grid chỉ lưu cách bố trí hiển thị.
+   Có thể thêm/sửa/xoá, đổi kích thước và KÉO TRỰC TIẾP locator để di chuyển. */
+let khoGridLayouts = {}; // { 'Kho 3B'|'Kho 3A'|'Kho 2B': { rows, cols, cells:[...] } }
 const STORAGE_KEY_KHO_GRID = 'tn5_dashboard_kho_grid_v1';
 let sodo3bGridMode = false;
+const khoCustomGridMode = { 'Kho 3B': false, 'Kho 3A': false, 'Kho 2B': false };
 let _localKhoGridDirty = false;
-let _khoGridEditingCellId = null; // null = đang THÊM ô mới; có giá trị = đang SỬA ô đã có
+let _khoGridEditingCellId = null;
+let _khoGridActiveKho = 'Kho 3B';
+let _khoGridDragState = null;
+let _khoGridSuppressClick = false;
+
+const KHO_CUSTOM_GRID_CONFIG = {
+  'Kho 3B': {
+    defaultRows:5, defaultCols:5, defaultMax:WH3B_MAX_PALLET,
+    modeBtn:'sodo3b-grid-mode-toggle', settingsBtn:'sodo3b-grid-settings-btn',
+    defaultGrid:'sodo3b-grid', customGrid:'sodo3b-custom-grid', note:'sodo3b-custom-grid-note', hint:null,
+    search:'sodo3b-search', pass:'sodo3b-oqc-pass', ng:'sodo3b-oqc-ng', detail:'sodo3b-detail',
+    compute:computeSodo3bByLocator
+  },
+  'Kho 3A': {
+    defaultRows:10, defaultCols:10, defaultMax:2,
+    modeBtn:'rack3a-grid-mode-toggle', settingsBtn:'rack3a-grid-settings-btn',
+    defaultGrid:'rack3a-grid', customGrid:'rack3a-custom-grid', note:'rack3a-custom-grid-note', hint:'rack3a-drag-hint',
+    search:'rack3a-search', pass:'rack3a-oqc-pass', ng:'rack3a-oqc-ng', detail:'rack3a-detail',
+    compute:computeRack3AByLocator
+  },
+  'Kho 2B': {
+    defaultRows:10, defaultCols:10, defaultMax:24,
+    modeBtn:'sodo2b-grid-mode-toggle', settingsBtn:'sodo2b-grid-settings-btn',
+    defaultGrid:'sodo2b-grid', customGrid:'sodo2b-custom-grid', note:'sodo2b-custom-grid-note', hint:'sodo2b-drag-hint',
+    search:'sodo2b-search', pass:'sodo2b-oqc-pass', ng:'sodo2b-oqc-ng', detail:'sodo2b-detail',
+    compute:computeSodo2bByLocator
+  }
+};
+
+function computeSodo2bByLocator(){
+  const map = {};
+  B2_LOCATORS.forEach(loc => { map[loc] = []; });
+  if(!currentData) return map;
+  for(const row of getRawRows(currentData)){
+    if(row[RAW_KEY_IDX.kho] !== 'Kho 2B') continue;
+    const locator = String(row[RAW_KEY_IDX.locator] || '').trim();
+    if(!locator) continue;
+    (map[locator] || (map[locator] = [])).push(row);
+  }
+  return map;
+}
 
 function khoGridGetLayout(khoLabel){
-  if(!khoGridLayouts[khoLabel]) khoGridLayouts[khoLabel] = { rows: 5, cols: 5, cells: [] };
-  return khoGridLayouts[khoLabel];
+  const cfg = KHO_CUSTOM_GRID_CONFIG[khoLabel] || KHO_CUSTOM_GRID_CONFIG['Kho 3B'];
+  if(!khoGridLayouts[khoLabel]) khoGridLayouts[khoLabel] = { rows:cfg.defaultRows, cols:cfg.defaultCols, cells:[] };
+  const layout = khoGridLayouts[khoLabel];
+  layout.rows = Math.max(1, Number(layout.rows) || cfg.defaultRows);
+  layout.cols = Math.max(1, Number(layout.cols) || cfg.defaultCols);
+  layout.cells = Array.isArray(layout.cells) ? layout.cells : [];
+  return layout;
 }
 function khoGridSave(){
   _localKhoGridDirty = true;
   saveStateToStorage();
   scheduleAutoSaveToCloud('khogrid', [STORAGE_KEY_KHO_GRID], 'Sửa lưới sơ đồ kho tuỳ chỉnh');
 }
-
-// Tập hợp toạ độ "hàng,cột" đang bị các ô khác chiếm — dùng để tìm ô trống ("+") và để chặn
-// resize/kéo-thả đè lên ô đã có sẵn. excludeId: bỏ qua chính ô đang được sửa/kéo (nếu có).
 function khoGridBuildOccupied(layout, excludeId){
   const occupied = new Set();
   layout.cells.forEach(cell => {
     if(cell.id === excludeId) return;
-    for(let r = cell.row; r < cell.row + cell.rowSpan; r++){
-      for(let c = cell.col; c < cell.col + cell.colSpan; c++) occupied.add(r + ',' + c);
-    }
+    for(let r=cell.row;r<cell.row+cell.rowSpan;r++) for(let c=cell.col;c<cell.col+cell.colSpan;c++) occupied.add(r+','+c);
   });
   return occupied;
 }
-function khoGridRectOverlaps(occupied, row, col, rowSpan, colSpan){
-  for(let r = row; r < row + rowSpan; r++){
-    for(let c = col; c < col + colSpan; c++){
-      if(occupied.has(r + ',' + c)) return true;
-    }
-  }
+function khoGridRectOverlaps(occupied,row,col,rowSpan,colSpan){
+  for(let r=row;r<row+rowSpan;r++) for(let c=col;c<col+colSpan;c++) if(occupied.has(r+','+c)) return true;
   return false;
 }
+function khoGridBaseCapacity(khoLabel, loc){
+  if(khoLabel === 'Kho 3B') return WH3B_MAX_PALLET;
+  if(khoLabel === 'Kho 3A') return RACK3A_MAX_PALLET;
+  return B2_CAPACITY_MAP[loc] || 24;
+}
+function khoGridConfigFor(khoLabel){ return KHO_CUSTOM_GRID_CONFIG[khoLabel] || KHO_CUSTOM_GRID_CONFIG['Kho 3B']; }
+function khoGridIsCustomMode(khoLabel){ return khoLabel === 'Kho 3B' ? sodo3bGridMode : !!khoCustomGridMode[khoLabel]; }
 
-function renderSodo3bCustomGrid(){
-  const container = document.getElementById('sodo3b-custom-grid');
+function khoGridRenderCustom(khoLabel){
+  const cfg = khoGridConfigFor(khoLabel);
+  const container = document.getElementById(cfg.customGrid);
   if(!container) return;
-  const layout = khoGridGetLayout('Kho 3B');
+  const layout = khoGridGetLayout(khoLabel);
   container.className = 'wh3b-custom-grid wh3b-grid';
-  container.style.gridTemplateColumns = `repeat(${layout.cols}, minmax(90px, 1fr))`;
+  container.dataset.kho = khoLabel;
+  container.style.gridTemplateColumns = `repeat(${layout.cols}, minmax(72px, 1fr))`;
   container.style.gridTemplateRows = `repeat(${layout.rows}, minmax(90px, auto))`;
 
-  const map = computeSodo3bByLocator();
+  const map = cfg.compute();
   const occupied = khoGridBuildOccupied(layout, null);
-
   let html = '';
   layout.cells.forEach(cell => {
     const rows = map[cell.locator] || [];
-    const b = buildLocatorBoxHtml(cell.locator, rows, WH3B_MAX_PALLET, '');
-    // Chèn nút bánh răng RIÊNG (đổi tên/vị trí/kích thước/xoá) — khác nút bánh răng mặc định (chỉnh
-    // sức chứa), đặt thêm ở góc trái để không đè lên nút mặc định ở góc phải.
+    const b = buildLocatorBoxHtml(cell.locator, rows, khoGridBaseCapacity(khoLabel, cell.locator), '');
     const cellHtml = b.html.replace(
       '<div class="wh3b-box',
-      `<div style="grid-row:${cell.row} / span ${cell.rowSpan}; grid-column:${cell.col} / span ${cell.colSpan};" class="wh3b-box`
+      `<div draggable="false" data-kho-grid-drag="1" style="grid-row:${cell.row} / span ${cell.rowSpan}; grid-column:${cell.col} / span ${cell.colSpan};" class="wh3b-box`
     ).replace(
       '<button type="button" class="wh3b-box-gear"',
-      `<button type="button" class="wh3b-custom-gear" data-cell-id="${escAttr(cell.id)}" title="Đổi tên/vị trí/kích thước hoặc xoá ô này khỏi lưới">
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      `<button type="button" class="wh3b-custom-gear" data-cell-id="${escAttr(cell.id)}" title="Sửa vị trí / kích thước / xoá ô này khỏi lưới">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3l5 5-13 13H3v-5Z"/><path d="M14 5l5 5"/></svg>
       </button><button type="button" class="wh3b-box-gear"`
-    // Tay cầm kéo-thả để đổi kích thước ô ngay trên sơ đồ, thay vì phải mở popover gõ số hàng/cột chiếm.
     ).replace(/<\/div>$/, `
       <div class="wh3b-resize-handle wh3b-resize-e" data-cell-id="${escAttr(cell.id)}" data-dir="e" title="Kéo để đổi độ rộng"></div>
       <div class="wh3b-resize-handle wh3b-resize-s" data-cell-id="${escAttr(cell.id)}" data-dir="s" title="Kéo để đổi độ cao"></div>
@@ -8599,216 +8698,245 @@ function renderSodo3bCustomGrid(){
     </div>`);
     html += cellHtml;
   });
-
-  // Ô trống trong phạm vi lưới hiện tại — hiện nút "+" để thêm vị trí mới vào đúng chỗ đó.
-  for(let r = 1; r <= layout.rows; r++){
-    for(let c = 1; c <= layout.cols; c++){
-      if(occupied.has(r + ',' + c)) continue;
-      html += `<button type="button" class="wh3b-custom-add-cell" style="grid-row:${r}; grid-column:${c};" data-row="${r}" data-col="${c}" title="Thêm vị trí vào ô hàng ${r}, cột ${c}">+</button>`;
-    }
+  for(let r=1;r<=layout.rows;r++) for(let c=1;c<=layout.cols;c++){
+    if(occupied.has(r+','+c)) continue;
+    html += `<button type="button" class="wh3b-custom-add-cell" style="grid-row:${r};grid-column:${c};" data-kho="${escAttr(khoLabel)}" data-row="${r}" data-col="${c}" title="Thêm vị trí vào ô hàng ${r}, cột ${c}">+</button>`;
   }
-
   container.innerHTML = html || `<div class="wh3b-empty">Lưới trống — bấm "+" để bắt đầu thêm vị trí.</div>`;
-  whApplySearchFilter('sodo3b-custom-grid', computeSodo3bByLocator, 'sodo3b-search', 'sodo3b-oqc-pass', 'sodo3b-oqc-ng', 'sodo3b-detail');
+  whApplySearchFilter(cfg.customGrid, cfg.compute, cfg.search, cfg.pass, cfg.ng, cfg.detail);
 }
 
-function khoGridOpenCellPopover(cellId, prefillRow, prefillCol){
+function khoGridSetMode(khoLabel, enabled){
+  const cfg = khoGridConfigFor(khoLabel);
+  if(khoLabel === 'Kho 3B') sodo3bGridMode = !!enabled;
+  else khoCustomGridMode[khoLabel] = !!enabled;
+  const mode = !!enabled;
+  const modeBtn = document.getElementById(cfg.modeBtn);
+  const defaultGrid = document.getElementById(cfg.defaultGrid);
+  const customGrid = document.getElementById(cfg.customGrid);
+  const note = document.getElementById(cfg.note);
+  const settings = document.getElementById(cfg.settingsBtn);
+  const hint = cfg.hint ? document.getElementById(cfg.hint) : null;
+  if(modeBtn) modeBtn.textContent = mode ? '📋 Sơ đồ mặc định' : '🔲 Grid tuỳ chỉnh';
+  if(defaultGrid) defaultGrid.style.display = mode ? 'none' : '';
+  if(customGrid) customGrid.style.display = mode ? 'grid' : 'none';
+  if(note) note.style.display = mode ? '' : 'none';
+  if(settings) settings.style.display = mode ? '' : 'none';
+  if(hint) hint.style.display = mode ? '' : 'none';
+  if(mode) khoGridRenderCustom(khoLabel);
+  else whApplySearchFilter(cfg.defaultGrid, cfg.compute, cfg.search, cfg.pass, cfg.ng, cfg.detail);
+}
+
+function khoGridOpenCellPopover(cellId, prefillRow, prefillCol, khoLabel){
+  _khoGridActiveKho = khoLabel || _khoGridActiveKho || 'Kho 3B';
   _khoGridEditingCellId = cellId || null;
-  const layout = khoGridGetLayout('Kho 3B');
-  const cell = cellId ? layout.cells.find(c => c.id === cellId) : null;
-  document.getElementById('kho-grid-cell-title').textContent = cell ? `Sửa vị trí "${cell.locator}"` : 'Thêm vị trí vào lưới';
-  document.getElementById('kho-grid-cell-locator').value = cell ? cell.locator : '';
-  document.getElementById('kho-grid-cell-row').value = cell ? cell.row : (prefillRow || 1);
-  document.getElementById('kho-grid-cell-col').value = cell ? cell.col : (prefillCol || 1);
-  document.getElementById('kho-grid-cell-rowspan').value = cell ? cell.rowSpan : 1;
-  document.getElementById('kho-grid-cell-colspan').value = cell ? cell.colSpan : 1;
-  document.getElementById('kho-grid-cell-delete').style.display = cell ? '' : 'none';
-  const overlay = document.getElementById('kho-grid-cell-overlay');
+  const layout = khoGridGetLayout(_khoGridActiveKho);
+  const cell = cellId ? layout.cells.find(c=>c.id===cellId) : null;
+  const title = document.getElementById('kho-grid-cell-title');
+  const locator = document.getElementById('kho-grid-cell-locator');
+  const row = document.getElementById('kho-grid-cell-row');
+  const col = document.getElementById('kho-grid-cell-col');
+  const rowSpan = document.getElementById('kho-grid-cell-rowspan');
+  const colSpan = document.getElementById('kho-grid-cell-colspan');
+  const del = document.getElementById('kho-grid-cell-delete');
+  if(title) title.textContent = cell ? `Sửa vị trí "${cell.locator}" — ${_khoGridActiveKho}` : `Thêm vị trí — ${_khoGridActiveKho}`;
+  if(locator){ locator.value=cell?cell.locator:''; locator.placeholder=_khoGridActiveKho==='Kho 2B'?'D2B-FG-A01':_khoGridActiveKho==='Kho 3A'?'3A-A1-T1':'D3B-FG-A01'; }
+  if(row) row.value = cell ? cell.row : (prefillRow || 1);
+  if(col) col.value = cell ? cell.col : (prefillCol || 1);
+  if(rowSpan) rowSpan.value = cell ? cell.rowSpan : 1;
+  if(colSpan) colSpan.value = cell ? cell.colSpan : 1;
+  if(del) del.style.display = cell ? '' : 'none';
+  const overlay=document.getElementById('kho-grid-cell-overlay');
   if(overlay) overlay.classList.add('show');
 }
 
-document.addEventListener('click', (e) => {
-  const modeBtn = e.target.closest('#sodo3b-grid-mode-toggle');
-  if(modeBtn){
-    e.stopImmediatePropagation(); // 2 nút này nằm trong vùng bấm-để-xẹp/mở panel — chặn hẳn để không vô tình đóng panel khi bấm
-    sodo3bGridMode = !sodo3bGridMode;
-    modeBtn.textContent = sodo3bGridMode ? '📋 Sơ đồ mặc định' : '🔲 Grid tuỳ chỉnh';
-    document.getElementById('sodo3b-grid').style.display = sodo3bGridMode ? 'none' : '';
-    document.getElementById('sodo3b-custom-grid').style.display = sodo3bGridMode ? 'grid' : 'none';
-    document.getElementById('sodo3b-custom-grid-note').style.display = sodo3bGridMode ? '' : 'none';
-    document.getElementById('sodo3b-grid-settings-btn').style.display = sodo3bGridMode ? '' : 'none';
-    if(sodo3bGridMode) renderSodo3bCustomGrid();
-    else whApplySearchFilter('sodo3b-grid', computeSodo3bByLocator, 'sodo3b-search', 'sodo3b-oqc-pass', 'sodo3b-oqc-ng', 'sodo3b-detail');
-    return;
-  }
-  const settingsBtn = e.target.closest('#sodo3b-grid-settings-btn');
-  if(settingsBtn){
-    e.stopImmediatePropagation();
-    const layout = khoGridGetLayout('Kho 3B');
-    document.getElementById('kho-grid-rows-input').value = layout.rows;
-    document.getElementById('kho-grid-cols-input').value = layout.cols;
-    document.getElementById('kho-grid-settings-overlay').classList.add('show');
-    return;
-  }
-  const addBtn = e.target.closest('.wh3b-custom-add-cell');
-  if(addBtn){
-    e.stopPropagation();
-    khoGridOpenCellPopover(null, Number(addBtn.dataset.row), Number(addBtn.dataset.col));
-    return;
-  }
-  const gearBtn = e.target.closest('.wh3b-custom-gear');
-  if(gearBtn){
-    e.stopPropagation();
-    khoGridOpenCellPopover(gearBtn.dataset.cellId);
-    return;
-  }
-});
-
-/* Kéo-thả viền ô để đổi kích thước (chiều rộng/cao) trong lưới TUỲ CHỈNH — thay thế cho việc phải
-   mở popover gõ số hàng/cột chiếm. Kéo viền phải = đổi độ rộng (colSpan), viền dưới = đổi độ cao
-   (rowSpan), góc dưới-phải = đổi cả 2. Không cho đè lên ô khác đã có sẵn trên lưới. */
-let _khoGridResizeState = null;
-
-document.addEventListener('pointerdown', (e) => {
-  const handle = e.target.closest('.wh3b-resize-handle');
-  if(!handle) return;
-  const layout = khoGridGetLayout('Kho 3B');
-  const cell = layout.cells.find(c => c.id === handle.dataset.cellId);
-  const container = document.getElementById('sodo3b-custom-grid');
-  const boxEl = handle.closest('.wh3b-box');
-  if(!cell || !container || !boxEl) return;
-  e.preventDefault();
-  e.stopPropagation();
-
-  const colTracks = getComputedStyle(container).gridTemplateColumns.trim().split(/\s+/).map(parseFloat).filter(n => !isNaN(n));
-  const rowTracks = getComputedStyle(container).gridTemplateRows.trim().split(/\s+/).map(parseFloat).filter(n => !isNaN(n));
-  const colGap = parseFloat(getComputedStyle(container).columnGap) || 10;
-  const rowGap = parseFloat(getComputedStyle(container).rowGap) || 10;
-  const stepX = (colTracks.reduce((a, b) => a + b, 0) / (colTracks.length || 1)) + colGap;
-  const stepY = (rowTracks.reduce((a, b) => a + b, 0) / (rowTracks.length || 1)) + rowGap;
-
-  _khoGridResizeState = {
-    cell, boxEl, layout, dir: handle.dataset.dir, stepX, stepY,
-    occupied: khoGridBuildOccupied(layout, cell.id),
-    startX: e.clientX, startY: e.clientY,
-    origColSpan: cell.colSpan, origRowSpan: cell.rowSpan,
-    curColSpan: cell.colSpan, curRowSpan: cell.rowSpan,
-  };
-  boxEl.classList.add('wh3b-resizing');
-  try{ handle.setPointerCapture(e.pointerId); }catch(err){}
-});
-
-document.addEventListener('pointermove', (e) => {
-  const st = _khoGridResizeState;
-  if(!st) return;
-  const dx = e.clientX - st.startX;
-  const dy = e.clientY - st.startY;
-  let colSpan = st.origColSpan, rowSpan = st.origRowSpan;
-  if(st.dir === 'e' || st.dir === 'se') colSpan = st.origColSpan + Math.round(dx / st.stepX);
-  if(st.dir === 's' || st.dir === 'se') rowSpan = st.origRowSpan + Math.round(dy / st.stepY);
-  colSpan = Math.min(Math.max(colSpan, 1), st.layout.cols - st.cell.col + 1);
-  rowSpan = Math.min(Math.max(rowSpan, 1), st.layout.rows - st.cell.row + 1);
-  // Không cho lấn vào ô khác đã có sẵn — thu nhỏ dần tới khi hết chồng lấn.
-  while(colSpan > 1 && khoGridRectOverlaps(st.occupied, st.cell.row, st.cell.col, rowSpan, colSpan)) colSpan--;
-  while(rowSpan > 1 && khoGridRectOverlaps(st.occupied, st.cell.row, st.cell.col, rowSpan, colSpan)) rowSpan--;
-  st.curColSpan = colSpan; st.curRowSpan = rowSpan;
-  st.boxEl.style.gridColumn = `${st.cell.col} / span ${colSpan}`;
-  st.boxEl.style.gridRow = `${st.cell.row} / span ${rowSpan}`;
-  const hint = st.boxEl.querySelector('.wh3b-resize-hint');
-  if(hint) hint.textContent = `${colSpan}×${rowSpan}`;
-});
-
-function khoGridEndResize(){
-  const st = _khoGridResizeState;
-  if(!st) return;
-  _khoGridResizeState = null;
-  st.boxEl.classList.remove('wh3b-resizing');
-  if(st.curColSpan !== st.origColSpan || st.curRowSpan !== st.origRowSpan){
-    st.cell.colSpan = st.curColSpan;
-    st.cell.rowSpan = st.curRowSpan;
-    khoGridSave();
-  }
-  renderSodo3bCustomGrid(); // vẽ lại để cập nhật khung "+" trống theo kích thước mới
+function khoGridOpenSettings(khoLabel){
+  _khoGridActiveKho = khoLabel;
+  const layout=khoGridGetLayout(khoLabel);
+  document.getElementById('kho-grid-rows-input').value=layout.rows;
+  document.getElementById('kho-grid-cols-input').value=layout.cols;
+  const reset=document.getElementById('kho-grid-reset-all');
+  if(reset) reset.textContent=`🗑 Xoá toàn bộ lưới tuỳ chỉnh ${khoLabel}`;
+  document.getElementById('kho-grid-settings-overlay').classList.add('show');
 }
-document.addEventListener('pointerup', khoGridEndResize);
-document.addEventListener('pointercancel', khoGridEndResize);
 
-const khoGridSettingsCloseBtn = document.getElementById('kho-grid-settings-close');
-if(khoGridSettingsCloseBtn) khoGridSettingsCloseBtn.addEventListener('click', () => {
-  document.getElementById('kho-grid-settings-overlay').classList.remove('show');
-});
-const khoGridApplySizeBtn = document.getElementById('kho-grid-apply-size');
-if(khoGridApplySizeBtn) khoGridApplySizeBtn.addEventListener('click', () => {
-  const layout = khoGridGetLayout('Kho 3B');
-  const newRows = Math.max(1, Math.round(Number(document.getElementById('kho-grid-rows-input').value) || layout.rows));
-  const newCols = Math.max(1, Math.round(Number(document.getElementById('kho-grid-cols-input').value) || layout.cols));
-  const outOfBounds = layout.cells.filter(c => (c.row + c.rowSpan - 1) > newRows || (c.col + c.colSpan - 1) > newCols);
-  if(outOfBounds.length){
-    if(!confirm(`Kích thước mới sẽ làm ${outOfBounds.length} ô (${outOfBounds.map(c => c.locator).join(', ')}) nằm NGOÀI lưới và bị xoá khỏi lưới. Vẫn áp dụng?`)) return;
-    layout.cells = layout.cells.filter(c => !outOfBounds.includes(c));
+function khoGridPointToCell(container, clientX, clientY, layout){
+  const rect=container.getBoundingClientRect();
+  const cs=getComputedStyle(container);
+  const cols=cs.gridTemplateColumns.trim().split(/\\s+/).map(parseFloat).filter(Number.isFinite);
+  const rows=cs.gridTemplateRows.trim().split(/\\s+/).map(parseFloat).filter(Number.isFinite);
+  const gapX=parseFloat(cs.columnGap)||10, gapY=parseFloat(cs.rowGap)||10;
+  const avgX=cols.length?cols.reduce((a,b)=>a+b,0)/cols.length:Math.max(72,(rect.width-gapX*(layout.cols-1))/layout.cols);
+  const avgY=rows.length?rows.reduce((a,b)=>a+b,0)/rows.length:90;
+  const col=Math.min(layout.cols,Math.max(1,Math.floor((clientX-rect.left+gapX/2)/(avgX+gapX))+1));
+  const row=Math.min(layout.rows,Math.max(1,Math.floor((clientY-rect.top+gapY/2)/(avgY+gapY))+1));
+  return {row,col};
+}
+
+function khoGridTryMoveCell(st, clientX, clientY){
+  const target=khoGridPointToCell(st.container,clientX,clientY,st.layout);
+  let row=Math.min(Math.max(target.row,1),st.layout.rows-st.cell.rowSpan+1);
+  let col=Math.min(Math.max(target.col,1),st.layout.cols-st.cell.colSpan+1);
+  if(khoGridRectOverlaps(st.occupied,row,col,st.cell.rowSpan,st.cell.colSpan)){
+    // Tìm ô gần nhất còn trống theo khoảng cách Manhattan.
+    const candidates=[];
+    for(let r=1;r<=st.layout.rows-st.cell.rowSpan+1;r++) for(let c=1;c<=st.layout.cols-st.cell.colSpan+1;c++){
+      if(khoGridRectOverlaps(st.occupied,r,c,st.cell.rowSpan,st.cell.colSpan)) continue;
+      candidates.push({r,c,d:Math.abs(r-row)+Math.abs(c-col)});
+    }
+    candidates.sort((a,b)=>a.d-b.d);
+    if(!candidates.length) return false;
+    row=candidates[0].r; col=candidates[0].c;
   }
-  layout.rows = newRows; layout.cols = newCols;
-  khoGridSave();
-  renderSodo3bCustomGrid();
-  document.getElementById('kho-grid-settings-overlay').classList.remove('show');
+  st.curRow=row; st.curCol=col;
+  st.boxEl.style.gridRow=`${row} / span ${st.cell.rowSpan}`;
+  st.boxEl.style.gridColumn=`${col} / span ${st.cell.colSpan}`;
+  const hint=st.boxEl.querySelector('.wh3b-resize-hint');
+  if(hint) hint.textContent=`${st.cell.colSpan}×${st.cell.rowSpan} · ${row},${col}`;
+  return true;
+}
+
+// Kéo locator để DI CHUYỂN — chỉ kích hoạt trong grid tuỳ chỉnh và bỏ qua nút/resize handle.
+document.addEventListener('pointerdown',(e)=>{
+  const box=e.target.closest('.wh3b-custom-grid .wh3b-box[data-kho-grid-drag="1"]');
+  if(!box || e.target.closest('button,.wh3b-resize-handle')) return;
+  const container=box.closest('.wh3b-custom-grid');
+  const kho=container?.dataset.kho || _khoGridActiveKho;
+  if(!kho || !khoGridIsCustomMode(kho)) return;
+  const layout=khoGridGetLayout(kho);
+  const cell=layout.cells.find(c=>c.id===box.dataset.cellId || c.locator===box.dataset.locator);
+  if(!cell) return;
+  e.preventDefault(); e.stopPropagation();
+  _khoGridDragState={kho,layout,cell,boxEl:box,container,occupied:khoGridBuildOccupied(layout,cell.id),startX:e.clientX,startY:e.clientY,curRow:cell.row,curCol:cell.col,moved:false,pointerId:e.pointerId};
+  try{box.setPointerCapture(e.pointerId);}catch(err){}
 });
-const khoGridResetAllBtn = document.getElementById('kho-grid-reset-all');
-if(khoGridResetAllBtn) khoGridResetAllBtn.addEventListener('click', () => {
-  if(!confirm('Xoá TOÀN BỘ lưới tuỳ chỉnh của Kho 3B (mọi vị trí đã đặt)? Không ảnh hưởng tới dữ liệu tồn kho thật.')) return;
-  khoGridLayouts['Kho 3B'] = { rows: 5, cols: 5, cells: [] };
-  khoGridSave();
-  renderSodo3bCustomGrid();
-  document.getElementById('kho-grid-settings-overlay').classList.remove('show');
+document.addEventListener('pointermove',(e)=>{
+  const st=_khoGridDragState; if(!st) return;
+  const dx=e.clientX-st.startX,dy=e.clientY-st.startY;
+  if(!st.moved && Math.hypot(dx,dy)<6) return;
+  st.moved=true; st.boxEl.classList.add('wh3b-dragging');
+  khoGridTryMoveCell(st,e.clientX,e.clientY);
 });
-const khoGridCellCloseBtn = document.getElementById('kho-grid-cell-close');
-if(khoGridCellCloseBtn) khoGridCellCloseBtn.addEventListener('click', () => {
-  document.getElementById('kho-grid-cell-overlay').classList.remove('show');
-});
-const khoGridCellSaveBtn = document.getElementById('kho-grid-cell-save');
-if(khoGridCellSaveBtn) khoGridCellSaveBtn.addEventListener('click', () => {
-  const layout = khoGridGetLayout('Kho 3B');
-  const locator = document.getElementById('kho-grid-cell-locator').value.trim().toUpperCase();
-  const row = Math.round(Number(document.getElementById('kho-grid-cell-row').value));
-  const col = Math.round(Number(document.getElementById('kho-grid-cell-col').value));
-  const rowSpan = Math.max(1, Math.round(Number(document.getElementById('kho-grid-cell-rowspan').value) || 1));
-  const colSpan = Math.max(1, Math.round(Number(document.getElementById('kho-grid-cell-colspan').value) || 1));
-  if(!locator){ alert('Chưa nhập mã Locator.'); return; }
-  if(!row || row < 1 || !col || col < 1){ alert('Hàng/Cột phải là số ≥ 1.'); return; }
-  if(row + rowSpan - 1 > layout.rows || col + colSpan - 1 > layout.cols){
-    alert(`Vị trí này vượt ra ngoài lưới hiện tại (${layout.rows} hàng × ${layout.cols} cột) — hãy tăng kích thước lưới ở "Cài đặt lưới" trước, hoặc giảm số hàng/cột chiếm.`);
-    return;
+function khoGridEndDrag(){
+  const st=_khoGridDragState; if(!st) return;
+  _khoGridDragState=null; st.boxEl.classList.remove('wh3b-dragging');
+  if(st.moved) _khoGridSuppressClick = true;
+  if(st.moved && (st.curRow!==st.cell.row || st.curCol!==st.cell.col)){
+    st.cell.row=st.curRow; st.cell.col=st.curCol; khoGridSave(); khoGridRenderCustom(st.kho);
   }
-  // Kiểm tra chồng lấn với các ô KHÁC (bỏ qua chính ô đang sửa)
-  const newCells = new Set();
-  for(let r = row; r < row + rowSpan; r++) for(let c = col; c < col + colSpan; c++) newCells.add(r + ',' + c);
-  const conflict = layout.cells.find(cell => {
-    if(cell.id === _khoGridEditingCellId) return false;
-    for(let r = cell.row; r < cell.row + cell.rowSpan; r++)
-      for(let c = cell.col; c < cell.col + cell.colSpan; c++)
-        if(newCells.has(r + ',' + c)) return true;
+}
+document.addEventListener('pointerup',khoGridEndDrag);
+document.addEventListener('pointercancel',khoGridEndDrag);
+
+// Kéo resize — giữ nguyên hành vi cũ, nhưng dùng kho đang active.
+document.addEventListener('pointerdown',(e)=>{
+  const handle=e.target.closest('.wh3b-custom-grid .wh3b-resize-handle');
+  if(!handle) return;
+  const container=handle.closest('.wh3b-custom-grid');
+  const kho=container?.dataset.kho || _khoGridActiveKho;
+  const layout=khoGridGetLayout(kho);
+  const cell=layout.cells.find(c=>c.id===handle.dataset.cellId);
+  const boxEl=handle.closest('.wh3b-box'); if(!cell||!container||!boxEl) return;
+  e.preventDefault();e.stopPropagation();
+  const cs=getComputedStyle(container);
+  const cols=cs.gridTemplateColumns.trim().split(/\\s+/).map(parseFloat).filter(Number.isFinite);
+  const rows=cs.gridTemplateRows.trim().split(/\\s+/).map(parseFloat).filter(Number.isFinite);
+  const gapX=parseFloat(cs.columnGap)||10,gapY=parseFloat(cs.rowGap)||10;
+  const stepX=(cols.reduce((a,b)=>a+b,0)/(cols.length||1))+gapX;
+  const stepY=(rows.reduce((a,b)=>a+b,0)/(rows.length||1))+gapY;
+  _khoGridResizeState={cell,boxEl,layout,dir:handle.dataset.dir,stepX,stepY,occupied:khoGridBuildOccupied(layout,cell.id),startX:e.clientX,startY:e.clientY,origColSpan:cell.colSpan,origRowSpan:cell.rowSpan,curColSpan:cell.colSpan,curRowSpan:cell.rowSpan,kho};
+  boxEl.classList.add('wh3b-resizing'); try{handle.setPointerCapture(e.pointerId);}catch(err){}
+});
+document.addEventListener('pointermove',(e)=>{
+  const st=window._khoGridResizeState || _khoGridResizeState; if(!st) return;
+  const dx=e.clientX-st.startX,dy=e.clientY-st.startY;
+  let colSpan=st.origColSpan,rowSpan=st.origRowSpan;
+  if(st.dir==='e'||st.dir==='se') colSpan=st.origColSpan+Math.round(dx/st.stepX);
+  if(st.dir==='s'||st.dir==='se') rowSpan=st.origRowSpan+Math.round(dy/st.stepY);
+  colSpan=Math.min(Math.max(colSpan,1),st.layout.cols-st.cell.col+1);
+  rowSpan=Math.min(Math.max(rowSpan,1),st.layout.rows-st.cell.row+1);
+  while(colSpan>1&&khoGridRectOverlaps(st.occupied,st.cell.row,st.cell.col,rowSpan,colSpan)) colSpan--;
+  while(rowSpan>1&&khoGridRectOverlaps(st.occupied,st.cell.row,st.cell.col,rowSpan,colSpan)) rowSpan--;
+  st.curColSpan=colSpan;st.curRowSpan=rowSpan;
+  st.boxEl.style.gridColumn=`${st.cell.col} / span ${colSpan}`;st.boxEl.style.gridRow=`${st.cell.row} / span ${rowSpan}`;
+  const hint=st.boxEl.querySelector('.wh3b-resize-hint');if(hint)hint.textContent=`${colSpan}×${rowSpan}`;
+});
+function khoGridEndResize(){
+  const st=_khoGridResizeState;if(!st)return;_khoGridResizeState=null;st.boxEl.classList.remove('wh3b-resizing');
+  if(st.curColSpan!==st.origColSpan||st.curRowSpan!==st.origRowSpan){st.cell.colSpan=st.curColSpan;st.cell.rowSpan=st.curRowSpan;khoGridSave();}
+  khoGridRenderCustom(st.kho);
+}
+document.addEventListener('pointerup',khoGridEndResize);document.addEventListener('pointercancel',khoGridEndResize);
+
+// Điều khiển chung cho 3B / 3A / 2B.
+document.addEventListener('click',(e)=>{
+  for(const [kho,cfg] of Object.entries(KHO_CUSTOM_GRID_CONFIG)){
+    const modeBtn=e.target.closest('#'+cfg.modeBtn);
+    if(modeBtn){e.stopImmediatePropagation();khoGridSetMode(kho,!khoGridIsCustomMode(kho));return;}
+    const settingsBtn=e.target.closest('#'+cfg.settingsBtn);
+    if(settingsBtn){e.stopImmediatePropagation();khoGridOpenSettings(kho);return;}
+  }
+  if(_khoGridSuppressClick){ _khoGridSuppressClick=false; e.preventDefault(); e.stopImmediatePropagation(); return; }
+  const addBtn=e.target.closest('.wh3b-custom-add-cell');
+  if(addBtn){e.stopPropagation();khoGridOpenCellPopover(null,Number(addBtn.dataset.row),Number(addBtn.dataset.col),addBtn.dataset.kho);return;}
+  const gearBtn=e.target.closest('.wh3b-custom-gear');
+  if(gearBtn){e.stopImmediatePropagation();const box=gearBtn.closest('.wh3b-box');const kho=box?.closest('.wh3b-custom-grid')?.dataset.kho || _khoGridActiveKho;khoGridOpenCellPopover(gearBtn.dataset.cellId,null,null,kho);return;}
+});
+
+// Khi custom grid render, ghi khoLabel vào container để pointer events biết đang thao tác kho nào.
+const _oldKghRender = khoGridRenderCustom;
+khoGridRenderCustom = function(khoLabel){
+  _oldKghRender(khoLabel);
+  const cfg=khoGridConfigFor(khoLabel);const el=document.getElementById(cfg.customGrid);if(el)el.dataset.kho=khoLabel;
+};
+
+// Modal settings chung.
+const khoGridSettingsCloseBtn=document.getElementById('kho-grid-settings-close');
+if(khoGridSettingsCloseBtn) khoGridSettingsCloseBtn.addEventListener('click',()=>document.getElementById('kho-grid-settings-overlay').classList.remove('show'));
+const khoGridApplySizeBtn=document.getElementById('kho-grid-apply-size');
+if(khoGridApplySizeBtn) khoGridApplySizeBtn.addEventListener('click',()=>{
+  const kho=_khoGridActiveKho,cfg=khoGridConfigFor(kho),layout=khoGridGetLayout(kho);
+  const newRows=Math.min(30,Math.max(1,Math.round(Number(document.getElementById('kho-grid-rows-input').value)||layout.rows)));
+  const newCols=Math.min(30,Math.max(1,Math.round(Number(document.getElementById('kho-grid-cols-input').value)||layout.cols)));
+  const out=layout.cells.filter(c=>(c.row+c.rowSpan-1)>newRows||(c.col+c.colSpan-1)>newCols);
+  if(out.length){if(!confirm(`Kích thước mới sẽ làm ${out.length} ô (${out.map(c=>c.locator).join(', ')}) nằm NGOÀI lưới và bị xoá khỏi lưới. Vẫn áp dụng?`))return;layout.cells=layout.cells.filter(c=>!out.includes(c));}
+  layout.rows=newRows;layout.cols=newCols;khoGridSave();khoGridRenderCustom(kho);document.getElementById('kho-grid-settings-overlay').classList.remove('show');
+});
+const khoGridResetAllBtn=document.getElementById('kho-grid-reset-all');
+if(khoGridResetAllBtn) khoGridResetAllBtn.addEventListener('click',()=>{
+  const kho=_khoGridActiveKho;
+  if(!confirm(`Xoá TOÀN BỘ lưới tuỳ chỉnh của ${kho} (mọi vị trí đã đặt)? Không ảnh hưởng tới dữ liệu tồn kho thật.`))return;
+  const cfg=khoGridConfigFor(kho);khoGridLayouts[kho]={rows:cfg.defaultRows,cols:cfg.defaultCols,cells:[]};khoGridSave();khoGridRenderCustom(kho);document.getElementById('kho-grid-settings-overlay').classList.remove('show');
+});
+const khoGridCellCloseBtn=document.getElementById('kho-grid-cell-close');
+if(khoGridCellCloseBtn) khoGridCellCloseBtn.addEventListener('click',()=>document.getElementById('kho-grid-cell-overlay').classList.remove('show'));
+const khoGridCellSaveBtn=document.getElementById('kho-grid-cell-save');
+if(khoGridCellSaveBtn) khoGridCellSaveBtn.addEventListener('click',()=>{
+  const kho=_khoGridActiveKho,layout=khoGridGetLayout(kho);
+  const locator=document.getElementById('kho-grid-cell-locator').value.trim().toUpperCase();
+  const row=Math.round(Number(document.getElementById('kho-grid-cell-row').value));
+  const col=Math.round(Number(document.getElementById('kho-grid-cell-col').value));
+  const rowSpan=Math.max(1,Math.round(Number(document.getElementById('kho-grid-cell-rowspan').value)||1));
+  const colSpan=Math.max(1,Math.round(Number(document.getElementById('kho-grid-cell-colspan').value)||1));
+  if(!locator){alert('Chưa nhập mã Locator.');return;}
+  if(!row||row<1||!col||col<1){alert('Hàng/Cột phải là số ≥ 1.');return;}
+  if(row+rowSpan-1>layout.rows||col+colSpan-1>layout.cols){alert(`Vị trí này vượt ra ngoài lưới hiện tại (${layout.rows} hàng × ${layout.cols} cột).`);return;}
+  const newCells=new Set();for(let r=row;r<row+rowSpan;r++)for(let c=col;c<col+colSpan;c++)newCells.add(r+','+c);
+  const conflict=layout.cells.find(cell=>{
+    if(cell.id===_khoGridEditingCellId)return false;
+    for(let r=cell.row;r<cell.row+cell.rowSpan;r++)for(let c=cell.col;c<cell.col+cell.colSpan;c++)if(newCells.has(r+','+c))return true;
     return false;
   });
-  if(conflict){ alert(`Vị trí này đè lên ô "${conflict.locator}" đã có sẵn trên lưới — hãy chọn hàng/cột khác.`); return; }
-
-  if(_khoGridEditingCellId){
-    const cell = layout.cells.find(c => c.id === _khoGridEditingCellId);
-    if(cell){ cell.locator = locator; cell.row = row; cell.col = col; cell.rowSpan = rowSpan; cell.colSpan = colSpan; }
-  } else {
-    layout.cells.push({ id: 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), locator, row, col, rowSpan, colSpan });
-  }
-  khoGridSave();
-  renderSodo3bCustomGrid();
-  document.getElementById('kho-grid-cell-overlay').classList.remove('show');
+  if(conflict){alert(`Vị trí này đè lên ô "${conflict.locator}" đã có sẵn trên lưới.`);return;}
+  if(_khoGridEditingCellId){const cell=layout.cells.find(c=>c.id===_khoGridEditingCellId);if(cell){cell.locator=locator;cell.row=row;cell.col=col;cell.rowSpan=rowSpan;cell.colSpan=colSpan;}}
+  else layout.cells.push({id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),locator,row,col,rowSpan,colSpan});
+  khoGridSave();khoGridRenderCustom(kho);document.getElementById('kho-grid-cell-overlay').classList.remove('show');
 });
-const khoGridCellDeleteBtn = document.getElementById('kho-grid-cell-delete');
-if(khoGridCellDeleteBtn) khoGridCellDeleteBtn.addEventListener('click', () => {
-  if(!_khoGridEditingCellId) return;
-  if(!confirm('Xoá ô này khỏi lưới? (không ảnh hưởng dữ liệu tồn kho thật, chỉ bỏ khỏi cách hiển thị)')) return;
-  const layout = khoGridGetLayout('Kho 3B');
-  layout.cells = layout.cells.filter(c => c.id !== _khoGridEditingCellId);
-  khoGridSave();
-  renderSodo3bCustomGrid();
-  document.getElementById('kho-grid-cell-overlay').classList.remove('show');
+const khoGridCellDeleteBtn=document.getElementById('kho-grid-cell-delete');
+if(khoGridCellDeleteBtn) khoGridCellDeleteBtn.addEventListener('click',()=>{
+  const kho=_khoGridActiveKho;if(!_khoGridEditingCellId)return;
+  if(!confirm(`Xoá ô này khỏi lưới ${kho}? (không ảnh hưởng dữ liệu tồn kho thật)`))return;
+  const layout=khoGridGetLayout(kho);layout.cells=layout.cells.filter(c=>c.id!==_khoGridEditingCellId);khoGridSave();khoGridRenderCustom(kho);document.getElementById('kho-grid-cell-overlay').classList.remove('show');
 });
 
 /* ============ SƠ ĐỒ RACK 3A ============
@@ -8995,11 +9123,13 @@ function whApplySearchFilter(gridId, computeFn, searchInputId, passChkId, ngChkI
     </div>`;
 }
 
-['sodo3b', 'rack3a'].forEach(prefix => {
+['sodo3b', 'rack3a', 'sodo2b'].forEach(prefix => {
   const detailId = prefix + '-detail';
   const computeFn = prefix === 'sodo3b' ? computeSodo3bByLocator : computeRack3AByLocator;
   const apply = () => {
-    const gridId = (prefix === 'sodo3b' && sodo3bGridMode) ? 'sodo3b-custom-grid' : (prefix + '-grid');
+    const khoForPrefix = prefix === 'sodo3b' ? 'Kho 3B' : (prefix === 'rack3a' ? 'Kho 3A' : 'Kho 2B');
+    const cfgForPrefix = KHO_CUSTOM_GRID_CONFIG[khoForPrefix];
+    const gridId = khoGridIsCustomMode(khoForPrefix) ? cfgForPrefix.customGrid : cfgForPrefix.defaultGrid;
     whApplySearchFilter(gridId, computeFn, prefix + '-search', prefix + '-oqc-pass', prefix + '-oqc-ng', detailId);
   };
   const searchEl = document.getElementById(prefix + '-search');
@@ -9013,9 +9143,13 @@ function whApplySearchFilter(gridId, computeFn, searchInputId, passChkId, ngChkI
 function renderSodo3B(){
   renderSodo3bBlocks();
   renderWhGrid('rack3a-grid');
-  if(sodo3bGridMode) renderSodo3bCustomGrid();
+  renderWhGrid('sodo2b-grid');
+  if(khoGridIsCustomMode('Kho 3B')) khoGridRenderCustom('Kho 3B');
   else whApplySearchFilter('sodo3b-grid', computeSodo3bByLocator, 'sodo3b-search', 'sodo3b-oqc-pass', 'sodo3b-oqc-ng', 'sodo3b-detail');
-  whApplySearchFilter('rack3a-grid', computeRack3AByLocator, 'rack3a-search', 'rack3a-oqc-pass', 'rack3a-oqc-ng', 'rack3a-detail');
+  if(khoGridIsCustomMode('Kho 3A')) khoGridRenderCustom('Kho 3A');
+  else whApplySearchFilter('rack3a-grid', computeRack3AByLocator, 'rack3a-search', 'rack3a-oqc-pass', 'rack3a-oqc-ng', 'rack3a-detail');
+  if(khoGridIsCustomMode('Kho 2B')) khoGridRenderCustom('Kho 2B');
+  else whApplySearchFilter('sodo2b-grid', computeSodo2bByLocator, 'sodo2b-search', 'sodo2b-oqc-pass', 'sodo2b-oqc-ng', 'sodo2b-detail');
 }
 
 WH_GRID_CONFIGS['sodo3b-grid'] = {
@@ -9029,6 +9163,14 @@ WH_GRID_CONFIGS['rack3a-grid'] = {
   computeFn: computeRack3AByLocator, sortFn: rack3aLocatorSortKey, maxPallet: RACK3A_MAX_PALLET,
   emptyMsg: 'Không tải được danh sách vị trí Rack 3A.', groupLabelFn: rack3aGroupLabel
 };
+WH_GRID_CONFIGS['sodo2b-grid'] = {
+  detailId:'sodo2b-detail', summaryId:'sodo2b-summary',
+  computeFn:computeSodo2bByLocator, sortFn:(loc)=>[String(loc||'')], maxPallet:24,
+  emptyMsg:'Không có dữ liệu tồn kho cho Kho 2B.', groupLabelFn:null
+};
+WH_GRID_CONFIGS['sodo3b-custom-grid'] = {detailId:'sodo3b-detail',computeFn:computeSodo3bByLocator};
+WH_GRID_CONFIGS['rack3a-custom-grid'] = {detailId:'rack3a-detail',computeFn:computeRack3AByLocator};
+WH_GRID_CONFIGS['sodo2b-custom-grid'] = {detailId:'sodo2b-detail',computeFn:computeSodo2bByLocator};
 
 document.addEventListener('click', (e) => {
   const outsideWarnBtn = e.target.closest('#wh3b-outside-warning');
