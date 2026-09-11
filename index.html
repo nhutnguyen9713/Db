@@ -4941,7 +4941,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.77-debug';
+const APP_VERSION = 'v1.78-debug';
 const APP_VERSION_DATE = '12/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -14612,39 +14612,45 @@ function initDashboard(){
   // trị CŨ (rỗng) của planData/confirmedKiemTonItems/... và XOÁ MẤT dữ liệu vừa tải về từ
   // Cloud/file — dù biến sẽ được gán đúng ngay sau đó, ô nhớ _mem đã bị ghi đè mất trước rồi.
   // Đây chính là nguyên nhân Plan hay bị mất dù Cloud vẫn đang lưu đúng.
-  if(saved.confirmed && Object.keys(saved.confirmed).length > 0) confirmedKiemTonItems = saved.confirmed;
-  if(saved.lastCheck && Object.keys(saved.lastCheck).length > 0) lastCheckedMap = saved.lastCheck;
-  if(saved.invSnapshot && Object.keys(saved.invSnapshot).length > 0) invSnapshotHistory = saved.invSnapshot;
-  if(saved.manualPicked && Object.keys(saved.manualPicked).length > 0) manualPickedContainers = saved.manualPicked;
-  if(saved.hiddenContainers && Object.keys(saved.hiddenContainers).length > 0) hiddenPlanContainers = saved.hiddenContainers;
-  if(saved.manualKho && Object.keys(saved.manualKho).length > 0) manualKhoOverrides = saved.manualKho;
-  if(saved.sppOk && Object.keys(saved.sppOk).length > 0) sppManualOk = saved.sppOk;
-  if(saved.scannedExtra && Object.keys(saved.scannedExtra).length > 0) scannedExtraRows = saved.scannedExtra;
-  if(saved.scannedGi && saved.scannedGi.length > 0) scannedGiSet = new Set(saved.scannedGi);
-  if(saved.giScanLog && saved.giScanLog.length > 0) giScanLog = saved.giScanLog;
-  if(saved.contShip) contShipData = saved.contShip;
-  if(saved.itemCbm && Object.keys(saved.itemCbm).length > 0) itemCbmLibrary = saved.itemCbm;
-  if(saved.khoGrid && Object.keys(saved.khoGrid).length > 0) khoGridLayouts = saved.khoGrid;
-  if(saved.confirmedHistory && Object.keys(saved.confirmedHistory).length > 0) confirmedHistory = saved.confirmedHistory;
-  if(saved.ktInputs && Object.keys(saved.ktInputs).length > 0) ktInputValues = saved.ktInputs;
-  // QUAN TRỌNG (giống lý do ở trên): khôi phục ccKhoResults ("Đề xuất kiểm hôm nay") VÀO BIẾN TOÀN CỤC
-  // NGAY Ở ĐÂY — trước đây chỉ được gán muộn hơn nhiều, sau khi renderDashboard() ở dưới đã kịp gọi
-  // saveStateToStorage() (side-effect) 1 lần với ccKhoResults vẫn đang RỖNG (giá trị khởi tạo ban đầu),
-  // nên lượt ghi ĐẦU TIÊN đó luôn xoá/ghi đè mất bản đã lưu trong _mem bằng {} rỗng — khiến LS.setItem()
-  // thấy khác bản cũ và bật nhầm "có thay đổi chưa lưu (Đề xuất kiểm hôm nay)" ngay khi vừa mở/tải lại
-  // trang, dù chưa ai đụng vào gì cả (và đây cũng là lý do CloudVault._isSafeToApply() luôn thấy
-  // hasUnsavedChanges=true nên realtime không bao giờ áp dụng được lần đầu). Gán ĐÚNG thứ tự khoá đã
-  // lưu (giữ nguyên logic lọc list rỗng của ccRestoreResultsFromStorage) để saveStateToStorage() lượt
-  // đầu ghi ra CHÍNH XÁC cùng 1 chuỗi JSON như bản đã lưu, không còn bị lệch.
+  // QUAN TRỌNG — GỐC THẬT của lỗi "dữ liệu đã xoá tự sống lại" (đã sửa nhiều lần ở chỗ khác nhưng vẫn
+  // tái diễn): TẤT CẢ các dòng gán bên dưới trước đây chỉ gán biến toàn cục khi dữ liệu đã lưu KHÔNG
+  // RỖNG ("if(saved.X && length>0) bien = saved.X") — nghĩa là khi dữ liệu đã lưu RỖNG (VD: Cloud vừa
+  // báo về 0 dòng "Đã xác nhận" sau khi máy khác Lưu/Đặt lại), biến toàn cục KHÔNG BAO GIỜ được đặt về
+  // rỗng, cứ giữ nguyên giá trị CŨ (còn đầy dữ liệu) từ lần initDashboard() TRƯỚC ĐÓ trong CÙNG phiên
+  // (initDashboard() có thể chạy lại NHIỀU LẦN không qua tải trang thật, xem FileVault._runReloaders()
+  // — VD: lần đầu tải trang đọc bản sao lưu cục bộ CŨ [còn dữ liệu], vài giây sau realtime nhận bản
+  // Cloud MỚI [đã rỗng] và gọi lại initDashboard() lần 2, nhưng biến toàn cục vẫn bị "kẹt" ở giá trị
+  // đầy từ lần 1). Ngay sau đó, renderDashboard() bên dưới gọi ccCaptureInventorySnapshot() ->
+  // saveStateToStorage() như 1 side-effect, ĐỌC LẠI đúng biến toàn cục đang "kẹt" đó và GHI NGƯỢC vào
+  // _mem — làm dữ liệu vừa được Cloud xoá đúng lại "sống lại" ngay trong bộ nhớ máy này, dù Cloud vẫn
+  // hoàn toàn đúng. Sửa: LUÔN gán lại (kể cả khi rỗng) để mọi lần initDashboard() đều phản ánh ĐÚNG
+  // trạng thái mới nhất, không còn giữ sót giá trị của lần chạy trước.
+  confirmedKiemTonItems = saved.confirmed || {};
+  lastCheckedMap = saved.lastCheck || {};
+  invSnapshotHistory = saved.invSnapshot || {};
+  manualPickedContainers = saved.manualPicked || {};
+  hiddenPlanContainers = saved.hiddenContainers || {};
+  manualKhoOverrides = saved.manualKho || {};
+  sppManualOk = saved.sppOk || {};
+  scannedExtraRows = saved.scannedExtra || {};
+  scannedGiSet = new Set(saved.scannedGi || []);
+  giScanLog = saved.giScanLog || [];
+  contShipData = saved.contShip || null;
+  itemCbmLibrary = saved.itemCbm || {};
+  khoGridLayouts = saved.khoGrid || {};
+  confirmedHistory = saved.confirmedHistory || {};
+  ktInputValues = saved.ktInputs || {};
+  // ccKhoResults ("Đề xuất kiểm hôm nay") — xoá sạch trước rồi mới gán lại từ saved.ccResults (cùng lý
+  // do "LUÔN gán lại" ở trên): xoá sạch key cũ đảm bảo kho nào Cloud/bản lưu KHÔNG còn (đã bị xoá ở nơi
+  // khác) cũng được dọn sạch ở đây, không giữ sót key "mồ côi" từ lần initDashboard() trước.
+  Object.keys(ccKhoResults).forEach(k => delete ccKhoResults[k]);
   if(saved.ccResults){
     Object.keys(saved.ccResults).forEach(khoLabel => {
       const result = saved.ccResults[khoLabel];
       if(result && result.list && result.list.length) ccKhoResults[khoLabel] = result;
     });
   }
-  if(saved.plans){
-    PLAN_TYPES.forEach(type => { if(saved.plans[type]) planData[type] = saved.plans[type]; });
-  }
+  PLAN_TYPES.forEach(type => { planData[type] = (saved.plans && saved.plans[type]) ? saved.plans[type] : null; });
 
   if(saved.inv){
     // QUAN TRỌNG (giống lý do ở trên): khôi phục currentFileName/dòng "Cập nhật lúc" TRƯỚC khi gọi
@@ -14668,15 +14674,20 @@ function initDashboard(){
 
   // Từ đây chỉ còn việc CẬP NHẬT GIAO DIỆN cho khớp với các biến đã khôi phục ở trên — không
   // còn thao tác gán biến nào nữa, nên renderDashboard() phía trên không thể đọc phải giá trị cũ.
-  if(saved.confirmed && Object.keys(saved.confirmed).length > 0){
-    renderConfirmedList();
-    // 🔍 [DEBUG TẠM THỜI] initDashboard() (có thể chạy lại KHÔNG PHẢI do tải trang thật, xem
-    // FileVault._runReloaders()) vừa hiện ra 1 danh sách "Đã xác nhận" không rỗng — ghi lại đúng lúc
-    // này để biết chính xác khi nào/bao nhiêu dòng bị hiện lại.
-    try{
-      if(typeof logNotification === 'function') logNotification(`🔍 [DEBUG] initDashboard() vừa hiện ${Object.keys(saved.confirmed).length} dòng "Đã xác nhận" từ bộ nhớ.`, '');
-    }catch(e){}
-  }
+  //
+  // LUÔN vẽ lại bảng "Đã xác nhận" (kể cả khi rỗng) — trước đây chỉ vẽ khi saved.confirmed KHÔNG
+  // RỖNG, nên khi initDashboard() chạy lại giữa phiên (không qua tải trang thật) với dữ liệu MỚI đã
+  // rỗng (VD: Cloud vừa báo máy khác đã Lưu/Đặt lại), bảng trên MÀN HÌNH không bao giờ được vẽ lại
+  // về rỗng — vẫn hiện nguyên các dòng cũ từ lần vẽ trước đó, dù confirmedKiemTonItems (biến) đã
+  // đúng là rỗng rồi. Đây là phần hiển thị bổ sung cho phần sửa gốc ở trên (luôn gán lại biến).
+  renderConfirmedList();
+  // 🔍 [DEBUG TẠM THỜI] initDashboard() (có thể chạy lại KHÔNG PHẢI do tải trang thật, xem
+  // FileVault._runReloaders()) vừa vẽ lại bảng "Đã xác nhận" — ghi lại đúng lúc này để biết chính
+  // xác khi nào/bao nhiêu dòng đang hiện ra.
+  try{
+    const _dbgN = saved.confirmed ? Object.keys(saved.confirmed).length : 0;
+    if(_dbgN > 0 && typeof logNotification === 'function') logNotification(`🔍 [DEBUG] initDashboard() vừa hiện ${_dbgN} dòng "Đã xác nhận" từ bộ nhớ.`, '');
+  }catch(e){}
 
   if(saved.plans){
     PLAN_TYPES.forEach(type => {
