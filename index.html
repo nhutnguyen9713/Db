@@ -4087,6 +4087,17 @@ const CloudVault = {
     return this.url.replace(/\/+$/, '') + '/dashboard_data.json';
   },
 
+  // Tham số chống cache cho các request ĐỌC (GET) — nối thêm 1 mốc luôn-khác-nhau vào URL và ép
+  // fetch() bỏ qua HTTP cache (cache: 'no-store'). LÝ DO: readAll()/peek()/_checkCloudStamp() trước
+  // đây luôn gọi ĐÚNG 1 URL y hệt nhau (chỉ khác token cố định) — nếu trình duyệt (hoặc 1 proxy/CDN
+  // trung gian nào đó trên đường mạng) lỡ cache lại 1 phản hồi GET, các lần gọi sau CÓ THỂ nhận nhầm
+  // bản CŨ đã cache thay vì dữ liệu thật mới nhất trên Cloud — dù Cloud đã ghi đúng dữ liệu mới. Đây
+  // là nghi vấn gốc của bug "bấm Lưu xong vài giây sau dữ liệu lại hiện lại" dù chỉ dùng đúng 1 máy
+  // (đã loại trừ được nguyên nhân do timer tự lưu/máy khác mở cùng lúc ở các lần sửa trước).
+  _noCacheParam(){
+    return '&_ts=' + Date.now() + '_' + Math.random().toString(36).slice(2);
+  },
+
   init(){
     try{
       this.url = localStorage.getItem(CV_LS_URL) || '';
@@ -4211,7 +4222,7 @@ const CloudVault = {
   async readAll(){
     if(!this.url || !this.token) return false;
     try{
-      const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token));
+      const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token) + this._noCacheParam(), { cache: 'no-store' });
       if(!res.ok) return false;
       const json = await res.json();
       if(json && json.error) return false;
@@ -4228,7 +4239,7 @@ const CloudVault = {
   async _checkCloudStamp(){
     try{
       const url = this.url.replace(/\/+$/, '') + '/dashboard_data/' + STORAGE_KEY_META_STAMP + '.json';
-      const res = await fetch(url + '?auth=' + encodeURIComponent(this.token));
+      const res = await fetch(url + '?auth=' + encodeURIComponent(this.token) + this._noCacheParam(), { cache: 'no-store' });
       if(!res.ok) return null;
       const text = await res.text();
       this._lastReadBytes = new Blob([text]).size; // chỉ vài chục byte — hiện kèm trong thông báo "dữ liệu chưa đổi"
@@ -4480,7 +4491,7 @@ const CloudVault = {
   async peek(){
     if(!this.url || !this.token) return null;
     try{
-      const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token));
+      const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token) + this._noCacheParam(), { cache: 'no-store' });
       if(!res.ok) return null;
       const json = await res.json();
       if(json && json.error) return null;
@@ -4544,7 +4555,8 @@ const CloudVault = {
       const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: payload
+        body: payload,
+        cache: 'no-store'
       });
       const bodyJson = await res.json().catch(() => null);
       if(!res.ok) throw new Error('HTTP ' + res.status + (bodyJson && bodyJson.error ? ' — ' + bodyJson.error : ''));
@@ -4586,7 +4598,8 @@ const CloudVault = {
       const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: payload
+        body: payload,
+        cache: 'no-store'
       });
       const bodyJson = await res.json().catch(() => null);
       if(!res.ok) throw new Error('HTTP ' + res.status + (bodyJson && bodyJson.error ? ' — ' + bodyJson.error : ''));
@@ -4873,7 +4886,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.71';
+const APP_VERSION = 'v1.72';
 const APP_VERSION_DATE = '11/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -12098,6 +12111,12 @@ async function saveConfirmedSnapshotAndReset(){
     clearTimeout(_ccAutoSaveTimer);
     _ccAutoSaveTimer = null;
   }
+  // Huỷ luôn hàng đợi tự-thử-lại (retry) của 1 lượt ghi TRƯỚC đó bị lỗi mạng tạm thời (nếu có) — cho
+  // chắc chắn không còn lượt ghi "mồ côi" nào từ trước có thể tự chạy chồng lên ngay sau khi Lưu xong.
+  if(typeof CloudVault !== 'undefined'){
+    clearTimeout(CloudVault._retryTimer);
+    CloudVault._retryCount = 0;
+  }
 
   try{
     // Gộp trước phần "Đã xác nhận / KT đang nhập dở / GI đã quét / Lịch sử" MỚI NHẤT từ Cloud (đề
@@ -13581,6 +13600,10 @@ document.getElementById('btn-reset-kiemke-all').addEventListener('click', async 
     clearTimeout(_ccAutoSaveTimer);
     _ccAutoSaveTimer = null;
   }
+  if(typeof CloudVault !== 'undefined'){
+    clearTimeout(CloudVault._retryTimer);
+    CloudVault._retryCount = 0;
+  }
 
   // QUAN TRỌNG: đọc thử (peek) bản MỚI NHẤT trên Cloud và gộp vào trước khi xoá — máy này có thể
   // đang có bản CŨ HƠN Cloud (VD: người khác vừa "Xác nhận" thêm dòng ở máy/ca khác mà máy này chưa
@@ -14379,6 +14402,10 @@ document.getElementById('btn-reset-confirmed').addEventListener('click', async (
   if(typeof _ccAutoSaveTimer !== 'undefined' && _ccAutoSaveTimer){
     clearTimeout(_ccAutoSaveTimer);
     _ccAutoSaveTimer = null;
+  }
+  if(typeof CloudVault !== 'undefined'){
+    clearTimeout(CloudVault._retryTimer);
+    CloudVault._retryCount = 0;
   }
 
   // Trả lại đúng số liệu KT đã nhập trước đó cho từng dòng (giống hệt restoreConfirmedItem) — không
