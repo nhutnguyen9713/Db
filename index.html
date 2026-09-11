@@ -4328,18 +4328,6 @@ const CloudVault = {
       // Cloud đang TRỐNG (vd: mới tạo Database lần đầu, hoặc dữ liệu trên Cloud bị mất) nhưng
       // máy này đang có dữ liệu — đẩy dữ liệu hiện có trên máy LÊN Cloud thay vì xoá mất dữ liệu cục bộ
       // bằng cách ghi đè với dữ liệu rỗng từ Cloud.
-      //
-      // 🔍 [DEBUG TẠM THỜI] NGHI VẤN MẠNH — nhánh này đẩy TOÀN BỘ _mem (kể cả "Đã xác nhận" nếu máy
-      // này đang có sẵn, dù CŨ) lên Cloud bất cứ khi nào cloudData trông "trống" ({}), KHÔNG kiểm tra
-      // hasUnsavedChanges/mốc thời gian gì cả — nếu Cloud thật ra ĐÃ CÓ dữ liệu (đã bị xoá đúng) nhưng
-      // vì lý do gì đó (lỗi mạng thoáng qua, phản hồi rỗng bất thường...) cloudData nhận về vẫn là {}
-      // dù không phải Cloud thật sự trống, nhánh này sẽ VÔ TÌNH đẩy đè dữ liệu CŨ trên máy này (VD:
-      // máy tính đang có sẵn 19 dòng "Đã xác nhận" cũ trong cache cục bộ) NGƯỢC LÊN Cloud, xoá mất bản
-      // đã xoá đúng — đây có thể chính là nguồn gây "sống lại" đang điều tra.
-      try{
-        const _dbgCnt = _mem[STORAGE_KEY_CONFIRMED] ? Object.keys(JSON.parse(_mem[STORAGE_KEY_CONFIRMED])).length : 0;
-        if(typeof logNotification === 'function') logNotification(`🔍 [DEBUG ${APP_VERSION}] Cloud trông TRỐNG khi vừa tải — sắp đẩy TOÀN BỘ dữ liệu máy này lên Cloud (Đã xác nhận: ${_dbgCnt} dòng, tổng ${Object.keys(_mem).length} mục).`, '');
-      }catch(e){}
       this._pushedLocalToEmptyCloud = true;
       try{ await this.writeAll(); }catch(e){ /* đã báo lỗi trong writeAll, không làm hỏng luồng đọc */ }
       if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
@@ -4365,19 +4353,6 @@ const CloudVault = {
     // bị mất. Nếu máy này thật sự có dữ liệu mới, người dùng luôn phải tự bấm "Lưu" để đẩy lên (đúng
     // thiết kế app "dữ liệu chỉ thực sự ghi lên Cloud khi bấm Lưu") — lúc đó hasUnsavedChanges=true sẽ
     // tự chặn mọi snapshot Cloud ghi đè giữa chừng cho tới khi Lưu xong.
-
-    // 🔍 [DEBUG TẠM THỜI — sẽ gỡ sau khi tìm ra nguyên nhân] Ghi lại NGAY TRƯỚC KHI áp dụng: đang có
-    // bao nhiêu dòng "Đã xác nhận" ở máy này (_mem) và ở Cloud (cloudData vừa tải về) — để biết chính
-    // xác dữ liệu cũ có thực sự nằm TRONG cloudData hay không (nếu có -> Cloud thật sự đang trả về bản
-    // cũ; nếu không -> lỗi nằm ở chỗ khác, không phải _applyCloudSnapshot).
-    try{
-      const _dbgLocalCnt = _mem[STORAGE_KEY_CONFIRMED] ? Object.keys(JSON.parse(_mem[STORAGE_KEY_CONFIRMED])).length : 0;
-      const _dbgCloudCnt = cloudData[STORAGE_KEY_CONFIRMED] ? Object.keys(JSON.parse(cloudData[STORAGE_KEY_CONFIRMED])).length : 0;
-      if((_dbgLocalCnt > 0 || _dbgCloudCnt > 0) && typeof logNotification === 'function'){
-        logNotification(`🔍 [DEBUG ${APP_VERSION}] Sắp áp dụng snapshot Cloud — Đã xác nhận: máy đang có ${_dbgLocalCnt} dòng, Cloud vừa tải về có ${_dbgCloudCnt} dòng (mốc Cloud=${cloudStamp||'—'}, mốc máy=${localStampBeforeApply||'—'}).`, '');
-      }
-    }catch(e){}
-
     Object.keys(_mem).forEach(k => delete _mem[k]);
     Object.assign(_mem, cloudData);
     tn5PersistMemToLocalBackup(); // cập nhật luôn bản sao lưu cục bộ theo đúng dữ liệu Cloud mới nhất
@@ -4515,9 +4490,6 @@ const CloudVault = {
       this._setRealtimeStatus('🔄 Có dữ liệu mới từ thiết bị khác — sẽ tự áp dụng ngay khi bạn ngừng nhập/đã lưu xong.', '');
       return;
     }
-    // 🔍 [DEBUG TẠM THỜI] Ghi lại đúng thời điểm realtime kích hoạt tải lại đầy đủ — để biết CÓ hay
-    // KHÔNG có 1 lượt tải Cloud nào xảy ra quanh lúc dữ liệu "hiện lại".
-    try{ if(typeof logNotification === 'function') logNotification(`🔍 [DEBUG ${APP_VERSION}] Realtime kích hoạt tải lại đầy đủ dữ liệu từ Cloud (_fetchFullSnapshotViaStamp).`, ''); }catch(e){}
     this._pendingStampDirty = false;
     // Lần ĐẦU TIÊN nhận được dữ liệu qua realtime (init() không còn tự gọi readAll() REST song song
     // nữa khi có Web API Key, xem init()) -> đây chính là lần tải dữ liệu ban đầu, cập nhật luôn
@@ -4595,15 +4567,6 @@ const CloudVault = {
     // 1 lúc/tải lại trang sẽ luôn thấy nó "sống lại" y như cũ, dù xoá trên máy vẫn chạy đúng.
     const partial = {};
     keys.forEach(k => { partial[k] = (k in _mem) ? _mem[k] : null; });
-    // 🔍 [DEBUG TẠM THỜI] Bắt đúng lúc CÓ 1 lượt ghi (merge) nào đó gửi dữ liệu "Đã xác nhận" lên Cloud
-    // — nếu số dòng > 0 xuất hiện ở ĐÚNG máy KHÔNG PHẢI máy vừa Lưu, đây chính là thủ phạm gây "sống
-    // lại" (VD: 1 timer tự lưu 'confirm' cũ ở máy khác, độc lập, không biết máy kia vừa Lưu/Đặt lại).
-    try{
-      if(keys.includes(STORAGE_KEY_CONFIRMED) && typeof logNotification === 'function'){
-        const _dbgCnt = partial[STORAGE_KEY_CONFIRMED] ? Object.keys(JSON.parse(partial[STORAGE_KEY_CONFIRMED])).length : 0;
-        logNotification(`🔍 [DEBUG ${APP_VERSION}] writeMerge() SẮP GỬI lên Cloud — Đã xác nhận: ${_dbgCnt} dòng (keys: ${keys.join(', ')}).`, '');
-      }
-    }catch(e){}
     // Luôn kèm theo mốc đồng bộ mới nhất trong CHÍNH gói ghi này (không tốn thêm request riêng) — để
     // các máy REST-only (xem _smartReadAll) biết chính xác lần ghi gần nhất là khi nào, dù ghi bằng
     // writeMerge() (gói nhỏ) hay writeAll() (toàn bộ) đều cùng cập nhật đúng 1 mốc thống nhất.
@@ -4652,14 +4615,6 @@ const CloudVault = {
       // REST-only (xem _smartReadAll) biết chính xác lần ghi gần nhất là khi nào.
       const newStamp = String(Date.now());
       _mem[STORAGE_KEY_META_STAMP] = newStamp;
-      // 🔍 [DEBUG TẠM THỜI] Bắt đúng lúc CÓ 1 lượt ghi TOÀN BỘ (writeAll/PUT) nào đó gửi dữ liệu "Đã
-      // xác nhận" lên Cloud — nếu số dòng > 0 xuất hiện ở ĐÚNG máy KHÔNG PHẢI máy vừa Lưu/Đặt lại, đây
-      // chính là thủ phạm (VD: retry của 1 lượt writeAll() cũ bị lỗi mạng, hoặc 1 nút Lưu/Đặt lại khác
-      // đang chạy trên chính máy đó mà không biết máy kia vừa xoá).
-      try{
-        const _dbgCnt = _mem[STORAGE_KEY_CONFIRMED] ? Object.keys(JSON.parse(_mem[STORAGE_KEY_CONFIRMED])).length : 0;
-        if(_dbgCnt > 0 && typeof logNotification === 'function') logNotification(`🔍 [DEBUG ${APP_VERSION}] writeAll() SẮP GỬI lên Cloud — Đã xác nhận: ${_dbgCnt} dòng, retryCount=${this._retryCount||0}.`, '');
-      }catch(e){}
       const payload = JSON.stringify(_mem);
       // PUT ghi đè TOÀN BỘ node "dashboard_data" trên Firebase bằng đúng _mem hiện tại.
       const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token), {
@@ -4953,7 +4908,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.79-debug';
+const APP_VERSION = 'v1.80';
 const APP_VERSION_DATE = '12/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -12192,13 +12147,6 @@ async function saveConfirmedSnapshotAndReset(){
     if(cloudActive){
       try{
         const cloudData = await CloudVault.peek();
-        // 🔍 [DEBUG TẠM THỜI] Cloud đang có bao nhiêu dòng "Đã xác nhận" NGAY TRƯỚC khi bấm Lưu (trước
-        // khi gộp/xoá trắng) — nếu con số này > 0 và > số dòng đang thấy trên máy, nghĩa là Cloud đang
-        // giữ 1 bản CŨ hơn máy này, khả năng có 1 lượt ghi khác đã đẩy lại dữ liệu cũ lên Cloud trước đó.
-        try{
-          const _dbgCnt = (cloudData && cloudData[STORAGE_KEY_CONFIRMED]) ? Object.keys(JSON.parse(cloudData[STORAGE_KEY_CONFIRMED])).length : 0;
-          if(typeof logNotification === 'function') logNotification(`🔍 [DEBUG ${APP_VERSION}] Trước khi Lưu — Cloud (peek) đang có ${_dbgCnt} dòng Đã xác nhận, máy này đang có ${keys.length} dòng.`, '');
-        }catch(e){}
         if(cloudData) mergeConfirmedDataFromCloud(cloudData);
       }catch(e){ console.warn('Không gộp được dữ liệu Cloud trước khi Lưu:', e); }
     }
@@ -14693,13 +14641,6 @@ function initDashboard(){
   // về rỗng — vẫn hiện nguyên các dòng cũ từ lần vẽ trước đó, dù confirmedKiemTonItems (biến) đã
   // đúng là rỗng rồi. Đây là phần hiển thị bổ sung cho phần sửa gốc ở trên (luôn gán lại biến).
   renderConfirmedList();
-  // 🔍 [DEBUG TẠM THỜI] initDashboard() (có thể chạy lại KHÔNG PHẢI do tải trang thật, xem
-  // FileVault._runReloaders()) vừa vẽ lại bảng "Đã xác nhận" — ghi lại đúng lúc này để biết chính
-  // xác khi nào/bao nhiêu dòng đang hiện ra.
-  try{
-    const _dbgN = saved.confirmed ? Object.keys(saved.confirmed).length : 0;
-    if(_dbgN > 0 && typeof logNotification === 'function') logNotification(`🔍 [DEBUG ${APP_VERSION}] initDashboard() vừa hiện ${_dbgN} dòng "Đã xác nhận" từ bộ nhớ.`, '');
-  }catch(e){}
 
   if(saved.plans){
     PLAN_TYPES.forEach(type => {
