@@ -2607,9 +2607,10 @@
           <h1 style="font-size:19px;">Sơ đồ kho 3B</h1>
           <div class="sub">Số pallet hiện có tại từng vị trí (locator) của Kho 3B — mỗi dòng GI No. trong dữ liệu tồn kho tính là 1 pallet. Sức chứa chuẩn mỗi vị trí: 26 pallet — số hiển thị là số pallet thực tế, thanh fill và màu sắc tính theo mức tối đa 26 (vượt quá vẫn tô đỏ/đầy như mức 26).</div>
           <div class="wh3b-summary" id="wh3b-summary"></div>
-          <div style="display:flex; gap:6px; margin-top:2px;">
+          <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
             <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-mode-toggle" title="Chuyển giữa sơ đồ mặc định và lưới tự sắp xếp theo đúng vị trí thật ngoài kho">🔲 Grid tuỳ chỉnh</button>
             <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-copy-btn" style="display:none;" title="Tự động thêm toàn bộ vị trí còn thiếu (theo đúng sơ đồ mặc định) vào các ô trống của grid tuỳ chỉnh">📋 Copy từ sơ đồ mặc định</button>
           </div>
         </div>
         <span class="cc-collapse-chevron">
@@ -2646,6 +2647,7 @@
           <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
             <button type="button" class="wh3b-grid-mode-btn" id="rack3a-grid-mode-toggle" title="Chuyển giữa sơ đồ mặc định và grid tuỳ chỉnh">🔲 Grid tuỳ chỉnh</button>
             <button type="button" class="wh3b-grid-mode-btn" id="rack3a-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="rack3a-grid-copy-btn" style="display:none;" title="Tự động thêm toàn bộ vị trí còn thiếu (theo đúng sơ đồ mặc định) vào các ô trống của grid tuỳ chỉnh">📋 Copy từ sơ đồ mặc định</button>
           </div>
         </div>
         <span class="cc-collapse-chevron">
@@ -2683,6 +2685,7 @@
           <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
             <button type="button" class="wh3b-grid-mode-btn" id="sodo2b-grid-mode-toggle" title="Chuyển giữa sơ đồ mặc định và grid tuỳ chỉnh">🔲 Grid tuỳ chỉnh</button>
             <button type="button" class="wh3b-grid-mode-btn" id="sodo2b-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="sodo2b-grid-copy-btn" style="display:none;" title="Tự động thêm toàn bộ vị trí còn thiếu (theo đúng sơ đồ mặc định) vào các ô trống của grid tuỳ chỉnh">📋 Copy từ sơ đồ mặc định</button>
           </div>
         </div>
         <span class="cc-collapse-chevron">
@@ -4865,7 +4868,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.67';
+const APP_VERSION = 'v1.68';
 const APP_VERSION_DATE = '11/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -8617,26 +8620,79 @@ let _khoGridResizeState = null; // trạng thái kéo-thả resize viền ô (kh
 const KHO_CUSTOM_GRID_CONFIG = {
   'Kho 3B': {
     defaultRows:5, defaultCols:5, defaultMax:WH3B_MAX_PALLET,
-    modeBtn:'sodo3b-grid-mode-toggle', settingsBtn:'sodo3b-grid-settings-btn',
+    modeBtn:'sodo3b-grid-mode-toggle', settingsBtn:'sodo3b-grid-settings-btn', copyBtn:'sodo3b-grid-copy-btn',
     defaultGrid:'sodo3b-grid', customGrid:'sodo3b-custom-grid', note:'sodo3b-custom-grid-note', hint:null,
     search:'sodo3b-search', pass:'sodo3b-oqc-pass', ng:'sodo3b-oqc-ng', detail:'sodo3b-detail',
     compute:computeSodo3bByLocator
   },
   'Kho 3A': {
     defaultRows:10, defaultCols:10, defaultMax:2,
-    modeBtn:'rack3a-grid-mode-toggle', settingsBtn:'rack3a-grid-settings-btn',
+    modeBtn:'rack3a-grid-mode-toggle', settingsBtn:'rack3a-grid-settings-btn', copyBtn:'rack3a-grid-copy-btn',
     defaultGrid:'rack3a-grid', customGrid:'rack3a-custom-grid', note:'rack3a-custom-grid-note', hint:'rack3a-drag-hint',
     search:'rack3a-search', pass:'rack3a-oqc-pass', ng:'rack3a-oqc-ng', detail:'rack3a-detail',
     compute:computeRack3AByLocator
   },
   'Kho 2B': {
     defaultRows:10, defaultCols:10, defaultMax:24,
-    modeBtn:'sodo2b-grid-mode-toggle', settingsBtn:'sodo2b-grid-settings-btn',
+    modeBtn:'sodo2b-grid-mode-toggle', settingsBtn:'sodo2b-grid-settings-btn', copyBtn:'sodo2b-grid-copy-btn',
     defaultGrid:'sodo2b-grid', customGrid:'sodo2b-custom-grid', note:'sodo2b-custom-grid-note', hint:'sodo2b-drag-hint',
     search:'sodo2b-search', pass:'sodo2b-oqc-pass', ng:'sodo2b-oqc-ng', detail:'sodo2b-detail',
     compute:computeSodo2bByLocator
   }
 };
+
+// Danh sách ĐẦY ĐỦ vị trí (locator) của sơ đồ MẶC ĐỊNH từng kho — cố định theo đúng bố cục layout
+// gốc (KHÁC với compute...ByLocator() ở trên, vốn chỉ liệt kê vị trí đang CÓ tồn kho thật) — dùng cho
+// nút "📋 Copy từ sơ đồ mặc định" ở grid tuỳ chỉnh.
+function khoGridDefaultLocatorsFor(khoLabel){
+  if(khoLabel === 'Kho 3B'){
+    const left = []; for(let n=1;n<=15;n++) left.push('D3B-FG-A' + String(n).padStart(2,'0'));
+    const right = []; for(let n=33;n>=16;n--) right.push('D3B-FG-A' + String(n).padStart(2,'0'));
+    const pick = []; for(let n=1;n<=5;n++) pick.push('3B-PICK-' + String(n).padStart(2,'0'));
+    return ['D3B-FG-PROD', 'D3B-Loading', ...pick, ...left, ...right];
+  }
+  if(khoLabel === 'Kho 3A') return RACK3A_ALL_LOCATORS.slice();
+  if(khoLabel === 'Kho 2B') return B2_LOCATORS.slice();
+  return [];
+}
+
+// Tự động thêm mọi vị trí CÒN THIẾU (so với sơ đồ mặc định) vào các Ô TRỐNG hiện có của grid tuỳ
+// chỉnh, theo đúng thứ tự đọc trái->phải/trên->dưới — không đụng tới các ô đã tự sắp xếp sẵn, tự
+// thêm hàng mới nếu không đủ chỗ chứa hết.
+function khoGridCopyFromDefault(khoLabel){
+  const defaultLocs = khoGridDefaultLocatorsFor(khoLabel);
+  if(!defaultLocs.length){ alert('Không có danh sách vị trí mặc định cho ' + khoLabel + '.'); return; }
+  const layout = khoGridGetLayout(khoLabel);
+  const existing = new Set(layout.cells.map(c => String(c.locator || '').trim().toUpperCase()));
+  const missing = defaultLocs.filter(loc => !existing.has(String(loc).toUpperCase()));
+  if(!missing.length){ alert('Grid tuỳ chỉnh đã có đủ toàn bộ vị trí từ sơ đồ mặc định — không có gì để thêm.'); return; }
+  if(!confirm(
+    `Thêm ${missing.length} vị trí còn thiếu (theo đúng thứ tự sơ đồ mặc định) vào các ô trống của grid tuỳ chỉnh ${khoLabel}?\n\n` +
+    `Các vị trí đã sắp xếp sẵn trong grid được giữ nguyên, không bị đụng tới. Nếu không đủ ô trống, grid sẽ tự thêm hàng mới.`
+  )) return;
+
+  const occupied = khoGridBuildOccupied(layout, null);
+  let r = 1, c = 1;
+  missing.forEach(loc => {
+    while(occupied.has(r + ',' + c)){
+      c++;
+      if(c > layout.cols){ c = 1; r++; }
+    }
+    if(r > layout.rows) layout.rows = r;
+    layout.cells.push({
+      id: 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      locator: loc, row: r, col: c, rowSpan: 1, colSpan: 1
+    });
+    occupied.add(r + ',' + c);
+    c++;
+    if(c > layout.cols){ c = 1; r++; }
+  });
+  if(r > layout.rows) layout.rows = r;
+
+  khoGridSave();
+  khoGridRenderCustom(khoLabel);
+  if(typeof showAppToast === 'function') showAppToast(`✓ Đã thêm ${fmt(missing.length)} vị trí từ sơ đồ mặc định vào grid tuỳ chỉnh ${khoLabel}.`);
+}
 
 function computeSodo2bByLocator(){
   const map = {};
@@ -8735,12 +8791,14 @@ function khoGridSetMode(khoLabel, enabled){
   const customGrid = document.getElementById(cfg.customGrid);
   const note = document.getElementById(cfg.note);
   const settings = document.getElementById(cfg.settingsBtn);
+  const copyBtn = document.getElementById(cfg.copyBtn);
   const hint = cfg.hint ? document.getElementById(cfg.hint) : null;
   if(modeBtn) modeBtn.textContent = mode ? '📋 Sơ đồ mặc định' : '🔲 Grid tuỳ chỉnh';
   if(defaultGrid) defaultGrid.style.display = mode ? 'none' : '';
   if(customGrid) customGrid.style.display = mode ? 'grid' : 'none';
   if(note) note.style.display = mode ? '' : 'none';
   if(settings) settings.style.display = mode ? '' : 'none';
+  if(copyBtn) copyBtn.style.display = mode ? '' : 'none';
   if(hint) hint.style.display = mode ? '' : 'none';
   if(mode) khoGridRenderCustom(khoLabel);
   else whApplySearchFilter(cfg.defaultGrid, cfg.compute, cfg.search, cfg.pass, cfg.ng, cfg.detail);
@@ -8815,10 +8873,15 @@ function khoGridTryMoveCell(st, clientX, clientY){
   return true;
 }
 
-// Kéo locator để DI CHUYỂN — chỉ kích hoạt trong grid tuỳ chỉnh và bỏ qua nút/resize handle.
+// Kéo locator để DI CHUYỂN — chỉ kích hoạt trong grid tuỳ chỉnh và bỏ qua 2 nút bánh răng/resize
+// handle. LƯU Ý: KHÔNG được loại trừ ".wh3b-box-main" — dù bản thân nó là 1 thẻ <button> (để bấm
+// xem chi tiết pallet), nó lại là vùng hiển thị CHIẾM GẦN HẾT diện tích ô (tên vị trí/SL/thanh %) —
+// nếu loại trừ mọi <button> như trước, gần như không còn chỗ nào để bắt đầu kéo được nữa. Việc bấm
+// nhẹ (không kéo di chuyển) trên ".wh3b-box-main" vẫn hoạt động bình thường như cũ (xem cờ
+// _khoGridSuppressClick — chỉ chặn click SAU KHI đã thực sự kéo di chuyển xong).
 document.addEventListener('pointerdown',(e)=>{
   const box=e.target.closest('.wh3b-custom-grid .wh3b-box[data-kho-grid-drag="1"]');
-  if(!box || e.target.closest('button,.wh3b-resize-handle')) return;
+  if(!box || e.target.closest('.wh3b-box-gear,.wh3b-custom-gear,.wh3b-resize-handle')) return;
   const container=box.closest('.wh3b-custom-grid');
   const kho=container?.dataset.kho || _khoGridActiveKho;
   if(!kho || !khoGridIsCustomMode(kho)) return;
@@ -8894,6 +8957,8 @@ document.addEventListener('click',(e)=>{
     if(modeBtn){e.stopImmediatePropagation();khoGridSetMode(kho,!khoGridIsCustomMode(kho));return;}
     const settingsBtn=e.target.closest('#'+cfg.settingsBtn);
     if(settingsBtn){e.stopImmediatePropagation();khoGridOpenSettings(kho);return;}
+    const copyBtn=e.target.closest('#'+cfg.copyBtn);
+    if(copyBtn){e.stopImmediatePropagation();khoGridCopyFromDefault(kho);return;}
   }
   if(_khoGridSuppressClick){ _khoGridSuppressClick=false; e.preventDefault(); e.stopImmediatePropagation(); return; }
   const addBtn=e.target.closest('.wh3b-custom-add-cell');
