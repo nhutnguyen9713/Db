@@ -91,6 +91,17 @@ function dangChoPhep(){
   const trongCa = mode === 'day' ? (gio >= 7 && gio < 19) : (gio >= 19 || gio < 7);
   return trongCa || overrideActive();
 }
+// Nối thêm 1 tham số luôn-khác-nhau vào URL trước khi điều hướng — CHỐNG CACHE, xem lý do đầy đủ ở
+// bản index.html (khối chặn ca đầu <body>): buộc trình duyệt tải lại thật, không trả nhầm 1 bản cũ
+// đã cache của index.html/lock.html.
+function gateBustedUrl(base){
+  try{
+    const params = new URLSearchParams(location.search);
+    params.delete('_t');
+    params.set('_t', Date.now());
+    return base + '?' + params.toString();
+  }catch(e){ return base + '?_t=' + Date.now(); }
+}
 
 function renderLockScreen(){
   const mode = shiftMode();
@@ -111,7 +122,7 @@ function renderLockScreen(){
       localStorage.setItem(LS_OVERRIDE_UNTIL, String(until));
     }catch(e){}
     try{ await gateWriteCloudConfig({ manualLock: false, overrideUntil: until }); }catch(e){}
-    location.replace('index.html' + location.search);
+    location.replace(gateBustedUrl('index.html'));
   };
   document.getElementById('gate-switch-mode').onclick = async function(){
     try{
@@ -119,7 +130,7 @@ function renderLockScreen(){
       localStorage.setItem(LS_SHIFT_MODE, caKhac);
     }catch(e){}
     try{ await gateWriteCloudConfig({ manualLock: false, mode: caKhac }); }catch(e){}
-    location.replace('index.html' + location.search);
+    location.replace(gateBustedUrl('index.html'));
   };
 }
 
@@ -143,7 +154,7 @@ document.getElementById('gate-pass-input').addEventListener('keydown', function(
   const cfg = await gateFetchCloudConfig();
   if(cfg) gateApplyCloudConfig(cfg);
   if(dangChoPhep()){
-    location.replace('index.html' + location.search);
+    location.replace(gateBustedUrl('index.html'));
     return;
   }
   renderLockScreen();
@@ -156,7 +167,7 @@ setInterval(async function(){
   const cfg = await gateFetchCloudConfig();
   if(cfg) gateApplyCloudConfig(cfg);
   if(dangChoPhep()){
-    location.replace('index.html' + location.search);
+    location.replace(gateBustedUrl('index.html'));
   } else {
     renderLockScreen();
   }

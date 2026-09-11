@@ -1752,9 +1752,21 @@ function gateEvalChoPhep(){
   const trongCa = mode === 'day' ? (gio >= 7 && gio < 19) : (gio >= 19 || gio < 7);
   return !gateManuallyLocked() && (trongCa || gateOverrideActive());
 }
+// Nối thêm 1 tham số luôn-khác-nhau vào URL trước khi điều hướng sang lock.html/index.html — CHỐNG
+// CACHE: GitHub Pages/trình duyệt có thể lỡ cache lại 1 bản CŨ của lock.html (VD: bản còn dùng
+// prompt() lộ mật khẩu thay vì ô ẩn mật khẩu) và cứ trả về y hệt bản cũ đó cho các lần điều hướng
+// sau dù server đã có bản mới — dùng URL luôn khác nhau buộc trình duyệt phải tải lại thật.
+function gateBustedUrl(base){
+  try{
+    const params = new URLSearchParams(location.search);
+    params.delete('_t');
+    params.set('_t', Date.now());
+    return base + '?' + params.toString();
+  }catch(e){ return base + '?_t=' + Date.now(); }
+}
 (function(){
   if(!gateEvalChoPhep()){
-    location.replace('lock.html' + location.search);
+    location.replace(gateBustedUrl('lock.html'));
     return;
   }
   // Đã cho vào theo dữ liệu CỤC BỘ (nhanh, không chờ mạng) — kiểm tra lại với Cloud Ở NỀN, không
@@ -1764,7 +1776,7 @@ function gateEvalChoPhep(){
   gateFetchCloudConfig().then(cfg => {
     if(!cfg) return;
     gateApplyCloudConfig(cfg);
-    if(!gateEvalChoPhep()) location.replace('lock.html' + location.search);
+    if(!gateEvalChoPhep()) location.replace(gateBustedUrl('lock.html'));
   });
 })();
 </script>
@@ -4496,7 +4508,7 @@ const CloudVault = {
             const cfg = snapshot.val();
             if(!cfg || typeof gateApplyCloudConfig !== 'function') return;
             gateApplyCloudConfig(cfg);
-            if(typeof gateEvalChoPhep === 'function' && !gateEvalChoPhep()) location.replace('lock.html');
+            if(typeof gateEvalChoPhep === 'function' && !gateEvalChoPhep()) location.replace(typeof gateBustedUrl === 'function' ? gateBustedUrl('lock.html') : 'lock.html');
           });
           this._realtimeActive = true;
           this._setRealtimeStatus('✓ Đồng bộ realtime đang bật — thay đổi từ thiết bị khác sẽ tự cập nhật ngay.', 'ok');
@@ -4989,7 +5001,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.84';
+const APP_VERSION = 'v1.85';
 const APP_VERSION_DATE = '12/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5196,7 +5208,7 @@ if(btnGateLockNow) btnGateLockNow.addEventListener('click', async () => {
       ]);
     }catch(e){}
   }
-  location.replace('lock.html');
+  location.replace(gateBustedUrl('lock.html'));
 });
 
 const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
