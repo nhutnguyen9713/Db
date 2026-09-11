@@ -4555,6 +4555,15 @@ const CloudVault = {
     // 1 lúc/tải lại trang sẽ luôn thấy nó "sống lại" y như cũ, dù xoá trên máy vẫn chạy đúng.
     const partial = {};
     keys.forEach(k => { partial[k] = (k in _mem) ? _mem[k] : null; });
+    // 🔍 [DEBUG TẠM THỜI] Bắt đúng lúc CÓ 1 lượt ghi (merge) nào đó gửi dữ liệu "Đã xác nhận" lên Cloud
+    // — nếu số dòng > 0 xuất hiện ở ĐÚNG máy KHÔNG PHẢI máy vừa Lưu, đây chính là thủ phạm gây "sống
+    // lại" (VD: 1 timer tự lưu 'confirm' cũ ở máy khác, độc lập, không biết máy kia vừa Lưu/Đặt lại).
+    try{
+      if(keys.includes(STORAGE_KEY_CONFIRMED) && typeof logNotification === 'function'){
+        const _dbgCnt = partial[STORAGE_KEY_CONFIRMED] ? Object.keys(JSON.parse(partial[STORAGE_KEY_CONFIRMED])).length : 0;
+        logNotification(`🔍 [DEBUG] writeMerge() SẮP GỬI lên Cloud — Đã xác nhận: ${_dbgCnt} dòng (keys: ${keys.join(', ')}).`, '');
+      }
+    }catch(e){}
     // Luôn kèm theo mốc đồng bộ mới nhất trong CHÍNH gói ghi này (không tốn thêm request riêng) — để
     // các máy REST-only (xem _smartReadAll) biết chính xác lần ghi gần nhất là khi nào, dù ghi bằng
     // writeMerge() (gói nhỏ) hay writeAll() (toàn bộ) đều cùng cập nhật đúng 1 mốc thống nhất.
@@ -4603,6 +4612,14 @@ const CloudVault = {
       // REST-only (xem _smartReadAll) biết chính xác lần ghi gần nhất là khi nào.
       const newStamp = String(Date.now());
       _mem[STORAGE_KEY_META_STAMP] = newStamp;
+      // 🔍 [DEBUG TẠM THỜI] Bắt đúng lúc CÓ 1 lượt ghi TOÀN BỘ (writeAll/PUT) nào đó gửi dữ liệu "Đã
+      // xác nhận" lên Cloud — nếu số dòng > 0 xuất hiện ở ĐÚNG máy KHÔNG PHẢI máy vừa Lưu/Đặt lại, đây
+      // chính là thủ phạm (VD: retry của 1 lượt writeAll() cũ bị lỗi mạng, hoặc 1 nút Lưu/Đặt lại khác
+      // đang chạy trên chính máy đó mà không biết máy kia vừa xoá).
+      try{
+        const _dbgCnt = _mem[STORAGE_KEY_CONFIRMED] ? Object.keys(JSON.parse(_mem[STORAGE_KEY_CONFIRMED])).length : 0;
+        if(_dbgCnt > 0 && typeof logNotification === 'function') logNotification(`🔍 [DEBUG] writeAll() SẮP GỬI lên Cloud — Đã xác nhận: ${_dbgCnt} dòng, retryCount=${this._retryCount||0}.`, '');
+      }catch(e){}
       const payload = JSON.stringify(_mem);
       // PUT ghi đè TOÀN BỘ node "dashboard_data" trên Firebase bằng đúng _mem hiện tại.
       const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token), {
@@ -4896,7 +4913,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.74-debug';
+const APP_VERSION = 'v1.75-debug';
 const APP_VERSION_DATE = '11/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
