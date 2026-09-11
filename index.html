@@ -2961,6 +2961,7 @@ function gateBustedUrl(base){
               <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
               <th data-key="chuyen">Chuyến <span class="arrow">↕</span></th>
               <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+              <th style="text-align:center;width:40px;" title="Tự đánh dấu đã kiểm tra — giữ lại qua lần tải file Transaction mới">✓</th>
             </tr>
           </thead>
           <tbody id="tx-transfer-tbody"></tbody>
@@ -4921,6 +4922,9 @@ function saveStateToStorage(){
 
     if(Object.keys(confirmedHistory).length) LS.setItem(STORAGE_KEY_CONFIRMED_HISTORY, JSON.stringify(confirmedHistory));
     else LS.removeItem(STORAGE_KEY_CONFIRMED_HISTORY);
+
+    if(Object.keys(txTransferChecked).length) LS.setItem(STORAGE_KEY_TX_TRANSFER_CHECKED, JSON.stringify(txTransferChecked));
+    else LS.removeItem(STORAGE_KEY_TX_TRANSFER_CHECKED);
   }catch(err){
     console.warn('Không lưu được trạng thái:', err);
   }
@@ -4948,6 +4952,7 @@ function loadStateFromStorage(){
     const itemCbmRaw = LS.getItem(STORAGE_KEY_ITEM_CBM);
     const khoGridRaw = LS.getItem(STORAGE_KEY_KHO_GRID);
     const confirmedHistoryRaw = LS.getItem(STORAGE_KEY_CONFIRMED_HISTORY);
+    const txTransferCheckedRaw = LS.getItem(STORAGE_KEY_TX_TRANSFER_CHECKED);
     return {
       inv: invRaw ? JSON.parse(invRaw, jsonReviver) : null,
       plans: plansRaw ? JSON.parse(plansRaw, jsonReviver) : {},
@@ -4967,11 +4972,12 @@ function loadStateFromStorage(){
       contShip: contShipRaw ? contShipDeserialize(JSON.parse(contShipRaw)) : null,
       itemCbm: itemCbmRaw ? JSON.parse(itemCbmRaw) : {},
       khoGrid: khoGridRaw ? JSON.parse(khoGridRaw) : {},
-      confirmedHistory: confirmedHistoryRaw ? JSON.parse(confirmedHistoryRaw) : {}
+      confirmedHistory: confirmedHistoryRaw ? JSON.parse(confirmedHistoryRaw) : {},
+      txTransferChecked: txTransferCheckedRaw ? JSON.parse(txTransferCheckedRaw) : {}
     };
   }catch(err){
     console.warn('Không đọc được dữ liệu đã lưu:', err);
-    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, sppOk: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, khoGrid: {}, confirmedHistory: {} };
+    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, sppOk: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, khoGrid: {}, confirmedHistory: {}, txTransferChecked: {} };
   }
 }
 
@@ -5001,7 +5007,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.85';
+const APP_VERSION = 'v1.86';
 const APP_VERSION_DATE = '12/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -8768,6 +8774,17 @@ let sodo3bOutsideData = { locators: [], rows: [] };
    Có thể thêm/sửa/xoá, đổi kích thước và KÉO TRỰC TIẾP locator để di chuyển. */
 let khoGridLayouts = {}; // { 'Kho 3B'|'Kho 3A'|'Kho 2B': { rows, cols, cells:[...] } }
 const STORAGE_KEY_KHO_GRID = 'tn5_dashboard_kho_grid_v1';
+
+// Cờ tick (✓) của bảng "Chuyển pallet (Transfer)" ở trang Transaction — đánh dấu dòng nào đã kiểm
+// tra xong, giữ được qua lần tải file Transaction mới (KHÔNG khoá theo Reference/Chuyến — 2 giá trị
+// này đổi theo từng file, đánh số lại từ đầu mỗi lần — mà khoá theo "hình dạng" chuyến hàng: Kho
+// xuất + Menu Name + Item + Locator xuất + Locator đến + User, xem txTransferRowKey()). Đây là kiểu
+// tick đơn giản, không có ý nghĩa nghiệp vụ gì khác ngoài giúp người dùng tự đánh dấu đã xem.
+let txTransferChecked = {}; // { rowKey: true }
+const STORAGE_KEY_TX_TRANSFER_CHECKED = 'tn5_dashboard_tx_transfer_checked_v1';
+function txTransferRowKey(r){
+  return [r.khoXuat, r.menuName, r.item, r.locatorXuat, r.locatorDen, r.user].map(v => String(v==null?'':v)).join('||');
+}
 let sodo3bGridMode = false;
 const khoCustomGridMode = { 'Kho 3B': false, 'Kho 3A': false, 'Kho 2B': false };
 let _localKhoGridDirty = false;
@@ -14743,6 +14760,7 @@ function initDashboard(){
   khoGridLayouts = saved.khoGrid || {};
   confirmedHistory = saved.confirmedHistory || {};
   ktInputValues = saved.ktInputs || {};
+  txTransferChecked = saved.txTransferChecked || {};
   // ccKhoResults ("Đề xuất kiểm hôm nay") — xoá sạch trước rồi mới gán lại từ saved.ccResults (cùng lý
   // do "LUÔN gán lại" ở trên): xoá sạch key cũ đảm bảo kho nào Cloud/bản lưu KHÔNG còn (đã bị xoá ở nơi
   // khác) cũng được dọn sạch ở đây, không giữ sót key "mồ côi" từ lần initDashboard() trước.
@@ -15717,7 +15735,12 @@ function renderTxTable(kind){
       const v = r[c];
       return `<td>${(v===''||v===undefined||v===null) ? '—' : escHtml(String(v))}</td>`;
     }).join('');
-    return `<tr>${tds}<td class="num tx-total-col">${fmt(r.total)}</td></tr>`;
+    // Cột tick (✓) — CHỈ riêng bảng Transfer, để người dùng tự đánh dấu đã kiểm tra dòng nào, giữ
+    // lại qua lần tải file Transaction mới (khoá theo "hình dạng" chuyến hàng, xem txTransferRowKey()).
+    const checkTd = kind === 'transfer'
+      ? `<td style="text-align:center"><input type="checkbox" class="tx-transfer-check" data-tx-check-key="${escAttr(txTransferRowKey(r))}" ${txTransferChecked[txTransferRowKey(r)] ? 'checked' : ''}></td>`
+      : '';
+    return `<tr>${tds}<td class="num tx-total-col">${fmt(r.total)}</td>${checkTd}</tr>`;
   }).join('');
   if(tfoot){
     const footTds = def.cols.slice(1).map(c => {
@@ -15725,7 +15748,8 @@ function renderTxTable(kind){
       if(c === 'contCount') return `<td class="num">${fmt(grandContCount)}</td>`;
       return '<td></td>';
     }).join('');
-    tfoot.innerHTML = `<tr style="font-weight:700; border-top:2px solid var(--line);"><td>Grand Total</td>${footTds}<td class="num tx-total-col">${fmt(grandTotal)}</td></tr>`;
+    const footCheckTd = kind === 'transfer' ? '<td></td>' : '';
+    tfoot.innerHTML = `<tr style="font-weight:700; border-top:2px solid var(--line);"><td>Grand Total</td>${footTds}<td class="num tx-total-col">${fmt(grandTotal)}</td>${footCheckTd}</tr>`;
   }
   if(summaryEl) summaryEl.textContent = `${rows.length} ${def.label} · Tổng: ${fmt(grandTotal)}`;
   renderTxChart();
@@ -15791,6 +15815,20 @@ function renderTransactionPage(){
   renderXeTrungChuyenTable('itnReceivingGroups', 'tx-xtc-receiving');
   renderTxChart();
 }
+
+// Tick/bỏ tick ở bảng "Chuyển pallet (Transfer)" — chỉ tick, không có tác dụng nghiệp vụ nào khác
+// ngoài tự đánh dấu đã kiểm tra. Lưu ngay (cục bộ + tự đẩy lên Cloud) để giữ được qua lần tải file
+// Transaction mới, đổi thiết bị/tải lại trang.
+document.addEventListener('change', (e) => {
+  const cb = e.target.closest('.tx-transfer-check');
+  if(!cb) return;
+  const key = cb.dataset.txCheckKey;
+  if(!key) return;
+  if(cb.checked) txTransferChecked[key] = true;
+  else delete txTransferChecked[key];
+  saveStateToStorage();
+  scheduleAutoSaveToCloud('txcheck', [STORAGE_KEY_TX_TRANSFER_CHECKED], 'Tick "Chuyển pallet (Transfer)"');
+});
 
 // "Xe Trung Chuyển" — 2 bảng song song: bên trái ITN Transfer (Chuyển đi), bên phải ITN Receiving
 // (Nhận). Mỗi bảng gộp nhóm theo Item + Locator xuất + Locator đến + Chuyến (cùng Reference).
