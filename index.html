@@ -4202,6 +4202,13 @@ const CloudVault = {
     // tải/đồng bộ hiện kèm số KB thực tế, giúp tự theo dõi băng thông đang dùng mà không cần vào
     // Firebase Console. Dùng Blob để tính đúng byte UTF-8 (tiếng Việt có dấu chiếm nhiều hơn 1 byte/ký tự).
     try{ this._lastReadBytes = new Blob([JSON.stringify(cloudData)]).size; }catch(e){ this._lastReadBytes = 0; }
+    const cloudStamp = cloudData[STORAGE_KEY_META_STAMP] == null ? '' : String(cloudData[STORAGE_KEY_META_STAMP]);
+    const localStampBeforeApply = _mem[STORAGE_KEY_META_STAMP] == null ? '' : String(_mem[STORAGE_KEY_META_STAMP]);
+    // Không bao giờ áp dụng snapshot Cloud CŨ hơn cache hiện tại. Đặc biệt quan trọng sau thao tác
+    // reset: một phản hồi/sự kiện cũ đến trễ không được phép phục hồi các dòng đã xoá.
+    if(cloudStamp && localStampBeforeApply && /^\d+$/.test(cloudStamp) && /^\d+$/.test(localStampBeforeApply) && Number(cloudStamp) < Number(localStampBeforeApply)){
+      return true;
+    }
     const cloudIsEmpty = Object.keys(cloudData).length === 0;
     // Bỏ qua mốc _meta_updatedAt khi xét "máy này có dữ liệu thật hay không" — mốc này có thể còn
     // sót lại (VD: sau khi bấm "Xoá dữ liệu" chỉ xoá các mục thật, không xoá riêng mốc) dù không còn
@@ -4334,6 +4341,14 @@ const CloudVault = {
     const cloudStampRaw = snapshot.val();
     const cloudStamp = (cloudStampRaw === null || cloudStampRaw === undefined) ? '' : String(cloudStampRaw);
     const localStamp = _mem[STORAGE_KEY_META_STAMP] || '';
+    // Bỏ qua tín hiệu realtime CŨ hơn bản đang có trên máy. Đây là lớp bảo vệ cuối cùng cho
+    // trường hợp Firebase/realtime trả về một snapshot cũ ngay sau khi người dùng vừa bấm
+    // "Đặt lại toàn bộ": nếu tải snapshot cũ lúc này, danh sách Đã xác nhận/Đề xuất kiểm
+    // vừa xoá sẽ sống lại dù lần ghi reset đã thành công.
+    if(cloudStamp && localStamp && /^\d+$/.test(cloudStamp) && /^\d+$/.test(String(localStamp)) && Number(cloudStamp) < Number(localStamp)){
+      this._pendingStampDirty = false;
+      return;
+    }
     const hasLocalData = Object.keys(_mem).some(k => k !== STORAGE_KEY_META_STAMP);
     try{ this._lastReadBytes = new Blob([JSON.stringify(cloudStampRaw === undefined ? null : cloudStampRaw)]).size; }catch(e){ this._lastReadBytes = 0; }
     if(hasLocalData && cloudStamp && cloudStamp === localStamp){
@@ -13305,6 +13320,21 @@ document.getElementById('btn-reset-kiemke-all').addEventListener('click', async 
   const btn = document.getElementById('btn-reset-kiemke-all');
   const cloudActive = typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token;
 
+  // Huỷ các lượt tự lưu kiểm tồn còn đang chờ trước khi reset. Nếu không, một timer cũ (được tạo
+  // từ lần Xác nhận/Quét QR ngay trước đó) có thể chạy sau thao tác reset và gửi lại trạng thái
+  // không mong muốn đúng lúc Cloud/realtime đang đồng bộ.
+  ['cc','confirm','qrscan'].forEach(k => {
+    if(typeof _autoSaveTimers !== 'undefined' && _autoSaveTimers[k]){
+      clearTimeout(_autoSaveTimers[k]);
+      _autoSaveTimers[k] = null;
+    }
+    if(typeof _pendingAutoSaveKeys !== 'undefined') _pendingAutoSaveKeys.delete(k);
+  });
+  if(typeof _ccAutoSaveTimer !== 'undefined' && _ccAutoSaveTimer){
+    clearTimeout(_ccAutoSaveTimer);
+    _ccAutoSaveTimer = null;
+  }
+
   // QUAN TRỌNG: đọc thử (peek) bản MỚI NHẤT trên Cloud và gộp vào trước khi xoá — máy này có thể
   // đang có bản CŨ HƠN Cloud (VD: người khác vừa "Xác nhận" thêm dòng ở máy/ca khác mà máy này chưa
   // kịp "Làm mới dữ liệu"). Nếu không gộp trước, "Đặt lại toàn bộ" chỉ xoá đúng những gì máy NÀY
@@ -13353,6 +13383,9 @@ document.getElementById('btn-reset-kiemke-all').addEventListener('click', async 
 
     if(typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token){
       await CloudVault.writeAll();
+      // Sau khi PUT đã được Firebase xác nhận, coi mốc vừa ghi là hàng rào mới: mọi snapshot
+      // realtime cũ hơn mốc này sẽ bị bỏ qua bởi _onRealtimeStampValue/_applyCloudSnapshot.
+      CloudVault._pendingStampDirty = false;
       if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();
     }
     if(typeof showAppToast === 'function') showAppToast('✓ Đã đặt lại toàn bộ dữ liệu Đề xuất kiểm + Đã xác nhận, đã đồng bộ Cloud.');
