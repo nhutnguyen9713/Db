@@ -1338,6 +1338,10 @@
   .kho-detail-table thead th.tx-total-col{background:rgba(230,168,63,0.18); color:var(--amber);}
   .kho-detail-table tbody td.tx-total-col{font-weight:800; font-size:14.5px; color:var(--amber);}
   .kho-detail-table tfoot td.tx-total-col{font-weight:900; font-size:15.5px; color:var(--amber); background:rgba(230,168,63,0.22);}
+  /* Dòng đã tick (✓) ở bảng "Chuyển pallet (Transfer)" — tô màu nguyên dòng để dễ phân biệt đã kiểm
+     tra xong, không đụng tới cột Total (vẫn giữ nổi bật riêng bằng màu amber). */
+  .kho-detail-table tbody tr.tx-row-checked td{background:rgba(47,190,158,0.14);}
+  .kho-detail-table tbody tr.tx-row-checked td.tx-total-col{background:rgba(47,190,158,0.20);}
   .kho-detail-table .col-kho{display:none;}
   .kho-detail-table.show-kho .col-kho{display:table-cell;}
   .kho-detail-table .col-plan{display:none; color:var(--violet);}
@@ -5007,7 +5011,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.86';
+const APP_VERSION = 'v1.87';
 const APP_VERSION_DATE = '12/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -15737,10 +15741,14 @@ function renderTxTable(kind){
     }).join('');
     // Cột tick (✓) — CHỈ riêng bảng Transfer, để người dùng tự đánh dấu đã kiểm tra dòng nào, giữ
     // lại qua lần tải file Transaction mới (khoá theo "hình dạng" chuyến hàng, xem txTransferRowKey()).
-    const checkTd = kind === 'transfer'
-      ? `<td style="text-align:center"><input type="checkbox" class="tx-transfer-check" data-tx-check-key="${escAttr(txTransferRowKey(r))}" ${txTransferChecked[txTransferRowKey(r)] ? 'checked' : ''}></td>`
-      : '';
-    return `<tr>${tds}<td class="num tx-total-col">${fmt(r.total)}</td>${checkTd}</tr>`;
+    // Đã tick -> tô màu nguyên dòng (class tx-row-checked, xem CSS) để dễ phân biệt.
+    let checkTd = '', rowClass = '';
+    if(kind === 'transfer'){
+      const isChecked = !!txTransferChecked[txTransferRowKey(r)];
+      rowClass = isChecked ? ' class="tx-row-checked"' : '';
+      checkTd = `<td style="text-align:center"><input type="checkbox" class="tx-transfer-check" data-tx-check-key="${escAttr(txTransferRowKey(r))}" ${isChecked ? 'checked' : ''}></td>`;
+    }
+    return `<tr${rowClass}>${tds}<td class="num tx-total-col">${fmt(r.total)}</td>${checkTd}</tr>`;
   }).join('');
   if(tfoot){
     const footTds = def.cols.slice(1).map(c => {
@@ -15826,6 +15834,8 @@ document.addEventListener('change', (e) => {
   if(!key) return;
   if(cb.checked) txTransferChecked[key] = true;
   else delete txTransferChecked[key];
+  const tr = cb.closest('tr');
+  if(tr) tr.classList.toggle('tx-row-checked', cb.checked);
   saveStateToStorage();
   scheduleAutoSaveToCloud('txcheck', [STORAGE_KEY_TX_TRANSFER_CHECKED], 'Tick "Chuyển pallet (Transfer)"');
 });
