@@ -4325,6 +4325,19 @@ const CloudVault = {
     // bị mất. Nếu máy này thật sự có dữ liệu mới, người dùng luôn phải tự bấm "Lưu" để đẩy lên (đúng
     // thiết kế app "dữ liệu chỉ thực sự ghi lên Cloud khi bấm Lưu") — lúc đó hasUnsavedChanges=true sẽ
     // tự chặn mọi snapshot Cloud ghi đè giữa chừng cho tới khi Lưu xong.
+
+    // 🔍 [DEBUG TẠM THỜI — sẽ gỡ sau khi tìm ra nguyên nhân] Ghi lại NGAY TRƯỚC KHI áp dụng: đang có
+    // bao nhiêu dòng "Đã xác nhận" ở máy này (_mem) và ở Cloud (cloudData vừa tải về) — để biết chính
+    // xác dữ liệu cũ có thực sự nằm TRONG cloudData hay không (nếu có -> Cloud thật sự đang trả về bản
+    // cũ; nếu không -> lỗi nằm ở chỗ khác, không phải _applyCloudSnapshot).
+    try{
+      const _dbgLocalCnt = _mem[STORAGE_KEY_CONFIRMED] ? Object.keys(JSON.parse(_mem[STORAGE_KEY_CONFIRMED])).length : 0;
+      const _dbgCloudCnt = cloudData[STORAGE_KEY_CONFIRMED] ? Object.keys(JSON.parse(cloudData[STORAGE_KEY_CONFIRMED])).length : 0;
+      if((_dbgLocalCnt > 0 || _dbgCloudCnt > 0) && typeof logNotification === 'function'){
+        logNotification(`🔍 [DEBUG] Sắp áp dụng snapshot Cloud — Đã xác nhận: máy đang có ${_dbgLocalCnt} dòng, Cloud vừa tải về có ${_dbgCloudCnt} dòng (mốc Cloud=${cloudStamp||'—'}, mốc máy=${localStampBeforeApply||'—'}).`, '');
+      }
+    }catch(e){}
+
     Object.keys(_mem).forEach(k => delete _mem[k]);
     Object.assign(_mem, cloudData);
     tn5PersistMemToLocalBackup(); // cập nhật luôn bản sao lưu cục bộ theo đúng dữ liệu Cloud mới nhất
@@ -4462,6 +4475,9 @@ const CloudVault = {
       this._setRealtimeStatus('🔄 Có dữ liệu mới từ thiết bị khác — sẽ tự áp dụng ngay khi bạn ngừng nhập/đã lưu xong.', '');
       return;
     }
+    // 🔍 [DEBUG TẠM THỜI] Ghi lại đúng thời điểm realtime kích hoạt tải lại đầy đủ — để biết CÓ hay
+    // KHÔNG có 1 lượt tải Cloud nào xảy ra quanh lúc dữ liệu "hiện lại".
+    try{ if(typeof logNotification === 'function') logNotification('🔍 [DEBUG] Realtime kích hoạt tải lại đầy đủ dữ liệu từ Cloud (_fetchFullSnapshotViaStamp).', ''); }catch(e){}
     this._pendingStampDirty = false;
     // Lần ĐẦU TIÊN nhận được dữ liệu qua realtime (init() không còn tự gọi readAll() REST song song
     // nữa khi có Web API Key, xem init()) -> đây chính là lần tải dữ liệu ban đầu, cập nhật luôn
@@ -4880,7 +4896,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.73';
+const APP_VERSION = 'v1.74-debug';
 const APP_VERSION_DATE = '11/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -12119,6 +12135,13 @@ async function saveConfirmedSnapshotAndReset(){
     if(cloudActive){
       try{
         const cloudData = await CloudVault.peek();
+        // 🔍 [DEBUG TẠM THỜI] Cloud đang có bao nhiêu dòng "Đã xác nhận" NGAY TRƯỚC khi bấm Lưu (trước
+        // khi gộp/xoá trắng) — nếu con số này > 0 và > số dòng đang thấy trên máy, nghĩa là Cloud đang
+        // giữ 1 bản CŨ hơn máy này, khả năng có 1 lượt ghi khác đã đẩy lại dữ liệu cũ lên Cloud trước đó.
+        try{
+          const _dbgCnt = (cloudData && cloudData[STORAGE_KEY_CONFIRMED]) ? Object.keys(JSON.parse(cloudData[STORAGE_KEY_CONFIRMED])).length : 0;
+          if(typeof logNotification === 'function') logNotification(`🔍 [DEBUG] Trước khi Lưu — Cloud (peek) đang có ${_dbgCnt} dòng Đã xác nhận, máy này đang có ${keys.length} dòng.`, '');
+        }catch(e){}
         if(cloudData) mergeConfirmedDataFromCloud(cloudData);
       }catch(e){ console.warn('Không gộp được dữ liệu Cloud trước khi Lưu:', e); }
     }
@@ -14602,6 +14625,12 @@ function initDashboard(){
   // còn thao tác gán biến nào nữa, nên renderDashboard() phía trên không thể đọc phải giá trị cũ.
   if(saved.confirmed && Object.keys(saved.confirmed).length > 0){
     renderConfirmedList();
+    // 🔍 [DEBUG TẠM THỜI] initDashboard() (có thể chạy lại KHÔNG PHẢI do tải trang thật, xem
+    // FileVault._runReloaders()) vừa hiện ra 1 danh sách "Đã xác nhận" không rỗng — ghi lại đúng lúc
+    // này để biết chính xác khi nào/bao nhiêu dòng bị hiện lại.
+    try{
+      if(typeof logNotification === 'function') logNotification(`🔍 [DEBUG] initDashboard() vừa hiện ${Object.keys(saved.confirmed).length} dòng "Đã xác nhận" từ bộ nhớ.`, '');
+    }catch(e){}
   }
 
   if(saved.plans){
