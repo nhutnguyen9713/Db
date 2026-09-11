@@ -4847,8 +4847,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.63';
-const APP_VERSION_DATE = '10/09/2026';
+const APP_VERSION = 'v1.64';
+const APP_VERSION_DATE = '11/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -8763,8 +8763,8 @@ function khoGridOpenSettings(khoLabel){
 function khoGridPointToCell(container, clientX, clientY, layout){
   const rect=container.getBoundingClientRect();
   const cs=getComputedStyle(container);
-  const cols=cs.gridTemplateColumns.trim().split(/\\s+/).map(parseFloat).filter(Number.isFinite);
-  const rows=cs.gridTemplateRows.trim().split(/\\s+/).map(parseFloat).filter(Number.isFinite);
+  const cols=cs.gridTemplateColumns.trim().split(/\s+/).map(parseFloat).filter(Number.isFinite);
+  const rows=cs.gridTemplateRows.trim().split(/\s+/).map(parseFloat).filter(Number.isFinite);
   const gapX=parseFloat(cs.columnGap)||10, gapY=parseFloat(cs.rowGap)||10;
   const avgX=cols.length?cols.reduce((a,b)=>a+b,0)/cols.length:Math.max(72,(rect.width-gapX*(layout.cols-1))/layout.cols);
   const avgY=rows.length?rows.reduce((a,b)=>a+b,0)/rows.length:90;
@@ -8839,8 +8839,8 @@ document.addEventListener('pointerdown',(e)=>{
   const boxEl=handle.closest('.wh3b-box'); if(!cell||!container||!boxEl) return;
   e.preventDefault();e.stopPropagation();
   const cs=getComputedStyle(container);
-  const cols=cs.gridTemplateColumns.trim().split(/\\s+/).map(parseFloat).filter(Number.isFinite);
-  const rows=cs.gridTemplateRows.trim().split(/\\s+/).map(parseFloat).filter(Number.isFinite);
+  const cols=cs.gridTemplateColumns.trim().split(/\s+/).map(parseFloat).filter(Number.isFinite);
+  const rows=cs.gridTemplateRows.trim().split(/\s+/).map(parseFloat).filter(Number.isFinite);
   const gapX=parseFloat(cs.columnGap)||10,gapY=parseFloat(cs.rowGap)||10;
   const stepX=(cols.reduce((a,b)=>a+b,0)/(cols.length||1))+gapX;
   const stepY=(rows.reduce((a,b)=>a+b,0)/(rows.length||1))+gapY;
