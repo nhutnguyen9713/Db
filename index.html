@@ -1680,30 +1680,31 @@
 </head>
 <body>
 <script>
-// Chặn truy cập ngoài ca đêm (19h hôm nay -> 7h hôm sau, giờ Việt Nam) — chỉ là lớp chặn PHÍA
-// TRÌNH DUYỆT (không phải bảo mật thật sự: ai mở "Xem mã nguồn"/sửa giờ hệ thống vẫn qua được),
-// mục đích chính là tránh người không thuộc ca vô tình mở nhầm app ngoài giờ.
-// Dùng document.write() (không phải chỉnh innerHTML) để CHẮC CHẮN các <script> còn lại phía dưới
-// (toàn bộ logic app) không được trình duyệt chạy tiếp — document.write() gọi ngay trong lúc
-// trang đang được phân tích (parse) sẽ THAY THẾ HẲN phần nội dung gốc còn lại, khác với việc chỉ
-// gán lại innerHTML (không ngăn được các thẻ <script> phía sau tự chạy).
+// Chặn truy cập ngoài ca (giờ Việt Nam) — chỉ là lớp chặn PHÍA TRÌNH DUYỆT (không phải bảo mật
+// thật sự: ai mở "Xem mã nguồn"/sửa giờ hệ thống vẫn qua được), mục đích chính là tránh người
+// không thuộc ca vô tình mở nhầm app ngoài giờ.
+//
+// QUAN TRỌNG: điều hướng THẬT SỰ sang trang riêng lock.html (location.replace) thay vì dựng màn
+// hình chặn ngay tại đây bằng document.write() — ĐÃ THỬ document.write() trước đó nhưng phát hiện
+// (qua test bằng trình duyệt thật) nó KHÔNG đáng tin cậy: gọi document.write() giữa lúc trang đang
+// được phân tích (parse) KHÔNG xoá được phần còn lại của tài liệu gốc — toàn bộ app vẫn âm thầm
+// tiếp tục tải/chạy phía SAU màn hình chặn (chỉ bị che khuất, không hề dừng lại), nên KHÔNG chặn
+// được gì cả về mặt thực chất. Điều hướng sang 1 trang khác là cách DUY NHẤT chặn chắc chắn 100%:
+// khi trình duyệt điều hướng, nó luôn dừng hẳn việc phân tích/chạy tiếp trang hiện tại.
+// Xem đầy đủ logic mật khẩu/đổi ca (đêm 19h-7h / ngày 7h-19h) trong lock.html.
 (function(){
+  function shiftMode(){
+    try{ return localStorage.getItem('tn5_shift_mode') === 'day' ? 'day' : 'night'; }catch(e){ return 'night'; }
+  }
+  function overrideActive(){
+    try{ return Number(localStorage.getItem('tn5_gate_override_until') || 0) > Date.now(); }catch(e){ return false; }
+  }
   const gioVN = new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' });
   const gio = new Date(gioVN).getHours();
-  const choPhep = gio >= 19 || gio < 7; // ca đêm 19h - 7h
-  if(!choPhep){
-    document.open();
-    document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>TN5 Dashboard</title></head>
-<body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;background:#111;color:#fff;text-align:center;padding:24px;box-sizing:border-box">
-  <div>
-    <div style="font-size:40px;margin-bottom:12px">🌙</div>
-    <h2 style="margin:0 0 8px">Ngoài giờ truy cập</h2>
-    <p style="margin:0;color:#aaa">Dashboard chỉ hoạt động trong ca đêm 19:00 – 7:00 (giờ Việt Nam).</p>
-  </div>
-</body></html>`);
-    document.close();
-    throw new Error('Ngoài giờ truy cập — dừng tải app.');
-  }
+  const mode = shiftMode();
+  const trongCa = mode === 'day' ? (gio >= 7 && gio < 19) : (gio >= 19 || gio < 7);
+  const choPhep = trongCa || overrideActive();
+  if(!choPhep) location.replace('lock.html' + location.search);
 })();
 </script>
 
@@ -4940,8 +4941,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.76-debug';
-const APP_VERSION_DATE = '11/09/2026';
+const APP_VERSION = 'v1.77-debug';
+const APP_VERSION_DATE = '12/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.

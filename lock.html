@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TN5 Dashboard — Ngoài giờ truy cập</title>
+</head>
+<body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;background:#111;color:#fff;text-align:center;padding:24px;box-sizing:border-box">
+  <div style="max-width:360px;width:100%">
+    <div style="font-size:40px;margin-bottom:12px">🌙</div>
+    <h2 style="margin:0 0 8px">Ngoài giờ truy cập</h2>
+    <p id="lock-desc" style="margin:0 0 20px;color:#aaa">Đang kiểm tra lịch ca…</p>
+    <button id="gate-unlock-btn" style="padding:10px 18px;border-radius:8px;border:none;background:#444;color:#fff;font-size:15px;cursor:pointer">🔓 Nhập mật khẩu để mở</button>
+    <div id="gate-actions" style="display:none;margin-top:16px;flex-direction:column;gap:8px">
+      <button id="gate-open-now" style="padding:10px 14px;border-radius:8px;border:none;background:#2e7d32;color:#fff;font-size:14px;cursor:pointer"></button>
+      <button id="gate-switch-mode" style="padding:10px 14px;border-radius:8px;border:none;background:#1565c0;color:#fff;font-size:14px;cursor:pointer"></button>
+    </div>
+    <p id="gate-msg" style="margin:12px 0 0;color:#e57373;font-size:13px"></p>
+  </div>
+
+<script>
+// Trang chặn RIÊNG BIỆT (điều hướng thật sự tới đây bằng location.replace() từ index.html) — thay
+// vì document.write() ngay trong index.html (đã thử nhưng KHÔNG đáng tin cậy: document.write() gọi
+// giữa lúc trang đang được phân tích không xoá được phần còn lại của tài liệu gốc, toàn bộ app vẫn
+// âm thầm tải/chạy phía sau màn hình chặn — đã tự kiểm chứng bằng trình duyệt thật và phát hiện lỗi
+// này). Điều hướng sang 1 trang HTML riêng là cách DUY NHẤT chặn chắc chắn 100%: khi trình duyệt
+// điều hướng sang trang khác, nó luôn dừng hẳn việc phân tích/chạy tiếp trang cũ.
+const LS_SHIFT_MODE = 'tn5_shift_mode'; // 'night' (mặc định, 19h-7h) | 'day' (7h-19h)
+const LS_OVERRIDE_UNTIL = 'tn5_gate_override_until'; // mốc thời gian (ms) còn hiệu lực mở tạm ngoài giờ
+const GATE_PASSWORD = 'qqqwww';
+const OVERRIDE_HOURS = 12; // mở tạm ngoài giờ có hiệu lực trong 12 giờ kể từ lúc bấm
+
+function shiftMode(){
+  try{ return localStorage.getItem(LS_SHIFT_MODE) === 'day' ? 'day' : 'night'; }catch(e){ return 'night'; }
+}
+function overrideActive(){
+  try{ return Number(localStorage.getItem(LS_OVERRIDE_UNTIL) || 0) > Date.now(); }catch(e){ return false; }
+}
+function dangChoPhep(){
+  const gioVN = new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' });
+  const gio = new Date(gioVN).getHours();
+  const mode = shiftMode();
+  const trongCa = mode === 'day' ? (gio >= 7 && gio < 19) : (gio >= 19 || gio < 7);
+  return trongCa || overrideActive();
+}
+
+// Nếu đã tới lúc được vào (VD: mở nhầm link này, hoặc vừa qua đúng giờ ca bắt đầu) -> về thẳng app.
+if(dangChoPhep()){
+  location.replace('index.html' + location.search);
+}
+
+const mode = shiftMode();
+const caHienTai = mode === 'day' ? 'Ca ngày (07:00 – 19:00)' : 'Ca đêm (19:00 – 07:00)';
+const caKhac = mode === 'day' ? 'night' : 'day';
+const caKhacLabel = mode === 'day' ? 'Ca đêm (19:00 – 07:00)' : 'Ca ngày (07:00 – 19:00)';
+
+document.getElementById('lock-desc').innerHTML = 'Dashboard đang áp dụng lịch: <b>' + caHienTai + '</b> (giờ Việt Nam).';
+document.getElementById('gate-open-now').textContent = '✓ Mở truy cập ngay (hiệu lực ' + OVERRIDE_HOURS + ' giờ)';
+document.getElementById('gate-switch-mode').textContent = '🔁 Đổi lịch sang: ' + caKhacLabel;
+
+document.getElementById('gate-unlock-btn').addEventListener('click', function(){
+  const pass = prompt('Nhập mật khẩu:');
+  if(pass === null) return;
+  if(pass !== GATE_PASSWORD){
+    document.getElementById('gate-msg').textContent = '✗ Sai mật khẩu.';
+    return;
+  }
+  document.getElementById('gate-msg').textContent = '';
+  document.getElementById('gate-unlock-btn').style.display = 'none';
+  document.getElementById('gate-actions').style.display = 'flex';
+});
+document.getElementById('gate-open-now').addEventListener('click', function(){
+  try{ localStorage.setItem(LS_OVERRIDE_UNTIL, String(Date.now() + OVERRIDE_HOURS * 3600 * 1000)); }catch(e){}
+  location.replace('index.html' + location.search);
+});
+document.getElementById('gate-switch-mode').addEventListener('click', function(){
+  try{ localStorage.setItem(LS_SHIFT_MODE, caKhac); }catch(e){}
+  location.replace('index.html' + location.search);
+});
+
+// Tự kiểm tra lại mỗi 30 giây — nếu đúng lúc ca bắt đầu (hoặc lịch/mở-tạm vừa được cấu hình từ tab
+// khác) thì tự động quay lại app, không bắt người dùng phải tự bấm tải lại.
+setInterval(function(){
+  if(dangChoPhep()) location.replace('index.html' + location.search);
+}, 30000);
+</script>
+</body>
+</html>
