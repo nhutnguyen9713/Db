@@ -5037,7 +5037,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.88';
+const APP_VERSION = 'v1.89';
 const APP_VERSION_DATE = '11/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -11121,19 +11121,72 @@ if(itemCbmConflictCloseBtn) itemCbmConflictCloseBtn.addEventListener('click', ()
   if(overlay) overlay.classList.remove('show');
 });
 
+// Tồn kho theo CBM (m³) cho 3 kho 2B/3A/3B — tính bằng: với mỗi mã hàng, gộp TỔNG SL tồn (mọi
+// locator, mọi OQC, giống hệt cách "qty_by_kho" đang gộp tổng SL theo kho ở nơi khác trong app,
+// KHÔNG lọc PASS/loại locator Pick-Loading-Prod-SPP như bảng Đề xuất kiểm) của kho đó, nhân với
+// CBM/đơn vị lấy từ Thư viện CBM, rồi cộng dồn qua mọi mã hàng -> ra tổng m³ đang tồn của kho đó.
+// Mã hàng nào đang có tồn kho nhưng CHƯA có trong Thư viện CBM thì tạm bỏ qua (không tính được),
+// đếm số lượng để cảnh báo ngay dưới biểu đồ cho biết số liệu có thể đang thấp hơn thực tế.
+function computeKhoCbmTotals(){
+  const totals = {}; CC_KHO_LIST.forEach(k => totals[k.code] = 0);
+  const missingItems = new Set();
+  if(!currentData) return { totals, missingCount: 0 };
+  const raw = getRawRows(currentData);
+  const byKhoItem = new Map(); // 'code||item' -> tổng SL tồn
+  raw.forEach(r => {
+    const khoLabel = r[RAW_KEY_IDX.kho], item = r[RAW_KEY_IDX.item], qty = Number(r[RAW_KEY_IDX.qty]) || 0;
+    if(!item || !khoLabel || !qty) return;
+    const khoDef = CC_KHO_LIST.find(k => k.label === khoLabel);
+    if(!khoDef) return; // chỉ tính đúng 3 kho 2B/3A/3B, bỏ qua các kho khác (VD: Kho DG1)
+    const key = khoDef.code + '||' + item;
+    byKhoItem.set(key, (byKhoItem.get(key) || 0) + qty);
+  });
+  byKhoItem.forEach((qty, key) => {
+    const [code, item] = key.split('||');
+    const entry = itemCbmLibrary[item];
+    if(entry && typeof entry.cbm === 'number') totals[code] += qty * entry.cbm;
+    else missingItems.add(item);
+  });
+  return { totals, missingCount: missingItems.size };
+}
+const KHO_CBM_CHART_COLORS = { '3B': '#0E8F76', '3A': '#2C6FCB', '2B': '#F5A623' };
+function buildKhoCbmChartHtml(){
+  const title = `<div style="font-weight:700; font-size:13px; margin-bottom:4px;">📊 Tồn kho theo CBM (m³) — Tổng SL tồn mỗi mã hàng × CBM/đơn vị, cộng dồn theo từng kho</div>`;
+  if(!currentData){
+    return title + `<div class="kho-empty" style="padding:20px 0;">Chưa có dữ liệu tồn kho — hãy tải file tồn kho trước.</div><div style="border-top:1px solid var(--line); margin:16px 0;"></div>`;
+  }
+  const { totals, missingCount } = computeKhoCbmTotals();
+  const order = ['3B','3A','2B'];
+  const maxVal = Math.max(0.0001, ...order.map(c => totals[c] || 0));
+  const barsHtml = order.map(code => {
+    const val = totals[code] || 0;
+    const pct = val > 0 ? Math.max(3, Math.round((val / maxVal) * 100)) : 1;
+    return `<div class="tx-chart-bar-col">
+      <div class="tx-chart-bar-value" style="color:${KHO_CBM_CHART_COLORS[code]}">${fmtDec(val,2)} m³</div>
+      <div class="tx-chart-bar" style="height:${pct}%; background:${KHO_CBM_CHART_COLORS[code]};"></div>
+      <div class="tx-chart-bar-label">Kho ${code}</div>
+    </div>`;
+  }).join('');
+  const noteHtml = missingCount
+    ? `<div class="desc" style="text-align:center; margin-top:6px;">⚠ ${missingCount} mã hàng đang có tồn kho nhưng chưa có CBM trong thư viện — tạm bỏ qua khi tính, số m³ trên có thể thấp hơn thực tế.</div>`
+    : '';
+  return title + `<div class="tx-chart-wrap">${barsHtml}</div>${noteHtml}<div style="border-top:1px solid var(--line); margin:16px 0;"></div>`;
+}
+
 function itemCbmRenderLibrary(){
   const el = document.getElementById('item-cbm-library-content');
   if(!el) return;
   const items = Object.keys(itemCbmLibrary).sort();
+  const chartHtml = buildKhoCbmChartHtml();
   if(!items.length){
-    el.innerHTML = `<div style="text-align:center; color:var(--muted-2); font-style:italic; padding:24px 0;">Chưa có dữ liệu — tải 1 Plan (Row/FC/HCP) có cột CBM để bắt đầu gom.</div>`;
+    el.innerHTML = chartHtml + `<div style="text-align:center; color:var(--muted-2); font-style:italic; padding:24px 0;">Chưa có dữ liệu — tải 1 Plan (Row/FC/HCP) có cột CBM để bắt đầu gom.</div>`;
     return;
   }
-  el.innerHTML = `<table class="kho-detail-table"><thead><tr><th>Item No.</th><th style="text-align:right">CBM/đơn vị</th><th>Cập nhật lúc</th></tr></thead><tbody>
-    ${items.map(item => {
+  el.innerHTML = chartHtml + `<table class="kho-detail-table"><thead><tr><th>STT</th><th>Item No.</th><th style="text-align:right">CBM/đơn vị</th><th>Cập nhật lúc</th></tr></thead><tbody>
+    ${items.map((item, idx) => {
       const e = itemCbmLibrary[item];
       const dt = e.updatedAt ? new Date(e.updatedAt) : null;
-      return `<tr><td>${escHtml(item)}</td><td style="text-align:right">${fmtDec(e.cbm,4)}</td><td>${dt ? escHtml(fmtDateTime(dt)) : '—'}</td></tr>`;
+      return `<tr><td>${idx+1}</td><td>${escHtml(item)}</td><td style="text-align:right">${fmtDec(e.cbm,4)}</td><td>${dt ? escHtml(fmtDateTime(dt)) : '—'}</td></tr>`;
     }).join('')}
   </tbody></table>`;
 }
@@ -11152,15 +11205,15 @@ const itemCbmExportBtn = document.getElementById('item-cbm-export-excel');
 if(itemCbmExportBtn) itemCbmExportBtn.addEventListener('click', () => {
   if(!LIB_XLSX_OK){ alert('Không xuất được Excel: thư viện SheetJS chưa tải được (cần Internet). Hãy mở file này bằng Chrome có kết nối mạng rồi thử lại.'); return; }
   const items = Object.keys(itemCbmLibrary).sort();
-  const header = ['Item No.', 'CBM/don vi', 'Cap nhat luc'];
-  const rows = items.map(item => {
+  const header = ['STT', 'Item No.', 'CBM/don vi', 'Cap nhat luc'];
+  const rows = items.map((item, idx) => {
     const e = itemCbmLibrary[item];
     const dt = e.updatedAt ? new Date(e.updatedAt) : null;
-    return [item, e.cbm, dt ? fmtDateTime(dt) : ''];
+    return [idx+1, item, e.cbm, dt ? fmtDateTime(dt) : ''];
   });
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-  ws['!cols'] = [{wch:16},{wch:14},{wch:18}];
+  ws['!cols'] = [{wch:6},{wch:16},{wch:14},{wch:18}];
   XLSX.utils.book_append_sheet(wb, ws, 'Thu vien CBM'.slice(0,31));
   const pad = n => String(n).padStart(2,'0');
   const now = new Date();
