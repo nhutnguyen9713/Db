@@ -5105,8 +5105,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.95';
-const APP_VERSION_DATE = '12/09/2026';
+const APP_VERSION = 'v1.96';
+const APP_VERSION_DATE = '13/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -15813,7 +15813,12 @@ function guessKhoFromLocatorPrefix(locator){
   if(/^D?3B/.test(s)) return 'Kho 3B';
   if(/^D?3A/.test(s)) return 'Kho 3A';
   if(/^D?2B/.test(s)) return 'Kho 2B';
-  return null; // các tiền tố khác (DG1/DG2/DG3...) không đủ rõ để đoán — để "—" thay vì đoán bừa
+  // DG2 (VD "DG2-Loading") — khu load hàng RIÊNG của Kho 2B, KHÁC với "Kho DG1" (1 kho hoàn toàn
+  // riêng biệt, đã có trong kho_order) — đây là domain-knowledge do người dùng xác nhận trực tiếp
+  // ("D2B và DG2 cùng là kho 2B"), không phải suy đoán từ quy ước đặt tên chung, nên chỉ khớp đúng
+  // "DG2", KHÔNG mở rộng sang DG1/DG3... (những tiền tố đó vẫn để "—" như cũ, tránh đoán bừa).
+  if(/^DG2/.test(s)) return 'Kho 2B';
+  return null; // các tiền tố khác (DG1/DG3...) không đủ rõ để đoán — để "—" thay vì đoán bừa
 }
 function resolveKhoForLocator(locator, lookupMap){
   const norm = String(locator || '').trim().toUpperCase();
