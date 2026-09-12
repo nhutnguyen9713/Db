@@ -5105,7 +5105,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.96';
+const APP_VERSION = 'v1.97';
 const APP_VERSION_DATE = '13/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -7693,8 +7693,16 @@ function renderContainerPickingOverview(){
     // so SL kế hoạch của CHÍNH container này với SL tồn kho PASS hiện có của mã đó. Container ĐÃ Pick
     // xong (thủ công hoặc đã Load Xong theo Ship) thì KHÔNG còn cần lấy thêm gì nữa — bỏ qua cảnh báo
     // Thiếu, tránh báo nhầm do tồn kho hiện tại đã giảm (vì chính lô hàng này vừa được lấy/xuất đi).
+    //
+    // LỖI THẬT ĐÃ GẶP (mã SPP đã tick "Đủ hàng" ở popup Nhóm SPP nhưng ở đây vẫn báo Thiếu): khi mã
+    // hàng không có Cust PO, popup Nhóm SPP (buildCombinedPlanCompareTable) chuẩn hoá thành chuỗi
+    // '(Khong co)' rồi mới ghép khoá sppOkKey — còn ở đây "it.po" lấy thẳng r.custPo || '' (chuỗi
+    // RỖNG, không qua chuẩn hoá) — 2 khoá lệch nhau ('...␟(khong co)' vs '...␟') nên tick tay không
+    // bao giờ khớp được. Chuẩn hoá lại y hệt (it.po || '(Khong co)') ngay khi tra cứu, KHÔNG đổi giá
+    // trị "po" gốc đang lưu trong shortItems (dòng map bên dưới vẫn giữ nguyên "po" thật để tính năng
+    // "bấm để xem chi tiết mã hàng" nhảy đúng dòng — combinedRowDomId() lại cần "po" RỖNG mới khớp).
     const shortItems = isManual ? [] : items
-      .filter(it => it.qty > it.passOnHand && !(ccIsSppItem(it.item) && sppManualOk[sppOkKey(it.item, it.po)]))
+      .filter(it => it.qty > it.passOnHand && !(ccIsSppItem(it.item) && sppManualOk[sppOkKey(it.item, it.po || '(Khong co)')]))
       .map(it => ({ item: it.item, po: it.po, qty: it.qty, passOnHand: it.passOnHand, diff: it.passOnHand - it.qty }));
 
     // Kho có SL tồn (PASS+NG, gộp mọi vị trí) nhiều nhất cho các mã hàng của container này
