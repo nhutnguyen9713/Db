@@ -5037,8 +5037,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.89';
-const APP_VERSION_DATE = '11/09/2026';
+const APP_VERSION = 'v1.90';
+const APP_VERSION_DATE = '12/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -15508,6 +15508,10 @@ function txParseTransactionRecords(rows){
   const colDate = findCol(headers, ['transaction date']);
   const colSetId = findCol(headers, ['transaction set id']);
   const colRef = findCol(headers, ['reference']);
+  // Cột GI No. — KHÔNG bắt buộc (không phải file Transaction nào cũng có sẵn cột này, khác với file
+  // tồn kho luôn có) — cùng nhóm alias tên cột đang dùng bên đọc file tồn kho (xem colGI ở trên) để
+  // nhận diện nhất quán dù tiêu đề cột ghi khác nhau chút ít giữa các lần xuất file.
+  const colGi = findCol(headers, ['gi no', 'gi no.', 'gi number', 'gi']);
   if(colType === -1 || colMenu === -1 || colLocator === -1 || colItem === -1 || colQty === -1 || colUser === -1){
     throw new Error('File thiếu cột bắt buộc (Transaction Type / Menu Name / Locator Name / Item No / Transaction Qty / User Name).');
   }
@@ -15527,7 +15531,8 @@ function txParseTransactionRecords(rows){
     const dt = colDate !== -1 ? txParseTxDateTime(r[colDate]) : null;
     const setId = colSetId !== -1 ? txNorm(r[colSetId]) : '';
     const reference = colRef !== -1 ? txNorm(r[colRef]) : '';
-    records.push({ transType, menuName, item, locator, user, flag, qty: isNaN(qty) ? 0 : qty, dt, setId, reference });
+    const gi = colGi !== -1 ? txNorm(r[colGi]) : '';
+    records.push({ transType, menuName, item, locator, user, flag, qty: isNaN(qty) ? 0 : qty, dt, setId, reference, gi });
   }
   return records;
 }
