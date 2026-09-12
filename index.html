@@ -5090,7 +5090,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.93';
+const APP_VERSION = 'v1.94';
 const APP_VERSION_DATE = '12/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13131,6 +13131,8 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
   const chartDataRow = headerExcelRow; // hàng 4 — cùng hàng với tiêu đề cột của bảng chính
   const dataFirstRow = headerExcelRow + 1;
   const dataLastRow = headerExcelRow + flatRows.length;
+  const cRange = `$C$${dataFirstRow}:$C$${dataLastRow}`; // cột "Số pallet"
+  const eRange = `$E$${dataFirstRow}:$E$${dataLastRow}`; // cột "Item No."
   const fRange = `$F$${dataFirstRow}:$F$${dataLastRow}`; // cột "Số lượng"
   const gRange = `$G$${dataFirstRow}:$G$${dataLastRow}`; // cột "Kết quả kiểm thực tế"
   ws.getCell(chartDataRow, 10).value = 'Row Labels';
@@ -13157,6 +13159,41 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
   ws.getRow(chartDataRow + 4).getCell(11).font = { bold:true };
   ws.getColumn(10).width = 18;
   ws.getColumn(11).width = 12;
+
+  // Bảng tổng hợp theo Item No. (cột N:Q) — y hệt kiểu PivotTable người dùng đang tự dựng tay trong
+  // Excel sau khi xuất file (Row Labels = Item No., Sum of Số pallet/Số lượng/Kết quả kiểm thực tế)
+  // — nay dựng SẴN, dùng công thức SUMIF thật tham chiếu đúng vào bảng dữ liệu chính (cột C/E/F/G)
+  // để tự cập nhật nếu sửa/thêm dòng, không phải PivotTable thật (lý do xem chú thích ở khối J:K
+  // phía trên) nhưng vẫn "sống" giống hệt.
+  const distinctItems = Array.from(new Set(flatRows.map(r => r.item))).sort((a,b) => String(a).localeCompare(String(b), 'vi'));
+  ws.getCell(chartDataRow, 14).value = 'Row Labels';
+  ws.getCell(chartDataRow, 15).value = 'Sum of Số pallet';
+  ws.getCell(chartDataRow, 16).value = 'Sum of Số lượng';
+  ws.getCell(chartDataRow, 17).value = 'Sum of Kết quả kiểm thực tế';
+  [14,15,16,17].forEach(c => { ws.getRow(chartDataRow).getCell(c).font = { bold:true }; });
+  distinctItems.forEach((item, i) => {
+    const r = chartDataRow + 1 + i;
+    const itemRows = flatRows.filter(x => x.item === item);
+    const palletSumForItem = itemRows.reduce((s,x) => s + (typeof x.palletCount === 'number' ? x.palletCount : 0), 0);
+    const qtySumForItem = itemRows.reduce((s,x) => s + (typeof x.qty === 'number' ? x.qty : (parseFloat(x.qty) || 0)), 0);
+    const resultSumForItem = itemRows.reduce((s,x) => s + (Math.round(x.actualResult) || 0), 0);
+    ws.getCell(r, 14).value = item;
+    ws.getCell(r, 15).value = { formula: `SUMIF(${eRange},$N$${r},${cRange})`, result: palletSumForItem };
+    ws.getCell(r, 16).value = { formula: `SUMIF(${eRange},$N$${r},${fRange})`, result: qtySumForItem };
+    ws.getCell(r, 17).value = { formula: `SUMIF(${eRange},$N$${r},${gRange})`, result: resultSumForItem };
+  });
+  const itemGrandRow = chartDataRow + 1 + distinctItems.length;
+  const itemFirstRow = chartDataRow + 1;
+  const itemLastRow = chartDataRow + distinctItems.length;
+  ws.getCell(itemGrandRow, 14).value = 'Grand Total';
+  ws.getCell(itemGrandRow, 15).value = { formula: `SUM($O$${itemFirstRow}:$O$${itemLastRow})`, result: distinctItems.reduce((s,item) => s + flatRows.filter(x=>x.item===item).reduce((ss,x)=>ss+(typeof x.palletCount === 'number' ? x.palletCount : 0),0), 0) };
+  ws.getCell(itemGrandRow, 16).value = { formula: `SUM($P$${itemFirstRow}:$P$${itemLastRow})`, result: distinctItems.reduce((s,item) => s + flatRows.filter(x=>x.item===item).reduce((ss,x)=>ss+(typeof x.qty === 'number' ? x.qty : (parseFloat(x.qty)||0)),0), 0) };
+  ws.getCell(itemGrandRow, 17).value = { formula: `SUM($Q$${itemFirstRow}:$Q$${itemLastRow})`, result: distinctItems.reduce((s,item) => s + flatRows.filter(x=>x.item===item).reduce((ss,x)=>ss+(Math.round(x.actualResult)||0),0), 0) };
+  [14,15,16,17].forEach(c => { ws.getRow(itemGrandRow).getCell(c).font = { bold:true }; });
+  ws.getColumn(14).width = 16;
+  ws.getColumn(15).width = 16;
+  ws.getColumn(16).width = 16;
+  ws.getColumn(17).width = 24;
 
   // Tổng SL pallet + tổng số vị trí (locator) KHÁC NHAU — hiện thêm vào tiêu đề chart tròn, bên
   // cạnh số dòng, để nhìn tiêu đề là biết ngay quy mô đợt kiểm (không phải mở bảng đếm tay).
