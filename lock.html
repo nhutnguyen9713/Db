@@ -32,7 +32,7 @@ const LS_SHIFT_MODE = 'tn5_shift_mode'; // 'night' (mặc định, 19h-7h) | 'da
 const LS_OVERRIDE_UNTIL = 'tn5_gate_override_until'; // mốc thời gian (ms) còn hiệu lực mở tạm ngoài giờ
 const LS_MANUAL_LOCK = 'tn5_gate_manual_lock'; // '1' = vừa bị khoá thủ công (nút 🔒 trong Cài đặt) — chặn NGAY dù đang trong giờ ca, tới khi mở lại bằng mật khẩu ở đây
 const GATE_PASSWORD = 'qqqwww';
-const OVERRIDE_HOURS = 12; // mở tạm ngoài giờ có hiệu lực trong 12 giờ kể từ lúc bấm
+const OVERRIDE_MINUTES = 30; // mở tạm ngoài giờ có hiệu lực trong 30 phút kể từ lúc bấm
 
 // ĐỒNG BỘ ĐA THIẾT BỊ: lịch ca/mở-tạm/khoá-thủ-công lấy TỪ CLOUD (Firebase, đúng databaseURL/token
 // đã cấu hình cho CloudVault, lưu ở khoá riêng "_gate_config" — không đụng dữ liệu chính app) là
@@ -111,12 +111,12 @@ function renderLockScreen(){
 
   document.getElementById('lock-desc').innerHTML = (manualLocked() ? 'Trang vừa được <b>khoá thủ công</b>. ' : '') +
     'Dashboard đang áp dụng lịch: <b>' + caHienTai + '</b> (giờ Việt Nam).';
-  document.getElementById('gate-open-now').textContent = '✓ Mở truy cập ngay (hiệu lực ' + OVERRIDE_HOURS + ' giờ)';
+  document.getElementById('gate-open-now').textContent = '✓ Mở truy cập ngay (hiệu lực ' + OVERRIDE_MINUTES + ' phút)';
   document.getElementById('gate-switch-mode').textContent = '🔁 Đổi lịch sang: ' + caKhacLabel;
   document.getElementById('gate-pass-wrap').style.display = 'flex';
 
   document.getElementById('gate-open-now').onclick = async function(){
-    const until = Date.now() + OVERRIDE_HOURS * 3600 * 1000;
+    const until = Date.now() + OVERRIDE_MINUTES * 60 * 1000;
     try{
       localStorage.removeItem(LS_MANUAL_LOCK); // mật khẩu đúng -> tự xoá luôn cờ khoá thủ công (nếu có)
       localStorage.setItem(LS_OVERRIDE_UNTIL, String(until));
