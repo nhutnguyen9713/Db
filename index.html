@@ -2493,6 +2493,44 @@ function gateBustedUrl(base){
       </div>
       </div>
     </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="top-pallet-panel" style="margin-top:16px;">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div>
+          <div class="brand-eyebrow"><span class="dot"></span>TOP MÃ HÀNG NHIỀU PALLET NHẤT</div>
+          <div class="sub">Gộp theo Kho + Item No. — mỗi dòng dữ liệu gốc (GI No.) tính là 1 pallet, xếp hạng nhiều pallet nhất trước, riêng theo từng kho</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="cc-collapse-hint">Bấm để mở/thu gọn</span>
+          <span class="cc-collapse-chevron">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </span>
+        </div>
+      </div>
+      <div class="cc-collapse-body">
+      <div class="kho-modal-body" style="padding:14px 0 0; max-height:none;">
+        <div class="kho-modal-toolbar" style="padding:0 0 14px;" onclick="event.stopPropagation();">
+          <select id="top-pallet-kho-filter" class="kho-search" style="flex:0 0 160px;">
+            <option value="">Tất cả kho</option>
+          </select>
+          <input type="text" class="kho-search" id="top-pallet-item-search" placeholder="Tìm theo Item No.…">
+          <div class="kho-summary" id="top-pallet-summary">—</div>
+        </div>
+        <table class="kho-detail-table" id="top-pallet-table">
+          <thead>
+            <tr>
+              <th style="width:60px;">Hạng</th>
+              <th class="col-kho">Kho</th>
+              <th>Item No.</th>
+              <th style="text-align:right">Số pallet</th>
+            </tr>
+          </thead>
+          <tbody id="top-pallet-tbody"></tbody>
+        </table>
+        <div class="kho-empty" id="top-pallet-empty" style="display:none;">Không có dòng nào khớp tìm kiếm</div>
+      </div>
+      </div>
+    </div>
   </div>
 
   <button type="button" id="search-fab-jump" class="search-fab" style="display:none;" title="Di chuyển nhanh giữa 2 bảng">
@@ -5037,7 +5075,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.90';
+const APP_VERSION = 'v1.91';
 const APP_VERSION_DATE = '12/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -12297,12 +12335,104 @@ function renderAlertsPanel(){
   });
 }
 
+// ============ TOP mã hàng nhiều pallet nhất (trang Tìm mã hàng) ============
+// Gộp theo Kho + Item No. — mỗi dòng dữ liệu gốc (raw_rows, tương ứng 1 GI No.) tính là 1 pallet,
+// giống hệt quy ước đang dùng ở Sơ đồ kho 3B. Xếp hạng RIÊNG theo từng kho (hạng 1 = nhiều pallet
+// nhất CỦA ĐÚNG KHO ĐÓ, không so lẫn giữa các kho khác nhau).
+function computeTopPalletByItem(){
+  const rows = [];
+  if(!currentData) return rows;
+  const raw = getRawRows(currentData);
+  const map = new Map(); // 'kho||item' -> số pallet
+  raw.forEach(r => {
+    const kho = r[RAW_KEY_IDX.kho], item = r[RAW_KEY_IDX.item];
+    if(!kho || !item) return;
+    const key = kho + '||' + item;
+    map.set(key, (map.get(key) || 0) + 1);
+  });
+  map.forEach((count, key) => {
+    const idx = key.indexOf('||');
+    rows.push({ kho: key.slice(0, idx), item: key.slice(idx + 2), count });
+  });
+  const khoOrder = (currentData.kho_order && currentData.kho_order.length) ? currentData.kho_order : ['Kho 2B','Kho 3A','Kho 3B','Kho DG1'];
+  rows.sort((a, b) => {
+    const oa = khoOrder.indexOf(a.kho), ob = khoOrder.indexOf(b.kho);
+    const ia = oa === -1 ? 999 : oa, ib = ob === -1 ? 999 : ob;
+    if(ia !== ib) return ia - ib;
+    return b.count - a.count;
+  });
+  let lastKho = null, rank = 0;
+  rows.forEach(r => {
+    if(r.kho !== lastKho){ lastKho = r.kho; rank = 0; }
+    rank++;
+    r.rank = rank;
+  });
+  return rows;
+}
+let _topPalletCache = [];
+// Chỉ tính lại (group-by trên toàn bộ dữ liệu) khi dữ liệu tồn kho THẬT SỰ thay đổi — gọi từ
+// renderKhoSearchPage() bên dưới. Lọc theo kho/mã hàng (gõ phím) chỉ lọc lại mảng đã tính sẵn,
+// KHÔNG tính lại group-by mỗi lần gõ, xem renderTopPalletFiltered().
+function renderTopPalletTable(){
+  _topPalletCache = currentData ? computeTopPalletByItem() : [];
+  renderTopPalletFiltered();
+}
+function renderTopPalletFiltered(){
+  const tbody = document.getElementById('top-pallet-tbody');
+  if(!tbody) return;
+  const emptyEl = document.getElementById('top-pallet-empty');
+  const table = document.getElementById('top-pallet-table');
+  const summaryEl = document.getElementById('top-pallet-summary');
+  const khoFilterEl = document.getElementById('top-pallet-kho-filter');
+  const itemSearchEl = document.getElementById('top-pallet-item-search');
+
+  if(khoFilterEl){
+    const khoOrder = (currentData && currentData.kho_order && currentData.kho_order.length) ? currentData.kho_order : ['Kho 2B','Kho 3A','Kho 3B','Kho DG1'];
+    const signature = khoOrder.join('|');
+    if(khoFilterEl.dataset.builtFor !== signature){
+      const cur = khoFilterEl.value;
+      khoFilterEl.innerHTML = ['<option value="">Tất cả kho</option>'].concat(khoOrder.map(k => `<option value="${escAttr(k)}">${escHtml(k)}</option>`)).join('');
+      khoFilterEl.value = cur;
+      khoFilterEl.dataset.builtFor = signature;
+    }
+  }
+
+  const khoFilter = khoFilterEl ? khoFilterEl.value : '';
+  const itemQuery = removeDiacritics((itemSearchEl ? itemSearchEl.value : '').toLowerCase().trim());
+  let rows = _topPalletCache;
+  if(khoFilter) rows = rows.filter(r => r.kho === khoFilter);
+  if(itemQuery) rows = rows.filter(r => removeDiacritics(r.item.toLowerCase()).includes(itemQuery));
+
+  if(!rows.length){
+    tbody.innerHTML = '';
+    if(table) table.style.display = 'none';
+    if(emptyEl) emptyEl.style.display = '';
+    if(summaryEl) summaryEl.textContent = currentData ? '0 dòng' : 'Chưa có dữ liệu tồn kho';
+    return;
+  }
+  if(table) table.style.display = '';
+  if(emptyEl) emptyEl.style.display = 'none';
+  if(summaryEl) summaryEl.textContent = `${fmt(rows.length)} dòng`;
+  const medal = r => r.rank === 1 ? '🥇 ' : (r.rank === 2 ? '🥈 ' : (r.rank === 3 ? '🥉 ' : ''));
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td>${medal(r)}${r.rank}</td>
+    <td class="col-kho">${escHtml(r.kho.replace('Kho ',''))}</td>
+    <td>${escHtml(r.item)}</td>
+    <td style="text-align:right">${fmt(r.count)}</td>
+  </tr>`).join('');
+}
+const topPalletKhoFilterEl = document.getElementById('top-pallet-kho-filter');
+if(topPalletKhoFilterEl) topPalletKhoFilterEl.addEventListener('change', renderTopPalletFiltered);
+const topPalletItemSearchEl = document.getElementById('top-pallet-item-search');
+if(topPalletItemSearchEl) topPalletItemSearchEl.addEventListener('input', renderTopPalletFiltered);
+
 function renderKhoSearchPage(){
   if(searchCtrlMain) searchCtrlMain.renderKhoSearchPage();
   if(searchCtrlKiemTon) searchCtrlKiemTon.renderKhoSearchPage();
   if(typeof ccRefreshLocatorCardsIfActive === 'function') ccRefreshLocatorCardsIfActive();
   renderSodo3B();
   if(typeof renderAlertsPanel === 'function') renderAlertsPanel();
+  renderTopPalletTable();
 }
 
 // Hàm render bảng "Danh sách đã xác nhận"
