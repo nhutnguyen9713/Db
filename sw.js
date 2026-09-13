@@ -2,8 +2,14 @@
 // Chiến lược: "Network First" — luôn cố lấy bản MỚI NHẤT từ mạng trước; chỉ dùng bản đã lưu (cache)
 // khi không có mạng. Nhờ vậy mỗi lần cập nhật index.html mới lên GitHub Pages, mở app có mạng là
 // tự động thấy bản mới ngay, không bị kẹt ở bản cũ.
-const CACHE_NAME = 'tn5-dashboard-v1';
-const CORE_ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+// v2: index.html vừa được tách CSS/JS chính ra 2 file riêng (styles.css/app.js, trước đây nhúng
+// thẳng trong index.html) — đổi CACHE_NAME để buộc dọn sạch cache cũ (đang giữ bản index.html nhúng
+// sẵn mọi thứ), tránh lẫn lộn giữa bản cũ/mới; đồng thời thêm 2 file này vào CORE_ASSETS để được cài
+// sẵn (precache) ngay từ lúc cài Service Worker, giống index.html, thay vì chỉ được cache "tình cờ"
+// ở lần tải bình thường đầu tiên (vẫn hoạt động nhờ chiến lược Network First bên dưới, nhưng thêm vào
+// đây để có ngay từ đầu, đúng ý nghĩa "core" của app shell ngoại tuyến).
+const CACHE_NAME = 'tn5-dashboard-v2';
+const CORE_ASSETS = ['./', './index.html', './app.js', './styles.css', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
