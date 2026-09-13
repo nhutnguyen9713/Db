@@ -5028,6 +5028,25 @@ function saveStateToStorage(){
   }
 }
 
+// Lưu RIÊNG ktInputValues (giá trị đang gõ ở các ô "Kiểm thực tế"), có TRÌ HOÃN (debounce) — dùng cho
+// đường gõ phím tần suất cao (mỗi ký tự gõ đều gọi) thay vì saveStateToStorage() (tốn kém: stringify
+// LẠI TOÀN BỘ dữ liệu tồn kho hàng nghìn dòng mỗi lần gõ, dù chỉ 1 ô số thay đổi — thực đo gây giật
+// khi gõ trên máy/tablet yếu). Các nơi khác (Xác nhận dòng, Lưu tổng thể...) vẫn dùng
+// saveStateToStorage() như cũ để đảm bảo lưu đủ mọi state liên quan.
+let _ktInputSaveTimer = null;
+function saveKtInputValuesDebounced(){
+  clearTimeout(_ktInputSaveTimer);
+  _ktInputSaveTimer = setTimeout(() => {
+    if(!STORAGE_OK) return;
+    try{
+      if(Object.keys(ktInputValues).length) LS.setItem(STORAGE_KEY_KT_INPUTS, JSON.stringify(ktInputValues));
+      else LS.removeItem(STORAGE_KEY_KT_INPUTS);
+    }catch(err){
+      console.warn('Không lưu được ktInputValues:', err);
+    }
+  }, 400);
+}
+
 function loadStateFromStorage(){
   if(!STORAGE_OK) return { inv: null, plans: {}, meta: null, confirmed: {} };
   try{
@@ -5105,7 +5124,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v1.98';
+const APP_VERSION = 'v1.99';
 const APP_VERSION_DATE = '13/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5138,6 +5157,17 @@ const fmtDec = (v, dec=2) => {
 };
 const fmtDate = d => { const p = n=>String(n).padStart(2,'0'); return `${p(d.getUTCDate())}/${p(d.getUTCMonth()+1)}/${d.getUTCFullYear()}`; };
 const pct = (a,b) => b ? (100*a/b).toFixed(1)+'%' : '0%';
+
+// TRÌ HOÃN (debounce) 1 hàm — dùng cho các ô tìm kiếm gõ nhanh (mỗi ký tự gõ đều trigger vẽ lại
+// nhiều bảng/sơ đồ cùng lúc) để không vẽ lại NGAY từng ký tự, chỉ vẽ lại sau khi ngừng gõ 1 chút —
+// giảm giật khi gõ trên bộ dữ liệu tồn kho lớn (hàng nghìn dòng).
+function debounce(fn, wait){
+  let timer = null;
+  return function(...args){
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), wait);
+  };
+}
 
 function fmtDateTime(d){
   const p = n => String(n).padStart(2,'0');
@@ -5547,18 +5577,36 @@ function computeAggregates(rows){
   }
   if(!data.length) throw new Error('Không đọc được dòng dữ liệu hợp lệ nào.');
 
-  const total_qty = data.reduce((s,d)=>s+d.qty,0);
-  const distinct_items = new Set(data.map(d=>d.item)).size;
-  const distinct_locators = new Set(data.map(d=>d.locator)).size;
-  const distinct_pallets = new Set(data.map(d=>d.pallet)).size;
-  const pass_qty = data.filter(d=>d.oqc==='PASS').reduce((s,d)=>s+d.qty,0);
-  const ng_qty = data.filter(d=>d.oqc==='NG').reduce((s,d)=>s+d.qty,0);
-
+  // GỘP các lượt quét độc lập (trước đây ~10 lượt .map()/.filter()/.reduce()/for RIÊNG BIỆT qua toàn
+  // bộ `data`) thành 1 VÒNG LẶP DUY NHẤT cập nhật mọi bộ đếm/gộp nhóm cùng lúc — chạy 1 lần trên file
+  // tồn kho có thể tới hàng chục nghìn dòng mỗi khi tải file mới, thay vì lặp lại nhiều lần cho cùng 1
+  // việc duyệt dữ liệu. KHÔNG đổi kết quả trả về — chỉ đổi cách tính, giá trị từng trường giữ nguyên
+  // y hệt logic gốc.
+  let total_qty = 0;
+  const itemsSet = new Set(), locatorsSet = new Set(), palletsSet = new Set();
+  let pass_qty = 0, ng_qty = 0;
   const qty_by_kho = {};
   const kho_oqc = {};
   const pallet_by_kho = {};
   const kho_oqc_pallet = {};
+  const by_buyer = {};
+  const by_item = {};
+  const item_kho = {};
+  const by_locator = {};
+  const locator_kho = {};
+  const kho_item_po = {};
+  let maxDt = null;
+  const WATCH_LOCATORS_3B = ['D3B-FG-TG', 'D3B-FG-ITN'];
+  const WATCH_LOCATORS_3A = ['DG3-FG-TG', 'DG3-FG-ITN'];
+  const locator_watch_3b = [];
+  const locator_watch_3a = [];
   for(const d of data){
+    total_qty += d.qty;
+    itemsSet.add(d.item);
+    locatorsSet.add(d.locator);
+    palletsSet.add(d.pallet);
+    if(d.oqc === 'PASS') pass_qty += d.qty;
+    else if(d.oqc === 'NG') ng_qty += d.qty;
     qty_by_kho[d.kho] = (qty_by_kho[d.kho]||0) + d.qty;
     kho_oqc[d.kho] = kho_oqc[d.kho] || {};
     const key = d.oqc || 'Khac';
@@ -5567,41 +5615,47 @@ function computeAggregates(rows){
     pallet_by_kho[d.kho] = (pallet_by_kho[d.kho]||0) + 1;
     kho_oqc_pallet[d.kho] = kho_oqc_pallet[d.kho] || {};
     kho_oqc_pallet[d.kho][key] = (kho_oqc_pallet[d.kho][key]||0) + 1;
+
+    by_buyer[d.buyer] = (by_buyer[d.buyer]||0) + d.qty;
+
+    by_item[d.item] = (by_item[d.item]||0) + d.qty;
+    item_kho[d.item] = item_kho[d.item] || new Set();
+    item_kho[d.item].add(d.kho);
+
+    by_locator[d.locator] = (by_locator[d.locator]||0) + d.qty;
+    locator_kho[d.locator] = d.kho;
+
+    kho_item_po[d.kho] = kho_item_po[d.kho] || {};
+    const poKey = d.item + '␟' + d.custpo + '␟' + (d.locator || '—') + '␟' + (d.oqc || 'Khac') + '␟' + (d.ref || '');
+    kho_item_po[d.kho][poKey] = (kho_item_po[d.kho][poKey] || 0) + d.qty;
+
+    if(d.dt && (maxDt === null || d.dt > maxDt)) maxDt = d.dt;
+
+    const locUp = (d.locator || '').toUpperCase();
+    if(WATCH_LOCATORS_3B.includes(locUp) || WATCH_LOCATORS_3A.includes(locUp)){
+      const watchEntry = { item: d.item, locator: d.locator, qty: d.qty, gi: d.gi, lot: d.lot, pallet: d.pallet != null ? String(d.pallet) : '' };
+      if(WATCH_LOCATORS_3B.includes(locUp)) locator_watch_3b.push(watchEntry);
+      else locator_watch_3a.push(watchEntry);
+    }
   }
+  const distinct_items = itemsSet.size;
+  const distinct_locators = locatorsSet.size;
+  const distinct_pallets = palletsSet.size;
+  locator_watch_3b.sort((a,b) => a.locator.localeCompare(b.locator) || b.qty - a.qty);
+  locator_watch_3a.sort((a,b) => a.locator.localeCompare(b.locator) || b.qty - a.qty);
   const khoPriority = ['Kho 2B','Kho 3A','Kho 3B','Kho DG1','Chua phan loai'];
   const kho_order = khoPriority.filter(k => qty_by_kho[k] !== undefined)
     .concat(Object.keys(qty_by_kho).filter(k => !khoPriority.includes(k)));
 
-  const by_buyer = {};
-  for(const d of data) by_buyer[d.buyer] = (by_buyer[d.buyer]||0) + d.qty;
   const top_buyers = Object.entries(by_buyer).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const other_buyers_qty = total_qty - top_buyers.reduce((s,b)=>s+b[1],0);
 
-  const by_item = {};
-  const item_kho = {};
-  for(const d of data){
-    by_item[d.item] = (by_item[d.item]||0) + d.qty;
-    item_kho[d.item] = item_kho[d.item] || new Set();
-    item_kho[d.item].add(d.kho);
-  }
   const top_items = Object.entries(by_item).sort((a,b)=>b[1]-a[1]).slice(0,12)
     .map(([item,q]) => [item, q, Array.from(item_kho[item])]);
 
-  const by_locator = {};
-  const locator_kho = {};
-  for(const d of data){
-    by_locator[d.locator] = (by_locator[d.locator]||0) + d.qty;
-    locator_kho[d.locator] = d.kho;
-  }
   const top_locators = Object.entries(by_locator).sort((a,b)=>b[1]-a[1]).slice(0,12)
     .map(([loc,q]) => [loc, q, locator_kho[loc]]);
 
-  const kho_item_po = {};
-  for(const d of data){
-    kho_item_po[d.kho] = kho_item_po[d.kho] || {};
-    const key = d.item + '\u241F' + d.custpo + '\u241F' + (d.locator || '—') + '\u241F' + (d.oqc || 'Khac') + '\u241F' + (d.ref || '');
-    kho_item_po[d.kho][key] = (kho_item_po[d.kho][key] || 0) + d.qty;
-  }
   const kho_detail = {};
   for(const k of Object.keys(kho_item_po)){
     kho_detail[k] = Object.entries(kho_item_po[k])
@@ -5609,8 +5663,8 @@ function computeAggregates(rows){
       .sort((a,b)=>b[4]-a[4]);
   }
 
-  const validDates = data.map(d=>d.dt).filter(Boolean);
-  const today = validDates.length ? new Date(Math.max(...validDates)) : new Date();
+  // "today" (moc tinh tuoi ton kho) lay tu maxDt da gom trong vong lap chinh o tren.
+  const today = maxDt || new Date();
   const buckets = [['0-7 ngay',0,7],['8-30 ngay',8,30],['31-60 ngay',31,60],['61-90 ngay',61,90],['>90 ngay',91,999999]];
   const bucket_qty = buckets.map(b => [b[0], 0]);
   for(const d of data){
@@ -5621,18 +5675,6 @@ function computeAggregates(rows){
     }
   }
   const pad = n => String(n).padStart(2,'0');
-
-  const WATCH_LOCATORS_3B = ['D3B-FG-TG', 'D3B-FG-ITN'];
-  const locator_watch_3b = data
-    .filter(d => WATCH_LOCATORS_3B.includes((d.locator || '').toUpperCase()))
-    .map(d => ({ item: d.item, locator: d.locator, qty: d.qty, gi: d.gi, lot: d.lot, pallet: d.pallet != null ? String(d.pallet) : '' }))
-    .sort((a,b) => a.locator.localeCompare(b.locator) || b.qty - a.qty);
-
-  const WATCH_LOCATORS_3A = ['DG3-FG-TG', 'DG3-FG-ITN'];
-  const locator_watch_3a = data
-    .filter(d => WATCH_LOCATORS_3A.includes((d.locator || '').toUpperCase()))
-    .map(d => ({ item: d.item, locator: d.locator, qty: d.qty, gi: d.gi, lot: d.lot, pallet: d.pallet != null ? String(d.pallet) : '' }))
-    .sort((a,b) => a.locator.localeCompare(b.locator) || b.qty - a.qty);
 
   return {
     snapshot_date: `${pad(today.getUTCDate())}/${pad(today.getUTCMonth()+1)}/${today.getUTCFullYear()}`,
@@ -6192,7 +6234,7 @@ document.addEventListener('click', (e) => {
   }
 });
 const ovConfigSearchEl = document.getElementById('ov-config-search');
-if(ovConfigSearchEl) ovConfigSearchEl.addEventListener('input', () => ovRenderConfigList());
+if(ovConfigSearchEl) ovConfigSearchEl.addEventListener('input', debounce(() => ovRenderConfigList(), 150));
 
 document.addEventListener('change', (e) => {
   const row = e.target.closest('.ov-config-row');
@@ -6834,9 +6876,17 @@ document.querySelectorAll('.btn-plan-clear').forEach(btn => {
 
 const planCardsEl = document.getElementById('plan-cards');
 
+// buildItemIndex()/buildItemCustPoIndex() luôn được gọi với CHÍNH currentData (không có nơi nào
+// truyền data khác) — CACHE lại theo tham chiếu data, vì trong 1 lần renderPlanPanel() cả 2 hàm này
+// bị gọi tới 4 lần (1 lần trong buildCombinedPlanCompareTable() + tối đa 3 lần, mỗi Plan Row/FC/HCP,
+// trong buildCompareTable()) — mỗi lần đều quét lại TOÀN BỘ kho_detail (mọi kho) từ đầu, dù dữ liệu
+// tồn kho không hề đổi giữa các lần gọi đó. Tự làm mới khi data đổi tham chiếu (currentData luôn được
+// GÁN LẠI object mới khi có dữ liệu mới, không sửa tại chỗ, nên so sánh tham chiếu là đủ).
+let _itemIndexCache = null, _itemIndexForData = null;
 function buildItemIndex(data){
+  if(_itemIndexForData === data && _itemIndexCache) return _itemIndexCache;
   const idx = {};
-  if(!data || !data.kho_detail) return idx;
+  if(!data || !data.kho_detail){ _itemIndexCache = idx; _itemIndexForData = data; return idx; }
   for(const kho of Object.keys(data.kho_detail)){
     for(const [item, , locator, oqc, qty] of data.kho_detail[kho]){
       if(PROD_LOCATOR_RE.test(locator || '')) continue; // loại vị trí "Prod" — không tính vào So sánh Plan / Tổng hợp 3 Plan
@@ -6849,12 +6899,16 @@ function buildItemIndex(data){
       else idx[key].other += qty;
     }
   }
+  _itemIndexCache = idx;
+  _itemIndexForData = data;
   return idx;
 }
 
+let _itemCustPoIndexCache = null, _itemCustPoIndexForData = null;
 function buildItemCustPoIndex(data){
+  if(_itemCustPoIndexForData === data && _itemCustPoIndexCache) return _itemCustPoIndexCache;
   const idx = {};
-  if(!data || !data.kho_detail) return idx;
+  if(!data || !data.kho_detail){ _itemCustPoIndexCache = idx; _itemCustPoIndexForData = data; return idx; }
   for(const kho of Object.keys(data.kho_detail)){
     for(const [item, custpo, locator, oqc, qty] of data.kho_detail[kho]){
       if(PROD_LOCATOR_RE.test(locator || '')) continue; // loại vị trí "Prod" — không tính vào So sánh Plan / Tổng hợp 3 Plan
@@ -6867,6 +6921,8 @@ function buildItemCustPoIndex(data){
       else idx[key].other += qty;
     }
   }
+  _itemCustPoIndexCache = idx;
+  _itemCustPoIndexForData = data;
   return idx;
 }
 
@@ -6966,18 +7022,41 @@ function buildCompareTable(type){
 // dùng chung 1 regex để loại vị trí này ở những chỗ tính "tồn kho khả dụng để pick".
 const PROD_LOCATOR_RE = /prod/i;
 
+// Bảng tra cứu (Map) item -> mảng {kho,locator,custpo,oqc,qty} — dựng 1 LẦN từ kho_detail và tái sử
+// dụng cho mọi lần gọi buildItemLocatorDetail(), thay vì quét lại TOÀN BỘ kho_detail (hàng nghìn dòng)
+// mỗi lần gọi. buildItemLocatorDetail() gọi rất nhiều lần trong 1 lần render (VD: 1 lần/mã hàng/
+// container ở renderContainerPickingOverview()) nên quét lại từ đầu mỗi lần gây giật khi thao tác.
+// Tự làm mới khi currentData đổi tham chiếu (mỗi lần tải file mới/đồng bộ Cloud đều gán currentData =
+// object MỚI, không sửa tại chỗ — xem renderDashboard()/_smartReadAll() — nên so sánh tham chiếu là đủ).
+let _itemLocatorIndexCache = null;
+let _itemLocatorIndexForData = null;
+function getItemLocatorIndex(){
+  if(_itemLocatorIndexForData === currentData && _itemLocatorIndexCache) return _itemLocatorIndexCache;
+  const idx = new Map();
+  if(currentData && currentData.kho_detail){
+    for(const kho of Object.keys(currentData.kho_detail)){
+      for(const [it, custpo, locator, oqc, qty] of currentData.kho_detail[kho]){
+        const key = it.toLowerCase();
+        let arr = idx.get(key);
+        if(!arr){ arr = []; idx.set(key, arr); }
+        arr.push({ kho, locator, custpo, oqc, qty });
+      }
+    }
+  }
+  _itemLocatorIndexCache = idx;
+  _itemLocatorIndexForData = currentData;
+  return idx;
+}
+
 function buildItemLocatorDetail(item, po, excludeProd){
   if(!currentData || !currentData.kho_detail) return [];
-  const itemLower = item.toLowerCase();
+  const entries = getItemLocatorIndex().get(item.toLowerCase()) || [];
   const poLower = po ? po.trim().toLowerCase() : '';
   const rows = [];
-  for(const kho of Object.keys(currentData.kho_detail)){
-    for(const [it, custpo, locator, oqc, qty] of currentData.kho_detail[kho]){
-      if(it.toLowerCase() !== itemLower) continue;
-      if(poLower && (custpo || '').trim().toLowerCase() !== poLower) continue;
-      if(excludeProd && PROD_LOCATOR_RE.test(locator || '')) continue;
-      rows.push({ kho, locator, custpo, oqc, qty });
-    }
+  for(const e of entries){
+    if(poLower && (e.custpo || '').trim().toLowerCase() !== poLower) continue;
+    if(excludeProd && PROD_LOCATOR_RE.test(e.locator || '')) continue;
+    rows.push(e);
   }
   return rows.sort((a,b) => b.qty - a.qty);
 }
@@ -7191,6 +7270,9 @@ const STORAGE_KEY_SCANNED_GI = 'tn5_dashboard_scanned_gi_v1';
 // chiếu từng GI theo từng vị trí khi phát hiện thiếu pallet.
 let giScanLog = [];
 const STORAGE_KEY_GI_LOG = 'tn5_dashboard_gi_scan_log_v1';
+// Số dòng tối đa giữ lại trong giScanLog — quét không giới hạn khiến mảng (và JSON lưu mỗi lần quét)
+// phình to dần suốt 1 đợt kiểm tồn kho dài; giữ đủ nhiều để "Xem GI đã quét" vẫn hữu ích mà không phình vô hạn.
+const GI_SCAN_LOG_MAX = 3000;
 
 // Lịch sử "Danh sách đã xác nhận" theo ngày — bấm nút "Lưu" sẽ chụp lại toàn bộ danh sách đã xác
 // nhận hiện tại vào đây (key = ngày dd/mm/yyyy), rồi làm mới (xoá trắng) bảng đã xác nhận để bắt
@@ -8695,15 +8777,23 @@ const RAW_KEY_IDX = {kho:0, item:1, custpo:2, locator:3, oqc:4, qty:5, gi:6, lot
    Gom theo Locator trong "Kho 3B", giới hạn hiển thị tối đa 26 pallet/vị trí (vượt quá vẫn tính max). */
 const WH3B_MAX_PALLET = 26;
 
+// CACHE theo tham chiếu currentData — hàm này được gọi lại MỖI KÝ TỰ gõ vào ô tìm kiếm sơ đồ kho (xem
+// whApplySearchFilter()), dù dữ liệu tồn kho không đổi giữa các lần gõ đó; quét lại toàn bộ raw_rows
+// mỗi lần gây giật khi gõ tìm kiếm trên bộ dữ liệu lớn.
+let _sodo3bByLocatorCache = null, _sodo3bByLocatorForData = null;
 function computeSodo3bByLocator(){
+  if(_sodo3bByLocatorForData === currentData && _sodo3bByLocatorCache) return _sodo3bByLocatorCache;
   const map = {};
-  if(!currentData) return map;
-  const raw = getRawRows(currentData);
-  for(const row of raw){
-    if(row[RAW_KEY_IDX.kho] !== 'Kho 3B') continue;
-    const locator = row[RAW_KEY_IDX.locator] || '—';
-    (map[locator] || (map[locator] = [])).push(row);
+  if(currentData){
+    const raw = getRawRows(currentData);
+    for(const row of raw){
+      if(row[RAW_KEY_IDX.kho] !== 'Kho 3B') continue;
+      const locator = row[RAW_KEY_IDX.locator] || '—';
+      (map[locator] || (map[locator] = [])).push(row);
+    }
   }
+  _sodo3bByLocatorCache = map;
+  _sodo3bByLocatorForData = currentData;
   return map;
 }
 
@@ -8722,10 +8812,21 @@ function sodo3bLocatorSortKey(loc){
    dụng chung cho cả Sơ đồ kho 3B và Sơ đồ Rack 3A, lưu qua LS nên cũng được đồng bộ theo cơ chế
    Lưu/Cloud sẵn có. */
 const WH_CAP_OVERRIDE_KEY = 'tn5_wh_cap_override_v1';
+// CACHE lại kết quả JSON.parse theo đúng chuỗi thô vừa đọc được — whApplyCapOverride() (và
+// computeLocatorBoxStats()) gọi whLoadCapOverrides() 1 LẦN CHO MỖI VỊ TRÍ khi vẽ sơ đồ kho (VD Rack 3A
+// có ~240 vị trí), dù dữ liệu override HIẾM KHI đổi giữa các lần gọi đó trong cùng 1 lượt vẽ — trước
+// đây mỗi lần đều JSON.parse() lại từ đầu. So sánh đúng CHUỖI THÔ (không phải cờ thủ công) nên vẫn
+// bắt được thay đổi tới từ nơi khác ghi vào cùng khoá này (VD đồng bộ Cloud/thiết bị khác), không lo
+// bị "cache cũ".
+let _whCapOverridesCache = null;
+let _whCapOverridesRawCache = undefined;
 function whLoadCapOverrides(){
   try{
     const raw = LS.getItem(WH_CAP_OVERRIDE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    if(raw === _whCapOverridesRawCache && _whCapOverridesCache) return _whCapOverridesCache;
+    _whCapOverridesRawCache = raw;
+    _whCapOverridesCache = raw ? JSON.parse(raw) : {};
+    return _whCapOverridesCache;
   }catch(e){ return {}; }
 }
 function whSaveCapOverrides(obj){
@@ -9011,16 +9112,23 @@ function khoGridCopyFromDefault(khoLabel){
   if(typeof showAppToast === 'function') showAppToast(`✓ Đã thêm ${fmt(missing.length)} vị trí từ sơ đồ mặc định vào grid tuỳ chỉnh ${khoLabel}.`);
 }
 
+// CACHE theo tham chiếu currentData — cùng lý do với computeSodo3bByLocator() ở trên (gọi lại mỗi ký
+// tự gõ tìm kiếm sơ đồ kho 2B).
+let _sodo2bByLocatorCache = null, _sodo2bByLocatorForData = null;
 function computeSodo2bByLocator(){
+  if(_sodo2bByLocatorForData === currentData && _sodo2bByLocatorCache) return _sodo2bByLocatorCache;
   const map = {};
   B2_LOCATORS.forEach(loc => { map[loc] = []; });
-  if(!currentData) return map;
-  for(const row of getRawRows(currentData)){
-    if(row[RAW_KEY_IDX.kho] !== 'Kho 2B') continue;
-    const locator = String(row[RAW_KEY_IDX.locator] || '').trim();
-    if(!locator) continue;
-    (map[locator] || (map[locator] = [])).push(row);
+  if(currentData){
+    for(const row of getRawRows(currentData)){
+      if(row[RAW_KEY_IDX.kho] !== 'Kho 2B') continue;
+      const locator = String(row[RAW_KEY_IDX.locator] || '').trim();
+      if(!locator) continue;
+      (map[locator] || (map[locator] = [])).push(row);
+    }
   }
+  _sodo2bByLocatorCache = map;
+  _sodo2bByLocatorForData = currentData;
   return map;
 }
 
@@ -9071,7 +9179,7 @@ function khoGridRenderCustom(khoLabel){
   const map = cfg.compute();
   const occupied = khoGridBuildOccupied(layout, null);
   const selKho = _khoGridSelectionKho === khoLabel ? _khoGridSelection : null;
-  let html = '';
+  const htmlParts = [];
   layout.cells.forEach(cell => {
     const rows = map[cell.locator] || [];
     const b = buildLocatorBoxHtml(cell.locator, rows, khoGridBaseCapacity(khoLabel, cell.locator), '');
@@ -9090,14 +9198,14 @@ function khoGridRenderCustom(khoLabel){
       <div class="wh3b-resize-handle wh3b-resize-se" data-cell-id="${escAttr(cell.id)}" data-dir="se" title="Kéo để đổi cả độ rộng lẫn độ cao"></div>
       <span class="wh3b-resize-hint">${cell.colSpan}×${cell.rowSpan}</span>
     </div>`);
-    html += cellHtml;
+    htmlParts.push(cellHtml);
   });
   for(let r=1;r<=layout.rows;r++) for(let c=1;c<=layout.cols;c++){
     if(occupied.has(r+','+c)) continue;
     const isSelected = selKho && selKho.has(khoGridSelectionKey(r, c));
-    html += `<button type="button" class="wh3b-custom-add-cell${isSelected ? ' wh3b-cell-selected' : ''}" style="grid-row:${r};grid-column:${c};" data-kho="${escAttr(khoLabel)}" data-row="${r}" data-col="${c}" title="Thêm vị trí vào ô hàng ${r}, cột ${c} — giữ Ctrl để chọn làm đích dán">+</button>`;
+    htmlParts.push(`<button type="button" class="wh3b-custom-add-cell${isSelected ? ' wh3b-cell-selected' : ''}" style="grid-row:${r};grid-column:${c};" data-kho="${escAttr(khoLabel)}" data-row="${r}" data-col="${c}" title="Thêm vị trí vào ô hàng ${r}, cột ${c} — giữ Ctrl để chọn làm đích dán">+</button>`);
   }
-  container.innerHTML = html || `<div class="wh3b-empty">Lưới trống — bấm "+" để bắt đầu thêm vị trí.</div>`;
+  container.innerHTML = htmlParts.length ? htmlParts.join('') : `<div class="wh3b-empty">Lưới trống — bấm "+" để bắt đầu thêm vị trí.</div>`;
   whApplySearchFilter(cfg.customGrid, cfg.compute, cfg.search, cfg.pass, cfg.ng, cfg.detail);
 }
 
@@ -9579,17 +9687,24 @@ const RACK3A_LOCATOR_REGEX = /^3A-[A-Za-z0-9]+-T\d+$/i;
 const RACK3A_MAX_PALLET = 2;
 const RACK3A_ALL_LOCATORS = ["3A-A1-T1","3A-A2-T1","3A-A3-T1","3A-A4-T1","3A-A5-T1","3A-A6-T1","3A-A7-T1","3A-A8-T1","3A-A9-T1","3A-A10-T1","3A-A11-T1","3A-A12-T1","3A-A13-T1","3A-A14-T1","3A-A15-T1","3A-A16-T1","3A-A17-T1","3A-A1-T2","3A-A2-T2","3A-A3-T2","3A-A4-T2","3A-A5-T2","3A-A6-T2","3A-A7-T2","3A-A8-T2","3A-A9-T2","3A-A10-T2","3A-A11-T2","3A-A12-T2","3A-A13-T2","3A-A14-T2","3A-A15-T2","3A-A16-T2","3A-A17-T2","3A-A1-T3","3A-A2-T3","3A-A3-T3","3A-A4-T3","3A-A5-T3","3A-A6-T3","3A-A7-T3","3A-A8-T3","3A-A9-T3","3A-A10-T3","3A-A11-T3","3A-A12-T3","3A-A13-T3","3A-A14-T3","3A-A15-T3","3A-A16-T3","3A-A17-T3","3A-A1-T4","3A-A2-T4","3A-A3-T4","3A-A4-T4","3A-A5-T4","3A-A6-T4","3A-A7-T4","3A-A8-T4","3A-A9-T4","3A-A10-T4","3A-A11-T4","3A-A12-T4","3A-A13-T4","3A-A14-T4","3A-A15-T4","3A-A16-T4","3A-A17-T4","3A-A1-T5","3A-A2-T5","3A-A3-T5","3A-A4-T5","3A-A5-T5","3A-A6-T5","3A-A7-T5","3A-A8-T5","3A-A9-T5","3A-A10-T5","3A-A11-T5","3A-A12-T5","3A-A13-T5","3A-A14-T5","3A-A15-T5","3A-A16-T5","3A-A17-T5","3A-B1-T5","3A-B2-T5","3A-B3-T5","3A-B4-T5","3A-B5-T5","3A-B6-T5","3A-B7-T5","3A-B8-T5","3A-B9-T5","3A-B10-T5","3A-B11-T5","3A-B12-T5","3A-B13-T5","3A-B14-T5","3A-B15-T5","3A-B16-T5","3A-B17-T5","3A-B1-T4","3A-B2-T4","3A-B3-T4","3A-B4-T4","3A-B5-T4","3A-B6-T4","3A-B7-T4","3A-B8-T4","3A-B9-T4","3A-B10-T4","3A-B11-T4","3A-B12-T4","3A-B13-T4","3A-B14-T4","3A-B15-T4","3A-B16-T4","3A-B17-T4","3A-B1-T3","3A-B2-T3","3A-B3-T3","3A-B4-T3","3A-B5-T3","3A-B6-T3","3A-B7-T3","3A-B8-T3","3A-B9-T3","3A-B10-T3","3A-B11-T3","3A-B12-T3","3A-B13-T3","3A-B14-T3","3A-B15-T3","3A-B16-T3","3A-B17-T3","3A-B1-T2","3A-B2-T2","3A-B3-T2","3A-B4-T2","3A-B5-T2","3A-B6-T2","3A-B7-T2","3A-B8-T2","3A-B9-T2","3A-B10-T2","3A-B11-T2","3A-B12-T2","3A-B13-T2","3A-B14-T2","3A-B15-T2","3A-B16-T2","3A-B17-T2","3A-B1-T1","3A-B2-T1","3A-B3-T1","3A-B4-T1","3A-B5-T1","3A-B6-T1","3A-B7-T1","3A-B8-T1","3A-B9-T1","3A-B10-T1","3A-B11-T1","3A-B12-T1","3A-B13-T1","3A-B14-T1","3A-B15-T1","3A-B16-T1","3A-B17-T1","3A-C1-T1","3A-C2-T1","3A-C3-T1","3A-C4-T1","3A-C5-T1","3A-C6-T1","3A-C7-T1","3A-C8-T1","3A-C9-T1","3A-C10-T1","3A-C11-T1","3A-C12-T1","3A-C13-T1","3A-C14-T1","3A-C15-T1","3A-C16-T1","3A-C17-T1","3A-C1-T2","3A-C2-T2","3A-C3-T2","3A-C4-T2","3A-C5-T2","3A-C6-T2","3A-C7-T2","3A-C8-T2","3A-C9-T2","3A-C10-T2","3A-C11-T2","3A-C12-T2","3A-C13-T2","3A-C14-T2","3A-C15-T2","3A-C16-T2","3A-C17-T2","3A-C1-T3","3A-C2-T3","3A-C3-T3","3A-C4-T3","3A-C5-T3","3A-C6-T3","3A-C7-T3","3A-C8-T3","3A-C9-T3","3A-C10-T3","3A-C11-T3","3A-C12-T3","3A-C13-T3","3A-C14-T3","3A-C15-T3","3A-C16-T3","3A-C17-T3","3A-C1-T4","3A-C2-T4","3A-C3-T4","3A-C4-T4","3A-C5-T4","3A-C6-T4","3A-C7-T4","3A-C8-T4","3A-C9-T4","3A-C10-T4","3A-C11-T4","3A-C12-T4","3A-C13-T4","3A-C14-T4","3A-C15-T4","3A-C16-T4","3A-C17-T4","3A-C1-T5","3A-C2-T5","3A-C3-T5","3A-C4-T5","3A-C5-T5","3A-C6-T5","3A-C7-T5","3A-C8-T5","3A-C9-T5","3A-C10-T5","3A-C11-T5","3A-C12-T5","3A-C13-T5","3A-C14-T5","3A-C15-T5","3A-C16-T5","3A-C17-T5","3A-D1-T5","3A-D2-T5","3A-D3-T5","3A-D4-T5","3A-D5-T5","3A-D6-T5","3A-D7-T5","3A-D8-T5","3A-D9-T5","3A-D10-T5","3A-D11-T5","3A-D12-T5","3A-D13-T5","3A-D14-T5","3A-D15-T5","3A-D16-T5","3A-D17-T5","3A-D1-T4","3A-D2-T4","3A-D3-T4","3A-D4-T4","3A-D5-T4","3A-D6-T4","3A-D7-T4","3A-D8-T4","3A-D9-T4","3A-D10-T4","3A-D11-T4","3A-D12-T4","3A-D13-T4","3A-D14-T4","3A-D15-T4","3A-D16-T4","3A-D17-T4","3A-D1-T3","3A-D2-T3","3A-D3-T3","3A-D4-T3","3A-D5-T3","3A-D6-T3","3A-D7-T3","3A-D8-T3","3A-D9-T3","3A-D10-T3","3A-D11-T3","3A-D12-T3","3A-D13-T3","3A-D14-T3","3A-D15-T3","3A-D16-T3","3A-D17-T3","3A-D1-T2","3A-D2-T2","3A-D3-T2","3A-D4-T2","3A-D5-T2","3A-D6-T2","3A-D7-T2","3A-D8-T2","3A-D9-T2","3A-D10-T2","3A-D11-T2","3A-D12-T2","3A-D13-T2","3A-D14-T2","3A-D15-T2","3A-D16-T2","3A-D17-T2","3A-D1-T1","3A-D2-T1","3A-D3-T1","3A-D4-T1","3A-D5-T1","3A-D6-T1","3A-D7-T1","3A-D8-T1","3A-D9-T1","3A-D10-T1","3A-D11-T1","3A-D12-T1","3A-D13-T1","3A-D14-T1","3A-D15-T1","3A-D16-T1","3A-D17-T1"];
 
+// CACHE theo tham chiếu currentData — cùng lý do với computeSodo3bByLocator() ở trên (gọi lại mỗi ký
+// tự gõ tìm kiếm sơ đồ Rack 3A).
+let _rack3aByLocatorCache = null, _rack3aByLocatorForData = null;
 function computeRack3AByLocator(){
+  if(_rack3aByLocatorForData === currentData && _rack3aByLocatorCache) return _rack3aByLocatorCache;
   const map = {};
   RACK3A_ALL_LOCATORS.forEach(loc => { map[loc] = []; });
-  if(!currentData) return map;
-  const raw = getRawRows(currentData);
-  for(const row of raw){
-    if(row[RAW_KEY_IDX.kho] !== 'Kho 3A') continue;
-    const locator = row[RAW_KEY_IDX.locator] || '';
-    if(!RACK3A_LOCATOR_REGEX.test(locator)) continue;
-    (map[locator] || (map[locator] = [])).push(row);
+  if(currentData){
+    const raw = getRawRows(currentData);
+    for(const row of raw){
+      if(row[RAW_KEY_IDX.kho] !== 'Kho 3A') continue;
+      const locator = row[RAW_KEY_IDX.locator] || '';
+      if(!RACK3A_LOCATOR_REGEX.test(locator)) continue;
+      (map[locator] || (map[locator] = [])).push(row);
+    }
   }
+  _rack3aByLocatorCache = map;
+  _rack3aByLocatorForData = currentData;
   return map;
 }
 
@@ -9765,7 +9880,7 @@ function whApplySearchFilter(gridId, computeFn, searchInputId, passChkId, ngChkI
     whApplySearchFilter(gridId, computeFn, prefix + '-search', prefix + '-oqc-pass', prefix + '-oqc-ng', detailId);
   };
   const searchEl = document.getElementById(prefix + '-search');
-  if(searchEl) searchEl.addEventListener('input', apply);
+  if(searchEl) searchEl.addEventListener('input', debounce(apply, 150));
   [prefix + '-oqc-pass', prefix + '-oqc-ng'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.addEventListener('change', apply);
@@ -10062,9 +10177,14 @@ function createSearchController(ids){
 
     const raw = getRawRows(currentData);
     let rows, totalQty;
+    // Nhớ lại chuỗi "hay" (đã ghép + viết thường) đã tính cho từng dòng ngay khi lọc — dùng lại ở phần
+    // tính "matchedCodesCount" bên dưới thay vì tính lại lần 2 (map theo THAM CHIẾU dòng nên vẫn đúng
+    // dù `rows` sau đó còn bị lọc cột/sắp xếp thêm — chỉ tạo mới mỗi lần render, không lưu xuyên suốt).
+    const multiHayMap = multiMode ? new Map() : null;
     if(multiMode){
       rows = raw.filter(r => {
         const hay = `${r[1]} ${r[2]} ${r[3]} ${r[4]} ${r[6]} ${r[7]} ${r[8]} ${r[9]} ${r[10]} ${r[11]}`.toLowerCase();
+        multiHayMap.set(r, hay);
         return multiGroupMatch(multiCodes, hay);
       });
     } else {
@@ -10096,7 +10216,7 @@ function createSearchController(ids){
       const foundQty = rows.reduce((s,r)=>s+r[5],0);
       if(multiMode){
         const matchedCodesCount = multiCodes.filter(g => rows.some(r => {
-          const hay = `${r[1]} ${r[2]} ${r[3]} ${r[4]} ${r[6]} ${r[7]} ${r[8]} ${r[9]} ${r[10]} ${r[11]}`.toLowerCase();
+          const hay = multiHayMap.get(r);
           return g.every(tok => hay.includes(tok));
         })).length;
         rawSummaryEl.innerHTML = `<b>${fmt(foundQty)}</b> Pcs &nbsp;·&nbsp; ${rows.length} dòng &nbsp;·&nbsp; khớp ${matchedCodesCount}/${multiCodes.length} mã tìm`;
@@ -10240,6 +10360,10 @@ function createSearchController(ids){
     }
 
     let rowsAll, totalQty;
+    // Nhớ lại chuỗi "hay" đã tính cho từng dòng ngay khi lọc — dùng lại ở "matchedCodesCount" bên dưới
+    // thay vì tính lại lần 2 (map theo THAM CHIẾU dòng nên vẫn đúng dù rowsAll/rows sau đó còn bị lọc
+    // cột/sắp xếp thêm — chỉ tạo mới mỗi lần render, không lưu xuyên suốt).
+    const multiHayMap = multiMode ? new Map() : null;
     if(multiMode){
       rowsAll = [];
       for(const kho of (currentData.kho_order || Object.keys(currentData.kho_detail))){
@@ -10249,6 +10373,7 @@ function createSearchController(ids){
       }
       rowsAll = rowsAll.filter(r => {
         const hay = `${r.item} ${r.custpo} ${r.locator} ${r.oqc} ${r.kho}`.toLowerCase();
+        multiHayMap.set(r, hay);
         return multiGroupMatch(multiCodes, hay);
       });
       totalQty = rowsAll.reduce((s,r)=>s+r.qty,0);
@@ -10300,7 +10425,7 @@ function createSearchController(ids){
     if(khoSummaryEl){
       if(multiMode){
         const matchedCodesCount = multiCodes.filter(g => rows.some(r => {
-          const hay = `${r.item} ${r.custpo} ${r.locator} ${r.oqc} ${r.kho}`.toLowerCase();
+          const hay = multiHayMap.get(r);
           return g.every(tok => hay.includes(tok));
         })).length;
         khoSummaryEl.innerHTML = `<b>${fmt(rows.reduce((s,r)=>s+r.qty,0))}</b> Pcs &nbsp;·&nbsp; ${rows.length} dòng &nbsp;·&nbsp; khớp ${matchedCodesCount}/${multiCodes.length} mã tìm`;
@@ -10436,7 +10561,7 @@ function createSearchController(ids){
     });
   }
 
-  if(khoSearchEl) khoSearchEl.addEventListener('input', renderKhoTable);
+  if(khoSearchEl) khoSearchEl.addEventListener('input', debounce(renderKhoTable, 150));
   if(khoMultiSearchEl){
     khoMultiSearchEl.addEventListener('input', () => {
       khoMultiSearchEl.classList.toggle('active', khoMultiSearchEl.value.trim().length > 0);
@@ -11007,6 +11132,11 @@ function handleQrScanReal(giNoRaw){
       oqc: effectiveOqcNorm === 'Khac' ? 'Khác' : effectiveOqcNorm,
       qty: palletQty, rowKey: loggedRowKey, ts: new Date().toISOString()
     });
+    // Giới hạn số dòng log tối đa — quét QR trong 1 đợt kiểm tồn có thể lên tới hàng nghìn lượt, cứ
+    // cộng dồn mãi không giới hạn sẽ làm giScanLog (và JSON của nó mỗi lần lưu) phình to dần suốt cả
+    // đợt kiểm. Giữ lại GIH_SCAN_LOG_MAX dòng GẦN NHẤT là đủ dùng cho "Xem GI đã quét" (mục đích chính
+    // của log này), bỏ bớt các dòng cũ nhất khi vượt ngưỡng.
+    if(giScanLog.length > GI_SCAN_LOG_MAX) giScanLog.splice(0, giScanLog.length - GI_SCAN_LOG_MAX);
   }
   saveStateToStorage();
   // Đẩy lên Cloud sau 2 giây (dùng riêng timerKey 'qrscan' — không dùng chung 'confirm' vì quét QR
@@ -15010,7 +15140,7 @@ document.addEventListener('input', function(e) {
     // Lưu lại giá trị vừa nhập theo rowKey để không bị mất khi bảng render lại
     // (VD: sau khi bấm "Xác nhận" ở 1 dòng khác trong cùng bảng).
     const rowKey = getRowKeyFromTr(tr);
-    if (rowKey){ ktInputValues[rowKey] = vals; saveStateToStorage(); }
+    if (rowKey){ ktInputValues[rowKey] = vals; saveKtInputValuesDebounced(); }
   }
 });
 
