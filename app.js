@@ -1379,7 +1379,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.01';
+const APP_VERSION = 'v2.02';
 const APP_VERSION_DATE = '14/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4008,7 +4008,12 @@ function renderContainerPickingOverview(){
       let contribution = planQty > 0 ? Math.min(passQty, planQty) : 0;
       // Mã SPP (không có GI nên không thể tự tính qua CSR/PASS) đã được tick "Đủ hàng" thủ công
       // -> coi như đã pick đủ phần kế hoạch của mã này, để % Picking Status của container nhảy theo.
-      if(ccIsSppItem(r.item) && sppManualOk[sppOkKey(r.item, r.custPo)]){
+      // SỬA (lỗi thật đã gặp): khi Cust PO rỗng, popup Nhóm SPP chuẩn hoá key thành '(Khong co)'
+      // (xem buildCombinedPlanCompareTable) trước khi lưu tick — ở đây trước kia dùng thẳng r.custPo
+      // (chuỗi RỖNG, không chuẩn hoá) nên 2 khoá lệch nhau, tick tay không bao giờ khớp, % vẫn đứng
+      // yên ở 0%. Chuẩn hoá y hệt ngay khi tra cứu (giống shortItems bên dưới đã làm đúng).
+      const custPoForSppKey = (r.custPo && r.custPo.trim()) ? r.custPo.trim() : '(Khong co)';
+      if(ccIsSppItem(r.item) && sppManualOk[sppOkKey(r.item, custPoForSppKey)]){
         contribution = planQty;
       }
       let entry = contMap.get(key);
