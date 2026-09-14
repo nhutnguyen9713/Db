@@ -486,6 +486,12 @@
     padding:2px 7px; cursor:pointer; white-space:nowrap; margin-left:6px; vertical-align:middle;
   }
   .cpt-short-badge:hover{background:rgba(214,57,75,0.22);}
+  .cpt-change-badge{
+    font-family:var(--mono); font-size:10px; font-weight:700; border-radius:5px;
+    padding:2px 7px; white-space:nowrap; margin-right:6px; vertical-align:middle; display:inline-block;
+  }
+  .cpt-change-new{color:var(--blue); background:rgba(46,110,222,0.12); border:1px solid rgba(46,110,222,0.35);}
+  .cpt-change-changed{color:var(--amber-bright); background:rgba(245,166,35,0.14); border:1px solid rgba(245,166,35,0.4);}
 
   /* ============ Sơ đồ kho 3B ============ */
   .wh3b-legend{display:flex; gap:16px; flex-wrap:wrap; margin-bottom:18px; font-size:11.5px; color:var(--muted); font-family:var(--mono);}

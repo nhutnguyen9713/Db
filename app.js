@@ -1249,6 +1249,9 @@ function saveStateToStorage(){
     if(Object.keys(hiddenPlanContainers).length) LS.setItem(STORAGE_KEY_HIDDEN_CONT, JSON.stringify(hiddenPlanContainers));
     else LS.removeItem(STORAGE_KEY_HIDDEN_CONT);
 
+    if(Object.keys(planContainerChangeInfo).length) LS.setItem(STORAGE_KEY_PLAN_CHANGE_INFO, JSON.stringify(planContainerChangeInfo));
+    else LS.removeItem(STORAGE_KEY_PLAN_CHANGE_INFO);
+
     if(Object.keys(manualKhoOverrides).length) LS.setItem(STORAGE_KEY_MANUAL_KHO, JSON.stringify(manualKhoOverrides));
     else LS.removeItem(STORAGE_KEY_MANUAL_KHO);
 
@@ -1314,6 +1317,7 @@ function loadStateFromStorage(){
     const ccResultsRaw = LS.getItem(STORAGE_KEY_CCRESULTS);
     const manualPickedRaw = LS.getItem(STORAGE_KEY_MANUAL_PICKED);
     const hiddenContRaw = LS.getItem(STORAGE_KEY_HIDDEN_CONT);
+    const planChangeInfoRaw = LS.getItem(STORAGE_KEY_PLAN_CHANGE_INFO);
     const manualKhoRaw = LS.getItem(STORAGE_KEY_MANUAL_KHO);
     const sppOkRaw = LS.getItem(STORAGE_KEY_SPP_OK);
     const ktInputsRaw = LS.getItem(STORAGE_KEY_KT_INPUTS);
@@ -1335,6 +1339,7 @@ function loadStateFromStorage(){
       ccResults: ccResultsRaw ? JSON.parse(ccResultsRaw) : {},
       manualPicked: manualPickedRaw ? JSON.parse(manualPickedRaw) : {},
       hiddenContainers: hiddenContRaw ? JSON.parse(hiddenContRaw) : {},
+      planChangeInfo: planChangeInfoRaw ? JSON.parse(planChangeInfoRaw) : {},
       manualKho: manualKhoRaw ? JSON.parse(manualKhoRaw) : {},
       sppOk: sppOkRaw ? JSON.parse(sppOkRaw) : {},
       ktInputs: ktInputsRaw ? JSON.parse(ktInputsRaw) : {},
@@ -1349,7 +1354,7 @@ function loadStateFromStorage(){
     };
   }catch(err){
     console.warn('Không đọc được dữ liệu đã lưu:', err);
-    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, manualKho: {}, sppOk: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, khoGrid: {}, confirmedHistory: {}, txTransferChecked: {} };
+    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, planChangeInfo: {}, manualKho: {}, sppOk: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, khoGrid: {}, confirmedHistory: {}, txTransferChecked: {} };
   }
 }
 
@@ -1364,6 +1369,7 @@ function clearStoredState(){
   LS.removeItem(STORAGE_KEY_CCRESULTS);
   LS.removeItem(STORAGE_KEY_MANUAL_PICKED);
   LS.removeItem(STORAGE_KEY_HIDDEN_CONT);
+  LS.removeItem(STORAGE_KEY_PLAN_CHANGE_INFO);
   LS.removeItem(STORAGE_KEY_MANUAL_KHO);
   LS.removeItem(STORAGE_KEY_SPP_OK);
   LS.removeItem(STORAGE_KEY_KT_INPUTS);
@@ -1379,7 +1385,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.10';
+const APP_VERSION = 'v2.11';
 const APP_VERSION_DATE = '14/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3086,6 +3092,10 @@ document.querySelectorAll('.plan-file-input').forEach(input => {
     try{
       const { rows } = await readTableFileAsRows(file, true);
       const agg = aggregatePlanRows(rows, type);
+      // Tính khác biệt (container MỚI / đổi Ngày Load-Giờ Plan) so với dữ liệu CŨ của đúng loại Plan
+      // này — PHẢI làm TRƯỚC khi planData[type] bị ghi đè bên dưới, vì cần đúng danh sách chi tiết CŨ
+      // để so sánh (xem computePlanContainerChanges()).
+      computePlanContainerChanges(type, planData[type] ? planData[type].detailRows : null, agg.detailRows);
       planData[type] = { ...agg, fileName: file.name };
       if(btnEl) btnEl.classList.add('loaded');
       if(clearBtn) clearBtn.classList.add('show');
@@ -3112,6 +3122,8 @@ document.querySelectorAll('.btn-plan-clear').forEach(btn => {
   btn.addEventListener('click', () => {
     const type = btn.dataset.planClear;
     planData[type] = null;
+    // Xoá luôn cờ MỚI/Đổi giờ đang treo của đúng loại Plan này — không còn dữ liệu để cờ đó gắn vào nữa.
+    Object.keys(planContainerChangeInfo).forEach(k => { if(k.startsWith(type + '|')) delete planContainerChangeInfo[k]; });
     const statusEl = document.querySelector(`.plan-status[data-plan-status="${type}"]`);
     const btnEl = document.querySelector(`.btn-plan[data-plan="${type}"]`);
     const clearBtn = document.querySelector(`.btn-plan-clear[data-plan-clear="${type}"]`);
@@ -3476,6 +3488,47 @@ function togglePickedManual(type, cNo, loadDate, planTime){
   if(typeof renderAlertsPanel === 'function') renderAlertsPanel();
 }
 
+// Đánh dấu container MỚI xuất hiện / vừa đổi Ngày Load-Giờ Plan so với lần tải Plan TRƯỚC ĐÓ của
+// đúng loại Plan này (Row/FC/HCP) — giúp nhận ra ngay dòng Plan nào vừa thay đổi mà không cần tự đối
+// chiếu file cũ/mới bằng tay (theo yêu cầu — Plan hay thay đổi, bảng container nhiều dòng khó theo dõi).
+// Chỉ đánh dấu khi ĐÃ CÓ dữ liệu cũ để so — lần tải ĐẦU TIÊN cho 1 loại Plan không đánh dấu gì cả, vì
+// lúc đó "mọi thứ đều mới" là vô nghĩa (không có gì để so sánh). Lưu CỤC BỘ (không đồng bộ Cloud) —
+// thông tin này chỉ có ý nghĩa ngay lúc vừa tải trên đúng máy vừa tải, không cần đồng bộ nhiều máy.
+let planContainerChangeInfo = {}; // contInstanceKey(...) -> { status: 'new'|'changed', at }
+const STORAGE_KEY_PLAN_CHANGE_INFO = 'tn5_dashboard_plan_change_info_v1';
+
+// So sánh danh sách chi tiết Plan CŨ (trước khi tải file mới đè lên) với danh sách MỚI của ĐÚNG 1
+// loại Plan (Row/FC/HCP) — gọi ngay SAU khi đọc xong file mới nhưng TRƯỚC khi ghi đè planData[type].
+function computePlanContainerChanges(type, oldDetailRows, newDetailRows){
+  // Xoá hết cờ CŨ của đúng loại Plan này trước — mỗi lần tải mới là 1 mốc so sánh mới, không cộng dồn
+  // cờ từ nhiều lần tải trước (VD: 1 container đã báo "MỚI" ở lần tải trước, lần này không còn gì khác
+  // thì không nên tiếp tục hiện "MỚI" nữa).
+  Object.keys(planContainerChangeInfo).forEach(k => { if(k.startsWith(type + '|')) delete planContainerChangeInfo[k]; });
+  if(!oldDetailRows || !oldDetailRows.length) return; // lần tải ĐẦU TIÊN cho loại Plan này — không có gì để so
+
+  const oldCnoSet = new Set();
+  const oldInstanceSet = new Set();
+  oldDetailRows.forEach(r => {
+    const cNo = r.containerNo;
+    if(!cNo || cNo === '—') return;
+    oldCnoSet.add(cNo);
+    oldInstanceSet.add(contInstanceKey(type, cNo, r.loadDate ? fmtDate(r.loadDate) : '', r.planTime || ''));
+  });
+
+  const seenNewInstance = new Set();
+  (newDetailRows || []).forEach(r => {
+    const cNo = r.containerNo;
+    if(!cNo || cNo === '—') return;
+    const key = contInstanceKey(type, cNo, r.loadDate ? fmtDate(r.loadDate) : '', r.planTime || '');
+    if(seenNewInstance.has(key)) return; // 1 container có nhiều dòng (nhiều mã hàng) — chỉ cần xử lý 1 lần
+    seenNewInstance.add(key);
+    if(oldInstanceSet.has(key)) return; // y hệt lần tải trước (cùng cont, cùng ngày/giờ) — không đánh dấu gì
+    // cNo đã từng xuất hiện ở lần tải trước (chỉ khác Ngày Load/Giờ Plan) -> "changed"; hoàn toàn chưa
+    // từng thấy số cont này bao giờ -> "new".
+    planContainerChangeInfo[key] = { status: oldCnoSet.has(cNo) ? 'changed' : 'new', at: Date.now() };
+  });
+}
+
 // Xoá (ẩn) 1 container khỏi bảng Plan — KHÔNG đụng tới file Excel Plan gốc đã tải lên, chỉ ẩn khỏi
 // dashboard này. Có xác nhận trước khi xoá để tránh bấm nhầm, và có thể khôi phục lại bất cứ lúc nào.
 let hiddenPlanContainers = {};
@@ -3802,6 +3855,13 @@ function renderContPickTable(){
       const shortBadge = hasShort
         ? `<button type="button" class="cpt-short-badge" data-jump-combined="${escAttr(combinedRowDomId(row.shortItems[0].item, row.shortItems[0].po))}" title="Thiếu ${row.shortItems.length} mã (tính riêng container này): ${row.shortItems.map(r=>`${r.item} (thiếu ${fmt(-r.diff)})`).join(', ')} — bấm để xem chi tiết mã hàng">⚠ Thiếu ${row.shortItems.length}</button>`
         : '';
+      // Cờ container MỚI xuất hiện / vừa đổi Ngày Load-Giờ Plan so với lần tải Plan trước — xem
+      // computePlanContainerChanges(). Tự mất khi tải Plan lần kế tiếp (không cần bấm tắt thủ công).
+      const changeBadge = row.changeStatus === 'new'
+        ? `<span class="cpt-change-badge cpt-change-new" title="Container này MỚI xuất hiện so với lần tải Plan ${row.type} gần nhất trước đó">✨ Mới</span>`
+        : row.changeStatus === 'changed'
+          ? `<span class="cpt-change-badge cpt-change-changed" title="Ngày Load / Giờ Plan của container này vừa đổi so với lần tải Plan ${row.type} gần nhất trước đó">⟳ Đổi giờ</span>`
+          : '';
       const khoCell = `<select class="cpt-kho-manual-select${row.isManualKho ? ' is-manual' : ''}" data-manual-type="${escAttr(row.type)}" data-manual-cno="${escAttr(String(row.cNo))}" data-manual-loaddate="${escAttr(row.loadDateKey || '')}" data-manual-plantime="${escAttr(row.planTimeKey || '')}" title="${row.isManualKho ? 'Đang chọn thủ công — bấm để đổi lại' : 'Kho hệ thống tự xác định — bấm để chọn lại thủ công nếu cần'}">
              <option value="">—</option>
              ${MANUAL_KHO_OPTIONS.map(k => `<option value="${escAttr(k)}"${row.topKho===k ? ' selected' : ''}>${escHtml(k.replace('Kho ',''))}</option>`).join('')}
@@ -3827,7 +3887,7 @@ function renderContPickTable(){
       return `
       <tr class="cont-pick-row${row.isManual ? ' cpt-row-manual' : ''}" style="cursor:pointer;" data-row-idx="${idx}" data-cont-jump="${contDomId(row.type, row.cNo)}">
         <td>${row.type}</td>
-        <td>${escHtml(String(row.cNo))}
+        <td>${changeBadge}${escHtml(String(row.cNo))}
           ${shortBadge}
         </td>
         <td>${escHtml(row.loadDate)}</td>
@@ -4108,8 +4168,12 @@ function renderContainerPickingOverview(){
       }
     }
 
+    // Cờ MỚI xuất hiện / vừa đổi Ngày Load-Giờ Plan (xem computePlanContainerChanges(), tính ngay lúc
+    // tải file Plan) — instanceKey ở đây ĐÚNG bằng contInstanceKey() dùng để lưu cờ đó.
+    const changeInfo = planContainerChangeInfo[instanceKey];
     detailRows.push({
       type: entry.type, cNo: entry.cNo, pct, status, autoStatus, autoPct: pct, isManual,
+      changeStatus: changeInfo ? changeInfo.status : null,
       instanceKey, planQty: entry.planQty,
       loadDateKey: entry.loadDate, planTimeKey: entry.planTime,
       loadDate: [...entry.loadDates].join(', ') || '—',
@@ -11826,6 +11890,7 @@ function initDashboard(){
   invSnapshotHistory = saved.invSnapshot || {};
   manualPickedContainers = saved.manualPicked || {};
   hiddenPlanContainers = saved.hiddenContainers || {};
+  planContainerChangeInfo = saved.planChangeInfo || {};
   manualKhoOverrides = saved.manualKho || {};
   sppManualOk = saved.sppOk || {};
   scannedExtraRows = saved.scannedExtra || {};
