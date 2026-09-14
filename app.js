@@ -1379,8 +1379,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.00';
-const APP_VERSION_DATE = '13/09/2026';
+const APP_VERSION = 'v2.01';
+const APP_VERSION_DATE = '14/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -3504,6 +3504,35 @@ function restoreHiddenContainer(type, cNo, loadDate, planTime){
   renderPlanPanel();
 }
 
+// Xoá VĨNH VIỄN dữ liệu của TẤT CẢ container đang bị ẩn khỏi Plan — khác với "Ẩn"/"Khôi phục" ở trên
+// (chỉ LỌC KHỎI HIỂN THỊ, dữ liệu gốc vẫn còn nguyên trong planData mãi mãi cho tới khi tải Plan mới
+// đè lên) — hàm này XOÁ THẬT các dòng đó khỏi planData[type].detailRows, dùng khi muốn dọn hẳn, không
+// cần giữ lại phòng khôi phục nữa. KHÔNG đụng tới file Excel Plan gốc trên máy bạn — chỉ xoá bản đã
+// tải vào dashboard (tải lại đúng file đó là có lại y hệt).
+function deleteAllHiddenContainerData(){
+  const keys = Object.keys(hiddenPlanContainers);
+  if(!keys.length) return;
+  const ok = window.confirm(
+    `Xoá VĨNH VIỄN dữ liệu của ${keys.length} container đã ẩn khỏi Plan?\n\n` +
+    `Khác với "Khôi phục" — sau khi xoá sẽ KHÔNG lấy lại được nữa (trừ khi tải lại đúng file Excel Plan gốc).`
+  );
+  if(!ok) return;
+  PLAN_TYPES.forEach(type => {
+    if(!planData[type]) return;
+    planData[type].detailRows = (planData[type].detailRows || []).filter(r => {
+      const rLoadDateStr = r.loadDate ? fmtDate(r.loadDate) : '';
+      const rPlanTimeStr = r.planTime || '';
+      return !isContainerHidden(type, r.containerNo, rLoadDateStr, rPlanTimeStr);
+    });
+  });
+  hiddenPlanContainers = {};
+  _localContOverridesDirty = true;
+  saveStateToStorage();
+  scheduleAutoSaveToCloud('contoverride', [STORAGE_KEY_HIDDEN_CONT], 'Xoá vĩnh viễn container đã ẩn');
+  schedulePlanAutoSaveToCloud(); // dữ liệu planData vừa đổi (xoá dòng) cũng cần đẩy lên Cloud, không chỉ mốc hiddenPlanContainers
+  renderPlanPanel();
+}
+
 // Các dòng được tự thêm vào bảng "Kiểm tồn kho" khi quét QR ra 1 mã+PO không có sẵn tại vị trí đó
 // (sai vị trí so với hệ thống) — key theo Kho, value là mảng các dòng tự thêm {item, custpo,
 // locator, oqc, qty, isScannedExtra:true}. Cột Locator của các dòng này hiển thị dạng xổ xuống để
@@ -3907,6 +3936,9 @@ function renderHiddenContBar(){
       <button type="button" class="cpt-hidden-cont-toggle" id="cpt-hidden-cont-toggle" title="Xem các container đã ẩn khỏi Plan">
         🗑 Cont đã ẩn <span class="cpt-hidden-cont-count">${fmt(keys.length)}</span>
       </button>
+      <button type="button" class="cpt-hidden-cont-delete-all" id="cpt-hidden-cont-delete-all" title="Xoá VĨNH VIỄN dữ liệu tất cả container đã ẩn — không thể khôi phục lại">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+      </button>
       <div class="cpt-hidden-cont-popup" id="cpt-hidden-cont-popup" style="display:none;">
         <div class="cpt-hidden-cont-popup-title">Đã ẩn ${fmt(keys.length)} container khỏi Plan (không đụng file Excel gốc):</div>
         <div class="cpt-hidden-cont-popup-list">${chips}</div>
@@ -3915,9 +3947,14 @@ function renderHiddenContBar(){
 }
 document.addEventListener('click', (e) => {
   const toggle = e.target.closest('#cpt-hidden-cont-toggle');
+  const deleteAllBtn = e.target.closest('#cpt-hidden-cont-delete-all');
   const popup = document.getElementById('cpt-hidden-cont-popup');
   if(toggle){
     if(popup) popup.style.display = popup.style.display === 'none' ? 'block' : 'none';
+    return;
+  }
+  if(deleteAllBtn){
+    deleteAllHiddenContainerData();
     return;
   }
   // Bấm ra ngoài popup thì đóng lại (trừ khi đang bấm nút khôi phục bên trong popup)
