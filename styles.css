@@ -261,6 +261,18 @@
   }
   .plan-detail-table tbody td{padding:6px 10px; border-bottom:1px solid var(--line-soft); font-family:var(--mono); color:var(--text); font-weight:600;}
   .plan-detail-table tbody tr:hover{filter:brightness(0.97);}
+  /* Hiệu ứng "nháy màu" khi bấm 1 dòng ở bảng Thống kê Container để nhảy sang đúng dòng này (xem
+     document.addEventListener('click', ...) phần xử lý data-cont-jump trong app.js). SỬA (lỗi thật
+     đã gặp — outline vẽ lồng vào/tràn ra ngoài dòng bị chính dòng kế bên vẽ đè lên che mất, kể cả sau
+     khi thử offset dương lẫn position:relative + z-index): đổi hẳn sang tô MÀU NỀN TRÊN TỪNG Ô (td)
+     thay vì outline trên cả dòng (tr) — theo đúng quy tắc vẽ nền bảng HTML, nền của Ô LUÔN được vẽ ĐÈ
+     LÊN TRÊN nền của Dòng (không phụ thuộc z-index/thứ tự DOM giữa các dòng), nên chắc chắn không thể
+     bị dòng khác che mất nữa. */
+  @keyframes tn5RowJumpFlash{
+    0%{ background-color:rgba(110,79,224,0.55); }
+    100%{ background-color:rgba(110,79,224,0); }
+  }
+  .plan-detail-table tbody tr.tn5-row-jump-flash td{animation:tn5RowJumpFlash 1.6s ease-out;}
   .plan-detail-table tbody tr.cont-pick-row:hover{background:rgba(110,79,224,0.10) !important; filter:none;}
   .cpt-table thead th{vertical-align:top; padding-bottom:6px;}
   .cpt-th{display:flex; align-items:center; gap:5px; margin-bottom:5px;}
