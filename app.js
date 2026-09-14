@@ -1379,7 +1379,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.05';
+const APP_VERSION = 'v2.06';
 const APP_VERSION_DATE = '14/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4638,7 +4638,13 @@ function renderPlanPanel(){
       lastContainer = cNo;
       if(cNo !== '—' && !contColorMap.has(cNo)) contColorMap.set(cNo, CONT_COLOR_PALETTE[contColorMap.size % CONT_COLOR_PALETTE.length]);
       const contColor = contColorMap.get(cNo) || '#8892A0';
-      const rowBg = hexToRgba(contColor, 0.07);
+      // SỬA (theo yêu cầu — "màu chưa phân ra rõ từng cont"): 0.07 quá nhạt, gần như không nhận ra khi
+      // lướt mắt xuống bảng nhiều dòng. Tăng lên 0.16 cho rõ hẳn, đồng thời truyền màu container qua
+      // biến CSS --cont-line để viền trên của dòng ĐẦU TIÊN mỗi container (xem .cont-group-first ở
+      // styles.css) tô ĐÚNG màu container đó thay vì 1 màu xám chung chung như trước — biến CSS đặt ở
+      // <tr> vẫn tự "chảy" xuống các <td> con dù bảng dùng border-collapse (khác border thường không
+      // ăn khi đặt trực tiếp trên <tr> có border-collapse).
+      const rowBg = hexToRgba(contColor, 0.16);
       const groupCls = isNewGroup ? 'cont-group-first' : '';
       const locCells = locCols.map(name => {
         const v = r.locations && Object.prototype.hasOwnProperty.call(r.locations, name) ? r.locations[name] : null;
@@ -4673,7 +4679,7 @@ function renderPlanPanel(){
 
       const rowId = isNewGroup ? ` id="plan-cont-row-${contDomId(type, cNo)}"` : '';
       return `
-      <tr class="${groupCls}"${rowId} style="background:${rowBg};">
+      <tr class="${groupCls}"${rowId} style="background:${rowBg}; --cont-line:${contColor};">
         <td class="cont-no-cell" style="border-left-color:${contColor};"><span class="cont-badge" style="background:${contColor}">${cNo}</span></td>
         <td>${r.loadDate ? fmtDate(r.loadDate) : '—'}</td>
         <td>${r.planTime || '—'}</td>

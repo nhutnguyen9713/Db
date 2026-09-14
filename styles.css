@@ -314,7 +314,7 @@
   }
   #btn-fixed-back-to-pick:hover{transform:translateY(-3px); box-shadow:0 10px 24px rgba(110,79,224,0.45);}
   #btn-fixed-back-to-pick svg{width:22px; height:22px;}
-  .plan-detail-table tbody tr.cont-group-first td{border-top:2px solid rgba(22,32,46,0.14);}
+  .plan-detail-table tbody tr.cont-group-first td{border-top:3px solid var(--cont-line, rgba(22,32,46,0.14));}
   .plan-detail-table .cont-no-cell{color:var(--violet); font-weight:700; border-left:4px solid transparent;}
   .cont-badge{
     display:inline-flex; align-items:center; justify-content:center; min-width:26px;
