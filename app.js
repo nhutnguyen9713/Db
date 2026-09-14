@@ -1379,7 +1379,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.06';
+const APP_VERSION = 'v2.07';
 const APP_VERSION_DATE = '14/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4344,8 +4344,14 @@ document.addEventListener('click', (e) => {
   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
   const prevOutline = target.style.outline;
   const prevOutlineOffset = target.style.outlineOffset;
-  target.style.outline = '2px solid var(--violet)';
-  target.style.outlineOffset = '-2px';
+  // SỬA (lỗi thật đã gặp — "nháy màu bị mất/nhạt đi"): dòng đích luôn là dòng ĐẦU TIÊN của 1 container
+  // (chỉ dòng này mới có id="plan-cont-row-..." để nhảy tới được) — từ bản tô đậm màu container (viền
+  // trên 3px, đúng màu riêng từng container), outlineOffset ÂM (-2px, vẽ LỒNG VÀO BÊN TRONG viền) đè
+  // ngay lên đúng chỗ viền màu mới dày hơn, bị viền đó che gần hết, gần như không còn thấy nháy nữa.
+  // Đổi sang offset DƯƠNG (vẽ HẲN RA NGOÀI dòng, giống cách alertsHighlightScroll() đang làm) để không
+  // còn chồng lấn với viền trên của dòng, đồng thời tăng độ dày cho rõ hơn.
+  target.style.outline = '3px solid var(--violet)';
+  target.style.outlineOffset = '2px';
   setTimeout(() => { target.style.outline = prevOutline; target.style.outlineOffset = prevOutlineOffset; }, 1600);
 });
 
