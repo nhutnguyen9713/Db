@@ -1379,7 +1379,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.07';
+const APP_VERSION = 'v2.08';
 const APP_VERSION_DATE = '14/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4344,15 +4344,29 @@ document.addEventListener('click', (e) => {
   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
   const prevOutline = target.style.outline;
   const prevOutlineOffset = target.style.outlineOffset;
+  const prevPosition = target.style.position;
+  const prevZIndex = target.style.zIndex;
   // SỬA (lỗi thật đã gặp — "nháy màu bị mất/nhạt đi"): dòng đích luôn là dòng ĐẦU TIÊN của 1 container
   // (chỉ dòng này mới có id="plan-cont-row-..." để nhảy tới được) — từ bản tô đậm màu container (viền
   // trên 3px, đúng màu riêng từng container), outlineOffset ÂM (-2px, vẽ LỒNG VÀO BÊN TRONG viền) đè
   // ngay lên đúng chỗ viền màu mới dày hơn, bị viền đó che gần hết, gần như không còn thấy nháy nữa.
-  // Đổi sang offset DƯƠNG (vẽ HẲN RA NGOÀI dòng, giống cách alertsHighlightScroll() đang làm) để không
-  // còn chồng lấn với viền trên của dòng, đồng thời tăng độ dày cho rõ hơn.
+  // Đổi sang offset DƯƠNG (vẽ HẲN RA NGOÀI dòng) để không chồng lấn với viền trên nữa — NHƯNG vẫn còn
+  // bị CHE MẤT 1 PHẦN bởi chính dòng liền kề bên dưới: các <tr> anh em trong cùng luồng bình thường
+  // (không có ngữ cảnh xếp lớp riêng) vẽ theo đúng thứ tự trong DOM, dòng sinh SAU (ở dưới) luôn vẽ ĐÈ
+  // LÊN phần khung viền tràn ra ngoài của dòng phía trên nó — nên phần viền phía dưới dòng đích luôn
+  // bị dòng kế tiếp che khuất dù offset đã dương. Sửa dứt điểm bằng cách tạm đẩy dòng đích lên 1 lớp
+  // xếp chồng (stacking context) RIÊNG qua position:relative + z-index cao trong lúc nháy — buộc trình
+  // duyệt vẽ nguyên dòng này (kể cả outline) ĐÈ LÊN TRÊN mọi dòng xung quanh, bất kể thứ tự DOM.
+  target.style.position = 'relative';
+  target.style.zIndex = '50';
   target.style.outline = '3px solid var(--violet)';
   target.style.outlineOffset = '2px';
-  setTimeout(() => { target.style.outline = prevOutline; target.style.outlineOffset = prevOutlineOffset; }, 1600);
+  setTimeout(() => {
+    target.style.outline = prevOutline;
+    target.style.outlineOffset = prevOutlineOffset;
+    target.style.position = prevPosition;
+    target.style.zIndex = prevZIndex;
+  }, 1600);
 });
 
 document.addEventListener('change', (e) => {
