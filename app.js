@@ -1379,7 +1379,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.09';
+const APP_VERSION = 'v2.10';
 const APP_VERSION_DATE = '14/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -12432,7 +12432,10 @@ function txBuildStatsFromRecords(records, masterMap){
   });
   const picking = Array.from(pickingMap.values()).map(r => {
     const { contSet, ...rest } = r;
-    return { ...rest, contCodes: [...(contSet || [])], contCount: contSet ? contSet.size : 0 };
+    // "reference" hiển thị đúng danh sách mã CRxxxxx đã gộp vào "Số lượng cont" của dòng này (xếp thứ
+    // tự chữ-số cho dễ nhìn) — theo yêu cầu, để biết CHÍNH XÁC container nào đã được tính vào con số đó.
+    const contCodesSorted = [...(contSet || [])].sort();
+    return { ...rest, contCodes: contCodesSorted, reference: contCodesSorted.join(', '), contCount: contSet ? contSet.size : 0 };
   });
 
   // "Xe Trung Chuyển" — gộp nhóm riêng ITN Transfer (Chuyển đi) và ITN Receiving (Nhận) theo
@@ -12737,7 +12740,7 @@ function txFilterRows(rows, query){
 const TX_TABLE_DEFS = {
   receive: { cols: ['khoXuat','transType','item','locator','user'], tbody:'tx-receive-tbody', tfoot:'tx-receive-tfoot', empty:'tx-receive-empty', search:'tx-receive-search', summary:'tx-receive-summary', table:'tx-receive-table', label:'dòng Receive', clearBtn:'tx-receive-clear-filters' },
   transfer: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty','chuyen'], tbody:'tx-transfer-tbody', tfoot:'tx-transfer-tfoot', empty:'tx-transfer-empty', search:'tx-transfer-search', summary:'tx-transfer-summary', table:'tx-transfer-table', label:'nhóm Transfer', clearBtn:'tx-transfer-clear-filters' },
-  picking: { cols: ['khoXuat','locatorDen','item','user','contCount'], tbody:'tx-picking-tbody', tfoot:'tx-picking-tfoot', empty:'tx-picking-empty', search:'tx-picking-search', summary:'tx-picking-summary', table:'tx-picking-table', label:'nhóm Picking', clearBtn:'tx-picking-clear-filters' }
+  picking: { cols: ['khoXuat','locatorDen','item','user','reference','contCount'], tbody:'tx-picking-tbody', tfoot:'tx-picking-tfoot', empty:'tx-picking-empty', search:'tx-picking-search', summary:'tx-picking-summary', table:'tx-picking-table', label:'nhóm Picking', clearBtn:'tx-picking-clear-filters' }
 };
 
 const TX_DEFAULT_KHO_FILTER = '3B';
@@ -12989,7 +12992,10 @@ Object.keys(TX_TABLE_DEFS).forEach(kind => {
       else { sort.key = key; sort.dir = key === 'total' ? -1 : 1; }
       renderTxTable(kind);
     });
-    if(key !== 'total' && key !== 'qty' && key !== 'chuyen' && key !== 'contCount'){
+    // "reference" không gắn nút lọc: đây là danh sách NHIỀU mã CR gộp lại (mỗi dòng 1 tổ hợp khác
+    // nhau), lọc theo giá trị y hệt kiểu Excel sẽ không có ý nghĩa — cứ gõ mã CR vào ô tìm kiếm phía
+    // trên là tìm được (search chung đã tự quét qua field này).
+    if(key !== 'total' && key !== 'qty' && key !== 'chuyen' && key !== 'contCount' && key !== 'reference'){
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'th-filter-btn';
