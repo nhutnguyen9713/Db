@@ -1379,7 +1379,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.02';
+const APP_VERSION = 'v2.03';
 const APP_VERSION_DATE = '14/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -9457,7 +9457,7 @@ function ccBuildDaXacNhanSheet(workbook, khoLabel){
     const total = (parseFloat(item.inputs[0]) || 0) * (parseFloat(item.inputs[1]) || 1) +
                   (parseFloat(item.inputs[2]) || 0) * (parseFloat(item.inputs[3]) || 1) +
                   (parseFloat(item.inputs[4]) || 0) * (parseFloat(item.inputs[5]) || 1);
-    return { locator: item.data.locator, custpo: item.data.custpo, item: item.data.item, qty: item.data.qty, actualResult: Math.round(total) };
+    return { locator: item.data.locator, custpo: item.data.custpo, item: item.data.item, oqc: item.data.oqc, qty: item.data.qty, actualResult: Math.round(total) };
   });
   return ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, false);
 }
@@ -9478,6 +9478,7 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
       : computePalletCountFor(khoLabel, r.item, r.locator, r.custpo),
     custpo: r.custpo,
     item: r.item,
+    oqc: r.oqc || '',
     qty: r.qty,
     actualResult: r.actualResult
   }));
@@ -9497,7 +9498,7 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
     horizontalCentered: true, margins: { left:0.35, right:0.35, top:0.5, bottom:0.5, header:0.2, footer:0.2 }
   };
 
-  const headers = ['STT', 'Locator', 'Số pallet', 'Cust PO', 'Item No.', 'Số lượng', 'Kết quả kiểm thực tế'];
+  const headers = ['STT', 'Locator', 'Số pallet', 'Cust PO', 'Item No.', 'OQC', 'Số lượng', 'Kết quả kiểm thực tế'];
   const thin = { style:'thin', color:{ argb:'FF999999' } };
   const thick = { style:'medium', color:{ argb:'FF222222' } };
 
@@ -9524,7 +9525,7 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
   });
 
   ws.columns = [
-    { width:5 }, { width:14 }, { width:9 }, { width:14 }, { width:14 }, { width:9 }, { width:22 }
+    { width:5 }, { width:14 }, { width:9 }, { width:14 }, { width:14 }, { width:9 }, { width:9 }, { width:22 }
   ];
 
   let mismatchCount = 0, okCount = 0, shortCount = 0, surplusCount = 0;
@@ -9539,6 +9540,7 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
       r.palletCount || '',
       r.custpo || '',
       r.item,
+      r.oqc || '',
       typeof r.qty === 'number' ? r.qty : (parseFloat(r.qty) || 0),
       r.actualResult
     ];
@@ -9552,7 +9554,7 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
         right: (c === headers.length) ? thick : thin
       };
       if(c === 2 || c === 3 || c === 4 || c === 5) cell.alignment = { vertical:'middle', horizontal:'left', wrapText:true };
-      else if(c === 6 || c === 7) cell.alignment = { vertical:'middle', horizontal:'right' };
+      else if(c === 7 || c === 8) cell.alignment = { vertical:'middle', horizontal:'right' };
       else cell.alignment = { vertical:'middle', horizontal:'center' };
     }
     const qtyNum = typeof r.qty === 'number' ? r.qty : (parseFloat(r.qty) || 0);
@@ -9561,7 +9563,7 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
     if(Math.round(r.actualResult) === Math.round(qtyNum)) okCount++;
     else if(Math.round(r.actualResult) < Math.round(qtyNum)) shortCount++;
     else surplusCount++;
-    row.getCell(7).font = mismatch
+    row.getCell(8).font = mismatch
       ? { bold:true, color:{ argb:'FFD6394B' } }
       : { bold:false, color:{ argb:'FF000000' } };
   });
@@ -9570,7 +9572,7 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
   // các ô thật (cột J:K) để bước hậu xử lý injectRealPieCharts() gắn 1 chart Excel THẬT tham chiếu
   // đúng vào các ô này (không phải ảnh tĩnh — bấm vào chart trong Excel vẫn xem/sửa số liệu được).
   // 3 số Match/Negative/Positive + Grand Total dùng CÔNG THỨC EXCEL THẬT (SUMPRODUCT/SUM) so trực
-  // tiếp cột F "Số lượng" với cột G "Kết quả kiểm thực tế" của CHÍNH bảng dữ liệu — không ghi cứng
+  // tiếp cột G "Số lượng" với cột H "Kết quả kiểm thực tế" của CHÍNH bảng dữ liệu — không ghi cứng
   // số JS tính sẵn vào ô nữa: sửa/thêm dòng trong bảng ở Excel thì các số này (và cả chart) tự cập
   // nhật theo khi mở lại/tính toán lại, không cần PivotTable thật (đã thử ở bản trước, bị Excel báo
   // lỗi nội dung do OOXML PivotTable quá phức tạp để tự ghép tay an toàn — dùng công thức thường an
@@ -9583,8 +9585,9 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
   const dataLastRow = headerExcelRow + flatRows.length;
   const cRange = `$C$${dataFirstRow}:$C$${dataLastRow}`; // cột "Số pallet"
   const eRange = `$E$${dataFirstRow}:$E$${dataLastRow}`; // cột "Item No."
-  const fRange = `$F$${dataFirstRow}:$F$${dataLastRow}`; // cột "Số lượng"
-  const gRange = `$G$${dataFirstRow}:$G$${dataLastRow}`; // cột "Kết quả kiểm thực tế"
+  const oqcRange = `$F$${dataFirstRow}:$F$${dataLastRow}`; // cột "OQC"
+  const fRange = `$G$${dataFirstRow}:$G$${dataLastRow}`; // cột "Số lượng"
+  const gRange = `$H$${dataFirstRow}:$H$${dataLastRow}`; // cột "Kết quả kiểm thực tế"
   ws.getCell(chartDataRow, 10).value = 'Row Labels';
   ws.getCell(chartDataRow, 11).value = 'Count of Result';
   ws.getRow(chartDataRow).getCell(10).font = { bold:true };
@@ -9610,40 +9613,56 @@ function ccBuildDaXacNhanSheetFromRecords(workbook, khoLabel, rawRecords, pallet
   ws.getColumn(10).width = 18;
   ws.getColumn(11).width = 12;
 
-  // Bảng tổng hợp theo Item No. (cột N:Q) — y hệt kiểu PivotTable người dùng đang tự dựng tay trong
-  // Excel sau khi xuất file (Row Labels = Item No., Sum of Số pallet/Số lượng/Kết quả kiểm thực tế)
-  // — nay dựng SẴN, dùng công thức SUMIF thật tham chiếu đúng vào bảng dữ liệu chính (cột C/E/F/G)
-  // để tự cập nhật nếu sửa/thêm dòng, không phải PivotTable thật (lý do xem chú thích ở khối J:K
-  // phía trên) nhưng vẫn "sống" giống hệt.
-  const distinctItems = Array.from(new Set(flatRows.map(r => r.item))).sort((a,b) => String(a).localeCompare(String(b), 'vi'));
-  ws.getCell(chartDataRow, 14).value = 'Row Labels';
-  ws.getCell(chartDataRow, 15).value = 'Sum of Số pallet';
-  ws.getCell(chartDataRow, 16).value = 'Sum of Số lượng';
-  ws.getCell(chartDataRow, 17).value = 'Sum of Kết quả kiểm thực tế';
-  [14,15,16,17].forEach(c => { ws.getRow(chartDataRow).getCell(c).font = { bold:true }; });
-  distinctItems.forEach((item, i) => {
-    const r = chartDataRow + 1 + i;
-    const itemRows = flatRows.filter(x => x.item === item);
-    const palletSumForItem = itemRows.reduce((s,x) => s + (typeof x.palletCount === 'number' ? x.palletCount : 0), 0);
-    const qtySumForItem = itemRows.reduce((s,x) => s + (typeof x.qty === 'number' ? x.qty : (parseFloat(x.qty) || 0)), 0);
-    const resultSumForItem = itemRows.reduce((s,x) => s + (Math.round(x.actualResult) || 0), 0);
-    ws.getCell(r, 14).value = item;
-    ws.getCell(r, 15).value = { formula: `SUMIF(${eRange},$N$${r},${cRange})`, result: palletSumForItem };
-    ws.getCell(r, 16).value = { formula: `SUMIF(${eRange},$N$${r},${fRange})`, result: qtySumForItem };
-    ws.getCell(r, 17).value = { formula: `SUMIF(${eRange},$N$${r},${gRange})`, result: resultSumForItem };
+  // Bảng tổng hợp theo Item No. + OQC (cột N:R) — y hệt kiểu PivotTable người dùng đang tự dựng tay
+  // trong Excel sau khi xuất file (Row Labels = Item No., thêm cột OQC, rồi Sum of Số pallet/Số
+  // lượng/Kết quả kiểm thực tế) — nay dựng SẴN, dùng công thức SUMIFS thật (2 điều kiện: Item No. +
+  // OQC) tham chiếu đúng vào bảng dữ liệu chính (cột C/E/F/G/H) để tự cập nhật nếu sửa/thêm dòng,
+  // không phải PivotTable thật (lý do xem chú thích ở khối J:K phía trên) nhưng vẫn "sống" giống hệt.
+  // Gộp theo CẶP Item+OQC (không chỉ theo Item) vì cùng 1 mã hàng có thể có nhiều dòng PASS/NG khác
+  // nhau — gộp chung sẽ làm mất thông tin OQC ở bảng tổng hợp.
+  const distinctItemOqcPairs = [];
+  const seenPairKeys = new Set();
+  flatRows.forEach(r => {
+    const key = r.item + '␟' + (r.oqc || '');
+    if(!seenPairKeys.has(key)){ seenPairKeys.add(key); distinctItemOqcPairs.push({ item: r.item, oqc: r.oqc || '' }); }
   });
-  const itemGrandRow = chartDataRow + 1 + distinctItems.length;
+  distinctItemOqcPairs.sort((a,b) => {
+    const itemCmp = String(a.item).localeCompare(String(b.item), 'vi');
+    if(itemCmp !== 0) return itemCmp;
+    return String(a.oqc).localeCompare(String(b.oqc), 'vi');
+  });
+  ws.getCell(chartDataRow, 14).value = 'Row Labels';
+  ws.getCell(chartDataRow, 15).value = 'OQC';
+  ws.getCell(chartDataRow, 16).value = 'Sum of Số pallet';
+  ws.getCell(chartDataRow, 17).value = 'Sum of Số lượng';
+  ws.getCell(chartDataRow, 18).value = 'Sum of Kết quả kiểm thực tế';
+  [14,15,16,17,18].forEach(c => { ws.getRow(chartDataRow).getCell(c).font = { bold:true }; });
+  distinctItemOqcPairs.forEach((pair, i) => {
+    const r = chartDataRow + 1 + i;
+    const pairRows = flatRows.filter(x => x.item === pair.item && (x.oqc || '') === pair.oqc);
+    const palletSumForPair = pairRows.reduce((s,x) => s + (typeof x.palletCount === 'number' ? x.palletCount : 0), 0);
+    const qtySumForPair = pairRows.reduce((s,x) => s + (typeof x.qty === 'number' ? x.qty : (parseFloat(x.qty) || 0)), 0);
+    const resultSumForPair = pairRows.reduce((s,x) => s + (Math.round(x.actualResult) || 0), 0);
+    ws.getCell(r, 14).value = pair.item;
+    ws.getCell(r, 15).value = pair.oqc;
+    ws.getCell(r, 16).value = { formula: `SUMIFS(${cRange},${eRange},$N$${r},${oqcRange},$O$${r})`, result: palletSumForPair };
+    ws.getCell(r, 17).value = { formula: `SUMIFS(${fRange},${eRange},$N$${r},${oqcRange},$O$${r})`, result: qtySumForPair };
+    ws.getCell(r, 18).value = { formula: `SUMIFS(${gRange},${eRange},$N$${r},${oqcRange},$O$${r})`, result: resultSumForPair };
+  });
+  const itemGrandRow = chartDataRow + 1 + distinctItemOqcPairs.length;
   const itemFirstRow = chartDataRow + 1;
-  const itemLastRow = chartDataRow + distinctItems.length;
+  const itemLastRow = chartDataRow + distinctItemOqcPairs.length;
+  const pairSum = (fn) => distinctItemOqcPairs.reduce((s,pair) => s + flatRows.filter(x=>x.item===pair.item && (x.oqc||'')===pair.oqc).reduce((ss,x)=>ss+fn(x),0), 0);
   ws.getCell(itemGrandRow, 14).value = 'Grand Total';
-  ws.getCell(itemGrandRow, 15).value = { formula: `SUM($O$${itemFirstRow}:$O$${itemLastRow})`, result: distinctItems.reduce((s,item) => s + flatRows.filter(x=>x.item===item).reduce((ss,x)=>ss+(typeof x.palletCount === 'number' ? x.palletCount : 0),0), 0) };
-  ws.getCell(itemGrandRow, 16).value = { formula: `SUM($P$${itemFirstRow}:$P$${itemLastRow})`, result: distinctItems.reduce((s,item) => s + flatRows.filter(x=>x.item===item).reduce((ss,x)=>ss+(typeof x.qty === 'number' ? x.qty : (parseFloat(x.qty)||0)),0), 0) };
-  ws.getCell(itemGrandRow, 17).value = { formula: `SUM($Q$${itemFirstRow}:$Q$${itemLastRow})`, result: distinctItems.reduce((s,item) => s + flatRows.filter(x=>x.item===item).reduce((ss,x)=>ss+(Math.round(x.actualResult)||0),0), 0) };
-  [14,15,16,17].forEach(c => { ws.getRow(itemGrandRow).getCell(c).font = { bold:true }; });
+  ws.getCell(itemGrandRow, 16).value = { formula: `SUM($P$${itemFirstRow}:$P$${itemLastRow})`, result: pairSum(x => typeof x.palletCount === 'number' ? x.palletCount : 0) };
+  ws.getCell(itemGrandRow, 17).value = { formula: `SUM($Q$${itemFirstRow}:$Q$${itemLastRow})`, result: pairSum(x => typeof x.qty === 'number' ? x.qty : (parseFloat(x.qty)||0)) };
+  ws.getCell(itemGrandRow, 18).value = { formula: `SUM($R$${itemFirstRow}:$R$${itemLastRow})`, result: pairSum(x => Math.round(x.actualResult)||0) };
+  [14,15,16,17,18].forEach(c => { ws.getRow(itemGrandRow).getCell(c).font = { bold:true }; });
   ws.getColumn(14).width = 16;
-  ws.getColumn(15).width = 16;
+  ws.getColumn(15).width = 10;
   ws.getColumn(16).width = 16;
-  ws.getColumn(17).width = 24;
+  ws.getColumn(17).width = 16;
+  ws.getColumn(18).width = 24;
 
   // Tổng SL pallet + tổng số vị trí (locator) KHÁC NHAU — hiện thêm vào tiêu đề chart tròn, bên
   // cạnh số dòng, để nhìn tiêu đề là biết ngay quy mô đợt kiểm (không phải mở bảng đếm tay).
@@ -9855,7 +9874,7 @@ async function exportConfirmedHistoryExcel(dateKey){
   const chartSpecs = [];
   let nextSheetPosition = 2; // sheet 1 = Tổng quan
   khoList.forEach(k => {
-    const khoRecords = byKho[k.label].map(r => ({ locator: r.locator, custpo: r.custpo, item: r.item, qty: r.qty, actualResult: r.actualResult, palletCount: r.palletCount }));
+    const khoRecords = byKho[k.label].map(r => ({ locator: r.locator, custpo: r.custpo, item: r.item, oqc: r.oqc, qty: r.qty, actualResult: r.actualResult, palletCount: r.palletCount }));
     const stats = ccBuildDaXacNhanSheetFromRecords(workbook, k.label, khoRecords, 'stored');
     if(stats){
       chartSpecs.push({ sheetPosition: nextSheetPosition, chartInfo: stats.chartInfo });
