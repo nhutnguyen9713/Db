@@ -1379,7 +1379,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.04';
+const APP_VERSION = 'v2.05';
 const APP_VERSION_DATE = '14/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -8242,7 +8242,7 @@ async function exportPickSlipExcel(){
   };
 
   const headers = isLocatorMode
-    ? ['#', 'Item (PO)', 'OQC', 'Tồn kho', 'SL pallet', 'CBM']
+    ? ['#', 'Item (PO)', 'Locator', 'OQC', 'Tồn kho', 'SL pallet', 'CBM']
     : ['#', 'Locator', 'OQC', 'Tồn kho', 'SL pallet', 'CBM'];
   const nCols = headers.length;
   const thin = { style:'thin', color:{ argb:'FFAAAAAA' } };
@@ -8293,7 +8293,10 @@ async function exportPickSlipExcel(){
       const cell = ws.getCell(r, i+1);
       cell.value = v;
       trackWidth(i, v);
-      cell.alignment = { vertical:'middle', horizontal: (i===3||i===4||i===5) ? 'right' : (i===0 ? 'center' : 'left'), wrapText: i===1 };
+      // 3 cột cuối (Tồn kho/SL pallet/CBM) luôn căn phải — tính theo vị trí TƯƠNG ĐỐI (values.length-3)
+      // thay vì chỉ số cột cố định, vì locator-mode có thêm cột "Locator" làm tổng số cột khác
+      // item-mode (hàm này dùng chung cho cả 2 chế độ).
+      cell.alignment = { vertical:'middle', horizontal: (i >= values.length - 3) ? 'right' : (i===0 ? 'center' : 'left'), wrapText: i===1 };
       cell.border = { top:thin, bottom:thin, left: i===0?thick:thin, right: i===values.length-1?thick:thin };
       if(opts && opts.warn) cell.font = { bold:true, color:{ argb:'FFC9740A' } };
     });
@@ -8333,24 +8336,25 @@ async function exportPickSlipExcel(){
       if(walkCmp !== 0) return walkCmp;
       return a.item.localeCompare(b.item);
     });
-    let currentKho = null, currentLocator = null;
-    let locOnHand = 0, locPallet = 0, locCbm = 0, khoOnHand = 0, khoPallet = 0, khoCbm = 0, stt = 0;
+    // SỬA (theo yêu cầu): trước đây mỗi Locator có riêng 1 dòng tiêu đề màu cam + 1 dòng mini-header
+    // lặp lại (# | Item (PO) | OQC | Tồn kho | SL pallet | CBM) — rất dài dòng khi có nhiều Locator,
+    // đa số chỉ có 1 dòng dữ liệu bên dưới. Nay gộp Locator thành 1 CỘT dữ liệu bình thường ngay
+    // trong bảng chính (như cột "Item (PO)"), chỉ còn 1 dòng mini-header MỖI KHO (không lặp lại theo
+    // từng Locator nữa) — gọn hơn nhiều, vẫn giữ nguyên việc gộp/xếp theo Kho + đi theo đúng thứ tự
+    // đường đi (comparePickWalkOrder).
+    let currentKho = null;
+    let khoOnHand = 0, khoPallet = 0, khoCbm = 0, stt = 0;
     sorted.forEach((g, i) => {
       if(g.kho !== currentKho){
         if(currentKho !== null) writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, roundCbm(khoCbm), true);
-        currentKho = g.kho; currentLocator = null; khoOnHand = 0; khoPallet = 0; khoCbm = 0;
+        currentKho = g.kho; khoOnHand = 0; khoPallet = 0; khoCbm = 0; stt = 0;
         writeGroupHeaderRow(currentKho, KHO_COLOR);
-      }
-      if(g.locator !== currentLocator){
-        currentLocator = g.locator; locOnHand = 0; locPallet = 0; locCbm = 0; stt = 0;
-        writeGroupHeaderRow(currentLocator, g.isSurplus ? GROUP_COLOR_WARN : GROUP_COLOR);
         writeMiniHeaderRow();
       }
       stt++;
-      locOnHand += g.onHand; locPallet += g.pallets; locCbm += (g.cbm || 0);
       khoOnHand += g.onHand; khoPallet += g.pallets; khoCbm += (g.cbm || 0);
       const itemLabel = g.item + (g.po ? ` (PO ${g.po})` : '') + (g.itemPoCount > 1 ? ` — Có ${g.itemPoCount} PO` : '') + (g.isSurplus ? ` — DƯ ${g.surplusQty} (KH ${g.planQty})` : '');
-      writeDataRow([stt, itemLabel, g.oqc || '', g.onHand, g.pallets, roundCbm(g.cbm)], { warn: g.isSurplus });
+      writeDataRow([stt, itemLabel, g.locator, g.oqc || '', g.onHand, g.pallets, roundCbm(g.cbm)], { warn: g.isSurplus });
       if(i === sorted.length - 1){
         writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, roundCbm(khoCbm), true);
       }
@@ -8398,10 +8402,15 @@ async function exportPickSlipExcel(){
     });
   }
 
-  // Tự căn chiều rộng cột theo nội dung thực tế (có giới hạn min/max cho từng cột)
-  const colCaps = [[4,6], [16,48], [8,10], [10,14], [10,12], [8,10]];
+  // Tự căn chiều rộng cột theo nội dung thực tế (có giới hạn min/max cho từng cột) — tra theo TÊN cột
+  // thay vì vị trí cố định, vì locator-mode và item-mode có số cột khác nhau (locator-mode có thêm
+  // cột "Locator" từ bản sửa gộp locator vào bảng chính).
+  const colCapsByHeader = {
+    '#': [4,6], 'Item (PO)': [16,48], 'Locator': [10,16], 'OQC': [8,10],
+    'Tồn kho': [10,14], 'SL pallet': [10,12], 'CBM': [8,10]
+  };
   headers.forEach((h, i) => {
-    const [minW, maxW] = colCaps[i];
+    const [minW, maxW] = colCapsByHeader[h] || [8,14];
     ws.getColumn(i+1).width = Math.min(Math.max(colMaxLen[i] + 2, minW), maxW);
   });
 
