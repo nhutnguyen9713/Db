@@ -1249,6 +1249,9 @@ function saveStateToStorage(){
     if(Object.keys(hiddenPlanContainers).length) LS.setItem(STORAGE_KEY_HIDDEN_CONT, JSON.stringify(hiddenPlanContainers));
     else LS.removeItem(STORAGE_KEY_HIDDEN_CONT);
 
+    if(Object.keys(contPickComments).length) LS.setItem(STORAGE_KEY_CONT_COMMENTS, JSON.stringify(contPickComments));
+    else LS.removeItem(STORAGE_KEY_CONT_COMMENTS);
+
     if(Object.keys(planContainerChangeInfo).length) LS.setItem(STORAGE_KEY_PLAN_CHANGE_INFO, JSON.stringify(planContainerChangeInfo));
     else LS.removeItem(STORAGE_KEY_PLAN_CHANGE_INFO);
 
@@ -1317,6 +1320,7 @@ function loadStateFromStorage(){
     const ccResultsRaw = LS.getItem(STORAGE_KEY_CCRESULTS);
     const manualPickedRaw = LS.getItem(STORAGE_KEY_MANUAL_PICKED);
     const hiddenContRaw = LS.getItem(STORAGE_KEY_HIDDEN_CONT);
+    const contCommentsRaw = LS.getItem(STORAGE_KEY_CONT_COMMENTS);
     const planChangeInfoRaw = LS.getItem(STORAGE_KEY_PLAN_CHANGE_INFO);
     const manualKhoRaw = LS.getItem(STORAGE_KEY_MANUAL_KHO);
     const sppOkRaw = LS.getItem(STORAGE_KEY_SPP_OK);
@@ -1339,6 +1343,7 @@ function loadStateFromStorage(){
       ccResults: ccResultsRaw ? JSON.parse(ccResultsRaw) : {},
       manualPicked: manualPickedRaw ? JSON.parse(manualPickedRaw) : {},
       hiddenContainers: hiddenContRaw ? JSON.parse(hiddenContRaw) : {},
+      contComments: contCommentsRaw ? JSON.parse(contCommentsRaw) : {},
       planChangeInfo: planChangeInfoRaw ? JSON.parse(planChangeInfoRaw) : {},
       manualKho: manualKhoRaw ? JSON.parse(manualKhoRaw) : {},
       sppOk: sppOkRaw ? JSON.parse(sppOkRaw) : {},
@@ -1354,7 +1359,7 @@ function loadStateFromStorage(){
     };
   }catch(err){
     console.warn('Không đọc được dữ liệu đã lưu:', err);
-    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, planChangeInfo: {}, manualKho: {}, sppOk: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, khoGrid: {}, confirmedHistory: {}, txTransferChecked: {} };
+    return { inv: null, plans: {}, meta: null, confirmed: {}, lastCheck: {}, invSnapshot: {}, ccResults: {}, manualPicked: {}, hiddenContainers: {}, contComments: {}, planChangeInfo: {}, manualKho: {}, sppOk: {}, ktInputs: {}, scannedExtra: {}, scannedGi: [], giScanLog: [], contShip: null, itemCbm: {}, khoGrid: {}, confirmedHistory: {}, txTransferChecked: {} };
   }
 }
 
@@ -1369,6 +1374,7 @@ function clearStoredState(){
   LS.removeItem(STORAGE_KEY_CCRESULTS);
   LS.removeItem(STORAGE_KEY_MANUAL_PICKED);
   LS.removeItem(STORAGE_KEY_HIDDEN_CONT);
+  LS.removeItem(STORAGE_KEY_CONT_COMMENTS);
   LS.removeItem(STORAGE_KEY_PLAN_CHANGE_INFO);
   LS.removeItem(STORAGE_KEY_MANUAL_KHO);
   LS.removeItem(STORAGE_KEY_SPP_OK);
@@ -1385,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.11';
+const APP_VERSION = 'v2.12';
 const APP_VERSION_DATE = '14/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3529,6 +3535,19 @@ function computePlanContainerChanges(type, oldDetailRows, newDetailRows){
   });
 }
 
+// Ghi chú tự do cho TỪNG container ở bảng Thống kê Container (theo yêu cầu — thêm ô để tự điền, lưu
+// Cloud mỗi lần điền xong). Khoá theo contInstanceKey(...) y hệt các tuỳ chỉnh container khác (Ẩn/Pick
+// xong tay/Kho thủ công) — cùng nhóm 'contoverride' khi tự lưu lên Cloud, để gộp chung 1 lượt lưu.
+let contPickComments = {};
+const STORAGE_KEY_CONT_COMMENTS = 'tn5_dashboard_cont_comments_v1';
+function saveContPickComment(instanceKey, text){
+  const trimmed = String(text || '').trim();
+  if(trimmed) contPickComments[instanceKey] = trimmed;
+  else delete contPickComments[instanceKey]; // xoá trắng ô ghi chú -> dọn luôn key, không giữ chuỗi rỗng
+  saveStateToStorage();
+  scheduleAutoSaveToCloud('contoverride', [STORAGE_KEY_CONT_COMMENTS], 'Ghi chú container');
+}
+
 // Xoá (ẩn) 1 container khỏi bảng Plan — KHÔNG đụng tới file Excel Plan gốc đã tải lên, chỉ ẩn khỏi
 // dashboard này. Có xác nhận trước khi xoá để tránh bấm nhầm, và có thể khôi phục lại bất cứ lúc nào.
 let hiddenPlanContainers = {};
@@ -3848,7 +3867,7 @@ function renderContPickTable(){
   contPickRowsCache = rows;
 
   if(!rows.length){
-    detailTbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:var(--muted-2); padding:16px; font-style:italic;">Không có dòng nào khớp với bộ lọc</td></tr>`;
+    detailTbody.innerHTML = `<tr><td colspan="11" style="text-align:center; color:var(--muted-2); padding:16px; font-style:italic;">Không có dòng nào khớp với bộ lọc</td></tr>`;
   } else {
     detailTbody.innerHTML = rows.map((row, idx) => {
       const hasShort = row.shortItems && row.shortItems.length > 0;
@@ -3909,6 +3928,7 @@ function renderContPickTable(){
           <button type="button" class="cpt-delete-btn" data-delete-type="${escAttr(row.type)}" data-delete-cno="${escAttr(String(row.cNo))}" data-delete-loaddate="${escAttr(row.loadDateKey || '')}" data-delete-plantime="${escAttr(row.planTimeKey || '')}" title="Xoá container này khỏi Plan (chỉ ẩn khỏi dashboard, không sửa file Excel gốc — sẽ hỏi xác nhận trước)">🗑</button>
         </td>
         <td>${loadingHtml}</td>
+        <td><input type="text" class="cpt-comment-input" data-instance="${escAttr(row.instanceKey)}" value="${escAttr(row.comment || '')}" placeholder="Tự điền ghi chú…" style="width:100%; box-sizing:border-box; border:1px solid var(--line); border-radius:6px; padding:4px 7px; font-family:var(--mono); font-size:11.5px; background:var(--panel); color:var(--text);"></td>
       </tr>`;
     }).join('');
   }
@@ -4174,6 +4194,7 @@ function renderContainerPickingOverview(){
     detailRows.push({
       type: entry.type, cNo: entry.cNo, pct, status, autoStatus, autoPct: pct, isManual,
       changeStatus: changeInfo ? changeInfo.status : null,
+      comment: contPickComments[instanceKey] || '',
       instanceKey, planQty: entry.planQty,
       loadDateKey: entry.loadDate, planTimeKey: entry.planTime,
       loadDate: [...entry.loadDates].join(', ') || '—',
@@ -4400,6 +4421,7 @@ document.addEventListener('click', (e) => {
     return;
   }
   if(e.target.closest('.cpt-kho-manual-select')) return; // để dropdown chọn Kho hoạt động, không nhảy dòng
+  if(e.target.closest('.cpt-comment-input')) return; // để bấm/gõ vào ô Ghi chú hoạt động, không nhảy dòng
   const row = e.target.closest('.cont-pick-row');
   if(!row) return;
   const domId = row.dataset.contJump;
@@ -4422,6 +4444,14 @@ document.addEventListener('change', (e) => {
   const sel = e.target.closest('.cpt-kho-manual-select');
   if(!sel) return;
   setManualKho(sel.dataset.manualType, sel.dataset.manualCno, sel.dataset.manualLoaddate, sel.dataset.manualPlantime, sel.value || null);
+});
+
+// Ghi chú tự điền ở bảng Thống kê Container — lưu (localStorage + tự lưu Cloud) khi ĐIỀN XONG (sự
+// kiện "change" chỉ nổ ra khi rời khỏi ô/nhấn Enter, không phải mỗi lần gõ phím), theo đúng yêu cầu.
+document.addEventListener('change', (e) => {
+  const input = e.target.closest('.cpt-comment-input');
+  if(!input) return;
+  saveContPickComment(input.dataset.instance, input.value);
 });
 
 (function setupFixedBackToPickBtn(){
@@ -11890,6 +11920,7 @@ function initDashboard(){
   invSnapshotHistory = saved.invSnapshot || {};
   manualPickedContainers = saved.manualPicked || {};
   hiddenPlanContainers = saved.hiddenContainers || {};
+  contPickComments = saved.contComments || {};
   planContainerChangeInfo = saved.planChangeInfo || {};
   manualKhoOverrides = saved.manualKho || {};
   sppManualOk = saved.sppOk || {};
@@ -12122,6 +12153,9 @@ if(btnSaveCloud){
               }
               if(cloudData[STORAGE_KEY_HIDDEN_CONT] !== undefined && cloudData[STORAGE_KEY_HIDDEN_CONT] !== _mem[STORAGE_KEY_HIDDEN_CONT]){
                 hiddenPlanContainers = cloudData[STORAGE_KEY_HIDDEN_CONT] ? JSON.parse(cloudData[STORAGE_KEY_HIDDEN_CONT]) : {};
+              }
+              if(cloudData[STORAGE_KEY_CONT_COMMENTS] !== undefined && cloudData[STORAGE_KEY_CONT_COMMENTS] !== _mem[STORAGE_KEY_CONT_COMMENTS]){
+                contPickComments = cloudData[STORAGE_KEY_CONT_COMMENTS] ? JSON.parse(cloudData[STORAGE_KEY_CONT_COMMENTS]) : {};
               }
               if(cloudData[STORAGE_KEY_SPP_OK] !== undefined && cloudData[STORAGE_KEY_SPP_OK] !== _mem[STORAGE_KEY_SPP_OK]){
                 sppManualOk = cloudData[STORAGE_KEY_SPP_OK] ? JSON.parse(cloudData[STORAGE_KEY_SPP_OK]) : {};
