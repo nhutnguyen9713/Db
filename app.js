@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.18';
+const APP_VERSION = 'v2.19';
 const APP_VERSION_DATE = '15/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3098,6 +3098,7 @@ document.querySelectorAll('.plan-file-input').forEach(input => {
     const statusEl = document.querySelector(`.plan-status[data-plan-status="${type}"]`);
     const btnEl = document.querySelector(`.btn-plan[data-plan="${type}"]`);
     const clearBtn = document.querySelector(`.btn-plan-clear[data-plan-clear="${type}"]`);
+    const editQuickBtn = document.querySelector(`.btn-plan-edit-quick[data-plan-edit-quick="${type}"]`);
     if(statusEl){ statusEl.className = 'plan-status'; statusEl.textContent = `Đang đọc "${file.name}"…`; }
     planEditingTypes.delete(type); // tải file mới đè lên thì thoát chế độ Sửa (nếu đang bật) của loại Plan này
     try{
@@ -3110,6 +3111,7 @@ document.querySelectorAll('.plan-file-input').forEach(input => {
       planData[type] = { ...agg, fileName: file.name };
       if(btnEl) btnEl.classList.add('loaded');
       if(clearBtn) clearBtn.classList.add('show');
+      if(editQuickBtn) editQuickBtn.classList.add('show');
       renderPlanPanel();
       renderKhoSearchPage();
       touchUpdatedAt();
@@ -3139,9 +3141,11 @@ document.querySelectorAll('.btn-plan-clear').forEach(btn => {
     const statusEl = document.querySelector(`.plan-status[data-plan-status="${type}"]`);
     const btnEl = document.querySelector(`.btn-plan[data-plan="${type}"]`);
     const clearBtn = document.querySelector(`.btn-plan-clear[data-plan-clear="${type}"]`);
+    const editQuickBtn = document.querySelector(`.btn-plan-edit-quick[data-plan-edit-quick="${type}"]`);
     if(statusEl){ statusEl.className = 'plan-status'; statusEl.textContent = 'Chưa tải'; }
     if(btnEl) btnEl.classList.remove('loaded');
     if(clearBtn) clearBtn.classList.remove('show');
+    if(editQuickBtn) editQuickBtn.classList.remove('show');
     renderPlanPanel();
     renderKhoSearchPage();
     touchUpdatedAt();
@@ -4835,7 +4839,7 @@ function renderPlanPanel(){
       // planData[type] cho tới khi bấm "Lưu", xem collectPlanEditRows()/nút data-plan-edit-save).
       const editRowsHtml = rows.map(r => `<tr class="plan-edit-row">${buildPlanEditRowCellsHtml(r, locCols)}</tr>`).join('');
       return `
-      <div class="plan-card plan-card-editing" style="border:2px solid ${PLAN_COLORS[type]}; background:linear-gradient(90deg, ${PLAN_COLORS[type]}14, transparent 120px);">
+      <div class="plan-card plan-card-editing" id="plan-card-${type}" style="border:2px solid ${PLAN_COLORS[type]}; background:linear-gradient(90deg, ${PLAN_COLORS[type]}14, transparent 120px);">
         <div class="plan-card-head">
           <span class="plan-card-badge" style="background:${PLAN_COLORS[type]};">${type}</span>
           <span class="plan-card-title" style="color:${PLAN_COLORS[type]}">Plan ${type} — đang sửa</span>
@@ -4928,7 +4932,7 @@ function renderPlanPanel(){
     }).join('');
     const compare = buildCompareTable(type);
     return `
-    <div class="plan-card" style="border:2px solid ${PLAN_COLORS[type]}; background:linear-gradient(90deg, ${PLAN_COLORS[type]}14, transparent 120px);">
+    <div class="plan-card" id="plan-card-${type}" style="border:2px solid ${PLAN_COLORS[type]}; background:linear-gradient(90deg, ${PLAN_COLORS[type]}14, transparent 120px);">
       <div class="plan-card-head">
         <span class="plan-card-badge" style="background:${PLAN_COLORS[type]};">${type}</span>
         <span class="plan-card-title" style="color:${PLAN_COLORS[type]}">Plan ${type}</span>
@@ -4974,6 +4978,26 @@ function renderPlanPanel(){
 // nội dung do renderPlanPanel() vẽ lại bằng innerHTML nên phải bắt sự kiện kiểu "delegated" (gắn trên
 // document, lọc theo nút con được bấm) thay vì gắn trực tiếp lên từng nút lúc khởi tạo trang.
 document.addEventListener('click', (e) => {
+  // Nút ✏️ nhỏ ngay tại thanh "Plan xuất cont" ở đầu trang (cùng chỗ tải file lên) — bấm vào là mở
+  // LUÔN chế độ Sửa của đúng thẻ Plan đó rồi cuộn xuống, không cần kéo tay xuống mục "Kế hoạch xuất
+  // cont" tìm thẻ tương ứng trước mới bấm "✏️ Sửa" trên thẻ.
+  const editQuickBtn = e.target.closest('[data-plan-edit-quick]');
+  if(editQuickBtn){
+    const type = editQuickBtn.dataset.planEditQuick;
+    if(!planData[type]){
+      alert(`Chưa tải Plan ${type} lên — tải file trước rồi mới sửa được.`);
+      return;
+    }
+    planEditingTypes.add(type);
+    renderPlanPanel();
+    const card = document.getElementById(`plan-card-${type}`);
+    if(card){
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      card.classList.add('plan-card-jump-flash');
+      setTimeout(() => card.classList.remove('plan-card-jump-flash'), 1700);
+    }
+    return;
+  }
   const editBtn = e.target.closest('[data-plan-edit]');
   if(editBtn){
     planEditingTypes.add(editBtn.dataset.planEdit);
@@ -12191,9 +12215,11 @@ function initDashboard(){
         const statusEl = document.querySelector(`.plan-status[data-plan-status="${type}"]`);
         const btnEl = document.querySelector(`.btn-plan[data-plan="${type}"]`);
         const clearBtn = document.querySelector(`.btn-plan-clear[data-plan-clear="${type}"]`);
+        const editQuickBtn = document.querySelector(`.btn-plan-edit-quick[data-plan-edit-quick="${type}"]`);
         if(statusEl){ statusEl.className = 'plan-status ok'; statusEl.textContent = `✓ ${planData[type].fileName} · ${planData[type].itemCount} mã · ${fmt(planData[type].totalQty)} Pcs (đã khôi phục)`; }
         if(btnEl) btnEl.classList.add('loaded');
         if(clearBtn) clearBtn.classList.add('show');
+        if(editQuickBtn) editQuickBtn.classList.add('show');
       }
     });
     renderPlanPanel();
@@ -12220,12 +12246,15 @@ document.getElementById('btn-reset-data').addEventListener('click', () => {
   currentFileName = null;
   PLAN_TYPES.forEach(type => {
     planData[type] = null;
+    planEditingTypes.delete(type);
     const statusEl = document.querySelector(`.plan-status[data-plan-status="${type}"]`);
     const btnEl = document.querySelector(`.btn-plan[data-plan="${type}"]`);
     const clearBtn = document.querySelector(`.btn-plan-clear[data-plan-clear="${type}"]`);
+    const editQuickBtn = document.querySelector(`.btn-plan-edit-quick[data-plan-edit-quick="${type}"]`);
     if(statusEl){ statusEl.className = 'plan-status'; statusEl.textContent = 'Chưa tải'; }
     if(btnEl) btnEl.classList.remove('loaded');
     if(clearBtn) clearBtn.classList.remove('show');
+    if(editQuickBtn) editQuickBtn.classList.remove('show');
   });
   confirmedKiemTonItems = {};
   renderConfirmedList();
@@ -12416,14 +12445,17 @@ function updatePlanUiAfterImport(type){
   const statusEl = document.querySelector(`.plan-status[data-plan-status="${type}"]`);
   const btnEl = document.querySelector(`.btn-plan[data-plan="${type}"]`);
   const clearBtn = document.querySelector(`.btn-plan-clear[data-plan-clear="${type}"]`);
+  const editQuickBtn = document.querySelector(`.btn-plan-edit-quick[data-plan-edit-quick="${type}"]`);
   if(planData[type]){
     if(statusEl){ statusEl.className = 'plan-status ok'; statusEl.textContent = `✓ ${planData[type].fileName} · ${planData[type].itemCount} mã · ${fmt(planData[type].totalQty)} Pcs (đã nhập)`; }
     if(btnEl) btnEl.classList.add('loaded');
     if(clearBtn) clearBtn.classList.add('show');
+    if(editQuickBtn) editQuickBtn.classList.add('show');
   } else {
     if(statusEl){ statusEl.className = 'plan-status'; statusEl.textContent = 'Chưa tải'; }
     if(btnEl) btnEl.classList.remove('loaded');
     if(clearBtn) clearBtn.classList.remove('show');
+    if(editQuickBtn) editQuickBtn.classList.remove('show');
   }
 }
 
