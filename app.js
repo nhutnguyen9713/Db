@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.14';
+const APP_VERSION = 'v2.15';
 const APP_VERSION_DATE = '15/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4555,7 +4555,12 @@ function buildItemLocatorPopoverHtml(item, po){
     return `<div class="cpt-item-head"><b>${escHtml(item)}</b>${poNote}</div><div class="cpt-empty">Không có container nào đóng mã hàng này (trong Plan xuất cont đã tải)</div>`;
   }
   const totalQty = conts.reduce((s, c) => s + c.qty, 0);
-  const locs = buildItemLocatorDetail(item, po, true); // loại vị trí "Prod" — không tính là tồn khả dụng để pick
+  // SỬA (lỗi thật đã gặp — popover báo "Đủ" trong khi bảng so sánh chính báo "Thiếu" cho ĐÚNG mã này):
+  // trước đây cộng TẤT CẢ OQC (PASS+NG+khác) làm "Tổng tồn hiện có", trong khi bảng so sánh chính
+  // (buildCombinedPlanCompareTable) VÀ mọi chỗ khác tính "Thiếu hàng" trong dashboard chỉ tính đúng
+  // hàng PASS là tồn khả dụng (hàng NG không xuất được) — 2 cách tính khác nhau cho cùng 1 mã hàng
+  // dẫn tới kết luận Đủ/Thiếu trái ngược nhau. Lọc lại đúng PASS để khớp quy ước chung.
+  const locs = buildItemLocatorDetail(item, po, true).filter(l => l.oqc === 'PASS'); // loại vị trí "Prod" + chỉ tính PASS là tồn khả dụng để pick
   const totalOnHand = locs.reduce((s, l) => s + l.qty, 0);
   const khoTotals = new Map();
   locs.forEach(l => khoTotals.set(l.kho, (khoTotals.get(l.kho)||0) + l.qty));
@@ -4580,7 +4585,7 @@ function buildItemLocatorPopoverHtml(item, po){
   return `<div class="cpt-item-head"><b>${escHtml(item)}</b>${poNote}</div>
     <div class="cpt-locs">${rowsHtml}</div>
     <div class="cpt-total">Tổng ${fmt(conts.length)} container: <b>${fmt(totalQty)}</b> Pcs</div>
-    <div class="cpt-total" style="color:var(--muted); font-weight:600; margin-top:6px;">Tổng tồn hiện có: <b style="color:var(--text);">${fmt(totalOnHand)}</b> Pcs</div>
+    <div class="cpt-total" style="color:var(--muted); font-weight:600; margin-top:6px;">Tổng tồn PASS hiện có: <b style="color:var(--text);">${fmt(totalOnHand)}</b> Pcs</div>
     <div class="cpt-locs">${khoRowsHtml || '<div class="cpt-empty">Không có tồn kho</div>'}</div>
     ${diffHtml}`;
 }
