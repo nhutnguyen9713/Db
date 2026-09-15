@@ -1391,8 +1391,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.12';
-const APP_VERSION_DATE = '14/09/2026';
+const APP_VERSION = 'v2.13';
+const APP_VERSION_DATE = '15/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -11044,7 +11044,7 @@ function ccBuildDeXuatSheet(workbook, khoLabel, result, createSheet){
       horizontalCentered: true, margins: { left:0.35, right:0.35, top:0.5, bottom:0.5, header:0.2, footer:0.2 }
     };
 
-    const headers = ['STT', 'Locator', 'Số pallet', 'Cust PO', 'Item No.', 'Số lượng', 'Kết quả kiểm thực tế (điền tay)'];
+    const headers = ['STT', 'Locator', 'Số pallet', 'Cust PO', 'Item No.', 'OQC', 'Số lượng', 'Kết quả kiểm thực tế (điền tay)'];
     const thin = { style:'thin', color:{ argb:'FF999999' } };
     const thick = { style:'medium', color:{ argb:'FF222222' } };
 
@@ -11071,7 +11071,7 @@ function ccBuildDeXuatSheet(workbook, khoLabel, result, createSheet){
     });
 
     ws.columns = [
-      { width:5 }, { width:14 }, { width:9 }, { width:14 }, { width:14 }, { width:9 }, { width:22 }
+      { width:5 }, { width:14 }, { width:9 }, { width:14 }, { width:14 }, { width:9 }, { width:9 }, { width:22 }
     ];
 
     flatRows.forEach((r, i) => {
@@ -11085,6 +11085,7 @@ function ccBuildDeXuatSheet(workbook, khoLabel, result, createSheet){
         r.palletCount || '',
         r.custpo || '',
         r.item,
+        r.oqc || '',
         typeof r.qty === 'number' ? r.qty : (parseFloat(r.qty) || 0),
         ''
       ];
@@ -11097,8 +11098,8 @@ function ccBuildDeXuatSheet(workbook, khoLabel, result, createSheet){
           left: (c === 1) ? thick : thin,
           right: (c === headers.length) ? thick : thin
         };
-        if(c === 2 || c === 3 || c === 4 || c === 5 || c === 7) cell.alignment = { vertical:'middle', horizontal:'left', wrapText:true };
-        else if(c === 6) cell.alignment = { vertical:'middle', horizontal:'right' };
+        if(c === 2 || c === 3 || c === 4 || c === 5 || c === 8) cell.alignment = { vertical:'middle', horizontal:'left', wrapText:true };
+        else if(c === 7) cell.alignment = { vertical:'middle', horizontal:'right' };
         else cell.alignment = { vertical:'middle', horizontal:'center' };
       }
     });
