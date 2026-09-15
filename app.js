@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.15';
+const APP_VERSION = 'v2.16';
 const APP_VERSION_DATE = '15/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -8407,7 +8407,10 @@ async function exportPickSlipExcel(){
       // thay vì chỉ số cột cố định, vì locator-mode có thêm cột "Locator" làm tổng số cột khác
       // item-mode (hàm này dùng chung cho cả 2 chế độ).
       cell.alignment = { vertical:'middle', horizontal: (i >= values.length - 3) ? 'right' : (i===0 ? 'center' : 'left'), wrapText: i===1 };
-      cell.border = { top:thin, bottom:thin, left: i===0?thick:thin, right: i===values.length-1?thick:thin };
+      // opts.groupFirst (theo yêu cầu — "chỉnh phân locator bằng nét đậm cho dễ nhìn"): dòng ĐẦU TIÊN
+      // của mỗi Locator mới (ở chế độ theo Locator) được viền TRÊN đậm — giống hệt cách đã làm để
+      // phân biệt ranh giới giữa các Kho, giúp mắt lướt xuống bảng dễ nhận ra chỗ đổi Locator hơn.
+      cell.border = { top: (opts && opts.groupFirst) ? thick : thin, bottom:thin, left: i===0?thick:thin, right: i===values.length-1?thick:thin };
       if(opts && opts.warn) cell.font = { bold:true, color:{ argb:'FFC9740A' } };
     });
     r++;
@@ -8452,19 +8455,21 @@ async function exportPickSlipExcel(){
     // trong bảng chính (như cột "Item (PO)"), chỉ còn 1 dòng mini-header MỖI KHO (không lặp lại theo
     // từng Locator nữa) — gọn hơn nhiều, vẫn giữ nguyên việc gộp/xếp theo Kho + đi theo đúng thứ tự
     // đường đi (comparePickWalkOrder).
-    let currentKho = null;
+    let currentKho = null, currentLocator = null;
     let khoOnHand = 0, khoPallet = 0, khoCbm = 0, stt = 0;
     sorted.forEach((g, i) => {
       if(g.kho !== currentKho){
         if(currentKho !== null) writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, roundCbm(khoCbm), true);
-        currentKho = g.kho; khoOnHand = 0; khoPallet = 0; khoCbm = 0; stt = 0;
+        currentKho = g.kho; currentLocator = null; khoOnHand = 0; khoPallet = 0; khoCbm = 0; stt = 0;
         writeGroupHeaderRow(currentKho, KHO_COLOR);
         writeMiniHeaderRow();
       }
+      const isNewLocator = g.locator !== currentLocator;
+      currentLocator = g.locator;
       stt++;
       khoOnHand += g.onHand; khoPallet += g.pallets; khoCbm += (g.cbm || 0);
       const itemLabel = g.item + (g.po ? ` (PO ${g.po})` : '') + (g.itemPoCount > 1 ? ` — Có ${g.itemPoCount} PO` : '') + (g.isSurplus ? ` — DƯ ${g.surplusQty} (KH ${g.planQty})` : '');
-      writeDataRow([stt, itemLabel, g.locator, g.oqc || '', g.onHand, g.pallets, roundCbm(g.cbm)], { warn: g.isSurplus });
+      writeDataRow([stt, itemLabel, g.locator, g.oqc || '', g.onHand, g.pallets, roundCbm(g.cbm)], { warn: g.isSurplus, groupFirst: isNewLocator });
       if(i === sorted.length - 1){
         writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, roundCbm(khoCbm), true);
       }
