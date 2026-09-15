@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.13';
+const APP_VERSION = 'v2.14';
 const APP_VERSION_DATE = '15/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -11039,8 +11039,10 @@ function ccBuildDeXuatSheet(workbook, khoLabel, result, createSheet){
     const modeText = result.mode === 'item' ? 'Mã hàng' : result.mode === 'locator' ? 'Locator' : 'Pallet';
     const khoCode = (CC_KHO_LIST.find(k => k.label === khoLabel) || {}).code || khoLabel.replace('Kho ', '');
     const ws = workbook.addWorksheet(`De xuat kiem ${khoCode}`.slice(0, 31));
+    // Theo yêu cầu: đổi mặc định in dọc (portrait) — trước đây in ngang (landscape). Vẫn giữ
+    // fitToWidth:1 để Excel tự co giãn cột vừa đúng 1 trang khổ dọc, không cần chỉnh tay.
     ws.pageSetup = {
-      paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
       horizontalCentered: true, margins: { left:0.35, right:0.35, top:0.5, bottom:0.5, header:0.2, footer:0.2 }
     };
 
