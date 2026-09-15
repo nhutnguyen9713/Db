@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.18';
+const APP_VERSION = 'v2.19';
 const APP_VERSION_DATE = '15/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5434,6 +5434,64 @@ function whApplyCapOverride(loc, baseCap){
   return (overrides[loc] !== undefined && overrides[loc] !== null) ? overrides[loc] : baseCap;
 }
 
+/* ============ HEATMAP tô màu SƠ ĐỒ KHO ============
+   Chế độ xem thêm (ngoài 4 mức Trống/Thấp/Vừa/Đầy mặc định vẫn giữ nguyên): tô cả nền ô theo
+   - 'qty': mật độ lấp đầy (giống % thanh fill hiện có, chỉ là tô nổi bật hơn lên cả ô)
+   - 'oqc': tỉ lệ PASS/NG theo SL tại vị trí đó (2 màu đối lập, giữa là trung tính)
+   Áp dụng CHUNG cho cả 3 kho (3B/3A/2B) và cả 2 kiểu lưới (mặc định + tuỳ chỉnh) vì đều đi qua
+   buildLocatorBoxHtml() — chỉ là 1 tuỳ chọn hiển thị trên máy, không phải dữ liệu nghiệp vụ nên chỉ
+   lưu localStorage, không đẩy lên Cloud. */
+const STORAGE_KEY_KHO_HEATMAP = 'tn5_kho_heatmap_mode_v1';
+const KHO_HEATMAP_MODES = ['off', 'qty', 'oqc'];
+let khoHeatmapMode = 'off';
+try{
+  const savedHeatmapMode = LS.getItem(STORAGE_KEY_KHO_HEATMAP);
+  if(KHO_HEATMAP_MODES.includes(savedHeatmapMode)) khoHeatmapMode = savedHeatmapMode;
+}catch(e){}
+
+function khoHeatmapBtnLabel(){
+  if(khoHeatmapMode === 'qty') return '🌡️ Heatmap: Mật độ';
+  if(khoHeatmapMode === 'oqc') return '🌡️ Heatmap: PASS/NG';
+  return '🌡️ Heatmap: Tắt';
+}
+function khoLegendHtml(){
+  if(khoHeatmapMode === 'qty'){
+    return `<span>Heatmap — mật độ lấp đầy theo vị trí:</span>
+      <span style="display:inline-flex; align-items:center; gap:6px;">
+        <i style="background:var(--panel-2)"></i>Trống
+        <span style="width:64px; height:10px; border-radius:5px; border:1px solid var(--line); display:inline-block; background:linear-gradient(90deg, var(--panel-2), var(--teal));"></span>
+        Đầy
+      </span>`;
+  }
+  if(khoHeatmapMode === 'oqc'){
+    return `<span>Heatmap — tỉ lệ PASS/NG theo SL:</span>
+      <span style="display:inline-flex; align-items:center; gap:6px;">
+        <span style="color:var(--red)">100% NG</span>
+        <span style="width:90px; height:10px; border-radius:5px; border:1px solid var(--line); display:inline-block; background:linear-gradient(90deg, var(--red), var(--line), var(--teal));"></span>
+        <span style="color:var(--teal)">100% PASS</span>
+      </span>`;
+  }
+  return `<span><i style="background:var(--muted-2)"></i>Trống (0 pallet)</span>
+    <span><i style="background:var(--teal)"></i>Thấp (&lt; 50%)</span>
+    <span><i style="background:var(--amber-bright)"></i>Vừa (50–79%)</span>
+    <span><i style="background:var(--red)"></i>Đầy / gần đầy (≥ 80%)</span>`;
+}
+function khoRenderHeatmapControls(){
+  Object.values(KHO_CUSTOM_GRID_CONFIG).forEach(cfg => {
+    const btn = document.getElementById(cfg.heatmapBtn);
+    if(btn){ btn.textContent = khoHeatmapBtnLabel(); btn.classList.toggle('active', khoHeatmapMode !== 'off'); }
+    const legendEl = document.getElementById(cfg.legend);
+    if(legendEl) legendEl.innerHTML = khoLegendHtml();
+  });
+}
+function khoHeatmapCycle(){
+  const idx = KHO_HEATMAP_MODES.indexOf(khoHeatmapMode);
+  khoHeatmapMode = KHO_HEATMAP_MODES[(idx + 1) % KHO_HEATMAP_MODES.length];
+  try{ LS.setItem(STORAGE_KEY_KHO_HEATMAP, khoHeatmapMode); }catch(e){}
+  khoRenderHeatmapControls();
+  renderSodo3B();
+}
+
 /* Vẽ 1 ô locator (dùng chung cho Sơ đồ kho 3B và Sơ đồ Rack 3A) — gồm: tên, số pallet/sức chứa,
    thanh fill màu theo mức lấp đầy, nút bánh răng để ghi đè sức chứa tối đa riêng cho vị trí đó,
    và badge "NG" nếu vị trí đang có hàng NG. */
@@ -5448,25 +5506,68 @@ function computeLocatorBoxStats(loc, rows, defaultMaxPallet){
   else if(cappedForFill < maxPallet * 0.5) level = 'low';
   else if(cappedForFill < maxPallet * 0.8) level = 'mid';
   else level = 'full';
-  const hasNG = rows.some(r => String(r[RAW_KEY_IDX.oqc] || '').toUpperCase().includes('NG'));
-  return { count, maxPallet, pct, level, hasNG };
+  // Tổng SL (không phải số pallet) + tách PASS/NG theo SL — dùng cho chế độ Heatmap "Tỉ lệ PASS/NG"
+  // (xem khoHeatmapMode) và cho tooltip; KHÔNG ảnh hưởng gì tới count/pct/level ở trên (vẫn tính theo
+  // số pallet như cũ, để không đổi hành vi hiện có khi Heatmap đang Tắt).
+  let qtyTotal = 0, passQty = 0, ngQty = 0;
+  rows.forEach(r => {
+    const q = Number(r[RAW_KEY_IDX.qty]) || 0;
+    qtyTotal += q;
+    const oqc = String(r[RAW_KEY_IDX.oqc] || '').toUpperCase();
+    if(oqc === 'PASS') passQty += q;
+    else if(oqc === 'NG') ngQty += q;
+  });
+  const gradedQty = passQty + ngQty;
+  const passRatio = gradedQty > 0 ? passQty / gradedQty : null;
+  const hasNG = ngQty > 0;
+  return { count, maxPallet, pct, level, hasNG, qtyTotal, passQty, ngQty, passRatio };
+}
+
+// Nền tô màu Heatmap cho 1 ô — trộn thẳng vào màu nền hiện có (--panel-2) hoặc màu viền trung tính
+// (--line) bằng color-mix() nên TỰ đổi đúng theo Sáng/Tối/theme đang chọn, không cần định nghĩa thêm
+// bảng màu riêng cho từng theme. Dùng "in oklab" (không phải oklch) — trộn xám/viền với đỏ theo oklch
+// (toạ độ cực) có thể "vòng qua" tím ở các mức pha thấp vì góc màu (hue) không ổn định quanh điểm gần
+// như không màu, dễ nhầm với màu tím thương hiệu (--violet) đang dùng cho hành động chính; oklab trộn
+// theo toạ độ thẳng (a*/b*) nên không bị lỗi này. Giới hạn mức trộn tối đa 85% để chữ/icon trong ô vẫn
+// đủ tương phản, không cần tính contrast riêng theo từng ô.
+const KHO_HEATMAP_MAX_MIX = 85;
+function khoHeatmapCellStyle(stats){
+  if(khoHeatmapMode === 'qty'){
+    if(stats.count === 0) return '';
+    const pct = Math.max(0, Math.min(KHO_HEATMAP_MAX_MIX, stats.pct));
+    return ` style="background:color-mix(in oklab, var(--panel-2), var(--teal) ${pct}%);"`;
+  }
+  if(khoHeatmapMode === 'oqc'){
+    if(stats.passRatio === null) return '';
+    const d = (stats.passRatio - 0.5) * 2; // -1 (toàn NG) .. 1 (toàn PASS)
+    const mixPct = Math.round(Math.min(KHO_HEATMAP_MAX_MIX, Math.abs(d) * 100));
+    const hue = d >= 0 ? 'var(--teal)' : 'var(--red)';
+    return ` style="background:color-mix(in oklab, var(--line), ${hue} ${mixPct}%);"`;
+  }
+  return '';
 }
 
 function buildLocatorBoxHtml(loc, rows, defaultMaxPallet, extraClass){
-  const { count, maxPallet, pct, level, hasNG } = computeLocatorBoxStats(loc, rows, defaultMaxPallet);
+  const stats = computeLocatorBoxStats(loc, rows, defaultMaxPallet);
+  const { count, maxPallet, pct, level, hasNG, qtyTotal, passQty, ngQty } = stats;
   const overNote = count > maxPallet
     ? `<span class="wh3b-over" title="Vượt sức chứa chuẩn ${maxPallet} pallet/vị trí">VƯỢT</span>`
     : '';
   const ngBadge = hasNG ? `<span class="wh3b-ng-badge" title="Vị trí này đang có hàng NG">NG</span>` : '';
+  const heatClass = khoHeatmapMode === 'off' ? '' : ' heat-' + khoHeatmapMode;
+  const heatStyle = khoHeatmapCellStyle(stats);
+  const mainTitle = count > 0
+    ? `${loc} — SL: ${fmt(qtyTotal)} (PASS ${fmt(passQty)} / NG ${fmt(ngQty)}) · Bấm để xem chi tiết`
+    : `Bấm để xem chi tiết pallet tại ${loc}`;
   return {
     level,
     count,
     html: `
-    <div class="wh3b-box lvl-${level}${extraClass ? ' ' + extraClass : ''}" data-locator="${escAttr(loc)}">
+    <div class="wh3b-box lvl-${level}${heatClass}${extraClass ? ' ' + extraClass : ''}" data-locator="${escAttr(loc)}"${heatStyle}>
       <button type="button" class="wh3b-box-gear" data-locator="${escAttr(loc)}" data-default-max="${defaultMaxPallet}" title="Chỉnh sức chứa tối đa (pallet) cho vị trí này">
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
       </button>
-      <button type="button" class="wh3b-box-main" data-locator="${escAttr(loc)}" title="Bấm để xem chi tiết pallet tại ${escAttr(loc)}">
+      <button type="button" class="wh3b-box-main" data-locator="${escAttr(loc)}" title="${escAttr(mainTitle)}">
         <span class="wh3b-box-name">${escHtml(loc)}${ngBadge}</span>
         <span class="wh3b-box-count">${fmt(count)}<span class="wh3b-box-max">/${fmt(maxPallet)}</span>${overNote}</span>
         <span class="wh3b-box-fill"><span class="wh3b-box-fill-bar" style="width:${pct}%"></span></span>
@@ -5632,6 +5733,7 @@ const KHO_CUSTOM_GRID_CONFIG = {
   'Kho 3B': {
     defaultRows:5, defaultCols:5, defaultMax:WH3B_MAX_PALLET,
     modeBtn:'sodo3b-grid-mode-toggle', settingsBtn:'sodo3b-grid-settings-btn', copyBtn:'sodo3b-grid-copy-btn',
+    heatmapBtn:'sodo3b-heatmap-toggle', legend:'sodo3b-legend',
     defaultGrid:'sodo3b-grid', customGrid:'sodo3b-custom-grid', note:'sodo3b-custom-grid-note', hint:null,
     search:'sodo3b-search', pass:'sodo3b-oqc-pass', ng:'sodo3b-oqc-ng', detail:'sodo3b-detail',
     compute:computeSodo3bByLocator
@@ -5639,6 +5741,7 @@ const KHO_CUSTOM_GRID_CONFIG = {
   'Kho 3A': {
     defaultRows:10, defaultCols:10, defaultMax:2,
     modeBtn:'rack3a-grid-mode-toggle', settingsBtn:'rack3a-grid-settings-btn', copyBtn:'rack3a-grid-copy-btn',
+    heatmapBtn:'rack3a-heatmap-toggle', legend:'rack3a-legend',
     defaultGrid:'rack3a-grid', customGrid:'rack3a-custom-grid', note:'rack3a-custom-grid-note', hint:'rack3a-drag-hint',
     search:'rack3a-search', pass:'rack3a-oqc-pass', ng:'rack3a-oqc-ng', detail:'rack3a-detail',
     compute:computeRack3AByLocator
@@ -5646,11 +5749,16 @@ const KHO_CUSTOM_GRID_CONFIG = {
   'Kho 2B': {
     defaultRows:10, defaultCols:10, defaultMax:24,
     modeBtn:'sodo2b-grid-mode-toggle', settingsBtn:'sodo2b-grid-settings-btn', copyBtn:'sodo2b-grid-copy-btn',
+    heatmapBtn:'sodo2b-heatmap-toggle', legend:'sodo2b-legend',
     defaultGrid:'sodo2b-grid', customGrid:'sodo2b-custom-grid', note:'sodo2b-custom-grid-note', hint:'sodo2b-drag-hint',
     search:'sodo2b-search', pass:'sodo2b-oqc-pass', ng:'sodo2b-oqc-ng', detail:'sodo2b-detail',
     compute:computeSodo2bByLocator
   }
 };
+
+// Vẽ nhãn nút + chú thích Heatmap NGAY khi script chạy (nút đã có sẵn trong index.html lúc này —
+// app.js nằm cuối <body>) — để đúng luôn trạng thái đã lưu (localStorage) từ trước khi cần bấm gì.
+khoRenderHeatmapControls();
 
 // Danh sách ĐẦY ĐỦ vị trí (locator) của sơ đồ MẶC ĐỊNH từng kho — cố định theo đúng bố cục layout
 // gốc (KHÁC với compute...ByLocator() ở trên, vốn chỉ liệt kê vị trí đang CÓ tồn kho thật) — dùng cho
@@ -5777,9 +5885,17 @@ function khoGridRenderCustom(khoLabel){
     const rows = map[cell.locator] || [];
     const b = buildLocatorBoxHtml(cell.locator, rows, khoGridBaseCapacity(khoLabel, cell.locator), '');
     const isSelected = selKho && selKho.has(khoGridSelectionKey(cell.row, cell.col));
-    const cellHtml = b.html.replace(
+    // b.html có thể đã có sẵn 1 thuộc tính style="background:...;" riêng do chế độ Heatmap đang bật
+    // (xem khoHeatmapCellStyle()) — PHẢI gộp vào chung với style vị trí/kích thước ô ngay dưới đây
+    // thành ĐÚNG 1 thuộc tính style. Nếu để nguyên 2 thuộc tính style trùng tên trên cùng 1 thẻ <div>,
+    // trình duyệt chỉ áp dụng thuộc tính ĐẦU TIÊN và âm thầm bỏ qua thuộc tính còn lại (ở đây sẽ mất
+    // hẳn màu Heatmap trên grid tuỳ chỉnh, không có lỗi console nào báo).
+    const heatStyleMatch = b.html.match(/\sstyle="(background:[^"]*)"/);
+    const heatStyle = heatStyleMatch ? heatStyleMatch[1] : '';
+    const htmlNoHeatStyle = heatStyleMatch ? b.html.replace(heatStyleMatch[0], '') : b.html;
+    const cellHtml = htmlNoHeatStyle.replace(
       '<div class="wh3b-box',
-      `<div draggable="false" data-kho-grid-drag="1" data-cell-id="${escAttr(cell.id)}" data-cell-row="${cell.row}" data-cell-col="${cell.col}" style="grid-row:${cell.row} / span ${cell.rowSpan}; grid-column:${cell.col} / span ${cell.colSpan};" class="wh3b-box${isSelected ? ' wh3b-cell-selected' : ''}`
+      `<div draggable="false" data-kho-grid-drag="1" data-cell-id="${escAttr(cell.id)}" data-cell-row="${cell.row}" data-cell-col="${cell.col}" style="grid-row:${cell.row} / span ${cell.rowSpan}; grid-column:${cell.col} / span ${cell.colSpan};${heatStyle}" class="wh3b-box${isSelected ? ' wh3b-cell-selected' : ''}`
     ).replace(
       '<button type="button" class="wh3b-box-gear"',
       `<button type="button" class="wh3b-custom-gear" data-cell-id="${escAttr(cell.id)}" title="Sửa vị trí / kích thước / xoá ô này khỏi lưới">
@@ -6051,6 +6167,8 @@ document.addEventListener('click',(e)=>{
     if(settingsBtn){e.stopImmediatePropagation();khoGridOpenSettings(kho);return;}
     const copyBtn=e.target.closest('#'+cfg.copyBtn);
     if(copyBtn){e.stopImmediatePropagation();khoGridCopyFromDefault(kho);return;}
+    const heatmapBtn=e.target.closest('#'+cfg.heatmapBtn);
+    if(heatmapBtn){e.stopImmediatePropagation();khoHeatmapCycle();return;}
   }
   if(_khoGridSuppressClick){ _khoGridSuppressClick=false; e.preventDefault(); e.stopImmediatePropagation(); return; }
   const addBtn=e.target.closest('.wh3b-custom-add-cell');

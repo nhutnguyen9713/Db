@@ -633,6 +633,11 @@
     white-space:nowrap;
   }
   .wh3b-grid-mode-btn:hover{border-color:var(--violet); color:var(--violet);}
+  .wh3b-grid-mode-btn.active{border-color:var(--teal); color:var(--teal); background:rgba(14,143,118,0.1);}
+  /* Heatmap 'qty' tô cả nền ô theo đúng % lấp đầy — ẩn bớt thanh fill mảnh cho khỏi lặp lại đúng 1
+     thông tin 2 lần; heatmap 'oqc' tô theo tỉ lệ PASS/NG (thông tin KHÁC với % lấp đầy) nên vẫn giữ
+     nguyên thanh fill để còn biết được mức lấp đầy song song. */
+  .wh3b-box.heat-qty .wh3b-box-fill{opacity:.22;}
   .wh3b-custom-grid{display:grid; gap:10px; margin-bottom:6px;}
   .wh3b-custom-grid{touch-action:pan-y; overscroll-behavior-x:contain;}
   .wh3b-custom-grid .wh3b-box{touch-action:none; user-select:none;}
