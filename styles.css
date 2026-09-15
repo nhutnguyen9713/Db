@@ -232,12 +232,6 @@
   }
   .btn-plan-clear.show{display:inline-block;}
   .btn-plan-clear:hover{color:var(--red);}
-  .btn-plan-edit-quick{
-    background:none; border:none; cursor:pointer; font-size:12px;
-    padding:0 2px; display:none; line-height:1; opacity:0.75;
-  }
-  .btn-plan-edit-quick.show{display:inline-block;}
-  .btn-plan-edit-quick:hover{opacity:1;}
 
   .plan-cards{display:flex; flex-direction:column; gap:18px;}
   .plan-card{background:var(--panel-2, var(--bg)); border:1px solid var(--line); border-radius:9px; padding:14px 16px; margin-bottom:22px;}
@@ -267,11 +261,6 @@
   .btn-plan-save:hover{background:rgba(14,143,118,0.24);}
   .btn-plan-cancel{color:var(--muted-2); background:rgba(136,146,160,0.1); border-color:var(--line);}
   .btn-plan-cancel:hover{color:var(--red); border-color:rgba(214,57,75,0.4);}
-  @keyframes tn5PlanCardJumpFlash{
-    0%{ box-shadow:0 0 0 3px rgba(110,79,224,0.55); }
-    100%{ box-shadow:0 0 0 3px rgba(110,79,224,0); }
-  }
-  .plan-card-jump-flash{animation:tn5PlanCardJumpFlash 1.6s ease-out;}
   .plan-detail-table-edit tbody td{padding:3px 5px;}
   .plan-edit-input{
     width:100%; min-width:64px; box-sizing:border-box; font-family:var(--mono); font-size:11.5px;
