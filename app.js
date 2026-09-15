@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.16';
+const APP_VERSION = 'v2.17';
 const APP_VERSION_DATE = '15/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -8352,7 +8352,7 @@ async function exportPickSlipExcel(){
   };
 
   const headers = isLocatorMode
-    ? ['#', 'Item (PO)', 'Locator', 'OQC', 'Tồn kho', 'SL pallet', 'CBM']
+    ? ['#', 'Item (PO)', 'Locator', 'OQC', 'Tồn kho', 'SL pallet', 'CBM', 'Ghi chú']
     : ['#', 'Locator', 'OQC', 'Tồn kho', 'SL pallet', 'CBM'];
   const nCols = headers.length;
   const thin = { style:'thin', color:{ argb:'FFAAAAAA' } };
@@ -8399,14 +8399,17 @@ async function exportPickSlipExcel(){
     r++;
   };
   const writeDataRow = (values, opts) => {
+    // opts.rightAlignIdx: chỉ số (0-based) các cột cần căn phải — mặc định "3 cột cuối" (Tồn kho/SL
+    // pallet/CBM) chỉ đúng khi đó CHÍNH LÀ 3 cột cuối cùng; từ khi thêm cột "Ghi chú" ở CUỐI bảng
+    // locator-mode, 3 cột cuối thật sự lại là SL pallet/CBM/Ghi chú (sai) — nên truyền rõ chỉ số cần
+    // căn phải cho các trường hợp có thêm cột theo sau (xem lệnh gọi writeDataRow ở locator-mode).
+    const rightAlignSet = (opts && opts.rightAlignIdx) ? new Set(opts.rightAlignIdx) : null;
     values.forEach((v,i) => {
       const cell = ws.getCell(r, i+1);
       cell.value = v;
       trackWidth(i, v);
-      // 3 cột cuối (Tồn kho/SL pallet/CBM) luôn căn phải — tính theo vị trí TƯƠNG ĐỐI (values.length-3)
-      // thay vì chỉ số cột cố định, vì locator-mode có thêm cột "Locator" làm tổng số cột khác
-      // item-mode (hàm này dùng chung cho cả 2 chế độ).
-      cell.alignment = { vertical:'middle', horizontal: (i >= values.length - 3) ? 'right' : (i===0 ? 'center' : 'left'), wrapText: i===1 };
+      const isRight = rightAlignSet ? rightAlignSet.has(i) : (i >= values.length - 3);
+      cell.alignment = { vertical:'middle', horizontal: isRight ? 'right' : (i===0 ? 'center' : 'left'), wrapText: i===1 };
       // opts.groupFirst (theo yêu cầu — "chỉnh phân locator bằng nét đậm cho dễ nhìn"): dòng ĐẦU TIÊN
       // của mỗi Locator mới (ở chế độ theo Locator) được viền TRÊN đậm — giống hệt cách đã làm để
       // phân biệt ranh giới giữa các Kho, giúp mắt lướt xuống bảng dễ nhận ra chỗ đổi Locator hơn.
@@ -8415,19 +8418,24 @@ async function exportPickSlipExcel(){
     });
     r++;
   };
+  // Cột "Ghi chú" (locator-mode) nằm SAU cùng 3 cột số (Tồn kho/SL pallet/CBM) — writeSubtotalRow
+  // trước đây giả định 3 cột số LUÔN là 3 cột cuối bảng, giờ không còn đúng nữa với locator-mode nên
+  // phải trừ đi số cột "không phải số" nằm sau chúng khi tính vị trí đặt Tồn kho/SL pallet/CBM.
+  const trailingNonNumCols = isLocatorMode ? 1 : 0;
   const writeSubtotalRow = (label, onHand, pallets, cbmVal, bold) => {
-    ws.mergeCells(r,1,r,nCols-3);
+    const lastNumCol = nCols - trailingNonNumCols;
+    ws.mergeCells(r,1,r,lastNumCol-3);
     const labelCell = ws.getCell(r,1);
     labelCell.value = label;
     labelCell.font = { bold:true, size: bold ? 11.5 : 10.5 };
     labelCell.alignment = { horizontal:'right', vertical:'middle' };
-    const onHandCell = ws.getCell(r, nCols-2);
+    const onHandCell = ws.getCell(r, lastNumCol-2);
     onHandCell.value = onHand; onHandCell.font = { bold:true };
     onHandCell.alignment = { horizontal:'right' };
-    const palletCell = ws.getCell(r, nCols-1);
+    const palletCell = ws.getCell(r, lastNumCol-1);
     palletCell.value = pallets; palletCell.font = { bold:true };
     palletCell.alignment = { horizontal:'right' };
-    const cbmCell = ws.getCell(r, nCols);
+    const cbmCell = ws.getCell(r, lastNumCol);
     cbmCell.value = cbmVal; cbmCell.font = { bold:true };
     cbmCell.alignment = { horizontal:'right' };
     for(let c=1;c<=nCols;c++){
@@ -8468,8 +8476,11 @@ async function exportPickSlipExcel(){
       currentLocator = g.locator;
       stt++;
       khoOnHand += g.onHand; khoPallet += g.pallets; khoCbm += (g.cbm || 0);
-      const itemLabel = g.item + (g.po ? ` (PO ${g.po})` : '') + (g.itemPoCount > 1 ? ` — Có ${g.itemPoCount} PO` : '') + (g.isSurplus ? ` — DƯ ${g.surplusQty} (KH ${g.planQty})` : '');
-      writeDataRow([stt, itemLabel, g.locator, g.oqc || '', g.onHand, g.pallets, roundCbm(g.cbm)], { warn: g.isSurplus, groupFirst: isNewLocator });
+      // Theo yêu cầu: phần "DƯ x (KH y)" trước đây nối thẳng vào cột "Item (PO)" — chuyển ra cột
+      // "Ghi chú" riêng ở cuối bảng cho gọn, không làm dài dòng tên mã hàng.
+      const itemLabel = g.item + (g.po ? ` (PO ${g.po})` : '') + (g.itemPoCount > 1 ? ` — Có ${g.itemPoCount} PO` : '');
+      const noteText = g.isSurplus ? `DƯ ${g.surplusQty} (KH ${g.planQty})` : '';
+      writeDataRow([stt, itemLabel, g.locator, g.oqc || '', g.onHand, g.pallets, roundCbm(g.cbm), noteText], { warn: g.isSurplus, groupFirst: isNewLocator, rightAlignIdx: [4,5,6] });
       if(i === sorted.length - 1){
         writeSubtotalRow('Tổng ' + currentKho, khoOnHand, khoPallet, roundCbm(khoCbm), true);
       }
@@ -8522,7 +8533,7 @@ async function exportPickSlipExcel(){
   // cột "Locator" từ bản sửa gộp locator vào bảng chính).
   const colCapsByHeader = {
     '#': [4,6], 'Item (PO)': [16,48], 'Locator': [10,16], 'OQC': [8,10],
-    'Tồn kho': [10,14], 'SL pallet': [10,12], 'CBM': [8,10]
+    'Tồn kho': [10,14], 'SL pallet': [10,12], 'CBM': [8,10], 'Ghi chú': [12,24]
   };
   headers.forEach((h, i) => {
     const [minW, maxW] = colCapsByHeader[h] || [8,14];
