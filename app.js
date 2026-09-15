@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.17';
+const APP_VERSION = 'v2.18';
 const APP_VERSION_DATE = '15/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -2857,6 +2857,10 @@ if(fileInput){
 
 const PLAN_TYPES = ['Row', 'FC', 'HCP'];
 const PLAN_COLORS = { Row: '#2C6FCB', FC: '#6E4FE0', HCP: '#B76E00' };
+// Các loại Plan (Row/FC/HCP) đang ở chế độ "Sửa" (chỉnh sửa trực tiếp bảng chi tiết) — xem
+// renderPlanPanel()/buildPlanEditRowHtml() bên dưới. Không lưu qua Storage/Cloud (chỉ là trạng thái
+// UI tạm thời khi đang thao tác trên máy).
+const planEditingTypes = new Set();
 let planData = { Row: null, FC: null, HCP: null };
 
 const PLAN_ITEM_CANDS = ['item no', 'item number', 'item', 'ma hang', 'ma hh', 'sku', 'part no', 'part number', 'material', 'tti model', 'model'];
@@ -3095,6 +3099,7 @@ document.querySelectorAll('.plan-file-input').forEach(input => {
     const btnEl = document.querySelector(`.btn-plan[data-plan="${type}"]`);
     const clearBtn = document.querySelector(`.btn-plan-clear[data-plan-clear="${type}"]`);
     if(statusEl){ statusEl.className = 'plan-status'; statusEl.textContent = `Đang đọc "${file.name}"…`; }
+    planEditingTypes.delete(type); // tải file mới đè lên thì thoát chế độ Sửa (nếu đang bật) của loại Plan này
     try{
       const { rows } = await readTableFileAsRows(file, true);
       const agg = aggregatePlanRows(rows, type);
@@ -3128,6 +3133,7 @@ document.querySelectorAll('.btn-plan-clear').forEach(btn => {
   btn.addEventListener('click', () => {
     const type = btn.dataset.planClear;
     planData[type] = null;
+    planEditingTypes.delete(type); // xoá cả Plan thì thoát luôn chế độ Sửa (nếu đang bật) — không còn dữ liệu để sửa nữa
     // Xoá luôn cờ MỚI/Đổi giờ đang treo của đúng loại Plan này — không còn dữ liệu để cờ đó gắn vào nữa.
     Object.keys(planContainerChangeInfo).forEach(k => { if(k.startsWith(type + '|')) delete planContainerChangeInfo[k]; });
     const statusEl = document.querySelector(`.plan-status[data-plan-status="${type}"]`);
@@ -4706,6 +4712,93 @@ function isContainerHidden(type, cNo, loadDate, planTime){
   return !!hiddenPlanContainers[contInstanceKey(type, cNo || '', loadDate, planTime)];
 }
 
+// Dựng nội dung (các <td>) của 1 dòng CÓ THỂ SỬA trong bảng chi tiết Plan — dùng CHUNG cho cả lúc vẽ
+// lại toàn bộ bảng (renderPlanPanel, khi đang ở chế độ Sửa) lẫn lúc bấm "+ Thêm dòng" (chỉ chèn thêm
+// đúng 1 <tr> mới, không vẽ lại cả bảng để không mất các ô đang gõ dở).
+function buildPlanEditRowCellsHtml(r, locCols){
+  r = r || {};
+  const loadDateStr = r.loadDate ? fmtDate(r.loadDate) : '';
+  const locCells = locCols.map(name => {
+    const v = r.locations && Object.prototype.hasOwnProperty.call(r.locations, name) ? r.locations[name] : '';
+    return `<td><input type="number" class="plan-edit-input plan-edit-loc" data-loc-name="${escAttr(name)}" value="${v === null || v === undefined ? '' : v}"></td>`;
+  }).join('');
+  return `
+    <td><input type="text" class="plan-edit-input plan-edit-cont" value="${escAttr(r.containerNo || '')}" placeholder="Cont"></td>
+    <td><input type="text" class="plan-edit-input plan-edit-loaddate" value="${escAttr(loadDateStr)}" placeholder="dd/mm/yyyy"></td>
+    <td><input type="text" class="plan-edit-input plan-edit-plantime" value="${escAttr(r.planTime || '')}" placeholder="hh:mm"></td>
+    <td><input type="text" class="plan-edit-input plan-edit-item" value="${escAttr(r.item || '')}" placeholder="Item No."></td>
+    <td><input type="text" class="plan-edit-input plan-edit-custpo" value="${escAttr(r.custPo || '')}"></td>
+    <td><input type="number" class="plan-edit-input plan-edit-qty" value="${r.qty === null || r.qty === undefined ? '' : r.qty}"></td>
+    <td><input type="number" class="plan-edit-input plan-edit-ctn" value="${r.ctn === null || r.ctn === undefined ? '' : r.ctn}"></td>
+    <td><input type="number" step="0.01" class="plan-edit-input plan-edit-cbm" value="${r.cbm === null || r.cbm === undefined ? '' : r.cbm}"></td>${locCells}
+    <td><input type="text" class="plan-edit-input plan-edit-type" value="${escAttr(r.type || '')}"></td>
+    <td><input type="text" class="plan-edit-input plan-edit-invoice" value="${escAttr(r.invoice || '')}"></td>
+    <td><input type="text" class="plan-edit-input plan-edit-csr" value="${escAttr(r.csr || '')}"></td>
+    <td style="text-align:center"><button class="btn-row-del" data-row-del type="button" title="Xoá dòng này">🗑</button></td>`;
+}
+
+// Đọc lại TOÀN BỘ các dòng đang sửa (kể cả dòng mới thêm) trực tiếp từ DOM của đúng thẻ Plan này —
+// KHÔNG dựa vào planData[type].detailRows cũ nữa (dữ liệu thật lúc này nằm ở các ô input trên màn hình).
+function collectPlanEditRows(cardEl){
+  const rows = [];
+  cardEl.querySelectorAll('tbody tr.plan-edit-row').forEach(tr => {
+    const val = sel => { const el = tr.querySelector(sel); return el ? el.value.trim() : ''; };
+    const itemVal = val('.plan-edit-item');
+    if(!itemVal) return; // dòng chưa nhập Item No. — bỏ qua, coi như dòng trống
+    const loadDateVal = val('.plan-edit-loaddate');
+    const locations = {};
+    tr.querySelectorAll('.plan-edit-loc').forEach(inp => {
+      const v = inp.value.trim();
+      if(v !== '') locations[inp.dataset.locName] = parseNumber(v);
+    });
+    const ctnVal = val('.plan-edit-ctn');
+    const cbmVal = val('.plan-edit-cbm');
+    rows.push({
+      loadDate: loadDateVal ? parseDateCell(loadDateVal) : null,
+      planTime: val('.plan-edit-plantime'),
+      item: normalizeItemCode(itemVal),
+      custPo: val('.plan-edit-custpo'),
+      qty: parseNumber(val('.plan-edit-qty')),
+      ctn: ctnVal === '' ? null : parseNumber(ctnVal),
+      cbm: cbmVal === '' ? null : parseNumber(cbmVal),
+      type: val('.plan-edit-type'),
+      containerNo: val('.plan-edit-cont'),
+      invoice: val('.plan-edit-invoice'),
+      csr: val('.plan-edit-csr'),
+      locations,
+    });
+  });
+  return rows;
+}
+
+// Tính lại các số liệu tổng hợp (SL tổng, số mã hàng, số container, cột vị trí...) của planData[type]
+// sau khi detailRows bị SỬA TAY — y hệt phần tổng hợp trong aggregatePlanRows(), nhưng chạy trên
+// detailRows đã có sẵn thay vì đọc lại từ file Excel gốc.
+function recomputePlanAgg(type){
+  const rows = planData[type].detailRows || [];
+  const byItem = {};
+  const containers = new Set();
+  const locSet = new Set();
+  let totalQty = 0;
+  let nearestDate = null;
+  rows.forEach(r => {
+    const key = (r.item || '').toLowerCase();
+    byItem[key] = (byItem[key] || 0) + (r.qty || 0);
+    totalQty += (r.qty || 0);
+    if(r.containerNo) containers.add(r.containerNo);
+    if(r.loadDate && (!nearestDate || r.loadDate < nearestDate)) nearestDate = r.loadDate;
+    if(r.locations) Object.keys(r.locations).forEach(k => locSet.add(k));
+  });
+  const pad = n => String(n).padStart(2,'0');
+  planData[type].byItem = byItem;
+  planData[type].rowCount = rows.length;
+  planData[type].totalQty = totalQty;
+  planData[type].itemCount = Object.keys(byItem).length;
+  planData[type].containerCount = containers.size || null;
+  planData[type].nearestDateStr = nearestDate ? `${pad(nearestDate.getUTCDate())}/${pad(nearestDate.getUTCMonth()+1)}/${nearestDate.getUTCFullYear()}` : null;
+  planData[type].locationColumns = Array.from(locSet);
+}
+
 function renderPlanPanel(){
   const loadedTypes = PLAN_TYPES.filter(t => planData[t]);
   // Tính lại trạng thái Pick (contPickAllRows) TRƯỚC khi dựng các bảng so sánh SL Plan vs Tồn kho —
@@ -4729,11 +4822,46 @@ function renderPlanPanel(){
   const CONT_COLOR_PALETTE = GROUP_COLOR_PALETTE;
 
   planCardsEl.innerHTML = loadedTypes.map(type => {
+    const isEditing = planEditingTypes.has(type);
     const rows = (planData[type].detailRows || []).filter(r => !isContainerHidden(type, r.containerNo, r.loadDate ? fmtDate(r.loadDate) : '', r.planTime || ''));
     const totalQtyDisplay = rows.reduce((s,r) => s + (r.qty || 0), 0);
     const itemCountDisplay = new Set(rows.map(r => (r.item || '').toLowerCase())).size;
     const containerSetDisplay = new Set(rows.map(r => r.containerNo).filter(c => c && c !== '—'));
     const locCols = planData[type].locationColumns || [];
+    const detailColCount = 12 + locCols.length;
+    if(isEditing){
+      // Chế độ SỬA: mỗi dòng là 1 ô nhập liệu — không tô màu container/Picking Status nữa (những cái
+      // đó phụ thuộc dữ liệu ĐÃ LƯU, trong lúc sửa dở dữ liệu thật nằm ở các ô input, chưa ghi vào
+      // planData[type] cho tới khi bấm "Lưu", xem collectPlanEditRows()/nút data-plan-edit-save).
+      const editRowsHtml = rows.map(r => `<tr class="plan-edit-row">${buildPlanEditRowCellsHtml(r, locCols)}</tr>`).join('');
+      return `
+      <div class="plan-card plan-card-editing" style="border:2px solid ${PLAN_COLORS[type]}; background:linear-gradient(90deg, ${PLAN_COLORS[type]}14, transparent 120px);">
+        <div class="plan-card-head">
+          <span class="plan-card-badge" style="background:${PLAN_COLORS[type]};">${type}</span>
+          <span class="plan-card-title" style="color:${PLAN_COLORS[type]}">Plan ${type} — đang sửa</span>
+          <span class="plan-card-file" title="${planData[type].fileName}">${planData[type].fileName}</span>
+          <div class="plan-edit-actions">
+            <button class="btn-plan-save" data-plan-edit-save="${type}" type="button">💾 Lưu</button>
+            <button class="btn-plan-cancel" data-plan-edit-cancel="${type}" type="button">✕ Huỷ</button>
+          </div>
+        </div>
+        <div class="plan-card-chart-label">Sửa trực tiếp bảng chi tiết (${rows.length} dòng) &nbsp; <span class="compare-summary" style="font-family:var(--mono); font-size:10px; color:var(--muted-2);">Bỏ trống Item No. để xoá dòng lúc Lưu · Bấm 🗑 để xoá ngay 1 dòng</span></div>
+        <div class="plan-table-wrap">
+          <table class="plan-detail-table plan-detail-table-edit" data-colspan="${detailColCount}">
+            <thead>
+              <tr>
+                <th>Cont</th><th>Loading Date</th><th>Plan Time</th><th>TTI Model</th><th>Customer PO</th>
+                <th style="text-align:right">QTY</th><th style="text-align:right">CTN</th><th style="text-align:right">CBM</th>${locCols.map(name=>`<th style="text-align:right" class="loc-head">${name}</th>`).join('')}
+                <th>Type</th><th>Invoice</th><th>CSR</th>
+                <th>Xoá</th>
+              </tr>
+            </thead>
+            <tbody>${editRowsHtml}<tr class="plan-add-row-trigger"><td colspan="${detailColCount}" style="text-align:center; padding:10px;"><button class="btn-plan-add-row" data-plan-add-row="${type}" type="button">+ Thêm dòng</button></td></tr></tbody>
+          </table>
+        </div>
+        <div class="plan-card-chart-label">Bảng so sánh SL tồn vs Plan sẽ cập nhật lại sau khi bấm "💾 Lưu".</div>
+      </div>`;
+    }
     const contColorMap = new Map();
     let lastContainer = null;
     const rowsHtml = rows.map(r => {
@@ -4798,7 +4926,6 @@ function renderPlanPanel(){
         <td>${barHtml}</td>
       </tr>`;
     }).join('');
-    const detailColCount = 12 + locCols.length;
     const compare = buildCompareTable(type);
     return `
     <div class="plan-card" style="border:2px solid ${PLAN_COLORS[type]}; background:linear-gradient(90deg, ${PLAN_COLORS[type]}14, transparent 120px);">
@@ -4806,6 +4933,7 @@ function renderPlanPanel(){
         <span class="plan-card-badge" style="background:${PLAN_COLORS[type]};">${type}</span>
         <span class="plan-card-title" style="color:${PLAN_COLORS[type]}">Plan ${type}</span>
         <span class="plan-card-file" title="${planData[type].fileName}">${planData[type].fileName}</span>
+        <button class="btn-plan-edit" data-plan-edit="${type}" type="button" title="Sửa trực tiếp bảng chi tiết Plan này">✏️ Sửa</button>
       </div>
       <div class="plan-card-kpis">
         <div><b>${fmt(totalQtyDisplay)}</b><span>Tổng SL kế hoạch</span></div>
@@ -4841,6 +4969,64 @@ function renderPlanPanel(){
   const planOverviewRow = document.getElementById('plan-overview-row');
   if(planOverviewRow) planOverviewRow.style.display = loadedTypes.length ? '' : 'none';
 }
+
+// Các nút thao tác Sửa/Lưu/Huỷ/Thêm dòng/Xoá dòng trong bảng chi tiết Plan — TẤT CẢ đều nằm trong
+// nội dung do renderPlanPanel() vẽ lại bằng innerHTML nên phải bắt sự kiện kiểu "delegated" (gắn trên
+// document, lọc theo nút con được bấm) thay vì gắn trực tiếp lên từng nút lúc khởi tạo trang.
+document.addEventListener('click', (e) => {
+  const editBtn = e.target.closest('[data-plan-edit]');
+  if(editBtn){
+    planEditingTypes.add(editBtn.dataset.planEdit);
+    renderPlanPanel();
+    return;
+  }
+  const cancelBtn = e.target.closest('[data-plan-edit-cancel]');
+  if(cancelBtn){
+    planEditingTypes.delete(cancelBtn.dataset.planEditCancel);
+    renderPlanPanel(); // KHÔNG đụng tới planData — huỷ chỉ đơn giản là vẽ lại đúng dữ liệu đã lưu trước đó
+    return;
+  }
+  const saveBtn = e.target.closest('[data-plan-edit-save]');
+  if(saveBtn){
+    const type = saveBtn.dataset.planEditSave;
+    const card = saveBtn.closest('.plan-card');
+    const newRows = collectPlanEditRows(card);
+    if(!newRows.length){
+      alert('Chưa có dòng dữ liệu hợp lệ nào (thiếu Item No.) — chưa thể lưu. Nhập ít nhất 1 dòng có Item No. hoặc bấm "✕ Huỷ" để bỏ qua.');
+      return;
+    }
+    planData[type].detailRows = newRows;
+    recomputePlanAgg(type);
+    planEditingTypes.delete(type);
+    const statusEl = document.querySelector(`.plan-status[data-plan-status="${type}"]`);
+    if(statusEl){ statusEl.className = 'plan-status ok'; statusEl.textContent = `✓ ${planData[type].fileName} · ${planData[type].itemCount} mã · ${fmt(planData[type].totalQty)} Pcs (đã sửa tay)`; }
+    renderPlanPanel();
+    renderKhoSearchPage();
+    touchUpdatedAt();
+    saveStateToStorage();
+    schedulePlanAutoSaveToCloud();
+    return;
+  }
+  const addRowBtn = e.target.closest('[data-plan-add-row]');
+  if(addRowBtn){
+    const type = addRowBtn.dataset.planAddRow;
+    const triggerRow = addRowBtn.closest('tr');
+    const tbody = triggerRow.parentElement;
+    const locCols = (planData[type] && planData[type].locationColumns) || [];
+    const tr = document.createElement('tr');
+    tr.className = 'plan-edit-row';
+    tr.innerHTML = buildPlanEditRowCellsHtml({}, locCols);
+    tbody.insertBefore(tr, triggerRow);
+    const firstInput = tr.querySelector('.plan-edit-cont');
+    if(firstInput) firstInput.focus();
+    return;
+  }
+  const delRowBtn = e.target.closest('[data-row-del]');
+  if(delRowBtn){
+    delRowBtn.closest('tr').remove();
+    return;
+  }
+});
 
 /* ============ TỔNG HỢP 3 PLAN (Row + FC + HCP) vs TỒN KHO ============ */
 let combinedPlanCache = null;
