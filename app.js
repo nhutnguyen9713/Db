@@ -3183,12 +3183,37 @@ const planCardsEl = document.getElementById('plan-cards');
 let _planStatusCache = null; // { pickOverview, compareByType, combined } | null
 let _planStatusFetchInFlight = null;
 let _planStatusLastFetchAt = 0;
+let _planStatusRetryTimer = null;
+let _planStatusRetryCount = 0;
+let _planStatusGaveUp = false; // hết số lần thử mà vẫn chưa có creds -> chắc thật là chưa kết nối Cloud
 const PLAN_STATUS_MIN_REFRESH_MS = 800;
+const PLAN_STATUS_MAX_RETRIES = 15; // ~15 lần x 500ms = 7.5s — đủ chờ CloudVault.init() (đọc creds từ
+// localStorage) chạy xong, vì LỖI THẬT ĐÃ GẶP: renderDashboard() (vẽ lần đầu lúc mở lại trang, khôi
+// phục dữ liệu đã lưu) chạy TRƯỚC CloudVault.init() (nằm ở cuối app.js) nên lần gọi đầu tiên luôn thấy
+// CloudVault.url/token còn rỗng -> bỏ qua hẳn, không tự thử lại -> đứng mãi ở "Đang tải…" tới khi
+// người dùng tự bấm "Kết nối" (nơi khác duy nhất gọi lại renderPlanPanel() sau khi đã có creds).
 
 function schedulePlanStatusRefresh(){
   if(_planStatusFetchInFlight) return;
   if(Date.now() - _planStatusLastFetchAt < PLAN_STATUS_MIN_REFRESH_MS) return;
-  if(!CloudVault.url || !CloudVault.token) return;
+  if(!CloudVault.url || !CloudVault.token){
+    if(_planStatusRetryTimer) return; // đã hẹn giờ thử lại rồi, không hẹn thêm
+    if(_planStatusRetryCount >= PLAN_STATUS_MAX_RETRIES){
+      if(!_planStatusGaveUp){
+        _planStatusGaveUp = true;
+        if(typeof renderPlanPanel === 'function') renderPlanPanel(); // vẽ lại 1 lần để đổi màn "Đang tải…" -> "Chưa kết nối Cloud" (CHỈ 1 lần — tránh gọi lại vô hạn vì renderPlanPanel() bên trong lại gọi chính hàm này)
+      }
+      return;
+    }
+    _planStatusRetryCount++;
+    _planStatusRetryTimer = setTimeout(() => {
+      _planStatusRetryTimer = null;
+      schedulePlanStatusRefresh();
+    }, 500);
+    return;
+  }
+  _planStatusRetryCount = 0; // đã có creds -> reset (phòng khi mất kết nối rồi cấu hình lại sau)
+  _planStatusGaveUp = false;
   _planStatusFetchInFlight = (async () => {
     try{
       const url = CloudVault.url.replace(/\/+$/, '') + '/functions/v1/plan-status';
@@ -3211,7 +3236,10 @@ function buildCompareTable(type){
   schedulePlanStatusRefresh();
   const cmp = _planStatusCache && _planStatusCache.compareByType && _planStatusCache.compareByType[type];
   if(!cmp){
-    return { html: '<div class="kho-empty" style="display:block;">Đang tải dữ liệu so sánh từ máy chủ…</div>',
+    const msg = _planStatusGaveUp
+      ? 'Chưa kết nối Cloud — vào mục Cloud (CloudVault) bấm "Kết nối" để xem bảng so sánh này.'
+      : 'Đang tải dữ liệu so sánh từ máy chủ…';
+    return { html: `<div class="kho-empty" style="display:block;">${msg}</div>`,
               okCount: 0, shortCount: 0, poMismatchCount: 0, rows: [], khoOrder: (currentData && currentData.kho_order) || [] };
   }
   const { rows, okCount, shortCount, poMismatchCount, khoOrder } = cmp;
@@ -4030,7 +4058,7 @@ function renderContainerPickingOverview(){
   const po = _planStatusCache && _planStatusCache.pickOverview;
   if(!po){
     panelEl.style.display = '';
-    kpiEl.innerHTML = `<div class="kho-empty" style="display:block;">Đang tải dữ liệu Picking Status từ máy chủ…</div>`;
+    kpiEl.innerHTML = `<div class="kho-empty" style="display:block;">${_planStatusGaveUp ? 'Chưa kết nối Cloud — vào mục Cloud (CloudVault) bấm "Kết nối" để xem Picking Status.' : 'Đang tải dữ liệu Picking Status từ máy chủ…'}</div>`;
     if(detailWrap) detailWrap.style.display = 'none';
     if(detailTbody) detailTbody.innerHTML = '';
     contPickAllRows = [];
@@ -4866,7 +4894,7 @@ function buildCombinedPlanCompareTable(){
   const khoOrder = (currentData && currentData.kho_order) || [];
   const combined = _planStatusCache && _planStatusCache.combined;
   if(!combined){
-    return { rows: [], mainRows: [], sppRows: [], okCount: 0, shortCount: 0, poMismatchCount: 0, loadedTypes, khoOrder, _loading: true };
+    return { rows: [], mainRows: [], sppRows: [], okCount: 0, shortCount: 0, poMismatchCount: 0, loadedTypes, khoOrder, _loading: !_planStatusGaveUp, _gaveUp: _planStatusGaveUp };
   }
   return combined;
 }
@@ -5008,9 +5036,11 @@ function renderCombinedPlanPanel(){
   }
 
   if(!combined.mainRows.length){
-    tableWrap.innerHTML = combined._loading
-      ? `<div class="kho-empty" style="display:block;">Đang tải dữ liệu so sánh từ máy chủ…</div>`
-      : `<div class="kho-empty" style="display:block;">Không có dữ liệu để so sánh (ngoài nhóm SPP — xem ô "Nhóm SPP" phía trên).</div>`;
+    tableWrap.innerHTML = combined._gaveUp
+      ? `<div class="kho-empty" style="display:block;">Chưa kết nối Cloud — vào mục Cloud (CloudVault) bấm "Kết nối" để xem bảng so sánh này.</div>`
+      : combined._loading
+        ? `<div class="kho-empty" style="display:block;">Đang tải dữ liệu so sánh từ máy chủ…</div>`
+        : `<div class="kho-empty" style="display:block;">Không có dữ liệu để so sánh (ngoài nhóm SPP — xem ô "Nhóm SPP" phía trên).</div>`;
     return;
   }
 
