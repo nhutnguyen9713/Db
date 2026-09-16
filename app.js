@@ -1404,7 +1404,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.21';
+const APP_VERSION = 'v2.22';
 const APP_VERSION_DATE = '16/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3168,108 +3168,53 @@ document.querySelectorAll('.btn-plan-clear').forEach(btn => {
 
 const planCardsEl = document.getElementById('plan-cards');
 
-// buildItemIndex()/buildItemCustPoIndex() luôn được gọi với CHÍNH currentData (không có nơi nào
-// truyền data khác) — CACHE lại theo tham chiếu data, vì trong 1 lần renderPlanPanel() cả 2 hàm này
-// bị gọi tới 4 lần (1 lần trong buildCombinedPlanCompareTable() + tối đa 3 lần, mỗi Plan Row/FC/HCP,
-// trong buildCompareTable()) — mỗi lần đều quét lại TOÀN BỘ kho_detail (mọi kho) từ đầu, dù dữ liệu
-// tồn kho không hề đổi giữa các lần gọi đó. Tự làm mới khi data đổi tham chiếu (currentData luôn được
-// GÁN LẠI object mới khi có dữ liệu mới, không sửa tại chỗ, nên so sánh tham chiếu là đủ).
-let _itemIndexCache = null, _itemIndexForData = null;
-function buildItemIndex(data){
-  if(_itemIndexForData === data && _itemIndexCache) return _itemIndexCache;
-  const idx = {};
-  if(!data || !data.kho_detail){ _itemIndexCache = idx; _itemIndexForData = data; return idx; }
-  for(const kho of Object.keys(data.kho_detail)){
-    for(const [item, , locator, oqc, qty] of data.kho_detail[kho]){
-      if(PROD_LOCATOR_RE.test(locator || '')) continue; // loại vị trí "Prod" — không tính vào So sánh Plan / Tổng hợp 3 Plan
-      const key = item.toLowerCase();
-      idx[key] = idx[key] || { byKho: {}, pass: 0, ng: 0, other: 0 };
-      idx[key].byKho[kho] = (idx[key].byKho[kho] || 0) + qty;
-      const o = (oqc || '').toUpperCase();
-      if(o === 'PASS') idx[key].pass += qty;
-      else if(o === 'NG') idx[key].ng += qty;
-      else idx[key].other += qty;
-    }
-  }
-  _itemIndexCache = idx;
-  _itemIndexForData = data;
-  return idx;
-}
+// === Trạng thái Plan (So sánh Plan vs Tồn kho + Picking Overview) — CÔNG THỨC ĐÃ CHUYỂN LÊN SERVER ===
+// Toàn bộ logic tính "Thiếu/Đủ", % Picking Status, gán Kho... giờ chạy ở 1 Supabase Edge Function
+// (đọc thẳng dữ liệu trong bảng dashboard_kv, không cần app.js gửi gì thêm) — app.js CHỈ còn giữ
+// phần dựng HTML từ kết quả JSON máy chủ trả về. Ai đó tải nguyên trang này về mở lên (không có
+// quyền truy cập đúng Edge Function/Supabase project) sẽ CHỈ thấy giao diện rỗng ở các bảng này.
+//
+// Kiểu "stale-while-revalidate": 3 hàm buildCompareTable()/buildCombinedPlanCompareTable()/
+// renderContainerPickingOverview() bên dưới vẫn ĐỒNG BỘ (không đổi async) và luôn vẽ ngay bản đang
+// có trong _planStatusCache (hoặc màn "Đang tải…" nếu chưa có lần nào) — không cần sửa hàng chục nơi
+// đang gọi renderPlanPanel()/renderContainerPickingOverview() sang await. Mỗi lần được gọi, chúng tự
+// bắn 1 request nền (debounce, chống gọi trùng) để lấy bản mới nhất; nếu dữ liệu trả về khác bản cũ,
+// tự gọi lại renderPlanPanel() một lần nữa để cập nhật ngay.
+let _planStatusCache = null; // { pickOverview, compareByType, combined } | null
+let _planStatusFetchInFlight = null;
+let _planStatusLastFetchAt = 0;
+const PLAN_STATUS_MIN_REFRESH_MS = 800;
 
-let _itemCustPoIndexCache = null, _itemCustPoIndexForData = null;
-function buildItemCustPoIndex(data){
-  if(_itemCustPoIndexForData === data && _itemCustPoIndexCache) return _itemCustPoIndexCache;
-  const idx = {};
-  if(!data || !data.kho_detail){ _itemCustPoIndexCache = idx; _itemCustPoIndexForData = data; return idx; }
-  for(const kho of Object.keys(data.kho_detail)){
-    for(const [item, custpo, locator, oqc, qty] of data.kho_detail[kho]){
-      if(PROD_LOCATOR_RE.test(locator || '')) continue; // loại vị trí "Prod" — không tính vào So sánh Plan / Tổng hợp 3 Plan
-      const key = item.toLowerCase() + '\u241F' + (custpo || '').toLowerCase();
-      idx[key] = idx[key] || { byKho: {}, pass: 0, ng: 0, other: 0 };
-      idx[key].byKho[kho] = (idx[key].byKho[kho] || 0) + qty;
-      const o = (oqc || '').toUpperCase();
-      if(o === 'PASS') idx[key].pass += qty;
-      else if(o === 'NG') idx[key].ng += qty;
-      else idx[key].other += qty;
+function schedulePlanStatusRefresh(){
+  if(_planStatusFetchInFlight) return;
+  if(Date.now() - _planStatusLastFetchAt < PLAN_STATUS_MIN_REFRESH_MS) return;
+  if(!CloudVault.url || !CloudVault.token) return;
+  _planStatusFetchInFlight = (async () => {
+    try{
+      const url = CloudVault.url.replace(/\/+$/, '') + '/functions/v1/plan-status';
+      const res = await fetch(url, { headers: { apikey: CloudVault.token, Authorization: 'Bearer ' + CloudVault.token }, cache: 'no-store' });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      const changed = JSON.stringify(data) !== JSON.stringify(_planStatusCache);
+      _planStatusCache = data;
+      _planStatusLastFetchAt = Date.now();
+      if(changed && typeof renderPlanPanel === 'function') renderPlanPanel();
+    }catch(e){
+      console.warn('Không tải được trạng thái Plan từ máy chủ (plan-status):', e);
+    }finally{
+      _planStatusFetchInFlight = null;
     }
-  }
-  _itemCustPoIndexCache = idx;
-  _itemCustPoIndexForData = data;
-  return idx;
+  })();
 }
 
 function buildCompareTable(type){
-  const khoOrder = (currentData && currentData.kho_order) || [];
-  const poIdx = buildItemCustPoIndex(currentData);
-  const itemIdx = buildItemIndex(currentData);
-
-  // Container nào đã "Pick xong" (tự động 100% hoặc đã đánh dấu thủ công) thì không tính SL của các
-  // dòng Plan thuộc container đó vào "còn cần" nữa — tránh báo Thiếu nhầm cho hàng đã xuất đi thực tế.
-  const doneContSet = new Set(
-    (contPickAllRows || [])
-      .filter(r => r.status === 'done' || r.status === 'manualDone')
-      .map(r => r.instanceKey)
-  );
-
-  const planPairs = {};
-  for(const r of (planData[type].detailRows || [])){
-    const rLoadDateStr = r.loadDate ? fmtDate(r.loadDate) : '';
-    const rPlanTimeStr = r.planTime || '';
-    if(isContainerHidden(type, r.containerNo, rLoadDateStr, rPlanTimeStr)) continue; // container đã xoá khỏi Plan — bỏ qua hẳn
-    const custpo = (r.custPo && r.custPo.trim()) ? r.custPo.trim() : '(Khong co)';
-    const key = r.item.toLowerCase() + '\u241F' + custpo.toLowerCase();
-    if(!planPairs[key]) planPairs[key] = { item: r.item, custpo, qty: 0 };
-    const isDone = r.containerNo && doneContSet.has(contInstanceKey(type, r.containerNo, rLoadDateStr, rPlanTimeStr));
-    if(isDone) continue;
-    planPairs[key].qty += r.qty;
+  schedulePlanStatusRefresh();
+  const cmp = _planStatusCache && _planStatusCache.compareByType && _planStatusCache.compareByType[type];
+  if(!cmp){
+    return { html: '<div class="kho-empty" style="display:block;">Đang tải dữ liệu so sánh từ máy chủ…</div>',
+              okCount: 0, shortCount: 0, poMismatchCount: 0, rows: [], khoOrder: (currentData && currentData.kho_order) || [] };
   }
-
-  const rows = Object.values(planPairs).map(p => {
-    const anyPO = p.custpo === '(Khong co)';
-    let inv;
-    if(anyPO){
-      inv = itemIdx[p.item.toLowerCase()] || { byKho:{}, pass:0, ng:0, other:0 };
-    } else {
-      const key = p.item.toLowerCase() + '\u241F' + p.custpo.toLowerCase();
-      inv = poIdx[key] || { byKho:{}, pass:0, ng:0, other:0 };
-    }
-    const khoQtys = khoOrder.map(k => inv.byKho[k] || 0);
-    const totalOnHand = inv.pass || 0;
-    const itemAnyPO = khoOrder.reduce((s,k) => s + ((itemIdx[p.item.toLowerCase()]||{}).byKho?.[k] || 0), 0);
-    const poMismatch = !anyPO && totalOnHand === 0 && itemAnyPO > 0;
-    // Nhóm SPP đã tick "Đủ hàng" ở popup của Tổng hợp 3 Plan (xem toggleSppOk) — LIÊN KẾT lại để
-    // bảng so sánh riêng theo từng Plan (Row/FC/HCP) này cũng coi đúng dòng đó là Đủ, không còn báo
-    // Thiếu lệch với popup SPP nữa (dùng CHUNG đúng 1 khoá sppOkKey/1 trạng thái sppManualOk).
-    const isSpp = ccIsSppItem(p.item);
-    const manualOk = isSpp && !!sppManualOk[sppOkKey(p.item, p.custpo)];
-    return { item: p.item, custpo: p.custpo, anyPO, khoQtys, totalOnHand, pass: inv.pass, ng: inv.ng,
-              planQty: p.qty, diff: totalOnHand - p.qty, poMismatch, itemAnyPO, isSpp, manualOk };
-  }).sort((a,b) => a.diff - b.diff);
-
-  const shortCount = rows.filter(r => r.diff < 0 && !r.manualOk).length;
-  const okCount = rows.length - shortCount;
-  const poMismatchCount = rows.filter(r => r.poMismatch).length;
-
+  const { rows, okCount, shortCount, poMismatchCount, khoOrder } = cmp;
   const headKho = khoOrder.map(k => `<th style="text-align:right">${k.replace('Kho ','')}</th>`).join('');
   const colCount = 2 + khoOrder.length + 6;
   const bodyRows = rows.map(r => {
@@ -4081,148 +4026,19 @@ function renderContainerPickingOverview(){
     return;
   }
 
-  const pickingIdx = buildPickingIndex(currentData);
-  // key = type|contNo|loadDate|planTime -> { type, cNo, loadDate, planTime, planQty, contribution, invoices:Set, csrs:Set }
-  // QUAN TRỌNG: khoá GỘP theo cả Ngày Load + Giờ Plan, KHÔNG chỉ theo số cont — vì cùng 1 số cont có
-  // thể là 2 lượt xuất khác nhau (ngày/giờ khác nhau) và phải được coi là 2 container RIÊNG BIỆT,
-  // không gộp SL kế hoạch / trạng thái pick của 2 lượt đó làm một.
-  const contMap = new Map();
-
-  loadedTypes.forEach(type => {
-    const rows = (planData[type].detailRows) || [];
-    rows.forEach(r => {
-      const cNo = r.containerNo;
-      if(!cNo || cNo === '—') return;
-      const loadDateStr = r.loadDate ? fmtDate(r.loadDate) : '';
-      const planTimeStr = r.planTime || '';
-      const key = contInstanceKey(type, cNo, loadDateStr, planTimeStr);
-      const itemKey = (r.item || '').toLowerCase();
-      const csrKey = (r.csr || '').trim().toLowerCase();
-      let passQty = 0;
-      if(csrKey){
-        const lookupKey = itemKey + '|' + csrKey;
-        passQty = pickingIdx[lookupKey] || 0;
-      }
-      const planQty = r.qty || 0;
-      let contribution = planQty > 0 ? Math.min(passQty, planQty) : 0;
-      // Mã SPP (không có GI nên không thể tự tính qua CSR/PASS) đã được tick "Đủ hàng" thủ công
-      // -> coi như đã pick đủ phần kế hoạch của mã này, để % Picking Status của container nhảy theo.
-      // SỬA (lỗi thật đã gặp): khi Cust PO rỗng, popup Nhóm SPP chuẩn hoá key thành '(Khong co)'
-      // (xem buildCombinedPlanCompareTable) trước khi lưu tick — ở đây trước kia dùng thẳng r.custPo
-      // (chuỗi RỖNG, không chuẩn hoá) nên 2 khoá lệch nhau, tick tay không bao giờ khớp, % vẫn đứng
-      // yên ở 0%. Chuẩn hoá y hệt ngay khi tra cứu (giống shortItems bên dưới đã làm đúng).
-      const custPoForSppKey = (r.custPo && r.custPo.trim()) ? r.custPo.trim() : '(Khong co)';
-      if(ccIsSppItem(r.item) && sppManualOk[sppOkKey(r.item, custPoForSppKey)]){
-        contribution = planQty;
-      }
-      let entry = contMap.get(key);
-      if(!entry){ entry = { type, cNo, loadDate: loadDateStr, planTime: planTimeStr, planQty: 0, contribution: 0, invoices: new Set(), csrs: new Set(), loadDates: new Set(), planTimes: new Set(), items: new Map() }; contMap.set(key, entry); }
-      entry.planQty += planQty;
-      entry.contribution += contribution;
-      if(r.invoice) entry.invoices.add(r.invoice);
-      if(r.csr) entry.csrs.add(r.csr);
-      if(r.loadDate) entry.loadDates.add(fmtDate(r.loadDate));
-      if(r.planTime) entry.planTimes.add(r.planTime);
-      const itemPoKey = r.item + '||' + (r.custPo || '');
-      if(!entry.items.has(itemPoKey)) entry.items.set(itemPoKey, { item: r.item, po: r.custPo || '', qty: 0, cbm: 0 });
-      entry.items.get(itemPoKey).qty += planQty;
-      entry.items.get(itemPoKey).cbm += (parseFloat(r.cbm) || 0);
-    });
-  });
-
-  let notStarted = 0, inProgress = 0, done = 0, total = 0;
-  const detailRows = [];
-  contMap.forEach(entry => {
-    if(entry.planQty <= 0) return;
-    const instanceKey = contInstanceKey(entry.type, entry.cNo, entry.loadDate, entry.planTime);
-    if(hiddenPlanContainers[instanceKey]) return; // đã bị xoá/ẩn thủ công khỏi Plan (đúng lượt xuất này)
-    total++;
-    const pct = (entry.contribution / entry.planQty) * 100;
-    // Trạng thái TỰ TÍNH theo tồn kho thực tế — KHÔNG bị đánh dấu thủ công làm sai lệch, vẫn giữ
-    // nguyên để mọi chỗ khác (so sánh Plan, cảnh báo...) luôn dùng đúng số liệu tồn kho thật.
-    let autoStatus;
-    if(pct >= 99.995) autoStatus = 'done';
-    else if(pct <= 0.005) autoStatus = 'notStarted';
-    else autoStatus = 'inProgress';
-
-    // Đánh dấu THỦ CÔNG (nếu có) — chỉ đổi NHÃN/TRẠNG THÁI HIỂN THỊ cho nhân viên dễ theo dõi,
-    // hoàn toàn không đụng tới pct/contribution hay bất kỳ số liệu tồn kho nào ở trên.
-    const manualKey = instanceKey;
-    const isManualUser = !!(manualPickedContainers && manualPickedContainers[manualKey]);
-    // Container đã Load Xong 100% theo dữ liệu Ship -> TỰ ĐỘNG tính là Pick xong (không cần tick tay),
-    // vì chất hàng lên xe/cont chỉ xảy ra SAU khi đã pick xong khỏi kho.
-    const isShipDone = !isManualUser && contShipIsFullyLoaded(entry.csrs, entry.planQty);
-    const isManual = isManualUser || isShipDone;
-    const status = isManual ? 'manualDone' : autoStatus;
-    if(status === 'manualDone' || status === 'done') done++;
-    else if(status === 'notStarted') notStarted++;
-    else inProgress++;
-
-    const items = [...entry.items.values()].map(it => {
-      // Loại vị trí "Prod" khỏi tồn kho khả dụng — đây là khu trung chuyển/sản xuất, không tính là
-      // hàng sẵn sàng để pick xuất cont.
-      const locs = buildItemLocatorDetail(it.item, it.po, true);
-      const totalOnHand = locs.reduce((s, l) => s + l.qty, 0);
-      const passOnHand = locs.reduce((s, l) => s + (l.oqc === 'PASS' ? l.qty : 0), 0);
-      return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, locs, totalOnHand, passOnHand };
-    });
-
-    // Mã hàng nào "Thiếu" TÍNH RIÊNG cho container này (không gộp với container khác dùng chung mã):
-    // so SL kế hoạch của CHÍNH container này với SL tồn kho PASS hiện có của mã đó. Container ĐÃ Pick
-    // xong (thủ công hoặc đã Load Xong theo Ship) thì KHÔNG còn cần lấy thêm gì nữa — bỏ qua cảnh báo
-    // Thiếu, tránh báo nhầm do tồn kho hiện tại đã giảm (vì chính lô hàng này vừa được lấy/xuất đi).
-    //
-    // LỖI THẬT ĐÃ GẶP (mã SPP đã tick "Đủ hàng" ở popup Nhóm SPP nhưng ở đây vẫn báo Thiếu): khi mã
-    // hàng không có Cust PO, popup Nhóm SPP (buildCombinedPlanCompareTable) chuẩn hoá thành chuỗi
-    // '(Khong co)' rồi mới ghép khoá sppOkKey — còn ở đây "it.po" lấy thẳng r.custPo || '' (chuỗi
-    // RỖNG, không qua chuẩn hoá) — 2 khoá lệch nhau ('...␟(khong co)' vs '...␟') nên tick tay không
-    // bao giờ khớp được. Chuẩn hoá lại y hệt (it.po || '(Khong co)') ngay khi tra cứu, KHÔNG đổi giá
-    // trị "po" gốc đang lưu trong shortItems (dòng map bên dưới vẫn giữ nguyên "po" thật để tính năng
-    // "bấm để xem chi tiết mã hàng" nhảy đúng dòng — combinedRowDomId() lại cần "po" RỖNG mới khớp).
-    const shortItems = isManual ? [] : items
-      .filter(it => it.qty > it.passOnHand && !(ccIsSppItem(it.item) && sppManualOk[sppOkKey(it.item, it.po || '(Khong co)')]))
-      .map(it => ({ item: it.item, po: it.po, qty: it.qty, passOnHand: it.passOnHand, diff: it.passOnHand - it.qty }));
-
-    // Kho có SL tồn (PASS+NG, gộp mọi vị trí) nhiều nhất cho các mã hàng của container này
-    const qtyByKho = {};
-    items.forEach(it => it.locs.forEach(l => { qtyByKho[l.kho] = (qtyByKho[l.kho] || 0) + l.qty; }));
-    let topKho = null, topKhoQty = 0;
-    Object.entries(qtyByKho).forEach(([kho, qty]) => { if(qty > topKhoQty){ topKho = kho; topKhoQty = qty; } });
-
-    // Lựa chọn thủ công LUÔN được ưu tiên áp dụng (ghi đè Kho hệ thống tự xác định được) — không chỉ
-    // dùng khi hệ thống không tự xác định được như trước, vì giờ cột Kho cho chọn tay ở MỌI dòng.
-    let isManualKho = false;
-    if(manualKhoOverrides[manualKey]){
-      topKho = manualKhoOverrides[manualKey];
-      topKhoQty = qtyByKho[topKho] || 0;
-      isManualKho = true;
-    } else {
-      // Chưa ai chọn tay -> nếu dữ liệu Ship xác định rõ ràng ĐÚNG 1 kho đã thực sự load hàng cho
-      // container này mà KHÁC với kho đang tự đoán theo SL tồn nhiều nhất, tự đổi sang đúng kho đó —
-      // bằng chứng THẬT (đã load ở đâu) đáng tin hơn suy đoán theo số lượng tồn.
-      const shipKho = contShipDetectSingleKho(entry.csrs);
-      if(shipKho && shipKho !== topKho){
-        topKho = shipKho;
-        topKhoQty = qtyByKho[topKho] || 0;
-      }
-    }
-
-    // Cờ MỚI xuất hiện / vừa đổi Ngày Load-Giờ Plan (xem computePlanContainerChanges(), tính ngay lúc
-    // tải file Plan) — instanceKey ở đây ĐÚNG bằng contInstanceKey() dùng để lưu cờ đó.
-    const changeInfo = planContainerChangeInfo[instanceKey];
-    detailRows.push({
-      type: entry.type, cNo: entry.cNo, pct, status, autoStatus, autoPct: pct, isManual,
-      changeStatus: changeInfo ? changeInfo.status : null,
-      comment: contPickComments[instanceKey] || '',
-      instanceKey, planQty: entry.planQty,
-      loadDateKey: entry.loadDate, planTimeKey: entry.planTime,
-      loadDate: [...entry.loadDates].join(', ') || '—',
-      planTime: [...entry.planTimes].join(', ') || '—',
-      invoice: [...entry.invoices].join(', ') || '—',
-      csr: [...entry.csrs].join(', ') || '—',
-      items, shortItems, topKho, topKhoQty, isManualKho
-    });
-  });
+  schedulePlanStatusRefresh();
+  const po = _planStatusCache && _planStatusCache.pickOverview;
+  if(!po){
+    panelEl.style.display = '';
+    kpiEl.innerHTML = `<div class="kho-empty" style="display:block;">Đang tải dữ liệu Picking Status từ máy chủ…</div>`;
+    if(detailWrap) detailWrap.style.display = 'none';
+    if(detailTbody) detailTbody.innerHTML = '';
+    contPickAllRows = [];
+    renderKhoContSummary([]);
+    renderHiddenContBar();
+    return;
+  }
+  const { detailRows, total, notStarted, inProgress, done } = po;
 
   if(!total){
     panelEl.style.display = 'none';
@@ -5045,74 +4861,14 @@ document.addEventListener('click', (e) => {
 let combinedPlanCache = null;
 
 function buildCombinedPlanCompareTable(){
+  schedulePlanStatusRefresh();
   const loadedTypes = PLAN_TYPES.filter(t => planData[t]);
   const khoOrder = (currentData && currentData.kho_order) || [];
-  const poIdx = buildItemCustPoIndex(currentData);
-  const itemIdx = buildItemIndex(currentData);
-
-  // Container nào đã "Pick xong" (tự động 100% hoặc đã đánh dấu thủ công) thì coi như đã lấy đủ
-  // hàng cho các dòng Plan của container đó rồi — không tính SL của các dòng này vào "còn cần" nữa,
-  // để không báo Thiếu nhầm cho hàng đã xuất đi thực tế đang giảm dần trong kho.
-  const doneContSet = new Set(
-    (contPickAllRows || [])
-      .filter(r => r.status === 'done' || r.status === 'manualDone')
-      .map(r => r.instanceKey)
-  );
-
-  const planPairs = {};
-  loadedTypes.forEach(type => {
-    for(const r of (planData[type].detailRows || [])){
-      const rLoadDateStr = r.loadDate ? fmtDate(r.loadDate) : '';
-      const rPlanTimeStr = r.planTime || '';
-      if(isContainerHidden(type, r.containerNo, rLoadDateStr, rPlanTimeStr)) continue; // container đã xoá khỏi Plan — bỏ qua hẳn
-      const custpo = (r.custPo && r.custPo.trim()) ? r.custPo.trim() : '(Khong co)';
-      const key = r.item.toLowerCase() + '\u241F' + custpo.toLowerCase();
-      if(!planPairs[key]) planPairs[key] = { item: r.item, custpo, qtyByType: {}, totalPlanQty: 0 };
-      const isDone = r.containerNo && doneContSet.has(contInstanceKey(type, r.containerNo, rLoadDateStr, rPlanTimeStr));
-      if(isDone) continue; // container này đã pick xong — không tính vào SL còn cần nữa
-      planPairs[key].qtyByType[type] = (planPairs[key].qtyByType[type] || 0) + r.qty;
-      planPairs[key].totalPlanQty += r.qty;
-    }
-  });
-
-  const rows = Object.values(planPairs).map(p => {
-    const anyPO = p.custpo === '(Khong co)';
-    let inv;
-    if(anyPO){
-      inv = itemIdx[p.item.toLowerCase()] || { byKho:{}, pass:0, ng:0, other:0 };
-    } else {
-      const key = p.item.toLowerCase() + '\u241F' + p.custpo.toLowerCase();
-      inv = poIdx[key] || { byKho:{}, pass:0, ng:0, other:0 };
-    }
-    const totalOnHand = inv.pass || 0;
-    const itemAnyPO = khoOrder.reduce((s,k) => s + ((itemIdx[p.item.toLowerCase()]||{}).byKho?.[k] || 0), 0);
-    const poMismatch = !anyPO && totalOnHand === 0 && itemAnyPO > 0;
-    // Nh\u00F3m SPP (Item No. kh\u00F4ng b\u1EAFt \u0111\u1EA7u b\u1EB1ng s\u1ED1 0) kh\u00F4ng c\u00F3 GI \u0111\u1EC3 t\u1EF1 nh\u1EADn bi\u1EBFt \u0111\u00E3 l\u1EA5y \u0111\u1EE7 h\u00E0ng nh\u01B0 m\u00E3
-    // th\u01B0\u1EDDng \u2014 cho ph\u00E9p tick tay "\u0110\u1EE7 h\u00E0ng" (coi nh\u01B0 \u0111\u00E3 pick 100%) thay th\u1EBF, xem sppManualOk/toggleSppOk.
-    const isSpp = ccIsSppItem(p.item);
-    const manualOk = isSpp && !!sppManualOk[sppOkKey(p.item, p.custpo)];
-    return {
-      item: p.item, custpo: p.custpo, anyPO,
-      qtyByType: p.qtyByType, totalPlanQty: p.totalPlanQty,
-      totalOnHand, pass: inv.pass, ng: inv.ng,
-      diff: totalOnHand - p.totalPlanQty, poMismatch, itemAnyPO,
-      isSpp, manualOk
-    };
-  }).sort((a,b) => a.diff - b.diff);
-
-  // "Thi\u1EBFu" = c\u00F2n thi\u1EBFu th\u1EADt (diff < 0) V\u00C0 ch\u01B0a \u0111\u01B0\u1EE3c tick tay "\u0110\u1EE7 h\u00E0ng" \u2014 d\u00F2ng SPP \u0111\u00E3 tick coi nh\u01B0
-  // \u0111\u1EE7 (pick 100%) d\u00F9 s\u1ED1 Ch\u00EAnh l\u1EC7ch hi\u1EC3n th\u1ECB v\u1EABn gi\u1EEF nguy\u00EAn s\u1ED1 TH\u1EACT (kh\u00F4ng b\u1ECBa s\u1ED1 li\u1EC7u), ch\u1EC9 \u0111\u1ED5i
-  // c\u00E1ch T\u00CDNH \u0110\u1EBEM/HI\u1EC2N TH\u1ECA tr\u1EA1ng th\u00E1i.
-  const isShortRow = r => r.diff < 0 && !r.manualOk;
-  const shortCount = rows.filter(isShortRow).length;
-  const okCount = rows.length - shortCount;
-  const poMismatchCount = rows.filter(r => r.poMismatch).length;
-  // T\u00E1ch ri\u00EAng nh\u00F3m SPP ra kh\u1ECFi b\u1EA3ng ch\u00EDnh \u2014 hi\u1EC3n th\u1ECB g\u1ED9p trong popup ri\u00EAng (xem renderSppPlanPopup),
-  // tr\u00E1nh l\u00E0m nhi\u1EC5u b\u1EA3ng so s\u00E1nh ch\u00EDnh v\u1ED1n ch\u1EC9 \u0111\u00E1ng tin cho nh\u00F3m h\u00E0ng c\u00F3 GI theo d\u00F5i \u0111\u01B0\u1EE3c t\u1EF1 \u0111\u1ED9ng.
-  const mainRows = rows.filter(r => !r.isSpp);
-  const sppRows = rows.filter(r => r.isSpp);
-
-  return { rows, mainRows, sppRows, okCount, shortCount, poMismatchCount, loadedTypes, khoOrder };
+  const combined = _planStatusCache && _planStatusCache.combined;
+  if(!combined){
+    return { rows: [], mainRows: [], sppRows: [], okCount: 0, shortCount: 0, poMismatchCount: 0, loadedTypes, khoOrder, _loading: true };
+  }
+  return combined;
 }
 
 // Dựng HTML 1 dòng so sánh — DÙNG CHUNG cho cả bảng chính (mainRows, không có cột tick) và popup
@@ -5252,7 +5008,9 @@ function renderCombinedPlanPanel(){
   }
 
   if(!combined.mainRows.length){
-    tableWrap.innerHTML = `<div class="kho-empty" style="display:block;">Không có dữ liệu để so sánh (ngoài nhóm SPP — xem ô "Nhóm SPP" phía trên).</div>`;
+    tableWrap.innerHTML = combined._loading
+      ? `<div class="kho-empty" style="display:block;">Đang tải dữ liệu so sánh từ máy chủ…</div>`
+      : `<div class="kho-empty" style="display:block;">Không có dữ liệu để so sánh (ngoài nhóm SPP — xem ô "Nhóm SPP" phía trên).</div>`;
     return;
   }
 
