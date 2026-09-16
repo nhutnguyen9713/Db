@@ -607,6 +607,7 @@ const CloudVault = {
     this.token = token;
     this._setStatus('Đang kết nối & tải dữ liệu từ Cloud…', '');
     this._pushedLocalToEmptyCloud = false;
+    this._lastError = '';
     const ok = await this.readAll();
     if(ok){
       this.saveCreds();
@@ -618,7 +619,7 @@ const CloudVault = {
       );
       try{ this._startRealtime(); }catch(e){ console.warn('CloudVault: lỗi khởi động realtime:', e); }
     } else {
-      this._setStatus('✗ Không tải được — kiểm tra lại Project URL / anon public key, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết. (Kiểm tra lại đã tạo bảng dashboard_kv và bật RLS cho phép anon đọc/ghi chưa.)', 'err');
+      this._setStatus('✗ Không tải được' + (this._lastError ? ' (lỗi thật: "' + this._lastError + '")' : '') + ' — kiểm tra lại Project URL / anon public key, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết. (Kiểm tra lại đã tạo bảng dashboard_kv và bật RLS cho phép anon đọc/ghi chưa.)', 'err');
     }
   },
 
@@ -668,12 +669,20 @@ const CloudVault = {
     if(!this.url || !this.token) return false;
     try{
       const res = await fetch(this._restUrl('select=key,value') + this._noCacheParam(), { headers: this._headers(), cache: 'no-store' });
-      if(!res.ok) return false;
+      if(!res.ok){
+        // Lưu lại lý do thật (thay vì chỉ trả về false chung chung) — để connect()/_smartReadAll()
+        // hiện được đúng nguyên nhân lỗi thay vì luôn chỉ nói "kiểm tra lại URL/anon key" dù lỗi thật
+        // có thể là timeout, vượt hạn mức, hay lỗi phía Supabase.
+        const bodyText = await res.text().catch(() => '');
+        this._lastError = 'HTTP ' + res.status;
+        try{ const j = JSON.parse(bodyText); if(j && j.message) this._lastError += ' — ' + j.message; }catch(e){}
+        return false;
+      }
       const rows = await res.json();
-      if(!Array.isArray(rows)) return false;
+      if(!Array.isArray(rows)){ this._lastError = 'Phản hồi không đúng định dạng mong đợi.'; return false; }
       const cloudData = this._rowsToObject(rows);
       return await this._applyCloudSnapshot(cloudData);
-    }catch(e){ console.warn('CloudVault đọc lỗi:', e); return false; }
+    }catch(e){ this._lastError = e.message; console.warn('CloudVault đọc lỗi:', e); return false; }
   },
 
   // Đọc RIÊNG mốc "_meta_updatedAt" trên Cloud (chỉ vài chục byte) — KHÔNG đụng gì tới _mem/trạng
@@ -710,12 +719,13 @@ const CloudVault = {
         return true;
       }
     }
+    this._lastError = '';
     const ok = await this.readAll();
     const msg = ok
       ? (this._pushedLocalToEmptyCloud
           ? `✓ Cloud đang trống — đã tải dữ liệu hiện có trên máy này LÊN Cloud (${fmtBytes(this._lastWriteBytes)}, không xoá mất dữ liệu cục bộ).`
           : `✓ Đã đồng bộ với Cloud (Supabase, đã tải ${fmtBytes(this._lastReadBytes)}).`)
-      : '✗ Không tải được — kiểm tra lại Project URL / anon public key, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết.';
+      : '✗ Không tải được' + (this._lastError ? ' (lỗi thật: "' + this._lastError + '")' : '') + ' — kiểm tra lại Project URL / anon public key, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết.';
     this._setStatus(msg, ok ? 'ok' : 'err');
     return ok;
   },
