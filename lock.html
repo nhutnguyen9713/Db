@@ -49,7 +49,10 @@ async function gateFetchCloudConfig(){
   const creds = gateCloudCreds();
   if(!creds) return null;
   try{
-    const url = creds.url.replace(/\/+$/, '') + '/rest/v1/dashboard_kv?key=eq._gate_config&select=value&_ts=' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    // KHÔNG gắn tham số chống-cache kiểu "&_ts=..." vào query — PostgREST (API Supabase) coi MỌI
+    // tham số lạ trên URL là 1 điều kiện lọc theo tên cột, sẽ báo lỗi "failed to parse filter" (khác
+    // hẳn Firebase, vốn bỏ qua tham số lạ). "cache: 'no-store'" bên dưới là đủ để chống cache.
+    const url = creds.url.replace(/\/+$/, '') + '/rest/v1/dashboard_kv?key=eq._gate_config&select=value';
     const res = await fetch(url, { headers: { apikey: creds.token, Authorization: 'Bearer ' + creds.token }, cache: 'no-store' });
     if(!res.ok) return null;
     const rows = await res.json();

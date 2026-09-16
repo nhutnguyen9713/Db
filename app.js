@@ -545,14 +545,16 @@ const CloudVault = {
   },
 
   // Tham số chống cache cho các request ĐỌC (GET) — nối thêm 1 mốc luôn-khác-nhau vào URL và ép
-  // fetch() bỏ qua HTTP cache (cache: 'no-store'). LÝ DO: readAll()/peek()/_checkCloudStamp() trước
-  // đây luôn gọi ĐÚNG 1 URL y hệt nhau (chỉ khác token cố định) — nếu trình duyệt (hoặc 1 proxy/CDN
-  // trung gian nào đó trên đường mạng) lỡ cache lại 1 phản hồi GET, các lần gọi sau CÓ THỂ nhận nhầm
-  // bản CŨ đã cache thay vì dữ liệu thật mới nhất trên Cloud — dù Cloud đã ghi đúng dữ liệu mới. Đây
-  // là nghi vấn gốc của bug "bấm Lưu xong vài giây sau dữ liệu lại hiện lại" dù chỉ dùng đúng 1 máy
-  // (đã loại trừ được nguyên nhân do timer tự lưu/máy khác mở cùng lúc ở các lần sửa trước).
+  // fetch() bỏ qua HTTP cache (cache: 'no-store'). LƯU Ý — KHÁC HẲN Firebase (bỏ qua mọi tham số lạ
+  // trên URL): PostgREST (API của Supabase) coi MỌI tham số query KHÔNG PHẢI select/order/limit/
+  // offset/... là 1 điều kiện lọc (filter) theo tên cột đó — thêm thẳng 1 tham số chống-cache kiểu
+  // "&_ts=..." như hồi dùng Firebase sẽ bị Supabase trả lỗi "failed to parse filter" (LỖI THẬT ĐÃ
+  // GẶP: "Kiểm tra kết nối" chạy OK nhưng "Kết nối" luôn báo lỗi, vì chỉ readAll()/_checkCloudStamp()/
+  // peek() có gắn thêm tham số này). Vẫn CHỐNG CACHE bằng "cache: 'no-store'" (đủ dùng — API có kèm
+  // header Authorization/apikey nên hầu hết CDN/trình duyệt không cache lại theo mặc định) — KHÔNG
+  // gắn thêm tham số lạ nào vào query string của các request tới /rest/v1/... nữa.
   _noCacheParam(){
-    return '&_ts=' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    return '';
   },
 
   // Gộp các dòng {key, value} đọc được từ bảng dashboard_kv thành lại đúng 1 object phẳng — value
@@ -1402,7 +1404,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.20';
+const APP_VERSION = 'v2.21';
 const APP_VERSION_DATE = '16/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
