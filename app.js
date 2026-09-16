@@ -1606,10 +1606,14 @@ async function verifyPasswordRemote(which, password){
       body: JSON.stringify({ which, password }),
       cache: 'no-store'
     });
-    if(!res.ok) return { ok: false, reason: 'http' };
+    if(!res.ok){
+      let bodyText = '';
+      try{ bodyText = (await res.text()).slice(0, 200); }catch(e2){}
+      return { ok: false, reason: 'http', detail: 'HTTP ' + res.status + (bodyText ? ': ' + bodyText : '') };
+    }
     const data = await res.json();
     return { ok: !!data.ok, reason: null };
-  }catch(e){ return { ok: false, reason: 'network' }; }
+  }catch(e){ return { ok: false, reason: 'network', detail: String((e && e.message) || e) }; }
 }
 async function appLockTryUnlock(){
   const input = document.getElementById('app-lock-password-input');
@@ -1626,7 +1630,7 @@ async function appLockTryUnlock(){
     if(statusEl){
       statusEl.textContent = result.reason === 'no-cloud'
         ? '✗ Chưa kết nối Cloud — không kiểm tra được mật khẩu.'
-        : (result.reason ? '✗ Không kiểm tra được mật khẩu (mất mạng?) — thử lại.' : '✗ Sai mật khẩu.');
+        : (result.reason ? ('✗ Lỗi kiểm tra mật khẩu — ' + (result.detail || result.reason)) : '✗ Sai mật khẩu.');
       statusEl.style.color = 'var(--red)';
     }
   }
