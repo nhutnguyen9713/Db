@@ -56,7 +56,7 @@ async function fvIdbSet(key, val){
    localStorage giới hạn ~5-10MB/domain — với dữ liệu tồn kho + lịch sử tích luỹ lâu ngày có thể VƯỢT
    hạn mức này (ghi bị lặng lẽ thất bại, xem catch trong tn5PersistMemToLocalBackup), khiến máy phải
    phụ thuộc HOÀN TOÀN vào tải lại từ Cloud mỗi lần mở trang dù dữ liệu chưa đổi gì — tốn băng thông
-   Firebase (free tier chỉ 10GB/tháng). IndexedDB không có giới hạn nhỏ như vậy nên dùng làm bản sao
+   Cloud (Supabase free tier chỉ 5GB băng thông/tháng). IndexedDB không có giới hạn nhỏ như vậy nên dùng làm bản sao
    lưu ĐẦY ĐỦ hơn — BỔ SUNG cho bản sao lưu localStorage hiện có (không thay thế), mỗi bản là 1 lớp
    dự phòng độc lập; xem tn5SeedMemFromLocalBackup() để rõ cách 2 lớp này kết hợp lúc khởi động. */
 const SC_DB_NAME = 'tn5_statecache_db';
@@ -485,33 +485,37 @@ const FileVault = {
 };
 
 /* ============================================================
-   ============  CloudVault: lưu trạng thái LÊN INTERNET (Firebase Realtime Database)  ============
+   ============  CloudVault: lưu trạng thái LÊN INTERNET (Supabase)  ============
    ============  Hoạt động trên MỌI trình duyệt, kể cả Safari/iPhone  ============
    ============================================================
-   - Dùng Firebase Realtime Database (free tier — 1GB lưu trữ, 10GB băng thông/tháng) làm nơi lưu
-     trạng thái, thay cho Google Apps Script (hay bị "cold start" tải chậm vài giây mỗi lần gọi).
-   - "Database URL" + "Database secret": dán URL Realtime Database (dạng
-     https://ten-du-an-default-rtdb.<region>.firebasedatabase.app/) và Database secret (lấy ở
-     Project settings → Service accounts → Database secrets, mục Legacy).
-   - "Kết nối": tải dữ liệu hiện có từ node "dashboard_data" của Database đó lên; nếu chưa có dữ
-     liệu, lần ghi đầu tiên sẽ tự tạo.
-   - Database URL & secret là THÔNG TIN KẾT NỐI (không phải dữ liệu dashboard) nên vẫn lưu trong
+   - Dùng Supabase (Postgres, free tier — 500MB lưu trữ, 5GB băng thông/tháng) làm nơi lưu trạng
+     thái. Mọi key trạng thái của dashboard (Plan, tồn kho, đã xác nhận...) được lưu thành TỪNG DÒNG
+     riêng trong 1 bảng duy nhất "dashboard_kv" (cột key/value/updated_at) — xem hướng dẫn tạo bảng +
+     policy ở phần trò chuyện lúc thiết lập, hoặc README.
+   - "Project URL" + "anon public key": lấy ở Project Settings → API trên supabase.com — 2 giá trị
+     này được PHÉP để lộ ở phía client (Supabase thiết kế vậy), an toàn miễn đã bật đúng Row Level
+     Security (RLS) cho bảng dashboard_kv.
+   - "Kết nối": tải dữ liệu hiện có từ bảng "dashboard_kv" lên; nếu bảng đang trống, lần ghi đầu
+     tiên sẽ tự tạo các dòng.
+   - Project URL & anon key là THÔNG TIN KẾT NỐI (không phải dữ liệu dashboard) nên vẫn lưu trong
      localStorage của trình duyệt để khỏi phải nhập lại; dữ liệu THẬT của dashboard nằm trên
-     Firebase, không nằm trong localStorage.
-   - "Web API Key" (tuỳ chọn — để trống vẫn dùng bình thường, chỉ mất khả năng realtime): bật thêm
-     lớp ĐỒNG BỘ REALTIME THẬT (WebSocket qua Firebase SDK, đăng nhập ẩn danh) — thiết bị khác vừa
-     ghi thay đổi lên Cloud sẽ TỰ ĐỘNG kéo về máy này ngay, không cần bấm "Làm mới dữ liệu" nữa. Có
-     bảo vệ: KHÔNG BAO GIỜ tự ghi đè trong lúc người dùng đang gõ dở/chưa lưu — sẽ tự áp dụng ngay
-     khi an toàn (xem _isSafeToApply/_pendingStampDirty). Cần bật "Anonymous" trong Firebase
-     Authentication → Sign-in method trước khi dùng được. */
+     Supabase, không nằm trong localStorage.
+   - Đồng bộ REALTIME THẬT (WebSocket qua Supabase Realtime) LUÔN tự bật ngay khi kết nối thành
+     công, không cần thêm khoá phụ nào — thiết bị khác vừa ghi thay đổi lên Cloud sẽ TỰ ĐỘNG kéo về
+     máy này ngay, không cần bấm "Làm mới dữ liệu" nữa. Có bảo vệ: KHÔNG BAO GIỜ tự ghi đè trong lúc
+     người dùng đang gõ dở/chưa lưu — sẽ tự áp dụng ngay khi an toàn (xem
+     _isSafeToApply/_pendingStampDirty). Cần thêm bảng dashboard_kv vào Realtime (Database →
+     Replication → bật "dashboard_kv") trước khi dùng được. */
 const CV_LS_URL = 'tn5_cloud_gas_url';
 const CV_LS_TOKEN = 'tn5_cloud_gas_token';
-const CV_LS_APIKEY = 'tn5_cloud_apikey';
+
+// Tên bảng cố định trong Supabase — gộp mọi dữ liệu dashboard vào 1 bảng riêng "dashboard_kv" (mỗi
+// key trạng thái = 1 dòng), tránh đụng nếu sau này project Supabase này còn dùng cho việc khác.
+const CV_TABLE = 'dashboard_kv';
 
 const CloudVault = {
   url: '',
-  token: '',
-  apiKey: '',
+  token: '', // Supabase anon public key (giữ tên "token" để không phải sửa lại mọi nơi khác đang đọc CloudVault.token)
   _writeTimer: null,
   _retryTimer: null,
   _retryCount: 0,
@@ -519,20 +523,25 @@ const CloudVault = {
   _gotInitialData: false, // đã áp dụng được ít nhất 1 bản dữ liệu Cloud (qua REST hoặc realtime) chưa
   _lastReadBytes: 0, // dung lượng (byte) bản Cloud vừa tải/nhận gần nhất — hiện kèm trong thông báo
   _lastWriteBytes: 0, // dung lượng (byte) gói vừa GHI lên Cloud gần nhất — hiện kèm trong thông báo
-  // --- Realtime (WebSocket, qua Firebase SDK) — lớp BỔ SUNG bên trên REST đã có sẵn ở trên. REST
-  // vẫn là "xương sống" cho đọc/ghi chủ động (bấm Lưu, Kết nối, Kiểm tra...) vì đã có sẵn cơ chế
+  // --- Realtime (WebSocket, qua Supabase Realtime) — lớp BỔ SUNG bên trên REST đã có sẵn ở trên.
+  // REST vẫn là "xương sống" cho đọc/ghi chủ động (bấm Lưu, Kết nối, Kiểm tra...) vì đã có sẵn cơ chế
   // kiểm chứng & retry chắc chắn. Realtime CHỈ để tự phát hiện khi CÓ THIẾT BỊ KHÁC vừa ghi thay đổi
   // lên Cloud, rồi tự kéo về máy này ngay — không cần đợi người dùng bấm "Làm mới dữ liệu" nữa.
-  _fbRef: null,
+  _sbClient: null,
+  _stampChannel: null,
+  _gateChannel: null,
   _realtimeActive: false,
   _pendingStampDirty: false, // TRUE = mốc realtime vừa báo có gì mới trên Cloud nhưng máy này đang
   // gõ dở/chưa lưu nên chưa tải, sẽ tự tải đủ (qua REST) ngay khi an toàn — xem _flushPendingSnapshot.
   _safeCheckTimer: null,
 
-  // Đường dẫn REST cố định trong Realtime Database — gộp mọi dữ liệu dashboard vào 1 node riêng
-  // "dashboard_data", tránh đụng nếu sau này project Firebase này còn dùng cho việc khác.
-  _dataUrl(){
-    return this.url.replace(/\/+$/, '') + '/dashboard_data.json';
+  // Đường dẫn REST (PostgREST) cố định tới bảng dashboard_kv.
+  _restUrl(query){
+    return this.url.replace(/\/+$/, '') + '/rest/v1/' + CV_TABLE + (query ? '?' + query : '');
+  },
+
+  _headers(extra){
+    return Object.assign({ apikey: this.token, Authorization: 'Bearer ' + this.token, 'Content-Type': 'application/json' }, extra || {});
   },
 
   // Tham số chống cache cho các request ĐỌC (GET) — nối thêm 1 mốc luôn-khác-nhau vào URL và ép
@@ -546,42 +555,38 @@ const CloudVault = {
     return '&_ts=' + Date.now() + '_' + Math.random().toString(36).slice(2);
   },
 
+  // Gộp các dòng {key, value} đọc được từ bảng dashboard_kv thành lại đúng 1 object phẳng — value
+  // là null (key đã bị "xoá" — xem _writeMergeNow) thì BỎ QUA, giống hệt cách Firebase coi field
+  // null là field không tồn tại, để _applyCloudSnapshot()/mọi nơi khác dùng lại được nguyên logic cũ.
+  _rowsToObject(rows){
+    const obj = {};
+    (rows || []).forEach(r => { if(r && r.value !== null && r.value !== undefined) obj[r.key] = r.value; });
+    return obj;
+  },
+
   init(){
     try{
       this.url = localStorage.getItem(CV_LS_URL) || '';
       this.token = localStorage.getItem(CV_LS_TOKEN) || '';
-      this.apiKey = localStorage.getItem(CV_LS_APIKEY) || '';
     }catch(e){}
     this._bindUi();
     const urlInput = document.getElementById('cv-url-input');
     const tokenInput = document.getElementById('cv-token-input');
-    const apiKeyInput = document.getElementById('cv-apikey-input');
     if(urlInput) urlInput.value = this.url;
     if(tokenInput) tokenInput.value = this.token;
-    if(apiKeyInput) apiKeyInput.value = this.apiKey;
     if(this.url && this.token){
       this._pushedLocalToEmptyCloud = false;
       this._gotInitialData = false;
-      if(this.apiKey){
-        // CÓ Web API Key -> dùng THẲNG realtime (WebSocket) làm nguồn tải dữ liệu ban đầu, KHÔNG gọi
-        // thêm readAll() REST song song nữa — trước đây làm cả 2, tải trùng nguyên khối dữ liệu 2 lần
-        // ngay lúc mở trang (1 lần qua REST, 1 lần realtime tự tải khi vừa kết nối), tốn gấp đôi băng
-        // thông. _startRealtime() tự có phương án dự phòng gọi lại REST nếu realtime lỗi (xem bên dưới).
-        this._setStatus('Đang bật đồng bộ realtime…', '');
-        try{ this._startRealtime(); }catch(e){
-          console.warn('CloudVault: lỗi khởi động realtime:', e);
-          this._smartReadAll();
-        }
-      } else {
-        // KHÔNG có Web API Key -> chỉ còn REST. Trước khi tải TOÀN BỘ dữ liệu (có thể tới hàng MB),
-        // kiểm tra 1 mốc nhỏ (_meta_updatedAt, chỉ vài chục byte) xem Cloud có gì mới hơn bản đang
-        // cache cục bộ hay không — nếu không, dùng luôn cache, khỏi tải lại (tiết kiệm băng thông cho
-        // phần lớn các lần mở app khi chưa ai sửa gì kể từ lần trước).
-        this._setStatus('Đang kiểm tra dữ liệu Cloud…', '');
+      // Realtime (WebSocket) LUÔN tự bật ngay — Supabase Realtime không cần khoá phụ/đăng nhập ẩn
+      // danh riêng như Firebase, chỉ cần đúng anon key + RLS đã cho phép. _startRealtime() tự có
+      // phương án dự phòng gọi lại REST nếu realtime lỗi (xem bên dưới).
+      this._setStatus('Đang bật đồng bộ realtime…', '');
+      try{ this._startRealtime(); }catch(e){
+        console.warn('CloudVault: lỗi khởi động realtime:', e);
         this._smartReadAll();
       }
     } else {
-      this._setStatus('Chưa kết nối Cloud — dán Database URL + Database secret rồi bấm "Kết nối".', '');
+      this._setStatus('Chưa kết nối Cloud — dán Project URL + anon public key rồi bấm "Kết nối".', '');
     }
   },
 
@@ -589,21 +594,17 @@ const CloudVault = {
     try{
       localStorage.setItem(CV_LS_URL, this.url);
       localStorage.setItem(CV_LS_TOKEN, this.token);
-      localStorage.setItem(CV_LS_APIKEY, this.apiKey);
     }catch(e){}
   },
 
   async connect(){
     const urlInput = document.getElementById('cv-url-input');
     const tokenInput = document.getElementById('cv-token-input');
-    const apiKeyInput = document.getElementById('cv-apikey-input');
     const url = urlInput ? urlInput.value.trim() : '';
     const token = tokenInput ? tokenInput.value.trim() : '';
-    const apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
-    if(!url || !token){ this._setStatus('✗ Cần nhập cả Database URL và Database secret.', 'err'); return; }
+    if(!url || !token){ this._setStatus('✗ Cần nhập cả Project URL và anon public key.', 'err'); return; }
     this.url = url;
     this.token = token;
-    this.apiKey = apiKey;
     this._setStatus('Đang kết nối & tải dữ liệu từ Cloud…', '');
     this._pushedLocalToEmptyCloud = false;
     const ok = await this.readAll();
@@ -617,7 +618,7 @@ const CloudVault = {
       );
       try{ this._startRealtime(); }catch(e){ console.warn('CloudVault: lỗi khởi động realtime:', e); }
     } else {
-      this._setStatus('✗ Không tải được — kiểm tra lại Database URL / Database secret, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết. (Kiểm tra lại đã dán đúng Database secret ở mục Project settings → Service accounts, và Rules đã Publish chưa.)', 'err');
+      this._setStatus('✗ Không tải được — kiểm tra lại Project URL / anon public key, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết. (Kiểm tra lại đã tạo bảng dashboard_kv và bật RLS cho phép anon đọc/ghi chưa.)', 'err');
     }
   },
 
@@ -625,18 +626,14 @@ const CloudVault = {
     this._stopRealtime();
     this.url = '';
     this.token = '';
-    this.apiKey = '';
     try{
       localStorage.removeItem(CV_LS_URL);
       localStorage.removeItem(CV_LS_TOKEN);
-      localStorage.removeItem(CV_LS_APIKEY);
     }catch(e){}
     const urlInput = document.getElementById('cv-url-input');
     const tokenInput = document.getElementById('cv-token-input');
-    const apiKeyInput = document.getElementById('cv-apikey-input');
     if(urlInput) urlInput.value = '';
     if(tokenInput) tokenInput.value = '';
-    if(apiKeyInput) apiKeyInput.value = '';
     this._setStatus('Đã ngắt kết nối Cloud trên trình duyệt này.', '');
   },
 
@@ -645,22 +642,22 @@ const CloudVault = {
     const tokenInput = document.getElementById('cv-token-input');
     const url = (urlInput ? urlInput.value.trim() : '') || this.url;
     const token = (tokenInput ? tokenInput.value.trim() : '') || this.token;
-    if(!url || !token){ this._setStatus('✗ Cần nhập cả Database URL và Database secret trước khi kiểm tra.', 'err'); return; }
-    this._setStatus('Đang kiểm tra kết nối tới Firebase…', '');
+    if(!url || !token){ this._setStatus('✗ Cần nhập cả Project URL và anon public key trước khi kiểm tra.', 'err'); return; }
+    this._setStatus('Đang kiểm tra kết nối tới Supabase…', '');
     try{
-      const testUrl = url.replace(/\/+$/, '') + '/dashboard_data.json?auth=' + encodeURIComponent(token);
-      const res = await fetch(testUrl);
+      const testUrl = url.replace(/\/+$/, '') + '/rest/v1/' + CV_TABLE + '?limit=1&select=key';
+      const res = await fetch(testUrl, { headers: { apikey: token, Authorization: 'Bearer ' + token } });
       const text = await res.text();
       let json = null;
       try{ json = JSON.parse(text); }catch(e){}
-      if(res.ok && !(json && json.error)){
-        this._setStatus('✓ Kết nối OK — Firebase trả về dữ liệu hợp lệ. Database URL & Database secret đúng.', 'ok');
-      } else if(json && json.error){
-        this._setStatus('✗ Firebase báo lỗi: "' + json.error + '" — kiểm tra lại đã dán đúng Database secret (Project settings → Service accounts → Database secrets) và Rules đã Publish đúng như hướng dẫn chưa.', 'err');
+      if(res.ok && Array.isArray(json)){
+        this._setStatus('✓ Kết nối OK — Supabase trả về dữ liệu hợp lệ. Project URL & anon key đúng, bảng dashboard_kv đã sẵn sàng.', 'ok');
+      } else if(json && json.message){
+        this._setStatus('✗ Supabase báo lỗi: "' + json.message + '" — kiểm tra lại đã tạo bảng dashboard_kv, bật RLS và policy cho phép anon đọc/ghi đúng như hướng dẫn chưa.', 'err');
       } else if(!res.ok){
-        this._setStatus('✗ Máy chủ trả về mã lỗi ' + res.status + '. Kiểm tra lại Database URL (dạng https://ten-du-an-default-rtdb....firebasedatabase.app/).', 'err');
+        this._setStatus('✗ Máy chủ trả về mã lỗi ' + res.status + '. Kiểm tra lại Project URL (dạng https://ten-du-an.supabase.co).', 'err');
       } else {
-        this._setStatus('✗ Phản hồi không đúng định dạng mong đợi — kiểm tra lại đã dán đúng Database URL chưa.', 'err');
+        this._setStatus('✗ Phản hồi không đúng định dạng mong đợi — kiểm tra lại đã dán đúng Project URL chưa.', 'err');
       }
     }catch(e){
       this._setStatus('✗ Không kết nối được tới máy chủ (lỗi mạng thật sự: "' + e.message + '") — kiểm tra Internet, hoặc URL dán bị sai/thiếu.', 'err');
@@ -670,28 +667,28 @@ const CloudVault = {
   async readAll(){
     if(!this.url || !this.token) return false;
     try{
-      const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token) + this._noCacheParam(), { cache: 'no-store' });
+      const res = await fetch(this._restUrl('select=key,value') + this._noCacheParam(), { headers: this._headers(), cache: 'no-store' });
       if(!res.ok) return false;
-      const json = await res.json();
-      if(json && json.error) return false;
-      // Firebase trả về "null" (không phải {}) khi node đang trống — coi như dữ liệu rỗng.
-      const cloudData = (json && typeof json === 'object') ? json : {};
+      const rows = await res.json();
+      if(!Array.isArray(rows)) return false;
+      const cloudData = this._rowsToObject(rows);
       return await this._applyCloudSnapshot(cloudData);
     }catch(e){ console.warn('CloudVault đọc lỗi:', e); return false; }
   },
 
   // Đọc RIÊNG mốc "_meta_updatedAt" trên Cloud (chỉ vài chục byte) — KHÔNG đụng gì tới _mem/trạng
   // thái cục bộ, chỉ để biết Cloud có mới hơn máy này đang cache hay không mà không cần tải nguyên
-  // khối dữ liệu lớn. Trả về null nếu không đọc được (mạng lỗi, node chưa từng có mốc này...) — khi
+  // khối dữ liệu lớn. Trả về null nếu không đọc được (mạng lỗi, dòng chưa từng có mốc này...) — khi
   // đó _smartReadAll() coi như "chưa rõ" và tải đủ như bình thường, để an toàn không bỏ sót dữ liệu mới.
   async _checkCloudStamp(){
     try{
-      const url = this.url.replace(/\/+$/, '') + '/dashboard_data/' + STORAGE_KEY_META_STAMP + '.json';
-      const res = await fetch(url + '?auth=' + encodeURIComponent(this.token) + this._noCacheParam(), { cache: 'no-store' });
+      const url = this._restUrl('key=eq.' + encodeURIComponent(STORAGE_KEY_META_STAMP) + '&select=value');
+      const res = await fetch(url + this._noCacheParam(), { headers: this._headers(), cache: 'no-store' });
       if(!res.ok) return null;
       const text = await res.text();
       this._lastReadBytes = new Blob([text]).size; // chỉ vài chục byte — hiện kèm trong thông báo "dữ liệu chưa đổi"
-      const stamp = JSON.parse(text);
+      const rows = JSON.parse(text);
+      const stamp = (Array.isArray(rows) && rows[0]) ? rows[0].value : null;
       return (stamp === null || stamp === undefined) ? null : String(stamp);
     }catch(e){ return null; }
   },
@@ -699,8 +696,8 @@ const CloudVault = {
   // Tải "thông minh": chỉ tải nguyên khối dữ liệu (readAll — có thể tới hàng MB) khi mốc trên Cloud
   // THỰC SỰ khác mốc máy này đang cache cục bộ (đã cập nhật ở lần đồng bộ/ghi gần nhất) — nếu giống
   // hệt, nghĩa là chưa ai (kể cả máy này) sửa gì kể từ lần đồng bộ trước, dùng thẳng cache là đủ,
-  // khỏi tải lại — đây chính là phần tiết kiệm băng thông Firebase nhiều nhất, vì phần lớn các lần mở
-  // app không ai vừa sửa gì cả. Chỉ dùng cho đường REST-only (không có Web API Key/realtime) — xem init().
+  // khỏi tải lại — đây chính là phần tiết kiệm băng thông Cloud nhiều nhất, vì phần lớn các lần mở
+  // app không ai vừa sửa gì cả. Dùng làm phương án dự phòng/lần tải ban đầu bên cạnh realtime — xem init()/_startRealtime().
   async _smartReadAll(){
     const localStamp = _mem[STORAGE_KEY_META_STAMP] || '';
     const hasLocalData = Object.keys(_mem).some(k => k !== STORAGE_KEY_META_STAMP);
@@ -717,8 +714,8 @@ const CloudVault = {
     const msg = ok
       ? (this._pushedLocalToEmptyCloud
           ? `✓ Cloud đang trống — đã tải dữ liệu hiện có trên máy này LÊN Cloud (${fmtBytes(this._lastWriteBytes)}, không xoá mất dữ liệu cục bộ).`
-          : `✓ Đã đồng bộ với Cloud (Firebase, đã tải ${fmtBytes(this._lastReadBytes)}).`)
-      : '✗ Không tải được — kiểm tra lại Database URL / Database secret, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết.';
+          : `✓ Đã đồng bộ với Cloud (Supabase, đã tải ${fmtBytes(this._lastReadBytes)}).`)
+      : '✗ Không tải được — kiểm tra lại Project URL / anon public key, hoặc bấm "Kiểm tra kết nối" để xem lỗi chi tiết.';
     this._setStatus(msg, ok ? 'ok' : 'err');
     return ok;
   },
@@ -730,7 +727,7 @@ const CloudVault = {
     this._gotInitialData = true; // đã có ít nhất 1 bản dữ liệu Cloud thật sự áp dụng — dùng cho phương án dự phòng của realtime, xem _startRealtime()
     // Dung lượng bản Cloud vừa nhận (qua REST hay realtime đều tính chung ở đây) — để các thông báo
     // tải/đồng bộ hiện kèm số KB thực tế, giúp tự theo dõi băng thông đang dùng mà không cần vào
-    // Firebase Console. Dùng Blob để tính đúng byte UTF-8 (tiếng Việt có dấu chiếm nhiều hơn 1 byte/ký tự).
+    // Supabase Dashboard. Dùng Blob để tính đúng byte UTF-8 (tiếng Việt có dấu chiếm nhiều hơn 1 byte/ký tự).
     try{ this._lastReadBytes = new Blob([JSON.stringify(cloudData)]).size; }catch(e){ this._lastReadBytes = 0; }
     const cloudStamp = cloudData[STORAGE_KEY_META_STAMP] == null ? '' : String(cloudData[STORAGE_KEY_META_STAMP]);
     const localStampBeforeApply = _mem[STORAGE_KEY_META_STAMP] == null ? '' : String(_mem[STORAGE_KEY_META_STAMP]);
@@ -783,7 +780,7 @@ const CloudVault = {
     return true;
   },
 
-  // ============ Realtime (WebSocket qua Firebase SDK) ============
+  // ============ Realtime (WebSocket qua Supabase Realtime) ============
   // An toàn: KHÔNG BAO GIỜ tự áp dụng dữ liệu mới trong lúc người dùng đang gõ dở (đang có ô nhập
   // liệu nào đó đang được focus) hoặc đang có thay đổi CHƯA LƯU trên máy này — tránh ghi đè mất số
   // liệu đang nhập ngay dưới tay người dùng. Nếu chưa an toàn, giữ lại cờ chờ (_pendingStampDirty) và
@@ -808,93 +805,82 @@ const CloudVault = {
 
   _startRealtime(){
     this._stopRealtime(); // huỷ kết nối realtime cũ (nếu có) trước khi mở kết nối mới
-    if(!this.apiKey){
-      this._setRealtimeStatus('ℹ Chưa nhập Web API Key — chỉ đồng bộ khi bấm nút (không tự động realtime). Xem hướng dẫn lấy Web API Key nếu muốn bật.', '');
-      // Không có Web API Key -> không thể dùng realtime làm nguồn tải ban đầu, phải tải qua REST
-      // (chỉ khi CHƯA có dữ liệu Cloud nào được áp dụng — tránh gọi lại REST thừa nếu init() hoặc
-      // connect() đã tải xong trước khi gọi hàm này).
-      if(!this._gotInitialData) this._smartReadAll();
-      return;
-    }
-    if(typeof firebase === 'undefined'){
-      this._setRealtimeStatus('⚠ Không tải được thư viện Firebase SDK (cần Internet) — không bật được realtime.', 'err');
+    if(typeof supabase === 'undefined' || !supabase.createClient){
+      this._setRealtimeStatus('⚠ Không tải được thư viện Supabase SDK (cần Internet) — không bật được realtime.', 'err');
       if(!this._gotInitialData) this._smartReadAll(); // dự phòng: vẫn tải được dữ liệu qua REST bình thường
       return;
     }
     try{
-      if(!firebase.apps || !firebase.apps.length){
-        firebase.initializeApp({ apiKey: this.apiKey, databaseURL: this.url });
-      }
       this._setRealtimeStatus('Đang bật đồng bộ realtime…', '');
-      firebase.auth().signInAnonymously()
-        .then(() => {
-          // CHỈ lắng nghe đúng 1 mốc nhỏ (_meta_updatedAt, vài chục byte) thay vì lắng nghe thẳng
-          // TOÀN BỘ dữ liệu — xem _onRealtimeStampValue() để rõ lý do (Firebase SDK luôn tải nguyên
-          // khối dữ liệu tại đường dẫn đang lắng nghe ngay khi vừa gắn listener, kể cả khi chẳng ai
-          // sửa gì cả — nếu lắng nghe thẳng gốc, MỖI LẦN mở/tải lại trang sẽ luôn tốn lại hàng MB).
-          this._fbRef = firebase.database().ref('dashboard_data/' + STORAGE_KEY_META_STAMP);
-          this._fbRef.on('value', (snapshot) => this._onRealtimeStampValue(snapshot), (err) => {
-            console.warn('CloudVault realtime lỗi:', err);
-            this._setRealtimeStatus('⚠ Mất kết nối realtime: ' + err.message + ' — vẫn dùng được nút "Lưu"/"Làm mới dữ liệu" như bình thường.', 'err');
-            if(!this._gotInitialData) this._smartReadAll(); // chưa kịp tải được lần nào -> dự phòng REST
-          });
-          // Lắng nghe RIÊNG khoá "_gate_config" (lịch ca/mở-tạm/khoá-thủ-công, xem khối chặn ca đầu
-          // <body>) — để khi 1 thiết bị khác bấm "🔒 Khoá trang ngay"/đổi lịch ca, các thiết bị ĐANG
-          // MỞ SẴN app (không chỉ thiết bị vừa tải trang) cũng bị đẩy ra màn hình khoá NGAY LẬP TỨC
-          // qua kênh realtime — không phải đợi tự tải lại trang mới biết.
-          this._gateRef = firebase.database().ref('dashboard_data/_gate_config');
-          this._gateRef.on('value', (snapshot) => {
-            const cfg = snapshot.val();
-            if(!cfg || typeof gateApplyCloudConfig !== 'function') return;
-            gateApplyCloudConfig(cfg);
-            if(typeof gateEvalChoPhep === 'function' && !gateEvalChoPhep()) location.replace(typeof gateBustedUrl === 'function' ? gateBustedUrl('lock.html') : 'lock.html');
-          });
-          this._realtimeActive = true;
-          this._setRealtimeStatus('✓ Đồng bộ realtime đang bật — thay đổi từ thiết bị khác sẽ tự cập nhật ngay.', 'ok');
-          clearInterval(this._safeCheckTimer);
-          this._safeCheckTimer = setInterval(() => this._flushPendingSnapshot(), 3000);
+      this._sbClient = supabase.createClient(this.url, this.token);
+      // CHỈ lắng nghe đúng 1 mốc nhỏ (_meta_updatedAt, vài chục byte) thay vì lắng nghe TOÀN BỘ bảng
+      // — mỗi lần dòng này đổi (INSERT lần đầu hoặc UPDATE các lần sau) mới tải đủ 1 lần qua REST
+      // (_fetchFullSnapshotViaStamp), tránh mỗi lần mở/tải lại trang đều phải tải lại toàn bộ dữ liệu.
+      this._stampChannel = this._sbClient
+        .channel('cv-stamp-' + Date.now())
+        .on('postgres_changes', { event: '*', schema: 'public', table: CV_TABLE, filter: 'key=eq.' + STORAGE_KEY_META_STAMP }, (payload) => {
+          this._onRealtimeStampValue(payload.new && ('value' in payload.new) ? payload.new.value : null);
         })
-        .catch(err => {
-          this._setRealtimeStatus('⚠ Không đăng nhập ẩn danh được: ' + err.message + ' — kiểm tra đã bật "Anonymous" trong Firebase Authentication chưa, và Web API Key đã đúng chưa.', 'err');
-          if(!this._gotInitialData) this._smartReadAll(); // dự phòng: không bật được realtime, vẫn tải được dữ liệu qua REST
+        .subscribe((status, err) => {
+          if(status === 'SUBSCRIBED'){
+            this._realtimeActive = true;
+            this._setRealtimeStatus('✓ Đồng bộ realtime đang bật — thay đổi từ thiết bị khác sẽ tự cập nhật ngay.', 'ok');
+            clearInterval(this._safeCheckTimer);
+            this._safeCheckTimer = setInterval(() => this._flushPendingSnapshot(), 3000);
+            if(!this._gotInitialData) this._smartReadAll(); // realtime chỉ BÁO có gì mới, vẫn cần 1 lần tải đủ ban đầu qua REST
+          } else if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED'){
+            console.warn('CloudVault realtime lỗi:', status, err);
+            this._setRealtimeStatus('⚠ Mất kết nối realtime' + (err ? ': ' + err.message : '') + ' — vẫn dùng được nút "Lưu"/"Làm mới dữ liệu" như bình thường. Kiểm tra đã thêm bảng dashboard_kv vào Database → Replication chưa.', 'err');
+            if(!this._gotInitialData) this._smartReadAll(); // chưa kịp tải được lần nào -> dự phòng REST
+          }
         });
+      // Lắng nghe RIÊNG dòng khoá "_gate_config" (lịch ca/mở-tạm/khoá-thủ-công, xem khối chặn ca đầu
+      // <body>) — để khi 1 thiết bị khác bấm "🔒 Khoá trang ngay"/đổi lịch ca, các thiết bị ĐANG MỞ
+      // SẴN app (không chỉ thiết bị vừa tải trang) cũng bị đẩy ra màn hình khoá NGAY LẬP TỨC qua kênh
+      // realtime — không phải đợi tự tải lại trang mới biết.
+      this._gateChannel = this._sbClient
+        .channel('cv-gate-' + Date.now())
+        .on('postgres_changes', { event: '*', schema: 'public', table: CV_TABLE, filter: 'key=eq._gate_config' }, (payload) => {
+          const cfg = payload.new ? payload.new.value : null;
+          if(!cfg || typeof gateApplyCloudConfig !== 'function') return;
+          gateApplyCloudConfig(cfg);
+          if(typeof gateEvalChoPhep === 'function' && !gateEvalChoPhep()) location.replace(typeof gateBustedUrl === 'function' ? gateBustedUrl('lock.html') : 'lock.html');
+        })
+        .subscribe();
     }catch(e){
-      this._setRealtimeStatus('⚠ Lỗi khởi tạo Firebase SDK: ' + e.message, 'err');
+      this._setRealtimeStatus('⚠ Lỗi khởi tạo Supabase SDK: ' + e.message, 'err');
       if(!this._gotInitialData) this._smartReadAll(); // dự phòng
     }
   },
 
   _stopRealtime(){
-    if(this._fbRef){ try{ this._fbRef.off(); }catch(e){} this._fbRef = null; }
-    if(this._gateRef){ try{ this._gateRef.off(); }catch(e){} this._gateRef = null; }
+    if(this._sbClient){
+      try{
+        if(this._stampChannel) this._sbClient.removeChannel(this._stampChannel);
+        if(this._gateChannel) this._sbClient.removeChannel(this._gateChannel);
+      }catch(e){}
+    }
+    this._stampChannel = null;
+    this._gateChannel = null;
+    this._sbClient = null;
     clearInterval(this._safeCheckTimer);
     this._safeCheckTimer = null;
     this._pendingStampDirty = false;
     this._realtimeActive = false;
-    // Xoá app Firebase cũ (nếu có) để lần _startRealtime() sau luôn khởi tạo lại ĐÚNG url/apiKey mới
-    // nhất — phòng trường hợp người dùng đổi Database URL/Web API Key rồi bấm "Kết nối" lại.
-    if(typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length){
-      firebase.apps.forEach(app => { try{ app.delete(); }catch(e){} });
-    }
     this._setRealtimeStatus('', '');
   },
 
   // Mốc "_meta_updatedAt" vừa được Cloud gửi về (do THIẾT BỊ KHÁC vừa ghi, do CHÍNH máy này vừa ghi,
-  // HOẶC đơn giản là lần đầu gắn listener khi vừa mở trang — Firebase LUÔN gửi giá trị hiện tại ngay
-  // khi vừa attach). Chỉ so sánh mốc (vài chục byte) với bản đang cache cục bộ TRƯỚC — GIỐNG HỆT nhau
-  // thì coi như chưa ai sửa gì kể từ lần đồng bộ trước, KHÔNG tải lại nguyên khối dữ liệu; chỉ khi
-  // mốc thực sự khác mới tải đủ 1 lần qua REST (_fetchFullSnapshotViaStamp) — đây chính là điểm tiết
-  // kiệm băng thông: trước đây lắng nghe thẳng gốc dữ liệu nên MỖI LẦN mở/tải lại trang đều tải lại
-  // toàn bộ (có thể tới vài MB) dù chẳng ai vừa sửa gì, giờ chỉ còn tốn vài chục byte cho phần lớn
-  // các lần mở app.
-  _onRealtimeStampValue(snapshot){
-    const cloudStampRaw = snapshot.val();
+  // hoặc lần đầu chính máy này ghi tạo dòng này). Chỉ so sánh mốc (vài chục byte) với bản đang cache
+  // cục bộ TRƯỚC — GIỐNG HỆT nhau thì coi như chưa ai sửa gì kể từ lần đồng bộ trước, KHÔNG tải lại
+  // nguyên khối dữ liệu; chỉ khi mốc thực sự khác mới tải đủ 1 lần qua REST (_fetchFullSnapshotViaStamp).
+  _onRealtimeStampValue(cloudStampRaw){
     const cloudStamp = (cloudStampRaw === null || cloudStampRaw === undefined) ? '' : String(cloudStampRaw);
     const localStamp = _mem[STORAGE_KEY_META_STAMP] || '';
     // Bỏ qua tín hiệu realtime CŨ hơn bản đang có trên máy. Đây là lớp bảo vệ cuối cùng cho
-    // trường hợp Firebase/realtime trả về một snapshot cũ ngay sau khi người dùng vừa bấm
-    // "Đặt lại toàn bộ": nếu tải snapshot cũ lúc này, danh sách Đã xác nhận/Đề xuất kiểm
-    // vừa xoá sẽ sống lại dù lần ghi reset đã thành công.
+    // trường hợp realtime trả về một sự kiện cũ ngay sau khi người dùng vừa bấm "Đặt lại toàn bộ":
+    // nếu tải snapshot cũ lúc này, danh sách Đã xác nhận/Đề xuất kiểm vừa xoá sẽ sống lại dù lần
+    // ghi reset đã thành công.
     if(cloudStamp && localStamp && /^\d+$/.test(cloudStamp) && /^\d+$/.test(String(localStamp)) && Number(cloudStamp) < Number(localStamp)){
       this._pendingStampDirty = false;
       return;
@@ -923,14 +909,14 @@ const CloudVault = {
       return;
     }
     this._pendingStampDirty = false;
-    // Lần ĐẦU TIÊN nhận được dữ liệu qua realtime (init() không còn tự gọi readAll() REST song song
-    // nữa khi có Web API Key, xem init()) -> đây chính là lần tải dữ liệu ban đầu, cập nhật luôn
+    // Nếu đây là sự kiện realtime đầu tiên trước khi kịp tải đủ dữ liệu ban đầu (hiếm — thường
+    // _smartReadAll() ở bước SUBSCRIBED của _startRealtime() đã lo phần này rồi) -> cập nhật luôn
     // trạng thái chính (#cv-status) để không bị kẹt mãi ở "Đang bật đồng bộ realtime…".
     const isFirstLoad = !this._gotInitialData;
     const ok = await this.readAll();
     if(ok){
       this._setRealtimeStatus(`✓ Realtime đang bật — vừa tự cập nhật dữ liệu mới nhất (${fmtBytes(this._lastReadBytes)}).`, 'ok');
-      if(isFirstLoad) this._setStatus(`✓ Đã đồng bộ với Cloud (Firebase, qua realtime — không tải REST trùng lặp, ${fmtBytes(this._lastReadBytes)}).`, 'ok');
+      if(isFirstLoad) this._setStatus(`✓ Đã đồng bộ với Cloud (Supabase, qua realtime, ${fmtBytes(this._lastReadBytes)}).`, 'ok');
     }
   },
 
@@ -945,11 +931,11 @@ const CloudVault = {
   async peek(){
     if(!this.url || !this.token) return null;
     try{
-      const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token) + this._noCacheParam(), { cache: 'no-store' });
+      const res = await fetch(this._restUrl('select=key,value') + this._noCacheParam(), { headers: this._headers(), cache: 'no-store' });
       if(!res.ok) return null;
-      const json = await res.json();
-      if(json && json.error) return null;
-      return (json && typeof json === 'object') ? json : {};
+      const rows = await res.json();
+      if(!Array.isArray(rows)) return null;
+      return this._rowsToObject(rows);
     }catch(e){ return null; }
   },
 
@@ -992,11 +978,11 @@ const CloudVault = {
 
   async _writeMergeNow(keys){
     if(!this.url || !this.token) return;
-    // QUAN TRỌNG: với key đã bị XÁC (không còn trong _mem, VD: vừa "Xoá danh sách" làm rỗng hẳn),
-    // PHẢI gửi rõ giá trị null cho key đó — Firebase PATCH coi "null" là lệnh XOÁ đúng key đó trên
-    // Cloud. Trước đây chỉ ĐƠN GIẢN BỎ QUA key không còn trong _mem (không gửi gì cho nó), khiến
-    // Cloud KHÔNG BAO GIỜ biết là cần xoá — cứ giữ mãi bản dữ liệu CŨ, nên "Xoá danh sách" xong đợi
-    // 1 lúc/tải lại trang sẽ luôn thấy nó "sống lại" y như cũ, dù xoá trên máy vẫn chạy đúng.
+    // QUAN TRỌNG: với key đã bị XOÁ (không còn trong _mem, VD: vừa "Xoá danh sách" làm rỗng hẳn),
+    // PHẢI gửi rõ giá trị null cho key đó — coi null là "key không tồn tại" khi đọc lại (xem
+    // _rowsToObject). Trước đây chỉ ĐƠN GIẢN BỎ QUA key không còn trong _mem (không gửi gì cho nó),
+    // khiến Cloud KHÔNG BAO GIỜ biết là cần xoá — cứ giữ mãi bản dữ liệu CŨ, nên "Xoá danh sách" xong
+    // đợi 1 lúc/tải lại trang sẽ luôn thấy nó "sống lại" y như cũ, dù xoá trên máy vẫn chạy đúng.
     const partial = {};
     keys.forEach(k => { partial[k] = (k in _mem) ? _mem[k] : null; });
     // Luôn kèm theo mốc đồng bộ mới nhất trong CHÍNH gói ghi này (không tốn thêm request riêng) — để
@@ -1004,24 +990,29 @@ const CloudVault = {
     // writeMerge() (gói nhỏ) hay writeAll() (toàn bộ) đều cùng cập nhật đúng 1 mốc thống nhất.
     const newStamp = String(Date.now());
     partial[STORAGE_KEY_META_STAMP] = newStamp;
-    const payload = JSON.stringify(partial);
+    const rows = Object.keys(partial).map(k => ({ key: k, value: partial[k] }));
+    const payload = JSON.stringify(rows);
     try{
-      const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token), {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+      // Upsert theo khoá chính "key" (on_conflict=key + Prefer: resolution=merge-duplicates) — tương
+      // đương PATCH-ghép của Firebase trước đây, chỉ đổi ĐÚNG các dòng (key) được chỉ định.
+      const res = await fetch(this._restUrl('on_conflict=key'), {
+        method: 'POST',
+        headers: this._headers({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
         body: payload,
         cache: 'no-store'
       });
       const bodyJson = await res.json().catch(() => null);
-      if(!res.ok) throw new Error('HTTP ' + res.status + (bodyJson && bodyJson.error ? ' — ' + bodyJson.error : ''));
-      if(bodyJson && bodyJson.error) throw new Error(bodyJson.error);
+      if(!res.ok) throw new Error('HTTP ' + res.status + (bodyJson && bodyJson.message ? ' — ' + bodyJson.message : ''));
+      if(!Array.isArray(bodyJson)) throw new Error('Phản hồi không đúng định dạng mong đợi — kiểm tra lại đã tạo đúng bảng dashboard_kv (cột key/value) chưa.');
 
-      // Kiểm chứng NGAY TỪ PHẢN HỒI CỦA PATCH: Firebase trả lại đúng phần dữ liệu vừa ghép (kể cả
-      // key vừa bị xoá, giá trị sẽ là null) trong response body của chính request này — không cần
-      // gửi thêm request nào để "tải lại" mới biết.
+      // Kiểm chứng NGAY TỪ PHẢN HỒI CỦA UPSERT (Prefer: return=representation): Supabase trả lại
+      // đúng các dòng vừa ghi (kể cả key vừa bị xoá, giá trị sẽ là null) trong response body của
+      // chính request này — không cần gửi thêm request nào để "tải lại" mới biết.
+      const returned = {};
+      bodyJson.forEach(r => { returned[r.key] = r.value; });
       const bad = keys.filter(k => {
-        if(partial[k] === null) return !bodyJson || bodyJson[k] !== null; // key vừa xoá -> phải thấy null
-        return !bodyJson || !(k in bodyJson) || String(bodyJson[k]).length < String(partial[k]).length;
+        if(partial[k] === null) return !(k in returned) || returned[k] !== null; // key vừa xoá -> phải thấy null
+        return !(k in returned) || returned[k] === null || String(returned[k]).length < String(partial[k]).length;
       });
       if(bad.length) throw new Error('Cloud không lưu đủ (thiếu/thiếu bớt: ' + bad.join(', ') + ')');
       tn5SetMetaStamp(newStamp); // ghi đúng mốc vừa gửi vào bản cache cục bộ, để lần mở app sau nhận ra đây LÀ bản mới nhất, khỏi tải lại
@@ -1054,38 +1045,48 @@ const CloudVault = {
   async _writeAllNow(){
     if(!this.url || !this.token) return;
     try{
-      // Đưa mốc đồng bộ mới vào NGAY TRONG gói PUT này (không tốn thêm request riêng) — để các máy
+      // Đưa mốc đồng bộ mới vào NGAY TRONG gói ghi này (không tốn thêm request riêng) — để các máy
       // REST-only (xem _smartReadAll) biết chính xác lần ghi gần nhất là khi nào.
       const newStamp = String(Date.now());
       _mem[STORAGE_KEY_META_STAMP] = newStamp;
-      const payload = JSON.stringify(_mem);
-      // PUT ghi đè TOÀN BỘ node "dashboard_data" trên Firebase bằng đúng _mem hiện tại.
-      const res = await fetch(this._dataUrl() + '?auth=' + encodeURIComponent(this.token), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+      const keysToKeep = Object.keys(_mem);
+      const rows = keysToKeep.map(k => ({ key: k, value: _mem[k] }));
+      const payload = JSON.stringify(rows);
+      // Upsert TOÀN BỘ _mem hiện tại (tương đương PUT ghi đè toàn bộ node của Firebase trước đây).
+      const res = await fetch(this._restUrl('on_conflict=key'), {
+        method: 'POST',
+        headers: this._headers({ 'Prefer': 'resolution=merge-duplicates,return=representation' }),
         body: payload,
         cache: 'no-store'
       });
       const bodyJson = await res.json().catch(() => null);
-      if(!res.ok) throw new Error('HTTP ' + res.status + (bodyJson && bodyJson.error ? ' — ' + bodyJson.error : ''));
-      if(bodyJson && bodyJson.error) throw new Error(bodyJson.error);
+      if(!res.ok) throw new Error('HTTP ' + res.status + (bodyJson && bodyJson.message ? ' — ' + bodyJson.message : ''));
+      if(!Array.isArray(bodyJson)) throw new Error('Phản hồi không đúng định dạng mong đợi — kiểm tra lại đã tạo đúng bảng dashboard_kv (cột key/value) chưa.');
 
-      // KIỂM CHỨNG NGAY TỪ PHẢN HỒI CỦA PUT: Firebase trả lại ĐÚNG dữ liệu vừa ghi trong response
-      // body của chính request PUT này — không cần gửi thêm 1 request GET riêng để "tải lại" mới biết
-      // (trước đây làm vậy, tốn gấp đôi băng thông mỗi lần lưu — đây chính là lý do mục "Downloads"
-      // trên Firebase Console tăng nhanh hơn nhiều so với dung lượng dữ liệu thực tế đang lưu).
-      const cloudData = (bodyJson && typeof bodyJson === 'object') ? bodyJson : null;
-      if(cloudData){
-        const missing = Object.keys(_mem).filter(k => !(k in cloudData));
-        const truncated = Object.keys(_mem).filter(k => (k in cloudData) && String(cloudData[k]).length < String(_mem[k]).length);
-        if(missing.length || truncated.length){
-          const sizeKB = Math.round(payload.length / 1024);
-          throw new Error(
-            `Cloud nhận nhưng KHÔNG lưu đủ dữ liệu (thiếu: ${missing.concat(truncated).join(', ') || 'không rõ'}). ` +
-            `Dung lượng đang gửi ~${sizeKB} KB — kiểm tra lại Rules đã Publish đúng, và tài khoản Firebase chưa vượt hạn mức miễn phí. ` +
-            `Hãy dùng "Xuất JSON" để sao lưu ngay nếu nghi ngờ mất dữ liệu.`
-          );
-        }
+      // KIỂM CHỨNG NGAY TỪ PHẢN HỒI CỦA UPSERT (Prefer: return=representation): Supabase trả lại
+      // ĐÚNG các dòng vừa ghi trong response body của chính request này — không cần gửi thêm 1
+      // request GET riêng để "tải lại" mới biết (tốn gấp đôi băng thông mỗi lần lưu).
+      const returned = {};
+      bodyJson.forEach(r => { returned[r.key] = r.value; });
+      const missing = keysToKeep.filter(k => !(k in returned));
+      const truncated = keysToKeep.filter(k => (k in returned) && String(returned[k]).length < String(_mem[k]).length);
+      if(missing.length || truncated.length){
+        const sizeKB = Math.round(payload.length / 1024);
+        throw new Error(
+          `Cloud nhận nhưng KHÔNG lưu đủ dữ liệu (thiếu: ${missing.concat(truncated).join(', ') || 'không rõ'}). ` +
+          `Dung lượng đang gửi ~${sizeKB} KB — kiểm tra lại RLS/policy đã cho phép anon ghi đúng chưa, và tài khoản Supabase chưa vượt hạn mức miễn phí. ` +
+          `Hãy dùng "Xuất JSON" để sao lưu ngay nếu nghi ngờ mất dữ liệu.`
+        );
+      }
+
+      // Xoá các dòng KHÔNG còn trong _mem hiện tại — để giống đúng hành vi ghi đè toàn bộ của Firebase
+      // PUT trước đây (mọi key không có trong gói ghi cuối coi như đã bị xoá). Chạy SAU khi upsert đã
+      // được xác nhận thành công, và không làm hỏng cả lượt ghi nếu bước dọn dẹp này lỗi (chỉ để sót
+      // lại vài dòng thừa, không mất dữ liệu thật).
+      if(keysToKeep.length){
+        const inList = keysToKeep.map(k => '"' + String(k).replace(/"/g, '\\"') + '"').join(',');
+        fetch(this._restUrl('key=not.in.(' + inList + ')'), { method: 'DELETE', headers: this._headers(), cache: 'no-store' })
+          .catch(e => console.warn('CloudVault: xoá dòng thừa thất bại (không nghiêm trọng):', e));
       }
 
       tn5SetMetaStamp(newStamp); // ghi đúng mốc vừa gửi vào bản cache cục bộ, để lần mở app sau nhận ra đây LÀ bản mới nhất, khỏi tải lại
@@ -1391,8 +1392,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.19';
-const APP_VERSION_DATE = '15/09/2026';
+const APP_VERSION = 'v2.20';
+const APP_VERSION_DATE = '16/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -11330,7 +11331,7 @@ document.getElementById('btn-reset-kiemke-all').addEventListener('click', async 
 
     if(typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token){
       await CloudVault.writeAll();
-      // Sau khi PUT đã được Firebase xác nhận, coi mốc vừa ghi là hàng rào mới: mọi snapshot
+      // Sau khi Cloud đã xác nhận ghi xong, coi mốc vừa ghi là hàng rào mới: mọi snapshot
       // realtime cũ hơn mốc này sẽ bị bỏ qua bởi _onRealtimeStampValue/_applyCloudSnapshot.
       CloudVault._pendingStampDirty = false;
       if(typeof clearUnsavedChanges === 'function') clearUnsavedChanges();

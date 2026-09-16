@@ -61,9 +61,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
@@ -83,11 +81,12 @@
 // khi trình duyệt điều hướng, nó luôn dừng hẳn việc phân tích/chạy tiếp trang hiện tại.
 // Xem đầy đủ logic mật khẩu/đổi ca (đêm 19h-7h / ngày 7h-19h) trong lock.html.
 //
-// ĐỒNG BỘ ĐA THIẾT BỊ: lịch ca/mở-tạm/khoá-thủ-công được lưu CHÍNH ở Cloud (Firebase, đúng
-// databaseURL/token đã cấu hình cho CloudVault) tại khoá "_gate_config" — RIÊNG BIỆT với dữ liệu
-// chính của app (dashboard_data), không đụng chạm gì tới đồng bộ tồn kho/kiểm kê. localStorage chỉ
-// là BẢN SAO CỤC BỘ (đọc nhanh, dùng khi mất mạng) — mỗi lần vào trang đều kiểm tra lại với Cloud ở
-// NỀN, nếu phát hiện lệch (VD: máy khác vừa "Khoá trang ngay") sẽ điều hướng lại ngay lập tức.
+// ĐỒNG BỘ ĐA THIẾT BỊ: lịch ca/mở-tạm/khoá-thủ-công được lưu CHÍNH ở Cloud (Supabase, đúng
+// Project URL/anon key đã cấu hình cho CloudVault) tại dòng khoá "_gate_config" trong bảng
+// dashboard_kv — RIÊNG BIỆT với dữ liệu chính của app, không đụng chạm gì tới đồng bộ tồn kho/kiểm
+// kê. localStorage chỉ là BẢN SAO CỤC BỘ (đọc nhanh, dùng khi mất mạng) — mỗi lần vào trang đều
+// kiểm tra lại với Cloud ở NỀN, nếu phát hiện lệch (VD: máy khác vừa "Khoá trang ngay") sẽ điều
+// hướng lại ngay lập tức.
 function gateCloudCreds(){
   try{
     const url = localStorage.getItem('tn5_cloud_gas_url');
@@ -99,10 +98,11 @@ async function gateFetchCloudConfig(){
   const creds = gateCloudCreds();
   if(!creds) return null;
   try{
-    const url = creds.url.replace(/\/+$/, '') + '/dashboard_data/_gate_config.json?auth=' + encodeURIComponent(creds.token) + '&_ts=' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    const res = await fetch(url, { cache: 'no-store' });
+    const url = creds.url.replace(/\/+$/, '') + '/rest/v1/dashboard_kv?key=eq._gate_config&select=value&_ts=' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const res = await fetch(url, { headers: { apikey: creds.token, Authorization: 'Bearer ' + creds.token }, cache: 'no-store' });
     if(!res.ok) return null;
-    const data = await res.json();
+    const rows = await res.json();
+    const data = (Array.isArray(rows) && rows[0]) ? rows[0].value : null;
     return (data && typeof data === 'object') ? data : null;
   }catch(e){ return null; }
 }
@@ -118,9 +118,17 @@ async function gateWriteCloudConfig(partial){
   const creds = gateCloudCreds();
   if(!creds) return false;
   try{
-    const url = creds.url.replace(/\/+$/, '') + '/dashboard_data/_gate_config.json?auth=' + encodeURIComponent(creds.token);
-    const payload = Object.assign({ updatedAt: Date.now() }, partial);
-    const res = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), cache: 'no-store' });
+    // Supabase (PostgREST) không tự gộp field bên TRONG 1 cột jsonb như Firebase PATCH — phải đọc
+    // giá trị hiện có rồi tự gộp ở phía client trước khi ghi đè lại nguyên cột "value".
+    const current = (await gateFetchCloudConfig()) || {};
+    const payload = Object.assign({}, current, partial, { updatedAt: Date.now() });
+    const url = creds.url.replace(/\/+$/, '') + '/rest/v1/dashboard_kv?on_conflict=key';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { apikey: creds.token, Authorization: 'Bearer ' + creds.token, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+      body: JSON.stringify([{ key: '_gate_config', value: payload }]),
+      cache: 'no-store'
+    });
     return res.ok;
   }catch(e){ return false; }
 }
@@ -2015,16 +2023,13 @@ function gateBustedUrl(base){
       </div>
 
       <div class="settings-section">
-        <div class="settings-section-label">Cloud (Firebase Realtime Database) — chạy được cả trên Safari/iPhone</div>
+        <div class="settings-section-label">Cloud (Supabase) — chạy được cả trên Safari/iPhone</div>
         <div class="settings-cloud-row">
-          <input type="text" id="cv-url-input" placeholder="Database URL (...firebasedatabase.app/)" autocomplete="off">
-          <input type="password" id="cv-token-input" placeholder="Database secret" autocomplete="off" style="flex:0 0 130px;">
-        </div>
-        <div class="settings-cloud-row" style="margin-top:6px;">
-          <input type="text" id="cv-apikey-input" placeholder="Web API Key (để bật đồng bộ realtime tức thời)" autocomplete="off">
+          <input type="text" id="cv-url-input" placeholder="Project URL (...supabase.co)" autocomplete="off">
+          <input type="password" id="cv-token-input" placeholder="anon public key" autocomplete="off" style="flex:0 0 160px;">
         </div>
         <div class="settings-btn-row">
-          <button class="btn-update btn-ghost-outline" id="cv-connect-btn" type="button" title="Kết nối tới Firebase Realtime Database — nhập đủ Database URL + Database secret rồi bấm">Kết nối</button>
+          <button class="btn-update btn-ghost-outline" id="cv-connect-btn" type="button" title="Kết nối tới Supabase — nhập đủ Project URL + anon public key rồi bấm">Kết nối</button>
           <button class="btn-update btn-ghost-outline" id="cv-disconnect-btn" type="button" title="Ngắt kết nối Cloud trên trình duyệt này">Ngắt</button>
           <button class="btn-update btn-ghost-outline" id="cv-test-btn" type="button" title="Kiểm tra kết nối và báo rõ lỗi thật thay vì chỉ báo chung chung">Kiểm tra kết nối</button>
         </div>

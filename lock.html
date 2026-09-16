@@ -34,9 +34,10 @@ const LS_MANUAL_LOCK = 'tn5_gate_manual_lock'; // '1' = vừa bị khoá thủ c
 const GATE_PASSWORD = 'qqqwww';
 const OVERRIDE_MINUTES = 30; // mở tạm ngoài giờ có hiệu lực trong 30 phút kể từ lúc bấm
 
-// ĐỒNG BỘ ĐA THIẾT BỊ: lịch ca/mở-tạm/khoá-thủ-công lấy TỪ CLOUD (Firebase, đúng databaseURL/token
-// đã cấu hình cho CloudVault, lưu ở khoá riêng "_gate_config" — không đụng dữ liệu chính app) là
-// nguồn xác thực chính — localStorage chỉ là bản sao cục bộ (dùng khi mất mạng/chưa cấu hình Cloud).
+// ĐỒNG BỘ ĐA THIẾT BỊ: lịch ca/mở-tạm/khoá-thủ-công lấy TỪ CLOUD (Supabase, đúng Project URL/anon
+// key đã cấu hình cho CloudVault, lưu ở dòng khoá riêng "_gate_config" trong bảng dashboard_kv —
+// không đụng dữ liệu chính app) là nguồn xác thực chính — localStorage chỉ là bản sao cục bộ (dùng
+// khi mất mạng/chưa cấu hình Cloud).
 function gateCloudCreds(){
   try{
     const url = localStorage.getItem('tn5_cloud_gas_url');
@@ -48,10 +49,11 @@ async function gateFetchCloudConfig(){
   const creds = gateCloudCreds();
   if(!creds) return null;
   try{
-    const url = creds.url.replace(/\/+$/, '') + '/dashboard_data/_gate_config.json?auth=' + encodeURIComponent(creds.token) + '&_ts=' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    const res = await fetch(url, { cache: 'no-store' });
+    const url = creds.url.replace(/\/+$/, '') + '/rest/v1/dashboard_kv?key=eq._gate_config&select=value&_ts=' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const res = await fetch(url, { headers: { apikey: creds.token, Authorization: 'Bearer ' + creds.token }, cache: 'no-store' });
     if(!res.ok) return null;
-    const data = await res.json();
+    const rows = await res.json();
+    const data = (Array.isArray(rows) && rows[0]) ? rows[0].value : null;
     return (data && typeof data === 'object') ? data : null;
   }catch(e){ return null; }
 }
@@ -67,9 +69,17 @@ async function gateWriteCloudConfig(partial){
   const creds = gateCloudCreds();
   if(!creds) return false;
   try{
-    const url = creds.url.replace(/\/+$/, '') + '/dashboard_data/_gate_config.json?auth=' + encodeURIComponent(creds.token);
-    const payload = Object.assign({ updatedAt: Date.now() }, partial);
-    const res = await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), cache: 'no-store' });
+    // Supabase (PostgREST) không tự gộp field bên TRONG 1 cột jsonb như Firebase PATCH — phải đọc
+    // giá trị hiện có rồi tự gộp ở phía client trước khi ghi đè lại nguyên cột "value".
+    const current = (await gateFetchCloudConfig()) || {};
+    const payload = Object.assign({}, current, partial, { updatedAt: Date.now() });
+    const url = creds.url.replace(/\/+$/, '') + '/rest/v1/dashboard_kv?on_conflict=key';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { apikey: creds.token, Authorization: 'Bearer ' + creds.token, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+      body: JSON.stringify([{ key: '_gate_config', value: payload }]),
+      cache: 'no-store'
+    });
     return res.ok;
   }catch(e){ return false; }
 }
