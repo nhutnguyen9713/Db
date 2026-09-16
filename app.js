@@ -1550,8 +1550,9 @@ document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeSettin
 
 /* ---- Khoá bớt tab trên sidebar — mặc định chỉ hiện Picking/Tìm mã hàng/Kiểm tồn kho,
    nhập đúng mật khẩu trong Cài đặt mới hiện lại toàn bộ. Chỉ mang tính ẩn bớt cho gọn,
-   KHÔNG phải bảo mật thật sự (code vẫn chạy phía client). ---- */
-const APP_LOCK_PASSWORD = '123465';
+   KHÔNG phải bảo mật thật sự (code vẫn chạy phía client) — nhưng mật khẩu THẬT giờ không còn nằm
+   trong file này nữa, kiểm tra qua Edge Function "verify-password" trên Supabase (mật khẩu thật
+   lưu ở Secrets của Edge Function đó, chỉ server đọc được — xem verifyPasswordRemote()). ---- */
 const APP_LOCK_RESTRICTED_PAGES = ['overview', 'sodo3b', 'transaction', 'compare'];
 const STORAGE_KEY_APP_UNLOCKED = 'tn5_dashboard_app_unlocked_v1';
 function isAppUnlocked(){
@@ -1572,17 +1573,43 @@ function applyAppLockUI(){
     }
   }
 }
-function appLockTryUnlock(){
+// Kiểm tra mật khẩu qua Edge Function "verify-password" trên Supabase — mật khẩu thật lưu ở Secrets
+// của Edge Function đó (Project Settings -> Edge Functions -> Secrets), KHÔNG còn nằm trong app.js
+// hay lock.html nữa. "which" phân biệt 2 mật khẩu riêng (GATE_PASSWORD cho lock.html, APP_LOCK_PASSWORD
+// cho hàm này) — xem thêm chú thích trong supabase/functions/verify-password/index.ts.
+async function verifyPasswordRemote(which, password){
+  if(!CloudVault.url || !CloudVault.token) return { ok: false, reason: 'no-cloud' };
+  try{
+    const url = CloudVault.url.replace(/\/+$/, '') + '/functions/v1/verify-password';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { apikey: CloudVault.token, Authorization: 'Bearer ' + CloudVault.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ which, password }),
+      cache: 'no-store'
+    });
+    if(!res.ok) return { ok: false, reason: 'http' };
+    const data = await res.json();
+    return { ok: !!data.ok, reason: null };
+  }catch(e){ return { ok: false, reason: 'network' }; }
+}
+async function appLockTryUnlock(){
   const input = document.getElementById('app-lock-password-input');
   const statusEl = document.getElementById('app-lock-status');
   if(!input) return;
-  if(input.value === APP_LOCK_PASSWORD){
+  if(statusEl){ statusEl.textContent = 'Đang kiểm tra…'; statusEl.style.color = 'var(--muted-2)'; }
+  const result = await verifyPasswordRemote('applock', input.value);
+  if(result.ok){
     try{ localStorage.setItem(STORAGE_KEY_APP_UNLOCKED, '1'); }catch(e){}
     input.value = '';
     if(statusEl){ statusEl.textContent = '✓ Đã mở khoá — hiện đầy đủ các tab.'; statusEl.style.color = 'var(--teal)'; }
     applyAppLockUI();
   } else {
-    if(statusEl){ statusEl.textContent = '✗ Sai mật khẩu.'; statusEl.style.color = 'var(--red)'; }
+    if(statusEl){
+      statusEl.textContent = result.reason === 'no-cloud'
+        ? '✗ Chưa kết nối Cloud — không kiểm tra được mật khẩu.'
+        : (result.reason ? '✗ Không kiểm tra được mật khẩu (mất mạng?) — thử lại.' : '✗ Sai mật khẩu.');
+      statusEl.style.color = 'var(--red)';
+    }
   }
 }
 function appLockLockAgain(){

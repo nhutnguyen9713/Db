@@ -31,7 +31,6 @@
 const LS_SHIFT_MODE = 'tn5_shift_mode'; // 'night' (mặc định, 19h-7h) | 'day' (7h-19h)
 const LS_OVERRIDE_UNTIL = 'tn5_gate_override_until'; // mốc thời gian (ms) còn hiệu lực mở tạm ngoài giờ
 const LS_MANUAL_LOCK = 'tn5_gate_manual_lock'; // '1' = vừa bị khoá thủ công (nút 🔒 trong Cài đặt) — chặn NGAY dù đang trong giờ ca, tới khi mở lại bằng mật khẩu ở đây
-const GATE_PASSWORD = 'qqqwww';
 const OVERRIDE_MINUTES = 30; // mở tạm ngoài giờ có hiệu lực trong 30 phút kể từ lúc bấm
 
 // ĐỒNG BỘ ĐA THIẾT BỊ: lịch ca/mở-tạm/khoá-thủ-công lấy TỪ CLOUD (Supabase, đúng Project URL/anon
@@ -147,13 +146,42 @@ function renderLockScreen(){
   };
 }
 
-function gateTryUnlock(){
+// Mật khẩu thật KHÔNG còn nằm trong file này (hay bất kỳ file mã nguồn nào) nữa — kiểm tra qua Edge
+// Function "verify-password" trên Supabase (mật khẩu thật lưu ở Secrets của Edge Function đó, chỉ
+// server đọc được). Dùng LẠI đúng creds Cloud đã lưu (gateCloudCreds() — cùng "chìa khoá" đang dùng
+// để đồng bộ _gate_config) nên không cần cấu hình gì thêm; máy nào CHƯA từng kết nối Cloud (chưa lưu
+// creds trong localStorage) sẽ không kiểm tra được mật khẩu — cần kết nối Cloud ở trang chính trước.
+async function gateVerifyPasswordRemote(password){
+  const creds = gateCloudCreds();
+  if(!creds) return { ok: false, reason: 'no-cloud' };
+  try{
+    const url = creds.url.replace(/\/+$/, '') + '/functions/v1/verify-password';
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { apikey: creds.token, Authorization: 'Bearer ' + creds.token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ which: 'gate', password }),
+      cache: 'no-store'
+    });
+    if(!res.ok) return { ok: false, reason: 'http' };
+    const data = await res.json();
+    return { ok: !!data.ok, reason: null };
+  }catch(e){ return { ok: false, reason: 'network' }; }
+}
+async function gateTryUnlock(){
   const pass = document.getElementById('gate-pass-input').value;
-  if(pass !== GATE_PASSWORD){
-    document.getElementById('gate-msg').textContent = '✗ Sai mật khẩu.';
+  const msgEl = document.getElementById('gate-msg');
+  const btn = document.getElementById('gate-unlock-btn');
+  msgEl.textContent = 'Đang kiểm tra…';
+  if(btn) btn.disabled = true;
+  const result = await gateVerifyPasswordRemote(pass);
+  if(btn) btn.disabled = false;
+  if(!result.ok){
+    msgEl.textContent = result.reason === 'no-cloud'
+      ? '✗ Thiết bị này chưa từng kết nối Cloud — không kiểm tra được mật khẩu.'
+      : (result.reason ? '✗ Không kiểm tra được mật khẩu (mất mạng?) — thử lại.' : '✗ Sai mật khẩu.');
     return;
   }
-  document.getElementById('gate-msg').textContent = '';
+  msgEl.textContent = '';
   document.getElementById('gate-pass-wrap').style.display = 'none';
   document.getElementById('gate-actions').style.display = 'flex';
 }
