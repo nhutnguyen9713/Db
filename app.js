@@ -513,15 +513,15 @@ const CV_LS_TOKEN = 'tn5_cloud_gas_token';
 // key trạng thái = 1 dòng), tránh đụng nếu sau này project Supabase này còn dùng cho việc khác.
 const CV_TABLE = 'dashboard_kv';
 
-// Project URL + anon public key NHÚNG SẴN — CloudVault tự kết nối luôn bằng 2 giá trị này nếu thiết
-// bị chưa từng lưu creds riêng (localStorage rỗng), KHÔNG bắt người dùng phải mở Cài đặt tự dán rồi
-// bấm "Kết nối" nữa. 2 giá trị này KHÔNG phải bí mật (Supabase thiết kế vậy — an toàn miễn đã bật
-// đúng Row Level Security cho bảng dashboard_kv, xem chú thích CloudVault ngay dưới) — khác hẳn 2
-// mật khẩu thật (GATE_PASSWORD/APP_LOCK_PASSWORD), vẫn chỉ nằm trong Secrets của Edge Function
-// "verify-password", không có ở đây. Cũng dùng làm phương án dự phòng cho verifyPasswordRemote() bên
-// dưới và cho gateCloudCreds() ở lock.html (2 nơi đó có bản khai riêng, PHẢI khớp giá trị ở đây).
+// Project URL NHÚNG SẴN — KHÔNG kèm anon key (khác bản cũ) — chỉ để biết GỌI Edge Function
+// "verify-password" ĐI ĐÂU (xem verifyPasswordRemote()/CloudVault.quickSetup() bên dưới), bản thân
+// URL không dùng được để đọc/ghi dữ liệu Cloud (bảng dashboard_kv vẫn cần đúng anon key thật, không
+// nhúng ở đây). "which":"setup" trong verify-password (gõ đúng mật khẩu cấu hình nhanh) mới trả về
+// anon key thật — máy mới chỉ cần nhớ 1 mật khẩu ngắn, không cần tự dán Project URL + anon key dài.
+// KHÔNG dùng để tự động kết nối/đồng bộ dữ liệu chính (CloudVault.init() KHÔNG đọc hằng số này) — ai
+// có link trang này KHÔNG tự nhiên đọc/ghi được dữ liệu Cloud thật chỉ vì mở trang lên. Bản khai
+// riêng GIỐNG HỆT (PHẢI khớp) trong lock.html cũng theo đúng nguyên tắc này.
 const FALLBACK_SUPABASE_URL = 'https://uakevzgdtsyzjomviyhe.supabase.co';
-const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVha2V2emdkdHN5empvbXZpeWhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5MDQ4MzEsImV4cCI6MjEwNDQ4MDgzMX0.LI5xD6h7dOm2hC562SwweW6p3XL1uKmgD5Ss6IqNdt8';
 
 const CloudVault = {
   url: '',
@@ -578,15 +578,8 @@ const CloudVault = {
 
   init(){
     try{
-      const savedUrl = localStorage.getItem(CV_LS_URL);
-      const savedToken = localStorage.getItem(CV_LS_TOKEN);
-      // Chưa từng lưu creds riêng (thiết bị mới/lần đầu mở) -> tự dùng luôn Project URL + anon key
-      // nhúng sẵn (FALLBACK_SUPABASE_URL/ANON_KEY, KHÔNG phải bí mật) thay vì bắt mở Cài đặt tự dán
-      // rồi bấm "Kết nối". Lưu lại luôn để các nơi khác đọc thẳng localStorage (VD: khối chặn ca đầu
-      // index.html) cũng thấy ngay từ lần sau, không phải tính lại fallback mỗi lần mở trang.
-      this.url = savedUrl || FALLBACK_SUPABASE_URL;
-      this.token = savedToken || FALLBACK_SUPABASE_ANON_KEY;
-      if(!savedUrl || !savedToken) this.saveCreds();
+      this.url = localStorage.getItem(CV_LS_URL) || '';
+      this.token = localStorage.getItem(CV_LS_TOKEN) || '';
     }catch(e){}
     this._bindUi();
     const urlInput = document.getElementById('cv-url-input');
@@ -1161,9 +1154,34 @@ const CloudVault = {
     const connectBtn = document.getElementById('cv-connect-btn');
     const disconnectBtn = document.getElementById('cv-disconnect-btn');
     const testBtn = document.getElementById('cv-test-btn');
+    const quickSetupBtn = document.getElementById('cv-quicksetup-btn');
     if(connectBtn) connectBtn.addEventListener('click', () => this.connect());
     if(disconnectBtn) disconnectBtn.addEventListener('click', () => this.disconnect());
     if(testBtn) testBtn.addEventListener('click', () => this.testConnection());
+    if(quickSetupBtn) quickSetupBtn.addEventListener('click', () => this.quickSetup());
+  },
+
+  // Máy MỚI: gõ 1 mật khẩu ngắn (khác GATE_PASSWORD/APP_LOCK_PASSWORD, xem SETUP_PASSWORD trong Edge
+  // Function "verify-password") thay vì tự dán Project URL + anon public key dài — server chỉ trả về
+  // 2 giá trị đó khi gõ ĐÚNG mật khẩu này (xem cloudSetupFetchConfig()). Sau khi có, tự điền vào 2 ô
+  // cv-url-input/cv-token-input rồi gọi lại đúng connect() sẵn có — không viết lại logic kết nối.
+  async quickSetup(){
+    const input = document.getElementById('cv-quicksetup-input');
+    if(!input) return;
+    const password = input.value;
+    if(!password){ this._setStatus('✗ Nhập mật khẩu cấu hình nhanh trước.', 'err'); return; }
+    this._setStatus('Đang lấy cấu hình…', '');
+    const result = await cloudSetupFetchConfig(password);
+    if(!result.ok){
+      this._setStatus(result.reason ? ('✗ Lỗi lấy cấu hình — ' + (result.detail || result.reason)) : '✗ Sai mật khẩu cấu hình nhanh.', 'err');
+      return;
+    }
+    const urlInput = document.getElementById('cv-url-input');
+    const tokenInput = document.getElementById('cv-token-input');
+    if(urlInput) urlInput.value = result.url;
+    if(tokenInput) tokenInput.value = result.anonKey;
+    input.value = '';
+    await this.connect();
   },
 
   _setStatus(msg, kind){
@@ -1591,29 +1609,41 @@ function applyAppLockUI(){
   }
 }
 
-// Kiểm tra mật khẩu qua Edge Function "verify-password" trên Supabase — mật khẩu thật lưu ở Secrets
-// của Edge Function đó (Project Settings -> Edge Functions -> Secrets), KHÔNG còn nằm trong app.js
-// hay lock.html nữa. "which" phân biệt 2 mật khẩu riêng (GATE_PASSWORD cho lock.html, APP_LOCK_PASSWORD
-// cho hàm này) — xem thêm chú thích trong supabase/functions/verify-password/index.ts.
-async function verifyPasswordRemote(which, password){
+// Gọi Edge Function "verify-password" trên Supabase — dùng chung cho gate/applock/setup, KHÁC NHAU
+// ở "which" gửi lên và ở cách đọc kết quả trả về (xem 2 hàm ngay dưới). Không có anon key thật nhúng
+// sẵn để gửi (xem chú thích FALLBACK_SUPABASE_URL) — chỉ gửi apikey/Authorization khi CloudVault ĐÃ
+// kết nối thật (this.token có giá trị thật); JWT verification của function này đã tắt (xem hướng dẫn
+// deploy) nên không bắt buộc phải có 2 header đó mới gọi được.
+async function callVerifyPasswordFn(which, password){
   const url0 = CloudVault.url || FALLBACK_SUPABASE_URL;
-  const token0 = CloudVault.token || FALLBACK_SUPABASE_ANON_KEY;
   try{
+    const headers = { 'Content-Type': 'application/json' };
+    if(CloudVault.token){ headers.apikey = CloudVault.token; headers.Authorization = 'Bearer ' + CloudVault.token; }
     const url = url0.replace(/\/+$/, '') + '/functions/v1/verify-password';
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { apikey: token0, Authorization: 'Bearer ' + token0, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ which, password }),
-      cache: 'no-store'
-    });
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ which, password }), cache: 'no-store' });
     if(!res.ok){
       let bodyText = '';
       try{ bodyText = (await res.text()).slice(0, 200); }catch(e2){}
       return { ok: false, reason: 'http', detail: 'HTTP ' + res.status + (bodyText ? ': ' + bodyText : '') };
     }
-    const data = await res.json();
-    return { ok: !!data.ok, reason: null };
+    return { ok: true, data: await res.json() };
   }catch(e){ return { ok: false, reason: 'network', detail: String((e && e.message) || e) }; }
+}
+// Kiểm tra mật khẩu (gate/applock) — mật khẩu thật lưu ở Secrets của Edge Function đó (Project
+// Settings -> Edge Functions -> Secrets), KHÔNG còn nằm trong app.js hay lock.html nữa.
+async function verifyPasswordRemote(which, password){
+  const res = await callVerifyPasswordFn(which, password);
+  if(!res.ok) return res;
+  return { ok: !!res.data.ok, reason: null };
+}
+// Mật khẩu CẤU HÌNH NHANH (setup) — gõ đúng 1 mật khẩu ngắn để server trả về Project URL + anon key
+// THẬT (đọc từ SUPABASE_URL/SUPABASE_ANON_KEY tự có sẵn trong Edge Function, không nhúng ở đây) —
+// dùng cho nút "⚡ Cấu hình nhanh" trong CloudVault.quickSetup(), thay vì phải tự dán URL/anon key dài.
+async function cloudSetupFetchConfig(password){
+  const res = await callVerifyPasswordFn('setup', password);
+  if(!res.ok) return res;
+  if(!res.data.ok || !res.data.url || !res.data.anonKey) return { ok: false, reason: null };
+  return { ok: true, url: res.data.url, anonKey: res.data.anonKey };
 }
 async function appLockTryUnlock(){
   const input = document.getElementById('app-lock-password-input');
@@ -1628,9 +1658,7 @@ async function appLockTryUnlock(){
     applyAppLockUI();
   } else {
     if(statusEl){
-      statusEl.textContent = result.reason === 'no-cloud'
-        ? '✗ Chưa kết nối Cloud — không kiểm tra được mật khẩu.'
-        : (result.reason ? ('✗ Lỗi kiểm tra mật khẩu — ' + (result.detail || result.reason)) : '✗ Sai mật khẩu.');
+      statusEl.textContent = result.reason ? ('✗ Lỗi kiểm tra mật khẩu — ' + (result.detail || result.reason)) : '✗ Sai mật khẩu.';
       statusEl.style.color = 'var(--red)';
     }
   }

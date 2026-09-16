@@ -33,15 +33,13 @@ const LS_OVERRIDE_UNTIL = 'tn5_gate_override_until'; // mốc thời gian (ms) c
 const LS_MANUAL_LOCK = 'tn5_gate_manual_lock'; // '1' = vừa bị khoá thủ công (nút 🔒 trong Cài đặt) — chặn NGAY dù đang trong giờ ca, tới khi mở lại bằng mật khẩu ở đây
 const OVERRIDE_MINUTES = 30; // mở tạm ngoài giờ có hiệu lực trong 30 phút kể từ lúc bấm
 
-// Project URL + anon public key CỐ ĐỊNH — dùng làm PHƯƠNG ÁN DỰ PHÒNG khi thiết bị này CHƯA từng
-// bấm "Kết nối" Cloud trong app (localStorage rỗng). 2 giá trị này KHÔNG phải bí mật (Supabase thiết
-// kế vậy — an toàn miễn đã bật đúng Row Level Security cho bảng dashboard_kv, xem CloudVault trong
-// app.js), khác hẳn mật khẩu thật (đã chuyển hẳn sang Secrets của Edge Function "verify-password",
-// không còn ở đây). LỖI THẬT ĐÃ GẶP trước khi thêm phương án dự phòng này: máy nào chưa từng "Kết
-// nối" mà đang bị chặn ở trang này thì KẸT HẲN — không gọi được Edge Function để kiểm mật khẩu, không
-// có cách nào vào lại app để tự cấu hình Cloud (gà-và-trứng).
+// Project URL NHÚNG SẴN — KHÔNG kèm anon key — CHỈ để biết GỌI Edge Function "verify-password" ĐI
+// ĐÂU (xem gateVerifyPasswordRemote() bên dưới); bản thân URL không dùng được để đọc/ghi dữ liệu
+// Cloud (không dùng cho gateCloudCreds()/đồng bộ _gate_config — 2 việc đó vẫn PHẢI thiết bị này từng
+// "Kết nối" Cloud thật sự trong app.js mới chạy được). Ai có link trang này KHÔNG tự nhiên đọc/ghi
+// được dữ liệu Cloud thật chỉ vì mở trang lên — chỉ gọi được đúng 1 việc là hỏi server "mật khẩu này
+// đúng hay sai", không hơn. Bản khai riêng GIỐNG HỆT (PHẢI khớp) trong app.js.
 const FALLBACK_SUPABASE_URL = 'https://uakevzgdtsyzjomviyhe.supabase.co';
-const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVha2V2emdkdHN5empvbXZpeWhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5MDQ4MzEsImV4cCI6MjEwNDQ4MDgzMX0.LI5xD6h7dOm2hC562SwweW6p3XL1uKmgD5Ss6IqNdt8';
 
 // ĐỒNG BỘ ĐA THIẾT BỊ: lịch ca/mở-tạm/khoá-thủ-công lấy TỪ CLOUD (Supabase, đúng Project URL/anon
 // key đã cấu hình cho CloudVault, lưu ở dòng khoá riêng "_gate_config" trong bảng dashboard_kv —
@@ -49,12 +47,10 @@ const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3M
 // khi mất mạng/chưa cấu hình Cloud).
 function gateCloudCreds(){
   try{
-    const url = localStorage.getItem('tn5_cloud_gas_url') || FALLBACK_SUPABASE_URL;
-    const token = localStorage.getItem('tn5_cloud_gas_token') || FALLBACK_SUPABASE_ANON_KEY;
+    const url = localStorage.getItem('tn5_cloud_gas_url');
+    const token = localStorage.getItem('tn5_cloud_gas_token');
     return (url && token) ? { url, token } : null;
-  }catch(e){
-    return (FALLBACK_SUPABASE_URL && FALLBACK_SUPABASE_ANON_KEY) ? { url: FALLBACK_SUPABASE_URL, token: FALLBACK_SUPABASE_ANON_KEY } : null;
-  }
+  }catch(e){ return null; }
 }
 async function gateFetchCloudConfig(){
   const creds = gateCloudCreds();
@@ -160,17 +156,16 @@ function renderLockScreen(){
 
 // Mật khẩu thật KHÔNG còn nằm trong file này (hay bất kỳ file mã nguồn nào) nữa — kiểm tra qua Edge
 // Function "verify-password" trên Supabase (mật khẩu thật lưu ở Secrets của Edge Function đó, chỉ
-// server đọc được). Dùng LẠI đúng creds Cloud đã lưu (gateCloudCreds() — cùng "chìa khoá" đang dùng
-// để đồng bộ _gate_config) nên không cần cấu hình gì thêm; máy nào CHƯA từng kết nối Cloud (chưa lưu
-// creds trong localStorage) sẽ không kiểm tra được mật khẩu — cần kết nối Cloud ở trang chính trước.
+// server đọc được). Dùng FALLBACK_SUPABASE_URL (nhúng sẵn, KHÔNG phải creds Cloud thật của thiết bị,
+// không kèm anon key) — CỐ Ý không dùng gateCloudCreds(), để việc kiểm mật khẩu luôn gọi được kể cả
+// trên thiết bị chưa từng "Kết nối" Cloud thật, mà KHÔNG vô tình cho phép đọc/ghi dữ liệu Cloud nào
+// khác. Function này đã tắt "Verify JWT" nên không cần apikey/Authorization mới gọi được.
 async function gateVerifyPasswordRemote(password){
-  const creds = gateCloudCreds();
-  if(!creds) return { ok: false, reason: 'no-cloud' };
   try{
-    const url = creds.url.replace(/\/+$/, '') + '/functions/v1/verify-password';
+    const url = FALLBACK_SUPABASE_URL.replace(/\/+$/, '') + '/functions/v1/verify-password';
     const res = await fetch(url, {
       method: 'POST',
-      headers: { apikey: creds.token, Authorization: 'Bearer ' + creds.token, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ which: 'gate', password }),
       cache: 'no-store'
     });
@@ -192,9 +187,9 @@ async function gateTryUnlock(){
   const result = await gateVerifyPasswordRemote(pass);
   if(btn) btn.disabled = false;
   if(!result.ok){
-    msgEl.textContent = result.reason === 'no-cloud'
-      ? '✗ Thiết bị này chưa từng kết nối Cloud — không kiểm tra được mật khẩu.'
-      : (result.reason ? ('✗ Lỗi kiểm tra mật khẩu — ' + (result.detail || result.reason)) : '✗ Sai mật khẩu.');
+    msgEl.textContent = result.reason
+      ? ('✗ Lỗi kiểm tra mật khẩu — ' + (result.detail || result.reason))
+      : '✗ Sai mật khẩu.';
     return;
   }
   msgEl.textContent = '';

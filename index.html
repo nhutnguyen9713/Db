@@ -2027,6 +2027,14 @@ function gateBustedUrl(base){
 
       <div class="settings-section">
         <div class="settings-section-label">Cloud (Supabase) — chạy được cả trên Safari/iPhone</div>
+        <div class="desc" style="margin-bottom:8px;">Máy mới: gõ mật khẩu cấu hình nhanh (không cần nhớ Project URL/anon key dài) rồi bấm "⚡ Cấu hình nhanh" — tự điền và kết nối luôn.</div>
+        <div class="settings-cloud-row">
+          <input type="password" id="cv-quicksetup-input" placeholder="Mật khẩu cấu hình nhanh" autocomplete="off" style="flex:1;">
+        </div>
+        <div class="settings-btn-row">
+          <button class="btn-update btn-ghost-outline" id="cv-quicksetup-btn" type="button" title="Gõ đúng mật khẩu cấu hình để tự điền Project URL + anon key rồi kết nối luôn, không cần dán tay">⚡ Cấu hình nhanh</button>
+        </div>
+        <div class="desc" style="margin:10px 0 8px;">Hoặc tự dán Project URL + anon public key nếu biết sẵn:</div>
         <div class="settings-cloud-row">
           <input type="text" id="cv-url-input" placeholder="Project URL (...supabase.co)" autocomplete="off">
           <input type="password" id="cv-token-input" placeholder="anon public key" autocomplete="off" style="flex:0 0 160px;">
