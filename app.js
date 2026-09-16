@@ -513,6 +513,16 @@ const CV_LS_TOKEN = 'tn5_cloud_gas_token';
 // key trạng thái = 1 dòng), tránh đụng nếu sau này project Supabase này còn dùng cho việc khác.
 const CV_TABLE = 'dashboard_kv';
 
+// Project URL + anon public key NHÚNG SẴN — CloudVault tự kết nối luôn bằng 2 giá trị này nếu thiết
+// bị chưa từng lưu creds riêng (localStorage rỗng), KHÔNG bắt người dùng phải mở Cài đặt tự dán rồi
+// bấm "Kết nối" nữa. 2 giá trị này KHÔNG phải bí mật (Supabase thiết kế vậy — an toàn miễn đã bật
+// đúng Row Level Security cho bảng dashboard_kv, xem chú thích CloudVault ngay dưới) — khác hẳn 2
+// mật khẩu thật (GATE_PASSWORD/APP_LOCK_PASSWORD), vẫn chỉ nằm trong Secrets của Edge Function
+// "verify-password", không có ở đây. Cũng dùng làm phương án dự phòng cho verifyPasswordRemote() bên
+// dưới và cho gateCloudCreds() ở lock.html (2 nơi đó có bản khai riêng, PHẢI khớp giá trị ở đây).
+const FALLBACK_SUPABASE_URL = 'https://uakevzgdtsyzjomviyhe.supabase.co';
+const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVha2V2emdkdHN5empvbXZpeWhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5MDQ4MzEsImV4cCI6MjEwNDQ4MDgzMX0.LI5xD6h7dOm2hC562SwweW6p3XL1uKmgD5Ss6IqNdt8';
+
 const CloudVault = {
   url: '',
   token: '', // Supabase anon public key (giữ tên "token" để không phải sửa lại mọi nơi khác đang đọc CloudVault.token)
@@ -568,8 +578,15 @@ const CloudVault = {
 
   init(){
     try{
-      this.url = localStorage.getItem(CV_LS_URL) || '';
-      this.token = localStorage.getItem(CV_LS_TOKEN) || '';
+      const savedUrl = localStorage.getItem(CV_LS_URL);
+      const savedToken = localStorage.getItem(CV_LS_TOKEN);
+      // Chưa từng lưu creds riêng (thiết bị mới/lần đầu mở) -> tự dùng luôn Project URL + anon key
+      // nhúng sẵn (FALLBACK_SUPABASE_URL/ANON_KEY, KHÔNG phải bí mật) thay vì bắt mở Cài đặt tự dán
+      // rồi bấm "Kết nối". Lưu lại luôn để các nơi khác đọc thẳng localStorage (VD: khối chặn ca đầu
+      // index.html) cũng thấy ngay từ lần sau, không phải tính lại fallback mỗi lần mở trang.
+      this.url = savedUrl || FALLBACK_SUPABASE_URL;
+      this.token = savedToken || FALLBACK_SUPABASE_ANON_KEY;
+      if(!savedUrl || !savedToken) this.saveCreds();
     }catch(e){}
     this._bindUi();
     const urlInput = document.getElementById('cv-url-input');
@@ -1573,13 +1590,6 @@ function applyAppLockUI(){
     }
   }
 }
-// Project URL + anon public key CỐ ĐỊNH — dùng làm PHƯƠNG ÁN DỰ PHÒNG khi thiết bị này CHƯA từng
-// bấm "Kết nối" Cloud (CloudVault.url/token còn rỗng). 2 giá trị này KHÔNG phải bí mật (xem chú
-// thích CloudVault ở đầu file) — GIỐNG HỆT bản dự phòng trong lock.html (phải khớp nhau, cùng 1
-// project Supabase). Không dùng để tự động đăng nhập/đồng bộ dữ liệu chính, CHỈ để gọi được Edge
-// Function "verify-password" (mật khẩu thật nằm ở Secrets của Edge Function, không phải ở đây).
-const FALLBACK_SUPABASE_URL = 'https://uakevzgdtsyzjomviyhe.supabase.co';
-const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVha2V2emdkdHN5empvbXZpeWhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5MDQ4MzEsImV4cCI6MjEwNDQ4MDgzMX0.LI5xD6h7dOm2hC562SwweW6p3XL1uKmgD5Ss6IqNdt8';
 
 // Kiểm tra mật khẩu qua Edge Function "verify-password" trên Supabase — mật khẩu thật lưu ở Secrets
 // của Edge Function đó (Project Settings -> Edge Functions -> Secrets), KHÔNG còn nằm trong app.js
