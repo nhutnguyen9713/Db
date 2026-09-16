@@ -33,16 +33,28 @@ const LS_OVERRIDE_UNTIL = 'tn5_gate_override_until'; // mốc thời gian (ms) c
 const LS_MANUAL_LOCK = 'tn5_gate_manual_lock'; // '1' = vừa bị khoá thủ công (nút 🔒 trong Cài đặt) — chặn NGAY dù đang trong giờ ca, tới khi mở lại bằng mật khẩu ở đây
 const OVERRIDE_MINUTES = 30; // mở tạm ngoài giờ có hiệu lực trong 30 phút kể từ lúc bấm
 
+// Project URL + anon public key CỐ ĐỊNH — dùng làm PHƯƠNG ÁN DỰ PHÒNG khi thiết bị này CHƯA từng
+// bấm "Kết nối" Cloud trong app (localStorage rỗng). 2 giá trị này KHÔNG phải bí mật (Supabase thiết
+// kế vậy — an toàn miễn đã bật đúng Row Level Security cho bảng dashboard_kv, xem CloudVault trong
+// app.js), khác hẳn mật khẩu thật (đã chuyển hẳn sang Secrets của Edge Function "verify-password",
+// không còn ở đây). LỖI THẬT ĐÃ GẶP trước khi thêm phương án dự phòng này: máy nào chưa từng "Kết
+// nối" mà đang bị chặn ở trang này thì KẸT HẲN — không gọi được Edge Function để kiểm mật khẩu, không
+// có cách nào vào lại app để tự cấu hình Cloud (gà-và-trứng).
+const FALLBACK_SUPABASE_URL = 'https://uakevzgdtsyzjomviyhe.supabase.co';
+const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVha2V2emdkdHN5empvbXZpeWhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5MDQ4MzEsImV4cCI6MjEwNDQ4MDgzMX0.LI5xD6h7dOm2hC562SwweW6p3XL1uKmgD5Ss6IqNdt8';
+
 // ĐỒNG BỘ ĐA THIẾT BỊ: lịch ca/mở-tạm/khoá-thủ-công lấy TỪ CLOUD (Supabase, đúng Project URL/anon
 // key đã cấu hình cho CloudVault, lưu ở dòng khoá riêng "_gate_config" trong bảng dashboard_kv —
 // không đụng dữ liệu chính app) là nguồn xác thực chính — localStorage chỉ là bản sao cục bộ (dùng
 // khi mất mạng/chưa cấu hình Cloud).
 function gateCloudCreds(){
   try{
-    const url = localStorage.getItem('tn5_cloud_gas_url');
-    const token = localStorage.getItem('tn5_cloud_gas_token');
+    const url = localStorage.getItem('tn5_cloud_gas_url') || FALLBACK_SUPABASE_URL;
+    const token = localStorage.getItem('tn5_cloud_gas_token') || FALLBACK_SUPABASE_ANON_KEY;
     return (url && token) ? { url, token } : null;
-  }catch(e){ return null; }
+  }catch(e){
+    return (FALLBACK_SUPABASE_URL && FALLBACK_SUPABASE_ANON_KEY) ? { url: FALLBACK_SUPABASE_URL, token: FALLBACK_SUPABASE_ANON_KEY } : null;
+  }
 }
 async function gateFetchCloudConfig(){
   const creds = gateCloudCreds();

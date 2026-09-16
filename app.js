@@ -1573,17 +1573,26 @@ function applyAppLockUI(){
     }
   }
 }
+// Project URL + anon public key CỐ ĐỊNH — dùng làm PHƯƠNG ÁN DỰ PHÒNG khi thiết bị này CHƯA từng
+// bấm "Kết nối" Cloud (CloudVault.url/token còn rỗng). 2 giá trị này KHÔNG phải bí mật (xem chú
+// thích CloudVault ở đầu file) — GIỐNG HỆT bản dự phòng trong lock.html (phải khớp nhau, cùng 1
+// project Supabase). Không dùng để tự động đăng nhập/đồng bộ dữ liệu chính, CHỈ để gọi được Edge
+// Function "verify-password" (mật khẩu thật nằm ở Secrets của Edge Function, không phải ở đây).
+const FALLBACK_SUPABASE_URL = 'https://uakevzgdtsyzjomviyhe.supabase.co';
+const FALLBACK_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVha2V2emdkdHN5empvbXZpeWhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5MDQ4MzEsImV4cCI6MjEwNDQ4MDgzMX0.LI5xD6h7dOm2hC562SwweW6p3XL1uKmgD5Ss6IqNdt8';
+
 // Kiểm tra mật khẩu qua Edge Function "verify-password" trên Supabase — mật khẩu thật lưu ở Secrets
 // của Edge Function đó (Project Settings -> Edge Functions -> Secrets), KHÔNG còn nằm trong app.js
 // hay lock.html nữa. "which" phân biệt 2 mật khẩu riêng (GATE_PASSWORD cho lock.html, APP_LOCK_PASSWORD
 // cho hàm này) — xem thêm chú thích trong supabase/functions/verify-password/index.ts.
 async function verifyPasswordRemote(which, password){
-  if(!CloudVault.url || !CloudVault.token) return { ok: false, reason: 'no-cloud' };
+  const url0 = CloudVault.url || FALLBACK_SUPABASE_URL;
+  const token0 = CloudVault.token || FALLBACK_SUPABASE_ANON_KEY;
   try{
-    const url = CloudVault.url.replace(/\/+$/, '') + '/functions/v1/verify-password';
+    const url = url0.replace(/\/+$/, '') + '/functions/v1/verify-password';
     const res = await fetch(url, {
       method: 'POST',
-      headers: { apikey: CloudVault.token, Authorization: 'Bearer ' + CloudVault.token, 'Content-Type': 'application/json' },
+      headers: { apikey: token0, Authorization: 'Bearer ' + token0, 'Content-Type': 'application/json' },
       body: JSON.stringify({ which, password }),
       cache: 'no-store'
     });
