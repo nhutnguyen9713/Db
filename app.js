@@ -3186,12 +3186,15 @@ let _planStatusLastFetchAt = 0;
 let _planStatusRetryTimer = null;
 let _planStatusRetryCount = 0;
 let _planStatusGaveUp = false; // hết số lần thử mà vẫn chưa có creds -> chắc thật là chưa kết nối Cloud
+let _planStatusStaleRetryTimer = null;
+let _planStatusStaleRetryCount = 0;
 const PLAN_STATUS_MIN_REFRESH_MS = 800;
 const PLAN_STATUS_MAX_RETRIES = 15; // ~15 lần x 500ms = 7.5s — đủ chờ CloudVault.init() (đọc creds từ
 // localStorage) chạy xong, vì LỖI THẬT ĐÃ GẶP: renderDashboard() (vẽ lần đầu lúc mở lại trang, khôi
 // phục dữ liệu đã lưu) chạy TRƯỚC CloudVault.init() (nằm ở cuối app.js) nên lần gọi đầu tiên luôn thấy
 // CloudVault.url/token còn rỗng -> bỏ qua hẳn, không tự thử lại -> đứng mãi ở "Đang tải…" tới khi
 // người dùng tự bấm "Kết nối" (nơi khác duy nhất gọi lại renderPlanPanel() sau khi đã có creds).
+const PLAN_STATUS_STALE_MAX_RETRIES = 10; // ~10 lần x 1.2s = 12s
 
 function schedulePlanStatusRefresh(){
   if(_planStatusFetchInFlight) return;
@@ -3224,6 +3227,28 @@ function schedulePlanStatusRefresh(){
       _planStatusCache = data;
       _planStatusLastFetchAt = Date.now();
       if(changed && typeof renderPlanPanel === 'function') renderPlanPanel();
+
+      // Phát hiện "hụt nhịp": Edge Function đọc dữ liệu Cloud, nhưng Plan vừa xoá/tải lên ở máy này
+      // có thể CHƯA lưu xong lên Cloud (lưu chạy debounce/nền — xem schedulePlanAutoSaveToCloud())
+      // đúng lúc request này bắn đi -> server trả bản CŨ (thiếu/dư 1 loại Plan so với máy này đang
+      // hiện). LỖI THẬT ĐÃ GẶP: xoá hết Plan rồi tải Plan mới lên ngay, bảng so sánh đứng mãi (cache
+      // đã "có" nên không tự thử lại nữa dù dữ liệu bên trong sai/thiếu). Tự thử lại vài lần nếu danh
+      // sách loại Plan server trả về chưa khớp danh sách đang tải ở máy này.
+      const localLoadedTypes = PLAN_TYPES.filter(t => planData[t]);
+      const serverLoadedTypes = (data.combined && data.combined.loadedTypes) || [];
+      const isStale = localLoadedTypes.length !== serverLoadedTypes.length ||
+        localLoadedTypes.some(t => !serverLoadedTypes.includes(t));
+      if(isStale && _planStatusStaleRetryCount < PLAN_STATUS_STALE_MAX_RETRIES){
+        _planStatusStaleRetryCount++;
+        if(_planStatusStaleRetryTimer) clearTimeout(_planStatusStaleRetryTimer);
+        _planStatusStaleRetryTimer = setTimeout(() => {
+          _planStatusStaleRetryTimer = null;
+          _planStatusLastFetchAt = 0; // bỏ qua debounce, ép thử lại ngay
+          schedulePlanStatusRefresh();
+        }, 1200);
+      } else {
+        _planStatusStaleRetryCount = 0;
+      }
     }catch(e){
       console.warn('Không tải được trạng thái Plan từ máy chủ (plan-status):', e);
     }finally{
