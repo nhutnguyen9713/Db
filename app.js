@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.26';
+const APP_VERSION = 'v2.27';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5304,10 +5304,11 @@ async function exportCombinedPlanToExcel(){
   const itemHeaders = ['Item No.', 'Cust PO', ...khoHeaderLabels, 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Remark'];
   // Remark: báo hàng tồn kho 3A của mã này thuộc dạng vị trí đặc biệt nào KÈM SL — 2 kiểu locator
   // riêng của kho 3A: "3AFG-M1xx"/"3AFG-M2xx" (số ngay sau M là tầng, VD 3AFG-M101 -> lầu M1) ghi
-  // "Hàng trên lầu M#: xx pcs"; "3A-##-##" (2 nhóm số, không có "FG-M") là hàng Rack -> ghi "Hàng
-  // Rack: xx pcs". Có đủ cả 3 (M1/M2/Rack) thì liệt kê đủ cả 3, mỗi dòng SL riêng (không gộp lại).
-  // Dùng buildItemLocatorDetail() — CÙNG hàm đang dùng cho sheet "Chi tiết vị trí" — lọc đúng theo PO
-  // (hoặc mọi PO nếu anyPO) khớp với cách tính SL kho 3A đang hiển thị ở cột 3A của chính dòng này.
+  // "Hàng trên lầu M#: xx pcs"; "3A-<Chữ><Số>-T<Số>" (VD 3A-A17-T5, 3A-D1-T5 — chữ số dãy/kệ rồi tới
+  // "T" + số tầng kệ, KHÔNG phải 2 nhóm số như tưởng lúc đầu — đã sửa lại đúng theo dữ liệu thật) là
+  // hàng Rack -> ghi "Hàng Rack: xx pcs". Có đủ cả 3 (M1/M2/Rack) thì liệt kê đủ cả 3, mỗi dòng SL
+  // riêng (không gộp lại). Dùng buildItemLocatorDetail() — CÙNG hàm đang dùng cho sheet "Chi tiết vị
+  // trí" — lọc đúng theo PO (hoặc mọi PO nếu anyPO) khớp với cách tính SL kho 3A ở cột 3A của dòng này.
   const computeKho3ARemark = (r) => {
     const locs = buildItemLocatorDetail(r.item, r.anyPO ? null : r.custpo, true);
     const floorQty = new Map(); // 'M1'|'M2' -> tổng SL
@@ -5321,7 +5322,7 @@ async function exportCombinedPlanToExcel(){
         floorQty.set(key, (floorQty.get(key) || 0) + (l.qty || 0));
         return;
       }
-      if(/^3A-\d{2}-\d{2}/i.test(loc)) rackQty += (l.qty || 0);
+      if(/^3A-[A-Z]\d+-T\d+/i.test(loc)) rackQty += (l.qty || 0);
     });
     const parts = [];
     [...floorQty.keys()].sort().forEach(k => parts.push(`Hàng trên lầu ${k}: ${fmt(floorQty.get(k))} pcs`));
