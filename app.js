@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.23';
+const APP_VERSION = 'v2.24';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5301,7 +5301,28 @@ async function exportCombinedPlanToExcel(){
   const ws1 = workbook.addWorksheet('Tong hop 3 Plan'.slice(0,31));
   const contHeaders = ['Loại Plan', 'Ngày Load', 'Giờ Plan', 'SL trong Cont', 'Invoice', 'CSR'];
   const khoHeaderLabels = khoOrder.map(k => k.replace('Kho ', ''));
-  const itemHeaders = ['Item No.', 'Cust PO', ...khoHeaderLabels, 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Nhóm'];
+  const itemHeaders = ['Item No.', 'Cust PO', ...khoHeaderLabels, 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Remark'];
+  // Remark: báo hàng tồn kho 3A của mã này có nằm ở vị trí "trên lầu" hay không — 2 kiểu locator
+  // riêng của kho 3A: "3AFG-M1xx"/"3AFG-M2xx" (số ngay sau M là tầng, VD 3AFG-M101 -> lầu M1) ghi rõ
+  // đúng tầng; "3A-##-##" (2 nhóm số, không có "FG-M") chỉ ghi chung "Hàng trên lầu" (không rõ tầng).
+  // Dùng buildItemLocatorDetail() — CÙNG hàm đang dùng cho sheet "Chi tiết vị trí" — lọc đúng theo PO
+  // (hoặc mọi PO nếu anyPO) khớp với cách tính SL kho 3A đang hiển thị ở cột 3A của chính dòng này.
+  const computeKho3ARemark = (r) => {
+    const locs = buildItemLocatorDetail(r.item, r.anyPO ? null : r.custpo, true);
+    const floors = new Set();
+    let hasGeneric = false;
+    locs.forEach(l => {
+      if(l.kho !== 'Kho 3A') return;
+      const loc = String(l.locator || '');
+      const mFloor = loc.match(/^3AFG-M([12])/i);
+      if(mFloor){ floors.add('M' + mFloor[1]); return; }
+      if(/^3A-\d{2}-\d{2}/i.test(loc)) hasGeneric = true;
+    });
+    const parts = [];
+    if(floors.size) parts.push('Hàng trên lầu ' + [...floors].sort().join(', '));
+    if(hasGeneric) parts.push('Hàng trên lầu');
+    return parts.join('; ');
+  };
   const headers1 = [...contHeaders, ...itemHeaders];
   const nCols1 = headers1.length;
   // Cột theo từng kho (2B/3A/3B/DG1...) + "Tổng tồn (PASS)" mỗi cột 1 màu nền RIÊNG (không đổi theo
@@ -5356,7 +5377,7 @@ async function exportCombinedPlanToExcel(){
       r.anyPO ? 'Bất kỳ PO' : r.custpo + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
       ...(r.khoQtys || []), r.totalOnHand, r.pass, r.ng, r.diff,
       (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu',
-      r.isSpp ? (r.manualOk ? 'SPP - đã tick Đủ hàng tay' : 'SPP') : ''
+      computeKho3ARemark(r)
     ];
     const rowValues = [...contValues, ...itemValues];
     rowValues.forEach((v,i) => trackWidth1(i, v));
@@ -5379,7 +5400,7 @@ async function exportCombinedPlanToExcel(){
   });
   if(ws1.lastRow) ws1.lastRow.eachCell(cell => { cell.border = Object.assign({}, cell.border, { bottom: thick }); });
 
-  const colCapsByHeader1 = { 'Item No.': [14,16], 'Cust PO': [16,26], 'Nhóm': [10,26], 'Invoice': [10,14], 'CSR': [10,14] };
+  const colCapsByHeader1 = { 'Item No.': [14,16], 'Cust PO': [16,26], 'Remark': [12,28], 'Invoice': [10,14], 'CSR': [10,14] };
   headers1.forEach((h,i) => {
     const [minW, maxW] = colCapsByHeader1[h] || [8,14];
     ws1.getColumn(i+1).width = Math.min(Math.max(colMaxLen1[i] + 2, minW), maxW);
