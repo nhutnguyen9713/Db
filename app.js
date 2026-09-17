@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.30';
+const APP_VERSION = 'v2.31';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3171,10 +3171,9 @@ function buildItemIndex(data){
       if(PROD_LOCATOR_RE.test(locator || '')) continue; // loại vị trí "Prod" — không tính vào So sánh Plan / Tổng hợp 3 Plan
       const key = item.toLowerCase();
       idx[key] = idx[key] || { byKho: {}, pass: 0, ng: 0, other: 0 };
+      idx[key].byKho[kho] = (idx[key].byKho[kho] || 0) + qty;
       const o = (oqc || '').toUpperCase();
-      // byKho (cột chia theo từng kho ở bảng So sánh Plan / Tổng hợp 3 Plan) chỉ tính hàng PASS —
-      // khớp với totalOnHand (cũng chỉ tính inv.pass), tránh cột kho hiện số cao hơn "Tổng tồn (PASS)".
-      if(o === 'PASS'){ idx[key].byKho[kho] = (idx[key].byKho[kho] || 0) + qty; idx[key].pass += qty; }
+      if(o === 'PASS') idx[key].pass += qty;
       else if(o === 'NG') idx[key].ng += qty;
       else idx[key].other += qty;
     }
@@ -3194,9 +3193,9 @@ function buildItemCustPoIndex(data){
       if(PROD_LOCATOR_RE.test(locator || '')) continue; // loại vị trí "Prod" — không tính vào So sánh Plan / Tổng hợp 3 Plan
       const key = item.toLowerCase() + '\u241F' + (custpo || '').toLowerCase();
       idx[key] = idx[key] || { byKho: {}, pass: 0, ng: 0, other: 0 };
+      idx[key].byKho[kho] = (idx[key].byKho[kho] || 0) + qty;
       const o = (oqc || '').toUpperCase();
-      // byKho ch\u1EC9 t\u00EDnh h\u00E0ng PASS \u2014 xem gi\u1EA3i th\u00EDch \u1EDF buildItemIndex() ph\u00EDa tr\u00EAn.
-      if(o === 'PASS'){ idx[key].byKho[kho] = (idx[key].byKho[kho] || 0) + qty; idx[key].pass += qty; }
+      if(o === 'PASS') idx[key].pass += qty;
       else if(o === 'NG') idx[key].ng += qty;
       else idx[key].other += qty;
     }
@@ -5320,7 +5319,6 @@ async function exportCombinedPlanToExcel(){
     let treQty = 0, floorQty = 0, rackQty = 0;
     locs.forEach(l => {
       if(l.kho !== 'Kho 3A') return;
-      if((l.oqc || '').toUpperCase() !== 'PASS') return; // chỉ tính hàng PASS, khớp "Tổng tồn (PASS)"
       const loc = String(l.locator || '');
       const qty = l.qty || 0;
       if(/^3AFG-M[12]/i.test(loc)){ floorQty += qty; return; }
