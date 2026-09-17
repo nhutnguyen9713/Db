@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.28';
+const APP_VERSION = 'v2.29';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5301,38 +5301,51 @@ async function exportCombinedPlanToExcel(){
   const ws1 = workbook.addWorksheet('Tong hop 3 Plan'.slice(0,31));
   const contHeaders = ['Loại Plan', 'Ngày Load', 'Giờ Plan', 'SL trong Cont', 'Invoice', 'CSR'];
   const khoHeaderLabels = khoOrder.map(k => k.replace('Kho ', ''));
-  // Ngay bên phải cột "3A" chèn thêm 2 cột SỐ riêng "3A lầu" (gộp cả lầu M1+M2) và "3A Rack" — tách
-  // tồn kho 3A theo vị trí đặc biệt, điền thẳng số lượng vào ô thay vì gộp chung 1 cột Remark dạng
-  // text (khó đọc khi nhiều điều kiện cùng lúc). Dùng buildItemLocatorDetail() — CÙNG hàm đang dùng
-  // cho sheet "Chi tiết vị trí" — lọc đúng theo PO (hoặc mọi PO nếu anyPO) khớp với cách tính SL kho
-  // 3A ở cột "3A" của dòng này. 2 dạng locator riêng của kho 3A: "3AFG-M1xx"/"3AFG-M2xx" (lầu M1/M2)
-  // và "3A-<Chữ><Số>-T<Số>" (VD 3A-A17-T5, 3A-D1-T5 — dãy/kệ rồi tới "T" + số tầng kệ) là hàng Rack.
+  // Cột "3A" (tổng tồn kho 3A) được TÁCH thành 3 cột SỐ liền nhau, thay vì hiện tổng gộp: "3A trệt"
+  // (mọi locator kho 3A KHÔNG thuộc 2 dạng bên dưới), "3A lầu" (gộp cả lầu M1+M2), "3A Rack" (vị trí
+  // Rack). Dùng buildItemLocatorDetail() — CÙNG hàm đang dùng cho sheet "Chi tiết vị trí" — lọc đúng
+  // theo PO (hoặc mọi PO nếu anyPO) khớp với cách tính SL kho 3A trước đây. 2 dạng locator riêng của
+  // kho 3A: "3AFG-M1xx"/"3AFG-M2xx" (lầu M1/M2) và "3A-<Chữ><Số>-T<Số>" (VD 3A-A17-T5, 3A-D1-T5 —
+  // dãy/kệ rồi tới "T" + số tầng kệ) là hàng Rack.
   const itemHeaderParts = ['Item No.', 'Cust PO'];
   khoHeaderLabels.forEach(label => {
-    itemHeaderParts.push(label);
-    if(label === '3A') itemHeaderParts.push('3A lầu', '3A Rack');
+    if(label === '3A') itemHeaderParts.push('3A trệt', '3A lầu', '3A Rack');
+    else itemHeaderParts.push(label);
   });
   itemHeaderParts.push('Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái');
   const itemHeaders = itemHeaderParts;
   const computeKho3AQty = (r) => {
     const locs = buildItemLocatorDetail(r.item, r.anyPO ? null : r.custpo, true);
-    let floorQty = 0, rackQty = 0;
+    let treQty = 0, floorQty = 0, rackQty = 0;
     locs.forEach(l => {
       if(l.kho !== 'Kho 3A') return;
       const loc = String(l.locator || '');
-      if(/^3AFG-M[12]/i.test(loc)){ floorQty += (l.qty || 0); return; }
-      if(/^3A-[A-Z]\d+-T\d+/i.test(loc)) rackQty += (l.qty || 0);
+      const qty = l.qty || 0;
+      if(/^3AFG-M[12]/i.test(loc)){ floorQty += qty; return; }
+      if(/^3A-[A-Z]\d+-T\d+/i.test(loc)){ rackQty += qty; return; }
+      treQty += qty;
     });
-    return { floorQty, rackQty };
+    return { treQty, floorQty, rackQty };
   };
   const headers1 = [...contHeaders, ...itemHeaders];
   const nCols1 = headers1.length;
-  // Cột theo từng kho (2B/3A/3B/DG1...) + "Tổng tồn (PASS)" mỗi cột 1 màu nền RIÊNG (không đổi theo
-  // nhóm container) để phân biệt rõ từng cột — xác định vị trí qua headers1.indexOf() thay vì tính
-  // offset thủ công, tránh lệch nếu sau này đổi thứ tự cột.
+  // Cột theo từng kho (2B/3A/3B/DG1...) + "Tổng tồn (PASS)" mỗi cột/nhóm cột 1 màu nền RIÊNG (không
+  // đổi theo nhóm container) để phân biệt rõ — riêng nhóm 3 cột "3A trệt/lầu/Rack" dùng CHUNG 1 màu vì
+  // cùng thuộc kho 3A — xác định vị trí qua headers1.indexOf() thay vì tính offset thủ công, tránh
+  // lệch nếu sau này đổi thứ tự cột.
   const HIGHLIGHT_PALETTE = ['FFDCEEF5', 'FFE1F5DC', 'FFFAF3D0', 'FFEDE3F5', 'FFFCE0D6', 'FFE0F7F5', 'FFF5E0EA'];
-  const highlightLabels = [...khoHeaderLabels, 'Tổng tồn (PASS)'];
-  const highlightColorByCol = new Map(highlightLabels.map((label, i) => [headers1.indexOf(label) + 1, HIGHLIGHT_PALETTE[i % HIGHLIGHT_PALETTE.length]]));
+  const highlightColorByCol = new Map();
+  let highlightPaletteIdx = 0;
+  const nextHighlightColor = () => HIGHLIGHT_PALETTE[(highlightPaletteIdx++) % HIGHLIGHT_PALETTE.length];
+  khoHeaderLabels.forEach(label => {
+    if(label === '3A'){
+      const color = nextHighlightColor();
+      ['3A trệt', '3A lầu', '3A Rack'].forEach(h => highlightColorByCol.set(headers1.indexOf(h) + 1, color));
+    } else {
+      highlightColorByCol.set(headers1.indexOf(label) + 1, nextHighlightColor());
+    }
+  });
+  highlightColorByCol.set(headers1.indexOf('Tổng tồn (PASS)') + 1, nextHighlightColor());
 
   const headerRow1 = ws1.addRow(headers1);
   headerRow1.height = 20;
@@ -5380,8 +5393,8 @@ async function exportCombinedPlanToExcel(){
       r.anyPO ? 'Bất kỳ PO' : r.custpo + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
     ];
     (r.khoQtys || []).forEach((qty, i) => {
-      itemValues.push(qty);
-      if(khoHeaderLabels[i] === '3A') itemValues.push(kho3A.floorQty, kho3A.rackQty);
+      if(khoHeaderLabels[i] === '3A') itemValues.push(kho3A.treQty, kho3A.floorQty, kho3A.rackQty);
+      else itemValues.push(qty);
     });
     itemValues.push(r.totalOnHand, r.pass, r.ng, r.diff, (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu');
     const rowValues = [...contValues, ...itemValues];
