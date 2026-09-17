@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.34';
+const APP_VERSION = 'v2.35';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6191,19 +6191,86 @@ document.addEventListener('pointerdown',(e)=>{
     return;
   }
   e.preventDefault(); e.stopPropagation();
-  _khoGridDragState={kho,layout,cell,boxEl:box,container,occupied:khoGridBuildOccupied(layout,cell.id),startX:e.clientX,startY:e.clientY,curRow:cell.row,curCol:cell.col,moved:false,pointerId:e.pointerId};
+
+  // Nếu ô đang nắm để kéo NẰM TRONG vùng đang chọn (từ 2 ô trở lên) -> kéo CẢ NHÓM cùng lúc, giữ
+  // nguyên vị trí tương đối giữa các ô trong nhóm. Ngược lại (kéo 1 ô không thuộc vùng chọn, hoặc
+  // chưa chọn gì) -> chỉ kéo riêng ô đó, y như hành vi cũ.
+  const selKho = _khoGridSelectionKho === kho ? _khoGridSelection : null;
+  const isAnchorSelected = selKho && selKho.has(khoGridSelectionKey(cell.row, cell.col));
+  let group = null;
+  if(isAnchorSelected && selKho.size > 1){
+    group = [];
+    selKho.forEach(posKey => {
+      const [r,c] = posKey.split(',').map(Number);
+      const gc = layout.cells.find(cc => cc.row===r && cc.col===c);
+      if(!gc) return;
+      const gBox = container.querySelector(`.wh3b-box[data-cell-id="${CSS.escape(gc.id)}"]`);
+      if(!gBox) return;
+      group.push({cell:gc, boxEl:gBox});
+    });
+    if(group.length <= 1) group = null; // phòng hờ: không tìm đủ ô -> coi như kéo đơn lẻ
+  }
+
+  if(group){
+    let occupied = khoGridBuildOccupied(layout, null);
+    group.forEach(g => {
+      for(let r=g.cell.row;r<g.cell.row+g.cell.rowSpan;r++) for(let c=g.cell.col;c<g.cell.col+g.cell.colSpan;c++) occupied.delete(r+','+c);
+    });
+    _khoGridDragState={kho,layout,container,group,occupied,anchorOrigRow:cell.row,anchorOrigCol:cell.col,curDRow:0,curDCol:0,startX:e.clientX,startY:e.clientY,moved:false,pointerId:e.pointerId};
+  } else {
+    _khoGridDragState={kho,layout,cell,boxEl:box,container,occupied:khoGridBuildOccupied(layout,cell.id),startX:e.clientX,startY:e.clientY,curRow:cell.row,curCol:cell.col,moved:false,pointerId:e.pointerId};
+  }
   try{box.setPointerCapture(e.pointerId);}catch(err){}
 });
 document.addEventListener('pointermove',(e)=>{
   const st=_khoGridDragState; if(!st) return;
   const dx=e.clientX-st.startX,dy=e.clientY-st.startY;
   if(!st.moved && Math.hypot(dx,dy)<6) return;
-  st.moved=true; st.boxEl.classList.add('wh3b-dragging');
-  khoGridTryMoveCell(st,e.clientX,e.clientY);
+  st.moved=true;
+  if(st.group){
+    st.group.forEach(g=>g.boxEl.classList.add('wh3b-dragging'));
+    khoGridTryMoveGroup(st,e.clientX,e.clientY);
+  } else {
+    st.boxEl.classList.add('wh3b-dragging');
+    khoGridTryMoveCell(st,e.clientX,e.clientY);
+  }
 });
+// Tương tự khoGridTryMoveCell() nhưng di chuyển CẢ NHÓM ô cùng lúc, giữ nguyên khoảng cách tương đối
+// giữa chúng — không "snap" từng ô về ô trống gần nhất riêng lẻ (dễ làm vỡ đội hình đang chọn), chỉ
+// chấp nhận vị trí mới khi TOÀN BỘ nhóm cùng hợp lệ (trong biên lưới, không đè lên ô ngoài nhóm).
+function khoGridTryMoveGroup(st, clientX, clientY){
+  const target=khoGridPointToCell(st.container,clientX,clientY,st.layout);
+  let dRow=target.row-st.anchorOrigRow, dCol=target.col-st.anchorOrigCol;
+  st.group.forEach(g => {
+    const minDRow=1-g.cell.row, maxDRow=st.layout.rows-g.cell.rowSpan+1-g.cell.row;
+    const minDCol=1-g.cell.col, maxDCol=st.layout.cols-g.cell.colSpan+1-g.cell.col;
+    dRow=Math.min(Math.max(dRow,minDRow),maxDRow);
+    dCol=Math.min(Math.max(dCol,minDCol),maxDCol);
+  });
+  const allOk=st.group.every(g => !khoGridRectOverlaps(st.occupied,g.cell.row+dRow,g.cell.col+dCol,g.cell.rowSpan,g.cell.colSpan));
+  if(!allOk) return false;
+  st.curDRow=dRow; st.curDCol=dCol;
+  st.group.forEach(g => {
+    g.boxEl.style.gridRow=`${g.cell.row+dRow} / span ${g.cell.rowSpan}`;
+    g.boxEl.style.gridColumn=`${g.cell.col+dCol} / span ${g.cell.colSpan}`;
+  });
+  return true;
+}
 function khoGridEndDrag(){
   const st=_khoGridDragState; if(!st) return;
-  _khoGridDragState=null; st.boxEl.classList.remove('wh3b-dragging');
+  _khoGridDragState=null;
+  if(st.group){
+    st.group.forEach(g=>g.boxEl.classList.remove('wh3b-dragging'));
+    if(st.moved) _khoGridSuppressClick = true;
+    if(st.moved && (st.curDRow || st.curDCol)){
+      st.group.forEach(g => { g.cell.row+=st.curDRow; g.cell.col+=st.curDCol; });
+      // Cập nhật lại vùng chọn theo vị trí MỚI — giữ nguyên đang chọn đúng các ô đó sau khi thả.
+      if(_khoGridSelectionKho===st.kho) _khoGridSelection=new Set(st.group.map(g=>khoGridSelectionKey(g.cell.row,g.cell.col)));
+      khoGridSave(); khoGridRenderCustom(st.kho);
+    }
+    return;
+  }
+  st.boxEl.classList.remove('wh3b-dragging');
   if(st.moved) _khoGridSuppressClick = true;
   if(st.moved && (st.curRow!==st.cell.row || st.curCol!==st.cell.col)){
     st.cell.row=st.curRow; st.cell.col=st.curCol; khoGridSave(); khoGridRenderCustom(st.kho);
