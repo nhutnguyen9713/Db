@@ -5300,15 +5300,21 @@ async function exportCombinedPlanToExcel(){
   // buildItemContainerList() — đúng nội dung popup "Xem container" trên giao diện.
   const ws1 = workbook.addWorksheet('Tong hop 3 Plan'.slice(0,31));
   const contHeaders = ['Loại Plan', 'Ngày Load', 'Giờ Plan', 'SL trong Cont', 'Invoice', 'CSR'];
-  const itemHeaders = ['Item No.', 'Cust PO', ...loadedTypes.map(t => `Plan ${t}`), 'Tổng Plan', ...khoOrder.map(k => k.replace('Kho ', '')), 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Nhóm'];
+  const khoHeaderLabels = khoOrder.map(k => k.replace('Kho ', ''));
+  const itemHeaders = ['Item No.', 'Cust PO', ...loadedTypes.map(t => `Plan ${t}`), 'Tổng Plan', ...khoHeaderLabels, 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Nhóm'];
   const headers1 = [...contHeaders, ...itemHeaders];
   const nCols1 = headers1.length;
+  // Cột theo từng kho (2B/3A/3B/DG1...) tô riêng 1 màu nền cố định (không đổi theo nhóm container)
+  // để tách biệt hẳn khỏi các cột khác cho dễ nhìn — xác định vị trí qua headers1.indexOf() thay vì
+  // tính offset thủ công, tránh lệch nếu sau này đổi thứ tự cột.
+  const khoColSet = new Set(khoHeaderLabels.map(label => headers1.indexOf(label) + 1));
+  const KHO_FILL = 'FFDCEEF5';
 
   const headerRow1 = ws1.addRow(headers1);
   headerRow1.height = 20;
-  headerRow1.eachCell(cell => {
+  headerRow1.eachCell((cell, colNumber) => {
     cell.font = { bold:true };
-    cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFEFEFEF' } };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: khoColSet.has(colNumber) ? KHO_FILL : 'FFEFEFEF' } };
     cell.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
     cell.border = { top:thick, bottom:thick, left:thin, right:thin };
   });
@@ -5361,7 +5367,7 @@ async function exportCombinedPlanToExcel(){
     const leftAlignCols = new Set([contHeaders.length + 1, contHeaders.length + 2]); // Item No./Cust PO
     const row = ws1.addRow(rowValues);
     row.eachCell((cell, colNumber) => {
-      cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: fillColor } };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: khoColSet.has(colNumber) ? KHO_FILL : fillColor } };
       cell.alignment = { vertical:'middle', horizontal: leftAlignCols.has(colNumber) ? 'left' : 'center' };
       cell.border = {
         top: isGroupFirst ? thick : thin,
