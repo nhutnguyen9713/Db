@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.36';
+const APP_VERSION = 'v2.37';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6532,7 +6532,7 @@ if(khoGridSettingsCloseBtn) khoGridSettingsCloseBtn.addEventListener('click',()=
 const khoGridApplySizeBtn=document.getElementById('kho-grid-apply-size');
 if(khoGridApplySizeBtn) khoGridApplySizeBtn.addEventListener('click',()=>{
   const kho=_khoGridActiveKho,cfg=khoGridConfigFor(kho),layout=khoGridGetLayout(kho);
-  const newRows=Math.min(30,Math.max(1,Math.round(Number(document.getElementById('kho-grid-rows-input').value)||layout.rows)));
+  const newRows=Math.min(100,Math.max(1,Math.round(Number(document.getElementById('kho-grid-rows-input').value)||layout.rows)));
   const newCols=Math.min(30,Math.max(1,Math.round(Number(document.getElementById('kho-grid-cols-input').value)||layout.cols)));
   const out=layout.cells.filter(c=>(c.row+c.rowSpan-1)>newRows||(c.col+c.colSpan-1)>newCols);
   if(out.length){if(!confirm(`Kích thước mới sẽ làm ${out.length} ô (${out.map(c=>c.locator).join(', ')}) nằm NGOÀI lưới và bị xoá khỏi lưới. Vẫn áp dụng?`))return;layout.cells=layout.cells.filter(c=>!out.includes(c));}
@@ -6545,7 +6545,7 @@ if(khoGridApplySizeBtn) khoGridApplySizeBtn.addEventListener('click',()=>{
 // tương đối; khi bớt, dịch ngược lại — nếu hàng/cột đó đang có ô, hỏi xác nhận trước khi xoá.
 function khoGridExpandTop(){
   const kho=_khoGridActiveKho, layout=khoGridGetLayout(kho);
-  if(layout.rows>=30){ alert('Lưới đã đạt tối đa 30 hàng.'); return; }
+  if(layout.rows>=100){ alert('Lưới đã đạt tối đa 100 hàng.'); return; }
   layout.rows++; layout.cells.forEach(c=>c.row++);
   khoGridSave(); khoGridRenderCustom(kho);
   const rowsInput=document.getElementById('kho-grid-rows-input'); if(rowsInput) rowsInput.value=layout.rows;
