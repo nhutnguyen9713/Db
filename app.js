@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.35';
+const APP_VERSION = 'v2.36';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6465,7 +6465,13 @@ document.addEventListener('keydown',(e)=>{
       cutIds: key==='x' ? found.map(c=>c.id) : null,
       cells: found.map(c=>({locator:c.locator, rowSpan:c.rowSpan, colSpan:c.colSpan, rowOffset:c.row-anchor.row, colOffset:c.col-anchor.col}))
     };
-    if(typeof showAppToast==='function') showAppToast(`${key==='x'?'✂ Đã cắt':'📋 Đã sao chép'} ${found.length} ô từ ${kho} — chọn ô đích rồi Ctrl+V để dán.`);
+    // Bỏ chọn NGAY sau khi Copy/Cắt — nếu để nguyên vùng đang chọn (vẫn là chính các ô vừa Copy), lỡ
+    // người dùng Ctrl+Click CỘNG THÊM 1 ô đích mới mà quên bỏ chọn các ô cũ trước, góc neo (điểm nhỏ
+    // nhất) vẫn rơi vào đúng các ô cũ đó -> dán đè lên chính chỗ cũ -> luôn báo xung đột 100%, y hệt
+    // lỗi thật đã gặp. Bắt buộc chọn LẠI từ đầu cho ô đích giúp tránh hẳn lỗi này.
+    khoGridClearSelection();
+    khoGridRenderCustom(kho);
+    if(typeof showAppToast==='function') showAppToast(`${key==='x'?'✂ Đã cắt':'📋 Đã sao chép'} ${found.length} ô từ ${kho} — Ctrl+Click (hoặc kéo chuột) chọn MỚI 1 ô đích rồi Ctrl+V để dán.`);
     return;
   }
 
