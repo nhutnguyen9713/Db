@@ -5293,13 +5293,15 @@ async function exportCombinedPlanToExcel(){
   const FILL_A = 'FFFFFFFF';
   const FILL_B = 'FFF6F6F6';
 
-  // ===== Sheet 1: Tổng hợp 3 Plan — kẻ khung đầy đủ, viền đậm + tô nền xen kẽ phân theo TỪNG MÃ (1
-  // mã có thể chiếm NHIỀU dòng nếu đang nằm trong nhiều container), kèm thông tin container ở CUỐI
-  // mỗi dòng — giống đúng nội dung popup "Xem container" trên giao diện (buildItemContainerList()).
+  // ===== Sheet 1: Tổng hợp 3 Plan — kẻ khung đầy đủ, viền đậm + tô nền xen kẽ phân theo TỪNG
+  // CONTAINER (không theo mã nữa — 1 container có thể chở nhiều mã, các mã đó được nhóm lại cùng
+  // nhau), xếp theo Ngày Load + Giờ Plan TĂNG DẦN, cột thông tin container đưa lên ĐẦU bảng. Mã nào
+  // không thuộc container nào (chưa gán/không tìm thấy) rơi xuống cuối bảng. Dữ liệu lấy từ
+  // buildItemContainerList() — đúng nội dung popup "Xem container" trên giao diện.
   const ws1 = workbook.addWorksheet('Tong hop 3 Plan'.slice(0,31));
+  const contHeaders = ['Loại Plan', 'Ngày Load', 'Giờ Plan', 'SL trong Cont', 'Invoice', 'CSR'];
   const itemHeaders = ['Item No.', 'Cust PO', ...loadedTypes.map(t => `Plan ${t}`), 'Tổng Plan', ...khoOrder.map(k => k.replace('Kho ', '')), 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Nhóm'];
-  const contHeaders = ['Cont', 'Loại Plan', 'Ngày Load', 'Giờ Plan', 'SL trong Cont', 'Invoice', 'CSR', 'Trạng thái Pick'];
-  const headers1 = [...itemHeaders, ...contHeaders];
+  const headers1 = [...contHeaders, ...itemHeaders];
   const nCols1 = headers1.length;
 
   const headerRow1 = ws1.addRow(headers1);
@@ -5312,13 +5314,36 @@ async function exportCombinedPlanToExcel(){
   });
   ws1.getCell(1, 1).border = Object.assign({}, ws1.getCell(1,1).border, { left:thick });
   ws1.getCell(1, nCols1).border = Object.assign({}, ws1.getCell(1,nCols1).border, { right:thick });
-  ws1.getCell(1, itemHeaders.length + 1).border = Object.assign({}, ws1.getCell(1, itemHeaders.length + 1).border, { left:thick });
+  ws1.getCell(1, contHeaders.length + 1).border = Object.assign({}, ws1.getCell(1, contHeaders.length + 1).border, { left:thick });
 
   const colMaxLen1 = headers1.map(h => h.length);
   const trackWidth1 = (idx, text) => { const len = String(text==null?'':text).length; if(len > colMaxLen1[idx]) colMaxLen1[idx] = len; };
 
-  combined.rows.forEach((r, itemIdx) => {
+  // Dàn phẳng ra 1 dòng/(mã, container) — mã nào dùng nhiều container thì lặp lại đủ số dòng; mã nào
+  // không có container nào thì vẫn giữ 1 dòng (cột container để trống), groupKey riêng theo mã đó để
+  // không bị gộp nhầm với mã khác. Container CÙNG groupKey (cùng type+cNo+loadDate+planTime) LUÔN có
+  // cùng sortKey (cùng ngày/giờ) nên sort ổn định vẫn giữ các mã của 1 container nằm liền nhau.
+  const exportEntries = [];
+  combined.rows.forEach(r => {
     const containers = buildItemContainerList(r.item, r.anyPO ? '' : r.custpo);
+    if(containers.length){
+      containers.forEach(c => exportEntries.push({
+        r, c,
+        groupKey: `${c.type}|${c.cNo}|${c.loadDate}|${c.planTime}`,
+        sortKey: ovParseDateTimeSortKey(c.loadDate, c.planTime)
+      }));
+    } else {
+      exportEntries.push({ r, c: null, groupKey: `__nocont__${r.item.toLowerCase()}␟${r.custpo.toLowerCase()}`, sortKey: Infinity });
+    }
+  });
+  exportEntries.sort((a,b) => (a.sortKey - b.sortKey) || (a.groupKey < b.groupKey ? -1 : a.groupKey > b.groupKey ? 1 : 0));
+
+  let groupIndex = -1;
+  let prevGroupKey = null;
+  exportEntries.forEach(({ r, c, groupKey }) => {
+    const contValues = c
+      ? [c.type, c.loadDate, c.planTime, c.qty, c.invoice || '—', c.csr || '—']
+      : ['—', '—', '—', '—', '—', '—'];
     const itemValues = [
       r.item,
       r.anyPO ? 'Bất kỳ PO' : r.custpo + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
@@ -5327,31 +5352,28 @@ async function exportCombinedPlanToExcel(){
       (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu',
       r.isSpp ? (r.manualOk ? 'SPP - đã tick Đủ hàng tay' : 'SPP') : ''
     ];
-    const fillColor = itemIdx % 2 === 0 ? FILL_A : FILL_B;
-    const groupRows = containers.length ? containers : [null];
-    groupRows.forEach((c, ci) => {
-      const contValues = c
-        ? [c.cNo, c.type, c.loadDate, c.planTime, c.qty, c.invoice || '—', c.csr || '—', CONT_PICK_STATUS_LABEL[c.status] || c.status]
-        : ['—', '—', '—', '—', '—', '—', '—', '—'];
-      const rowValues = [...itemValues, ...contValues];
-      rowValues.forEach((v,i) => trackWidth1(i, v));
-      const isGroupFirst = ci === 0;
-      const row = ws1.addRow(rowValues);
-      row.eachCell((cell, colNumber) => {
-        cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: fillColor } };
-        cell.alignment = { vertical:'middle', horizontal: colNumber <= 2 ? 'left' : 'center' };
-        cell.border = {
-          top: isGroupFirst ? thick : thin,
-          bottom: thin,
-          left: colNumber === 1 ? thick : (colNumber === itemHeaders.length + 1 ? thick : thin),
-          right: colNumber === nCols1 ? thick : thin
-        };
-      });
+    const rowValues = [...contValues, ...itemValues];
+    rowValues.forEach((v,i) => trackWidth1(i, v));
+    const isGroupFirst = groupKey !== prevGroupKey;
+    if(isGroupFirst) groupIndex++;
+    prevGroupKey = groupKey;
+    const fillColor = groupIndex % 2 === 0 ? FILL_A : FILL_B;
+    const leftAlignCols = new Set([contHeaders.length + 1, contHeaders.length + 2]); // Item No./Cust PO
+    const row = ws1.addRow(rowValues);
+    row.eachCell((cell, colNumber) => {
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: fillColor } };
+      cell.alignment = { vertical:'middle', horizontal: leftAlignCols.has(colNumber) ? 'left' : 'center' };
+      cell.border = {
+        top: isGroupFirst ? thick : thin,
+        bottom: thin,
+        left: colNumber === 1 ? thick : (colNumber === contHeaders.length + 1 ? thick : thin),
+        right: colNumber === nCols1 ? thick : thin
+      };
     });
   });
   if(ws1.lastRow) ws1.lastRow.eachCell(cell => { cell.border = Object.assign({}, cell.border, { bottom: thick }); });
 
-  const colCapsByHeader1 = { 'Item No.': [14,16], 'Cust PO': [16,26], 'Nhóm': [10,26], 'Cont': [12,16], 'Invoice': [10,14], 'CSR': [10,14], 'Trạng thái Pick': [12,14] };
+  const colCapsByHeader1 = { 'Item No.': [14,16], 'Cust PO': [16,26], 'Nhóm': [10,26], 'Invoice': [10,14], 'CSR': [10,14] };
   headers1.forEach((h,i) => {
     const [minW, maxW] = colCapsByHeader1[h] || [8,14];
     ws1.getColumn(i+1).width = Math.min(Math.max(colMaxLen1[i] + 2, minW), maxW);
