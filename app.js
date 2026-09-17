@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.20';
+const APP_VERSION = 'v2.21';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5270,50 +5270,123 @@ function renderCombinedPlanPanel(){
     </table>`;
 }
 
-function exportCombinedPlanToExcel(){
+// Đổi từ SheetJS (XLSX.*) sang ExcelJS cho riêng sheet "Tổng hợp 3 Plan" — SheetJS bản miễn phí không
+// ghi được style (kẻ khung/tô nền), ExcelJS thì có (đã dùng sẵn ở các chỗ xuất Excel khác trong app,
+// xem exportPickSlipToExcel()/ccBuildDaXacNhanSheetFromRecords() — dùng lại đúng quy ước màu/viền đó
+// cho nhất quán). CHỈ đổi CÁCH DỰNG sheet, không đổi số liệu/logic tính toán ở đâu khác.
+async function exportCombinedPlanToExcel(){
   const loadedTypes = PLAN_TYPES.filter(t => planData[t]);
   if(!loadedTypes.length) return;
-  if(!LIB_XLSX_OK){
-    alert('Không xuất được Excel: thư viện SheetJS chưa tải được (cần Internet). Hãy mở file này bằng Chrome có kết nối mạng rồi thử lại.');
+  if(!LIB_EXCELJS_OK){
+    alert('Không xuất được Excel: thư viện ExcelJS chưa tải được (cần Internet). Hãy mở file này bằng Chrome có kết nối mạng rồi thử lại.');
     return;
   }
   const combined = combinedPlanCache || buildCombinedPlanCompareTable();
   const khoOrder = combined.khoOrder || [];
 
-  const summaryHeader = ['Item No.', 'Cust PO', ...loadedTypes.map(t => `Plan ${t}`), 'Tổng Plan', ...khoOrder.map(k => k.replace('Kho ', '')), 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Nhóm'];
-  const summaryRows = combined.rows.map(r => [
-    r.item,
-    r.anyPO ? 'Bất kỳ PO' : r.custpo + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
-    ...loadedTypes.map(t => r.qtyByType[t] || 0),
-    r.totalPlanQty, ...(r.khoQtys || []), r.totalOnHand, r.pass, r.ng, r.diff,
-    (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu',
-    r.isSpp ? (r.manualOk ? 'SPP - đã tick Đủ hàng tay' : 'SPP') : ''
-  ]);
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'TN5 Dashboard';
+  workbook.created = new Date();
 
+  const thin = { style:'thin', color:{ argb:'FFAAAAAA' } };
+  const thick = { style:'medium', color:{ argb:'FF222222' } };
+  const FILL_A = 'FFFFFFFF';
+  const FILL_B = 'FFF6F6F6';
+
+  // ===== Sheet 1: Tổng hợp 3 Plan — kẻ khung đầy đủ, viền đậm + tô nền xen kẽ phân theo TỪNG MÃ (1
+  // mã có thể chiếm NHIỀU dòng nếu đang nằm trong nhiều container), kèm thông tin container ở CUỐI
+  // mỗi dòng — giống đúng nội dung popup "Xem container" trên giao diện (buildItemContainerList()).
+  const ws1 = workbook.addWorksheet('Tong hop 3 Plan'.slice(0,31));
+  const itemHeaders = ['Item No.', 'Cust PO', ...loadedTypes.map(t => `Plan ${t}`), 'Tổng Plan', ...khoOrder.map(k => k.replace('Kho ', '')), 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Nhóm'];
+  const contHeaders = ['Cont', 'Loại Plan', 'Ngày Load', 'Giờ Plan', 'SL trong Cont', 'Invoice', 'CSR', 'Trạng thái Pick'];
+  const headers1 = [...itemHeaders, ...contHeaders];
+  const nCols1 = headers1.length;
+
+  const headerRow1 = ws1.addRow(headers1);
+  headerRow1.height = 20;
+  headerRow1.eachCell(cell => {
+    cell.font = { bold:true };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFEFEFEF' } };
+    cell.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+    cell.border = { top:thick, bottom:thick, left:thin, right:thin };
+  });
+  ws1.getCell(1, 1).border = Object.assign({}, ws1.getCell(1,1).border, { left:thick });
+  ws1.getCell(1, nCols1).border = Object.assign({}, ws1.getCell(1,nCols1).border, { right:thick });
+  ws1.getCell(1, itemHeaders.length + 1).border = Object.assign({}, ws1.getCell(1, itemHeaders.length + 1).border, { left:thick });
+
+  const colMaxLen1 = headers1.map(h => h.length);
+  const trackWidth1 = (idx, text) => { const len = String(text==null?'':text).length; if(len > colMaxLen1[idx]) colMaxLen1[idx] = len; };
+
+  combined.rows.forEach((r, itemIdx) => {
+    const containers = buildItemContainerList(r.item, r.anyPO ? '' : r.custpo);
+    const itemValues = [
+      r.item,
+      r.anyPO ? 'Bất kỳ PO' : r.custpo + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
+      ...loadedTypes.map(t => r.qtyByType[t] || 0),
+      r.totalPlanQty, ...(r.khoQtys || []), r.totalOnHand, r.pass, r.ng, r.diff,
+      (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu',
+      r.isSpp ? (r.manualOk ? 'SPP - đã tick Đủ hàng tay' : 'SPP') : ''
+    ];
+    const fillColor = itemIdx % 2 === 0 ? FILL_A : FILL_B;
+    const groupRows = containers.length ? containers : [null];
+    groupRows.forEach((c, ci) => {
+      const contValues = c
+        ? [c.cNo, c.type, c.loadDate, c.planTime, c.qty, c.invoice || '—', c.csr || '—', CONT_PICK_STATUS_LABEL[c.status] || c.status]
+        : ['—', '—', '—', '—', '—', '—', '—', '—'];
+      const rowValues = [...itemValues, ...contValues];
+      rowValues.forEach((v,i) => trackWidth1(i, v));
+      const isGroupFirst = ci === 0;
+      const row = ws1.addRow(rowValues);
+      row.eachCell((cell, colNumber) => {
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: fillColor } };
+        cell.alignment = { vertical:'middle', horizontal: colNumber <= 2 ? 'left' : 'center' };
+        cell.border = {
+          top: isGroupFirst ? thick : thin,
+          bottom: thin,
+          left: colNumber === 1 ? thick : (colNumber === itemHeaders.length + 1 ? thick : thin),
+          right: colNumber === nCols1 ? thick : thin
+        };
+      });
+    });
+  });
+  if(ws1.lastRow) ws1.lastRow.eachCell(cell => { cell.border = Object.assign({}, cell.border, { bottom: thick }); });
+
+  const colCapsByHeader1 = { 'Item No.': [14,16], 'Cust PO': [16,26], 'Nhóm': [10,26], 'Cont': [12,16], 'Invoice': [10,14], 'CSR': [10,14], 'Trạng thái Pick': [12,14] };
+  headers1.forEach((h,i) => {
+    const [minW, maxW] = colCapsByHeader1[h] || [8,14];
+    ws1.getColumn(i+1).width = Math.min(Math.max(colMaxLen1[i] + 2, minW), maxW);
+  });
+  ws1.views = [{ state:'frozen', ySplit:1 }];
+
+  // ===== Sheet 2: Chi tiết vị trí tồn kho — GIỮ NGUYÊN dữ liệu/logic như bản cũ (chỉ đổi cách dựng
+  // sang ExcelJS cho khớp cùng workbook, không thêm/bớt/đổi nội dung gì).
+  const ws2 = workbook.addWorksheet('Chi tiet vi tri'.slice(0,31));
   const detailHeader = ['OQC', 'Kho', 'Item No.', 'Cust PO (tồn kho)', 'Locator', 'SL tồn'];
-  const detailRows = [];
+  const detailHeaderRow = ws2.addRow(detailHeader);
+  detailHeaderRow.eachCell(cell => { cell.font = { bold:true }; });
   combined.rows.forEach(r => {
     const locs = buildItemLocatorDetail(r.item, null, true); // loại vị trí "Prod" khỏi Excel Tổng hợp 3 Plan
     if(!locs.length){
-      detailRows.push(['', '(khong co ton kho)', r.item, '', '', 0]);
+      ws2.addRow(['', '(khong co ton kho)', r.item, '', '', 0]);
     } else {
-      locs.forEach(l => detailRows.push([l.oqc, l.kho.replace('Kho ', ''), r.item, l.custpo, l.locator, l.qty]));
+      locs.forEach(l => ws2.addRow([l.oqc, l.kho.replace('Kho ', ''), r.item, l.custpo, l.locator, l.qty]));
     }
   });
-
-  const wb = XLSX.utils.book_new();
-  const ws1 = XLSX.utils.aoa_to_sheet([summaryHeader, ...summaryRows]);
-  ws1['!cols'] = summaryHeader.map((h,i) => ({ wch: i === 0 ? 14 : (i === 1 ? 22 : 12) }));
-  const ws2 = XLSX.utils.aoa_to_sheet([detailHeader, ...detailRows]);
-  ws2['!cols'] = detailHeader.map((h,i) => ({ wch: i === 2 ? 14 : (i === 4 ? 18 : 14) }));
-
-  XLSX.utils.book_append_sheet(wb, ws1, 'Tong hop 3 Plan'.slice(0,31));
-  XLSX.utils.book_append_sheet(wb, ws2, 'Chi tiet vi tri'.slice(0,31));
+  [14, 14, 14, 14, 18, 14].forEach((w,i) => { ws2.getColumn(i+1).width = w; });
 
   const pad = n => String(n).padStart(2,'0');
   const now = new Date();
   const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
-  XLSX.writeFile(wb, `Tong_hop_3_Plan_vs_Ton_kho_${stamp}.xlsx`);
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Tong_hop_3_Plan_vs_Ton_kho_${stamp}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 const btnExportCombinedPlan = document.getElementById('btn-export-combined-plan');
