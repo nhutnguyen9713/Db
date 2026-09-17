@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.31';
+const APP_VERSION = 'v2.32';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5312,7 +5312,7 @@ async function exportCombinedPlanToExcel(){
     if(label === '3A') itemHeaderParts.push('3A trệt', '3A lầu', '3A Rack');
     else itemHeaderParts.push(label);
   });
-  itemHeaderParts.push('Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái');
+  itemHeaderParts.push('Tổng tồn (PASS+NG)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái');
   const itemHeaders = itemHeaderParts;
   const computeKho3AQty = (r) => {
     const locs = buildItemLocatorDetail(r.item, r.anyPO ? null : r.custpo, true);
@@ -5329,7 +5329,7 @@ async function exportCombinedPlanToExcel(){
   };
   const headers1 = [...contHeaders, ...itemHeaders];
   const nCols1 = headers1.length;
-  // Cột theo từng kho (2B/3A/3B/DG1...) + "Tổng tồn (PASS)" mỗi cột/nhóm cột 1 màu nền RIÊNG (không
+  // Cột theo từng kho (2B/3A/3B/DG1...) + "Tổng tồn (PASS+NG)" mỗi cột/nhóm cột 1 màu nền RIÊNG (không
   // đổi theo nhóm container) để phân biệt rõ — riêng nhóm 3 cột "3A trệt/lầu/Rack" dùng CHUNG 1 màu vì
   // cùng thuộc kho 3A — xác định vị trí qua headers1.indexOf() thay vì tính offset thủ công, tránh
   // lệch nếu sau này đổi thứ tự cột.
@@ -5345,7 +5345,7 @@ async function exportCombinedPlanToExcel(){
       highlightColorByCol.set(headers1.indexOf(label) + 1, nextHighlightColor());
     }
   });
-  highlightColorByCol.set(headers1.indexOf('Tổng tồn (PASS)') + 1, nextHighlightColor());
+  highlightColorByCol.set(headers1.indexOf('Tổng tồn (PASS+NG)') + 1, nextHighlightColor());
 
   const headerRow1 = ws1.addRow(headers1);
   headerRow1.height = 20;
@@ -5396,7 +5396,7 @@ async function exportCombinedPlanToExcel(){
       if(khoHeaderLabels[i] === '3A') itemValues.push(kho3A.treQty, kho3A.floorQty, kho3A.rackQty);
       else itemValues.push(qty);
     });
-    itemValues.push(r.totalOnHand, r.pass, r.ng, r.diff, (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu');
+    itemValues.push(r.pass + r.ng, r.pass, r.ng, r.diff, (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu');
     const rowValues = [...contValues, ...itemValues];
     rowValues.forEach((v,i) => trackWidth1(i, v));
     const isGroupFirst = groupKey !== prevGroupKey;
