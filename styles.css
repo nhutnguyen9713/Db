@@ -671,6 +671,19 @@
   }
   .wh3b-custom-gear:hover{background:rgba(110,79,224,0.16); color:var(--violet);}
 
+  /* Ô "tiêu đề" trong grid tuỳ chỉnh — chữ tự đặt tên, KHÔNG gán tồn kho thật, chỉ để ghi chú/chia khu
+     trên sơ đồ (VD "KHU RACK A"). Nền/viền nét đứt khác hẳn ô locator để phân biệt rõ ngay từ cái nhìn
+     đầu, không lẫn với ô có dữ liệu tồn kho thật. */
+  .wh3b-box-label{
+    background:var(--panel); border-style:dashed; border-color:var(--line);
+    display:flex; align-items:center; justify-content:center; text-align:center;
+    padding:10px 24px 10px 11px;
+  }
+  .wh3b-box-label:hover{border-color:var(--violet);}
+  .wh3b-box-label-text{
+    font-weight:700; font-size:12.5px; color:var(--muted); word-break:break-word; white-space:pre-wrap;
+  }
+
   /* Tay cầm kéo-thả để đổi kích thước ô trong lưới TUỲ CHỈNH — kéo viền phải = đổi độ rộng, kéo
      viền dưới = đổi độ cao, kéo góc = đổi cả 2. Chỉ xuất hiện trong .wh3b-custom-grid. */
   .wh3b-resize-handle{

@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.38';
+const APP_VERSION = 'v2.39';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6031,9 +6031,27 @@ function khoGridRenderCustom(khoLabel){
   const selKho = _khoGridSelectionKho === khoLabel ? _khoGridSelection : null;
   const htmlParts = [];
   layout.cells.forEach(cell => {
+    const isSelectedCell = selKho && selKho.has(khoGridSelectionKey(cell.row, cell.col));
+    if(cell.isLabel){
+      // Ô tiêu đề tự đặt tên — KHÔNG gán vị trí tồn kho thật, chỉ để ghi chú/chia khu trên sơ đồ. Xây
+      // thẳng HTML cuối cùng (không qua buildLocatorBoxHtml/replace như ô locator bên dưới, vì không
+      // có số liệu tồn kho/heatmap/nút chỉnh sức chứa để hiển thị).
+      htmlParts.push(`
+      <div draggable="false" data-kho-grid-drag="1" data-cell-id="${escAttr(cell.id)}" data-cell-row="${cell.row}" data-cell-col="${cell.col}" style="grid-row:${cell.row} / span ${cell.rowSpan}; grid-column:${cell.col} / span ${cell.colSpan};" class="wh3b-box wh3b-box-label${isSelectedCell ? ' wh3b-cell-selected' : ''}">
+        <button type="button" class="wh3b-custom-gear" data-cell-id="${escAttr(cell.id)}" style="right:7px;" title="Sửa ô tiêu đề / kích thước / xoá ô này khỏi lưới">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3l5 5-13 13H3v-5Z"/><path d="M14 5l5 5"/></svg>
+        </button>
+        <div class="wh3b-box-label-text">${escHtml(cell.label || '')}</div>
+        <div class="wh3b-resize-handle wh3b-resize-e" data-cell-id="${escAttr(cell.id)}" data-dir="e" title="Kéo để đổi độ rộng"></div>
+        <div class="wh3b-resize-handle wh3b-resize-s" data-cell-id="${escAttr(cell.id)}" data-dir="s" title="Kéo để đổi độ cao"></div>
+        <div class="wh3b-resize-handle wh3b-resize-se" data-cell-id="${escAttr(cell.id)}" data-dir="se" title="Kéo để đổi cả độ rộng lẫn độ cao"></div>
+        <span class="wh3b-resize-hint">${cell.colSpan}×${cell.rowSpan}</span>
+      </div>`);
+      return;
+    }
     const rows = map[cell.locator] || [];
     const b = buildLocatorBoxHtml(cell.locator, rows, khoGridBaseCapacity(khoLabel, cell.locator), '');
-    const isSelected = selKho && selKho.has(khoGridSelectionKey(cell.row, cell.col));
+    const isSelected = isSelectedCell;
     // b.html có thể đã có sẵn 1 thuộc tính style="background:...;" riêng do chế độ Heatmap đang bật
     // (xem khoHeatmapCellStyle()) — PHẢI gộp vào chung với style vị trí/kích thước ô ngay dưới đây
     // thành ĐÚNG 1 thuộc tính style. Nếu để nguyên 2 thuộc tính style trùng tên trên cùng 1 thẻ <div>,
@@ -6090,6 +6108,30 @@ function khoGridSetMode(khoLabel, enabled){
   else whApplySearchFilter(cfg.defaultGrid, cfg.compute, cfg.search, cfg.pass, cfg.ng, cfg.detail);
 }
 
+// Ô "tiêu đề" (isLabel=true) dùng CHUNG modal thêm/sửa vị trí với ô locator thường — chỉ khác nội
+// dung ô nhập (tên tự đặt thay vì mã locator thật) và bỏ qua bước tính tồn kho khi lưu. Toggle 2 nút
+// ở đầu modal chuyển qua lại giữa 2 loại, đồng bộ nhãn/placeholder ô nhập cho đúng ngữ cảnh.
+let _khoGridCellIsLabel = false;
+function khoGridSetCellTypeUI(isLabel){
+  _khoGridCellIsLabel = isLabel;
+  const locBtn = document.getElementById('kho-grid-cell-type-locator');
+  const labelBtn = document.getElementById('kho-grid-cell-type-label');
+  if(locBtn) locBtn.classList.toggle('active', !isLabel);
+  if(labelBtn) labelBtn.classList.toggle('active', isLabel);
+  const hint = document.getElementById('kho-grid-cell-locator-hint');
+  const input = document.getElementById('kho-grid-cell-locator');
+  if(hint) hint.textContent = isLabel
+    ? 'Nội dung ô tiêu đề (tự đặt tên, KHÔNG cần khớp dữ liệu tồn kho)'
+    : 'Mã Locator (phải gõ ĐÚNG tên có trong dữ liệu tồn kho/WMS)';
+  if(input) input.placeholder = isLabel
+    ? 'VD: KHU RACK A'
+    : (_khoGridActiveKho==='Kho 2B'?'D2B-FG-A01':_khoGridActiveKho==='Kho 3A'?'3A-A1-T1':'D3B-FG-A01');
+}
+const khoGridCellTypeLocatorBtn=document.getElementById('kho-grid-cell-type-locator');
+if(khoGridCellTypeLocatorBtn) khoGridCellTypeLocatorBtn.addEventListener('click',()=>khoGridSetCellTypeUI(false));
+const khoGridCellTypeLabelBtn=document.getElementById('kho-grid-cell-type-label');
+if(khoGridCellTypeLabelBtn) khoGridCellTypeLabelBtn.addEventListener('click',()=>khoGridSetCellTypeUI(true));
+
 function khoGridOpenCellPopover(cellId, prefillRow, prefillCol, khoLabel){
   _khoGridActiveKho = khoLabel || _khoGridActiveKho || 'Kho 3B';
   _khoGridEditingCellId = cellId || null;
@@ -6102,8 +6144,11 @@ function khoGridOpenCellPopover(cellId, prefillRow, prefillCol, khoLabel){
   const rowSpan = document.getElementById('kho-grid-cell-rowspan');
   const colSpan = document.getElementById('kho-grid-cell-colspan');
   const del = document.getElementById('kho-grid-cell-delete');
-  if(title) title.textContent = cell ? `Sửa vị trí "${cell.locator}" — ${_khoGridActiveKho}` : `Thêm vị trí — ${_khoGridActiveKho}`;
-  if(locator){ locator.value=cell?cell.locator:''; locator.placeholder=_khoGridActiveKho==='Kho 2B'?'D2B-FG-A01':_khoGridActiveKho==='Kho 3A'?'3A-A1-T1':'D3B-FG-A01'; }
+  khoGridSetCellTypeUI(cell ? !!cell.isLabel : false);
+  if(title) title.textContent = cell
+    ? `Sửa ${cell.isLabel ? 'ô tiêu đề' : 'vị trí'} "${cell.isLabel ? cell.label : cell.locator}" — ${_khoGridActiveKho}`
+    : `Thêm vào lưới — ${_khoGridActiveKho}`;
+  if(locator) locator.value = cell ? (cell.isLabel ? cell.label : cell.locator) : '';
   if(row) row.value = cell ? cell.row : (prefillRow || 1);
   if(col) col.value = cell ? cell.col : (prefillCol || 1);
   if(rowSpan) rowSpan.value = cell ? cell.rowSpan : 1;
@@ -6463,7 +6508,7 @@ document.addEventListener('keydown',(e)=>{
     _khoGridClipboard={
       kho, cut:key==='x',
       cutIds: key==='x' ? found.map(c=>c.id) : null,
-      cells: found.map(c=>({locator:c.locator, rowSpan:c.rowSpan, colSpan:c.colSpan, rowOffset:c.row-anchor.row, colOffset:c.col-anchor.col}))
+      cells: found.map(c=>({isLabel:c.isLabel, locator:c.locator, label:c.label, rowSpan:c.rowSpan, colSpan:c.colSpan, rowOffset:c.row-anchor.row, colOffset:c.col-anchor.col}))
     };
     // Bỏ chọn NGAY sau khi Copy/Cắt — nếu để nguyên vùng đang chọn (vẫn là chính các ô vừa Copy), lỡ
     // người dùng Ctrl+Click CỘNG THÊM 1 ô đích mới mà quên bỏ chọn các ô cũ trước, góc neo (điểm nhỏ
@@ -6509,7 +6554,7 @@ document.addEventListener('keydown',(e)=>{
   let added=0;
   placements.forEach(p=>{
     if(khoGridRectOverlaps(khoGridBuildOccupied(layout,null),p.row,p.col,p.rowSpan,p.colSpan)) return;
-    layout.cells.push({id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)+added,locator:p.locator,row:p.row,col:p.col,rowSpan:p.rowSpan,colSpan:p.colSpan});
+    layout.cells.push({id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)+added,isLabel:p.isLabel,locator:p.locator,label:p.label,row:p.row,col:p.col,rowSpan:p.rowSpan,colSpan:p.colSpan});
     added++;
   });
   if(!added){ if(typeof showAppToast==='function') showAppToast('⚠ Không dán được ô nào (toàn bộ đều bị xung đột với ô có sẵn).'); return; }
@@ -6535,7 +6580,7 @@ if(khoGridApplySizeBtn) khoGridApplySizeBtn.addEventListener('click',()=>{
   const newRows=Math.min(100,Math.max(1,Math.round(Number(document.getElementById('kho-grid-rows-input').value)||layout.rows)));
   const newCols=Math.min(30,Math.max(1,Math.round(Number(document.getElementById('kho-grid-cols-input').value)||layout.cols)));
   const out=layout.cells.filter(c=>(c.row+c.rowSpan-1)>newRows||(c.col+c.colSpan-1)>newCols);
-  if(out.length){if(!confirm(`Kích thước mới sẽ làm ${out.length} ô (${out.map(c=>c.locator).join(', ')}) nằm NGOÀI lưới và bị xoá khỏi lưới. Vẫn áp dụng?`))return;layout.cells=layout.cells.filter(c=>!out.includes(c));}
+  if(out.length){if(!confirm(`Kích thước mới sẽ làm ${out.length} ô (${out.map(c=>c.isLabel?c.label:c.locator).join(', ')}) nằm NGOÀI lưới và bị xoá khỏi lưới. Vẫn áp dụng?`))return;layout.cells=layout.cells.filter(c=>!out.includes(c));}
   layout.rows=newRows;layout.cols=newCols;khoGridSave();khoGridRenderCustom(kho);document.getElementById('kho-grid-settings-overlay').classList.remove('show');
 });
 
@@ -6554,7 +6599,7 @@ function khoGridShrinkTop(){
   const kho=_khoGridActiveKho, layout=khoGridGetLayout(kho);
   if(layout.rows<=1) return;
   const inTop=layout.cells.filter(c=>c.row===1);
-  if(inTop.length && !confirm(`Hàng trên cùng đang có ${inTop.length} ô (${inTop.map(c=>c.locator).join(', ')}) — bớt hàng này sẽ XOÁ các ô đó khỏi lưới. Vẫn tiếp tục?`)) return;
+  if(inTop.length && !confirm(`Hàng trên cùng đang có ${inTop.length} ô (${inTop.map(c=>c.isLabel?c.label:c.locator).join(', ')}) — bớt hàng này sẽ XOÁ các ô đó khỏi lưới. Vẫn tiếp tục?`)) return;
   layout.cells=layout.cells.filter(c=>c.row!==1);
   layout.cells.forEach(c=>c.row--);
   layout.rows--;
@@ -6572,7 +6617,7 @@ function khoGridShrinkLeft(){
   const kho=_khoGridActiveKho, layout=khoGridGetLayout(kho);
   if(layout.cols<=1) return;
   const inLeft=layout.cells.filter(c=>c.col===1);
-  if(inLeft.length && !confirm(`Cột trái cùng đang có ${inLeft.length} ô (${inLeft.map(c=>c.locator).join(', ')}) — bớt cột này sẽ XOÁ các ô đó khỏi lưới. Vẫn tiếp tục?`)) return;
+  if(inLeft.length && !confirm(`Cột trái cùng đang có ${inLeft.length} ô (${inLeft.map(c=>c.isLabel?c.label:c.locator).join(', ')}) — bớt cột này sẽ XOÁ các ô đó khỏi lưới. Vẫn tiếp tục?`)) return;
   layout.cells=layout.cells.filter(c=>c.col!==1);
   layout.cells.forEach(c=>c.col--);
   layout.cols--;
@@ -6599,12 +6644,15 @@ if(khoGridCellCloseBtn) khoGridCellCloseBtn.addEventListener('click',()=>documen
 const khoGridCellSaveBtn=document.getElementById('kho-grid-cell-save');
 if(khoGridCellSaveBtn) khoGridCellSaveBtn.addEventListener('click',()=>{
   const kho=_khoGridActiveKho,layout=khoGridGetLayout(kho);
-  const locator=document.getElementById('kho-grid-cell-locator').value.trim().toUpperCase();
+  const isLabel=_khoGridCellIsLabel;
+  const rawValue=document.getElementById('kho-grid-cell-locator').value.trim();
+  const locator=isLabel?'':rawValue.toUpperCase(); // Locator luôn IN HOA cho khớp dữ liệu; ô tiêu đề giữ nguyên chữ hoa/thường người dùng gõ.
+  const label=isLabel?rawValue:'';
   const row=Math.round(Number(document.getElementById('kho-grid-cell-row').value));
   const col=Math.round(Number(document.getElementById('kho-grid-cell-col').value));
   const rowSpan=Math.max(1,Math.round(Number(document.getElementById('kho-grid-cell-rowspan').value)||1));
   const colSpan=Math.max(1,Math.round(Number(document.getElementById('kho-grid-cell-colspan').value)||1));
-  if(!locator){alert('Chưa nhập mã Locator.');return;}
+  if(!rawValue){alert(isLabel?'Chưa nhập nội dung ô tiêu đề.':'Chưa nhập mã Locator.');return;}
   if(!row||row<1||!col||col<1){alert('Hàng/Cột phải là số ≥ 1.');return;}
   if(row+rowSpan-1>layout.rows||col+colSpan-1>layout.cols){alert(`Vị trí này vượt ra ngoài lưới hiện tại (${layout.rows} hàng × ${layout.cols} cột).`);return;}
   const newCells=new Set();for(let r=row;r<row+rowSpan;r++)for(let c=col;c<col+colSpan;c++)newCells.add(r+','+c);
@@ -6613,9 +6661,9 @@ if(khoGridCellSaveBtn) khoGridCellSaveBtn.addEventListener('click',()=>{
     for(let r=cell.row;r<cell.row+cell.rowSpan;r++)for(let c=cell.col;c<cell.col+cell.colSpan;c++)if(newCells.has(r+','+c))return true;
     return false;
   });
-  if(conflict){alert(`Vị trí này đè lên ô "${conflict.locator}" đã có sẵn trên lưới.`);return;}
-  if(_khoGridEditingCellId){const cell=layout.cells.find(c=>c.id===_khoGridEditingCellId);if(cell){cell.locator=locator;cell.row=row;cell.col=col;cell.rowSpan=rowSpan;cell.colSpan=colSpan;}}
-  else layout.cells.push({id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),locator,row,col,rowSpan,colSpan});
+  if(conflict){alert(`Vị trí này đè lên ô "${conflict.isLabel?conflict.label:conflict.locator}" đã có sẵn trên lưới.`);return;}
+  if(_khoGridEditingCellId){const cell=layout.cells.find(c=>c.id===_khoGridEditingCellId);if(cell){cell.isLabel=isLabel;cell.locator=locator;cell.label=label;cell.row=row;cell.col=col;cell.rowSpan=rowSpan;cell.colSpan=colSpan;}}
+  else layout.cells.push({id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),isLabel,locator,label,row,col,rowSpan,colSpan});
   khoGridSave();khoGridRenderCustom(kho);document.getElementById('kho-grid-cell-overlay').classList.remove('show');
 });
 // Nhấn Enter ở BẤT KỲ ô nhập nào trong popup này = bấm "Lưu" luôn, khỏi phải với chuột — trừ khi
