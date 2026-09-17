@@ -5007,6 +5007,7 @@ function buildCombinedPlanCompareTable(){
 // dễ lệch nhau.
 function combinedCompareRowHtml(r, loadedTypes, showTick){
   const typeCells = loadedTypes.map(t => `<td class="num">${r.qtyByType[t] ? fmt(r.qtyByType[t]) : '—'}</td>`).join('');
+  const khoCells = (r.khoQtys || []).map(q => `<td class="num">${fmt(q)}</td>`).join('');
   const short = r.diff < 0 && !r.manualOk;
   const poCell = r.anyPO
     ? `<span class="po-any">Bất kỳ PO</span>`
@@ -5028,6 +5029,7 @@ function combinedCompareRowHtml(r, loadedTypes, showTick){
       <td>${poCell}</td>
       ${typeCells}
       <td class="num" style="font-weight:700;">${fmt(r.totalPlanQty)}</td>
+      ${khoCells}
       <td class="num" style="color:var(--text); font-weight:700;">${fmt(r.totalOnHand)}</td>
       <td class="num oqc-pass">${fmt(r.pass)}</td>
       <td class="num oqc-ng">${fmt(r.ng)}</td>
@@ -5047,14 +5049,16 @@ function renderSppPlanPopup(){
     el.innerHTML = `<div style="text-align:center; color:var(--muted-2); font-style:italic; padding:24px 0;">Không có mã SPP nào trong Tổng hợp 3 Plan hiện tại.</div>`;
     return;
   }
-  const { sppRows, loadedTypes } = combined;
+  const { sppRows, loadedTypes, khoOrder } = combined;
   const typeHead = loadedTypes.map(t => `<th style="text-align:right; color:${PLAN_COLORS[t]}">Plan ${t}</th>`).join('');
+  const khoHead = (khoOrder || []).map(k => `<th style="text-align:right">${k.replace('Kho ','')}</th>`).join('');
   const bodyRows = sppRows.map(r => combinedCompareRowHtml(r, loadedTypes, true)).join('');
   el.innerHTML = `
     <table class="plan-detail-table compare-table">
       <thead><tr>
         <th>Item No.</th><th>Cust PO</th>${typeHead}
         <th style="text-align:right">Tổng Plan</th>
+        ${khoHead}
         <th style="text-align:right">Tổng tồn (PASS)</th>
         <th style="text-align:right">PASS</th>
         <th style="text-align:right">NG</th>
@@ -5147,8 +5151,10 @@ function renderCombinedPlanPanel(){
     return;
   }
 
+  const khoOrder = combined.khoOrder || [];
   const typeHead = loadedTypes.map(t => `<th style="text-align:right; color:${PLAN_COLORS[t]}">Plan ${t}</th>`).join('');
-  const colCount = 3 + loadedTypes.length + 5;
+  const khoHead = khoOrder.map(k => `<th style="text-align:right">${k.replace('Kho ','')}</th>`).join('');
+  const colCount = 3 + loadedTypes.length + khoOrder.length + 5;
   const bodyRows = combined.mainRows.map(r => combinedCompareRowHtml(r, loadedTypes, false)).join('');
 
   tableWrap.innerHTML = `
@@ -5156,6 +5162,7 @@ function renderCombinedPlanPanel(){
       <thead><tr>
         <th>Item No.</th><th>Cust PO</th>${typeHead}
         <th style="text-align:right">Tổng Plan</th>
+        ${khoHead}
         <th style="text-align:right">Tổng tồn (PASS)</th>
         <th style="text-align:right">PASS</th>
         <th style="text-align:right">NG</th>
@@ -5174,13 +5181,14 @@ function exportCombinedPlanToExcel(){
     return;
   }
   const combined = combinedPlanCache || buildCombinedPlanCompareTable();
+  const khoOrder = combined.khoOrder || [];
 
-  const summaryHeader = ['Item No.', 'Cust PO', ...loadedTypes.map(t => `Plan ${t}`), 'Tổng Plan', 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Nhóm'];
+  const summaryHeader = ['Item No.', 'Cust PO', ...loadedTypes.map(t => `Plan ${t}`), 'Tổng Plan', ...khoOrder.map(k => k.replace('Kho ', '')), 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Nhóm'];
   const summaryRows = combined.rows.map(r => [
     r.item,
     r.anyPO ? 'Bất kỳ PO' : r.custpo + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
     ...loadedTypes.map(t => r.qtyByType[t] || 0),
-    r.totalPlanQty, r.totalOnHand, r.pass, r.ng, r.diff,
+    r.totalPlanQty, ...(r.khoQtys || []), r.totalOnHand, r.pass, r.ng, r.diff,
     (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu',
     r.isSpp ? (r.manualOk ? 'SPP - đã tick Đủ hàng tay' : 'SPP') : ''
   ]);

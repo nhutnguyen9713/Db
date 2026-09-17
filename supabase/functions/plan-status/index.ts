@@ -497,6 +497,7 @@ function buildCombinedPlanCompareData(ctx: {
       const key = p.item.toLowerCase() + "␟" + p.custpo.toLowerCase();
       inv = poIdx[key] || { byKho: {}, pass: 0, ng: 0, other: 0 };
     }
+    const khoQtys = khoOrder.map((k) => inv.byKho[k] || 0);
     const totalOnHand = inv.pass || 0;
     const itemAnyPO = khoOrder.reduce((s, k) => s + ((itemIdx[p.item.toLowerCase()] || { byKho: {} } as any).byKho[k] || 0), 0);
     const poMismatch = !anyPO && totalOnHand === 0 && itemAnyPO > 0;
@@ -505,7 +506,7 @@ function buildCombinedPlanCompareData(ctx: {
     return {
       item: p.item, custpo: p.custpo, anyPO,
       qtyByType: p.qtyByType, totalPlanQty: p.totalPlanQty,
-      totalOnHand, pass: inv.pass, ng: inv.ng,
+      khoQtys, totalOnHand, pass: inv.pass, ng: inv.ng,
       diff: totalOnHand - p.totalPlanQty, poMismatch, itemAnyPO,
       isSpp, manualOk,
     };
