@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.33';
+const APP_VERSION = 'v2.34';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6346,6 +6346,30 @@ document.addEventListener('keydown',(e)=>{
     const kho=_khoGridSelectionKho;
     khoGridClearSelection();
     if(kho) khoGridRenderCustom(kho);
+    return;
+  }
+  // Delete/Backspace = xoá thẳng toàn bộ ô đang chọn (nhiều ô cùng lúc) khỏi lưới tuỳ chỉnh — không
+  // cần Ctrl, chỉ cần đang có vùng chọn (giống hành vi xoá ô đơn lẻ ở popover ⚙️, nhưng làm hàng loạt).
+  if((e.key==='Delete' || e.key==='Backspace') && !isEditable && _khoGridSelectionKho && _khoGridSelection.size){
+    const kho=_khoGridSelectionKho;
+    const layout=khoGridGetLayout(kho);
+    const ids=[];
+    _khoGridSelection.forEach(posKey=>{
+      const [r,c]=posKey.split(',').map(Number);
+      const cell=layout.cells.find(cc=>cc.row===r && cc.col===c);
+      if(cell) ids.push(cell.id);
+    });
+    if(!ids.length){
+      if(typeof showAppToast==='function') showAppToast('⚠ Vùng đang chọn không có ô nào đã đặt locator để xoá.');
+      return;
+    }
+    e.preventDefault();
+    if(!confirm(`Xoá ${ids.length} vị trí đã chọn khỏi lưới ${kho}? (không ảnh hưởng dữ liệu tồn kho thật)`)) return;
+    layout.cells=layout.cells.filter(cc=>!ids.includes(cc.id));
+    khoGridClearSelection();
+    khoGridSave();
+    khoGridRenderCustom(kho);
+    if(typeof showAppToast==='function') showAppToast(`🗑 Đã xoá ${ids.length} vị trí khỏi lưới ${kho}.`);
     return;
   }
   if(isEditable) return;
