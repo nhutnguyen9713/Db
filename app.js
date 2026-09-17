@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.25';
+const APP_VERSION = 'v2.26';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5302,25 +5302,30 @@ async function exportCombinedPlanToExcel(){
   const contHeaders = ['Loại Plan', 'Ngày Load', 'Giờ Plan', 'SL trong Cont', 'Invoice', 'CSR'];
   const khoHeaderLabels = khoOrder.map(k => k.replace('Kho ', ''));
   const itemHeaders = ['Item No.', 'Cust PO', ...khoHeaderLabels, 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Remark'];
-  // Remark: báo hàng tồn kho 3A của mã này thuộc dạng vị trí đặc biệt nào — 2 kiểu locator riêng của
-  // kho 3A: "3AFG-M1xx"/"3AFG-M2xx" (số ngay sau M là tầng, VD 3AFG-M101 -> lầu M1) ghi rõ "Hàng trên
-  // lầu M#"; "3A-##-##" (2 nhóm số, không có "FG-M") là hàng Rack -> ghi "Hàng Rack".
+  // Remark: báo hàng tồn kho 3A của mã này thuộc dạng vị trí đặc biệt nào KÈM SL — 2 kiểu locator
+  // riêng của kho 3A: "3AFG-M1xx"/"3AFG-M2xx" (số ngay sau M là tầng, VD 3AFG-M101 -> lầu M1) ghi
+  // "Hàng trên lầu M#: xx pcs"; "3A-##-##" (2 nhóm số, không có "FG-M") là hàng Rack -> ghi "Hàng
+  // Rack: xx pcs". Có đủ cả 3 (M1/M2/Rack) thì liệt kê đủ cả 3, mỗi dòng SL riêng (không gộp lại).
   // Dùng buildItemLocatorDetail() — CÙNG hàm đang dùng cho sheet "Chi tiết vị trí" — lọc đúng theo PO
   // (hoặc mọi PO nếu anyPO) khớp với cách tính SL kho 3A đang hiển thị ở cột 3A của chính dòng này.
   const computeKho3ARemark = (r) => {
     const locs = buildItemLocatorDetail(r.item, r.anyPO ? null : r.custpo, true);
-    const floors = new Set();
-    let hasRack = false;
+    const floorQty = new Map(); // 'M1'|'M2' -> tổng SL
+    let rackQty = 0;
     locs.forEach(l => {
       if(l.kho !== 'Kho 3A') return;
       const loc = String(l.locator || '');
       const mFloor = loc.match(/^3AFG-M([12])/i);
-      if(mFloor){ floors.add('M' + mFloor[1]); return; }
-      if(/^3A-\d{2}-\d{2}/i.test(loc)) hasRack = true;
+      if(mFloor){
+        const key = 'M' + mFloor[1];
+        floorQty.set(key, (floorQty.get(key) || 0) + (l.qty || 0));
+        return;
+      }
+      if(/^3A-\d{2}-\d{2}/i.test(loc)) rackQty += (l.qty || 0);
     });
     const parts = [];
-    if(floors.size) parts.push('Hàng trên lầu ' + [...floors].sort().join(', '));
-    if(hasRack) parts.push('Hàng Rack');
+    [...floorQty.keys()].sort().forEach(k => parts.push(`Hàng trên lầu ${k}: ${fmt(floorQty.get(k))} pcs`));
+    if(rackQty > 0) parts.push(`Hàng Rack: ${fmt(rackQty)} pcs`);
     return parts.join('; ');
   };
   const headers1 = [...contHeaders, ...itemHeaders];
