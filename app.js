@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.22';
+const APP_VERSION = 'v2.23';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5301,20 +5301,21 @@ async function exportCombinedPlanToExcel(){
   const ws1 = workbook.addWorksheet('Tong hop 3 Plan'.slice(0,31));
   const contHeaders = ['Loại Plan', 'Ngày Load', 'Giờ Plan', 'SL trong Cont', 'Invoice', 'CSR'];
   const khoHeaderLabels = khoOrder.map(k => k.replace('Kho ', ''));
-  const itemHeaders = ['Item No.', 'Cust PO', ...loadedTypes.map(t => `Plan ${t}`), 'Tổng Plan', ...khoHeaderLabels, 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Nhóm'];
+  const itemHeaders = ['Item No.', 'Cust PO', ...khoHeaderLabels, 'Tổng tồn (PASS)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái', 'Nhóm'];
   const headers1 = [...contHeaders, ...itemHeaders];
   const nCols1 = headers1.length;
-  // Cột theo từng kho (2B/3A/3B/DG1...) tô riêng 1 màu nền cố định (không đổi theo nhóm container)
-  // để tách biệt hẳn khỏi các cột khác cho dễ nhìn — xác định vị trí qua headers1.indexOf() thay vì
-  // tính offset thủ công, tránh lệch nếu sau này đổi thứ tự cột.
-  const khoColSet = new Set(khoHeaderLabels.map(label => headers1.indexOf(label) + 1));
-  const KHO_FILL = 'FFDCEEF5';
+  // Cột theo từng kho (2B/3A/3B/DG1...) + "Tổng tồn (PASS)" mỗi cột 1 màu nền RIÊNG (không đổi theo
+  // nhóm container) để phân biệt rõ từng cột — xác định vị trí qua headers1.indexOf() thay vì tính
+  // offset thủ công, tránh lệch nếu sau này đổi thứ tự cột.
+  const HIGHLIGHT_PALETTE = ['FFDCEEF5', 'FFE1F5DC', 'FFFAF3D0', 'FFEDE3F5', 'FFFCE0D6', 'FFE0F7F5', 'FFF5E0EA'];
+  const highlightLabels = [...khoHeaderLabels, 'Tổng tồn (PASS)'];
+  const highlightColorByCol = new Map(highlightLabels.map((label, i) => [headers1.indexOf(label) + 1, HIGHLIGHT_PALETTE[i % HIGHLIGHT_PALETTE.length]]));
 
   const headerRow1 = ws1.addRow(headers1);
   headerRow1.height = 20;
   headerRow1.eachCell((cell, colNumber) => {
     cell.font = { bold:true };
-    cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: khoColSet.has(colNumber) ? KHO_FILL : 'FFEFEFEF' } };
+    cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: highlightColorByCol.get(colNumber) || 'FFEFEFEF' } };
     cell.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
     cell.border = { top:thick, bottom:thick, left:thin, right:thin };
   });
@@ -5353,8 +5354,7 @@ async function exportCombinedPlanToExcel(){
     const itemValues = [
       r.item,
       r.anyPO ? 'Bất kỳ PO' : r.custpo + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
-      ...loadedTypes.map(t => r.qtyByType[t] || 0),
-      r.totalPlanQty, ...(r.khoQtys || []), r.totalOnHand, r.pass, r.ng, r.diff,
+      ...(r.khoQtys || []), r.totalOnHand, r.pass, r.ng, r.diff,
       (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu',
       r.isSpp ? (r.manualOk ? 'SPP - đã tick Đủ hàng tay' : 'SPP') : ''
     ];
@@ -5367,7 +5367,7 @@ async function exportCombinedPlanToExcel(){
     const leftAlignCols = new Set([contHeaders.length + 1, contHeaders.length + 2]); // Item No./Cust PO
     const row = ws1.addRow(rowValues);
     row.eachCell((cell, colNumber) => {
-      cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: khoColSet.has(colNumber) ? KHO_FILL : fillColor } };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: highlightColorByCol.get(colNumber) || fillColor } };
       cell.alignment = { vertical:'middle', horizontal: leftAlignCols.has(colNumber) ? 'left' : 'center' };
       cell.border = {
         top: isGroupFirst ? thick : thin,
