@@ -1391,8 +1391,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.47';
-const APP_VERSION_DATE = '17/09/2026';
+const APP_VERSION = 'v2.48';
+const APP_VERSION_DATE = '18/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -5495,13 +5495,17 @@ function exportCombinedPlanToHtml(){
   const loadedTypes = PLAN_TYPES.filter(t => planData[t]);
   if(!loadedTypes.length) return;
 
-  const loadedDoneContainerKeys = computeLoadedDoneContainerKeys();
+  // "Pick xong" = row.status đã tính sẵn ('done' hoặc 'manualDone', BAO TRÙM luôn trường hợp "Đã Load
+  // Xong" theo Ship — xem renderContainerPickingOverview()) — dùng TRỰC TIẾP field này, rộng hơn
+  // computeLoadedDoneContainerKeys() (chỉ xét riêng theo Ship, dùng RIÊNG cho bản xuất Excel — không đổi
+  // exportCombinedPlanToExcel()). Bản HTML dùng field rộng hơn vì bản HTML còn tự làm mới theo Cloud —
+  // phải khớp đúng cùng 1 quy tắc loại container ở cả bản tĩnh lúc xuất lẫn lúc làm mới sau này.
   const containers = (contPickAllRows || [])
-    .filter(row => row.planQty > 0 && !loadedDoneContainerKeys.has(`${row.type}|${row.cNo}|${row.loadDate}|${row.planTime}`))
+    .filter(row => row.planQty > 0 && row.status !== 'done' && row.status !== 'manualDone')
     .slice()
     .sort((a,b) => ovParseDateTimeSortKey(a.loadDate, a.planTime) - ovParseDateTimeSortKey(b.loadDate, b.planTime));
 
-  if(!containers.length){ alert('Không có container nào để xuất (có thể tất cả đã "Đã Load Xong").'); return; }
+  if(!containers.length){ alert('Không có container nào để xuất (có thể tất cả đã "Pick xong").'); return; }
 
   // Cột theo từng kho (2B/3A.../3B/DG1...) NGAY TRONG bảng con của mỗi container — Kho 3A tách 3 cột
   // "trệt/lầu/Rack" y hệt cách tách ở sheet Excel "Tổng hợp 3 Plan" (xem computeKho3AQty() bên trên).
@@ -5606,7 +5610,13 @@ function exportCombinedPlanToHtml(){
   // nối Cloud lúc xuất — nếu chưa kết nối thì bỏ qua, HTML vẫn dùng được ở dạng snapshot tĩnh như cũ.
   const canLiveRefresh = !!(typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token);
   const liveConfigJson = canLiveRefresh
-    ? JSON.stringify({ url: CloudVault.url, token: CloudVault.token, invKey: STORAGE_KEY_INVENTORY, khoLabels: khoHeaderLabelsHtml, khoColors: Object.fromEntries(khoColColor) })
+    ? JSON.stringify({
+        url: CloudVault.url, token: CloudVault.token,
+        invKey: STORAGE_KEY_INVENTORY, plansKey: STORAGE_KEY_PLANS,
+        manualPickedKey: STORAGE_KEY_MANUAL_PICKED, hiddenKey: STORAGE_KEY_HIDDEN_CONT,
+        sppOkStorageKey: STORAGE_KEY_SPP_OK, contShipKey: STORAGE_KEY_CONT_SHIP,
+        khoLabels: khoHeaderLabelsHtml, khoColors: Object.fromEntries(khoColColor),
+      })
     : 'null';
 
   const pad = n => String(n).padStart(2, '0');
@@ -5654,11 +5664,11 @@ function exportCombinedPlanToHtml(){
 </style></head>
 <body>
   <h1>Tổng hợp 3 Plan — Xem theo Container</h1>
-  <div class="ph-meta">Tạo lúc ${fmtDateTime(now)} · ${fmt(containers.length)} container (đã bỏ container "Đã Load Xong") · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm vào số lượng của 1 kho để xem Locator/OQC/SL tồn</div>
+  <div class="ph-meta">Tạo lúc ${fmtDateTime(now)} · <span id="ph-cont-count">${fmt(containers.length)} container</span> (đã bỏ container "Pick xong") · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm vào số lượng của 1 kho để xem Locator/OQC/SL tồn</div>
   <input id="ph-search" type="text" placeholder="Tìm theo VNC, CSR, mã hàng...">
   <div class="ph-toolbar">
-    <button id="ph-refresh-btn" type="button"${canLiveRefresh ? '' : ' disabled'}>🔄 Làm mới tồn kho (Cloud)</button>
-    <span id="ph-refresh-status">${canLiveRefresh ? 'Chưa làm mới — số liệu tồn kho đang là bản lúc xuất file.' : 'Không kết nối được Cloud lúc xuất file — chỉ xem được bản tồn kho lúc xuất, không làm mới được.'}</span>
+    <button id="ph-refresh-btn" type="button"${canLiveRefresh ? '' : ' disabled'}>🔄 Làm mới từ Cloud</button>
+    <span id="ph-refresh-status">${canLiveRefresh ? 'Chưa làm mới — danh sách container + tồn kho đang là bản lúc xuất file.' : 'Không kết nối được Cloud lúc xuất file — chỉ xem được bản lúc xuất, không làm mới được.'}</span>
   </div>
   <div id="ph-list">${contsHtml}</div>
   <script>
@@ -5743,30 +5753,197 @@ function exportCombinedPlanToHtml(){
         return '<tr><td>' + phEsc(item) + '</td><td>' + phEsc(po || '—') + '</td><td class="ph-num">' + phFmt(qty) + '</td>' + khoTds + '</tr>' + detailRows;
       };
 
+      // ===== Phần dưới đây làm mới CẢ danh sách container (VNC xuất hiện/mất đi theo "Pick xong") —
+      // port lại ĐÚNG thuật toán gộp container của renderContainerPickingOverview() trong app.js gốc
+      // (buildPickingIndex + vòng lặp gộp theo contInstanceKey + tính pct/status), chỉ bỏ các phần
+      // không hiển thị ở bản HTML này (shortItems, topKho, changeStatus...). =====
+      var phFmtDec = function(v, dec){
+        if(v === null || v === undefined || v === '') return '—';
+        var n = Number(v);
+        return isNaN(n) ? String(v) : n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: dec == null ? 2 : dec });
+      };
+      var phFmtDateUtc = function(d){
+        var p = function(n){ return String(n).padStart(2, '0'); };
+        return p(d.getUTCDate()) + '/' + p(d.getUTCMonth() + 1) + '/' + d.getUTCFullYear();
+      };
+      var phParseDateField = function(v){
+        if(v && typeof v === 'object' && v.__date) return new Date(v.__date);
+        return v ? new Date(v) : null;
+      };
+      var phContInstanceKey = function(type, cNo, loadDate, planTime){
+        return type + '|' + cNo + '|' + (loadDate || '') + '|' + (planTime || '');
+      };
+      var phIsSppItem = function(item){ return !/^0/.test(String(item || '').trim()); };
+      var phSppOkKey = function(item, custpo){ return String(item || '').toLowerCase() + '␟' + String(custpo || '').toLowerCase(); };
+      var phBuildPickingIndex = function(khoDetail){
+        var idx = {};
+        Object.keys(khoDetail || {}).forEach(function(kho){
+          (khoDetail[kho] || []).forEach(function(r){
+            var item = r[0], oqc = r[3], qty = r[4], ref = r[5];
+            if(String(oqc || '').toUpperCase() !== 'PASS') return;
+            if(ref && String(ref).trim()){
+              var key = String(item || '').toLowerCase() + '|' + String(ref).trim().toLowerCase();
+              idx[key] = (idx[key] || 0) + qty;
+            }
+          });
+        });
+        return idx;
+      };
+      var phShipIsFullyLoaded = function(contShipByRef, csrs, planQty){
+        if(!contShipByRef || !csrs || !csrs.length) return false;
+        var shipQty = 0, matched = false;
+        csrs.forEach(function(csr){
+          var ref = String(csr || '').trim().toUpperCase().replace(/[;,.\s]+$/, '');
+          if(Object.prototype.hasOwnProperty.call(contShipByRef, ref)){ matched = true; shipQty += Number(contShipByRef[ref]) || 0; }
+        });
+        if(!matched) return false;
+        var pct = planQty > 0 ? (shipQty / planQty * 100) : 0;
+        return pct >= 99.995;
+      };
+      var phDateTimeSortKey = function(dateStr, timeStr){
+        var d = String(dateStr || '').split(',')[0].trim();
+        var t = String(timeStr || '').split(',')[0].trim();
+        var dm = d.match(/^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})$/);
+        if(!dm) return Infinity;
+        var tm = t.match(/^(\\d{1,2}):(\\d{2})/);
+        var hh = tm ? Number(tm[1]) : 0, mi = tm ? Number(tm[2]) : 0;
+        return new Date(Number(dm[3]), Number(dm[2]) - 1, Number(dm[1]), hh, mi).getTime();
+      };
+
+      var phBuildContainers = function(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx){
+        var contMap = {};
+        ['Row', 'FC', 'HCP'].forEach(function(type){
+          var plan = planDataLive[type];
+          if(!plan || !plan.detailRows) return;
+          plan.detailRows.forEach(function(r){
+            var cNo = r.containerNo;
+            if(!cNo || cNo === '—') return;
+            var loadDateVal = phParseDateField(r.loadDate);
+            var loadDateStr = loadDateVal ? phFmtDateUtc(loadDateVal) : '';
+            var planTimeStr = r.planTime || '';
+            var key = phContInstanceKey(type, cNo, loadDateStr, planTimeStr);
+            var itemKey = String(r.item || '').toLowerCase();
+            var csrKey = String(r.csr || '').trim().toLowerCase();
+            var passQty = 0;
+            if(csrKey) passQty = pickingIdx[itemKey + '|' + csrKey] || 0;
+            var planQty = r.qty || 0;
+            var contribution = planQty > 0 ? Math.min(passQty, planQty) : 0;
+            var custPoForSppKey = (r.custPo && r.custPo.trim()) ? r.custPo.trim() : '(Khong co)';
+            if(phIsSppItem(r.item) && sppOk[phSppOkKey(r.item, custPoForSppKey)]) contribution = planQty;
+            var entry = contMap[key];
+            if(!entry){
+              entry = { type: type, cNo: cNo, loadDate: loadDateStr, planTime: planTimeStr, planQty: 0, contribution: 0, invoices: [], csrs: [], items: {} };
+              contMap[key] = entry;
+            }
+            entry.planQty += planQty;
+            entry.contribution += contribution;
+            if(r.invoice && entry.invoices.indexOf(r.invoice) === -1) entry.invoices.push(r.invoice);
+            if(r.csr && entry.csrs.indexOf(r.csr) === -1) entry.csrs.push(r.csr);
+            var itemPoKey = r.item + '||' + (r.custPo || '');
+            if(!entry.items[itemPoKey]) entry.items[itemPoKey] = { item: r.item, po: r.custPo || '', qty: 0, cbm: 0 };
+            entry.items[itemPoKey].qty += planQty;
+            entry.items[itemPoKey].cbm += (parseFloat(r.cbm) || 0);
+          });
+        });
+
+        var rows = [];
+        Object.keys(contMap).forEach(function(key){
+          var entry = contMap[key];
+          if(entry.planQty <= 0) return;
+          var instanceKey = phContInstanceKey(entry.type, entry.cNo, entry.loadDate, entry.planTime);
+          if(hidden[instanceKey]) return; // đã bị ẩn/xoá thủ công khỏi Plan
+          var pct = (entry.contribution / entry.planQty) * 100;
+          var autoStatus = pct >= 99.995 ? 'done' : (pct <= 0.005 ? 'notStarted' : 'inProgress');
+          var isManualUser = !!(manualPicked && manualPicked[instanceKey]);
+          var isShipDone = !isManualUser && phShipIsFullyLoaded(contShipByRef, entry.csrs, entry.planQty);
+          var status = (isManualUser || isShipDone) ? 'manualDone' : autoStatus;
+          if(status === 'done' || status === 'manualDone') return; // Pick xong -> loại khỏi danh sách, y hệt bản tĩnh lúc xuất
+
+          var items = Object.keys(entry.items).map(function(k){
+            var it = entry.items[k];
+            return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, locs: phLocatorDetail(invIdx, it.item, it.po) };
+          });
+
+          rows.push({
+            type: entry.type, cNo: entry.cNo, status: status,
+            loadDate: entry.loadDate, planTime: entry.planTime,
+            invoice: entry.invoices.join(', ') || '—', csr: entry.csrs.join(', ') || '—',
+            planQty: entry.planQty, items: items
+          });
+        });
+        rows.sort(function(a, b){ return phDateTimeSortKey(a.loadDate, a.planTime) - phDateTimeSortKey(b.loadDate, b.planTime); });
+        return rows;
+      };
+
+      var phBuildContainerHtml = function(row, uidState){
+        var totalCbm = row.items.reduce(function(s, it){ return s + (it.cbm || 0); }, 0);
+        var khoTh = PH_LIVE_CONFIG.khoLabels.map(function(label){ return '<th style="background:' + PH_LIVE_CONFIG.khoColors[label] + ';">' + phEsc(label) + '</th>'; }).join('');
+        var itemsHtml = row.items.map(function(it){
+          var uidPrefix = 'k' + (uidState.n++);
+          return '<tbody class="ph-item-group" data-item="' + phEsc(it.item) + '" data-po="' + phEsc(it.po || '') + '" data-qty="' + it.qty + '">' + phGroupBodyHtml(it.item, it.po, it.qty, it.locs, uidPrefix) + '</tbody>';
+        }).join('');
+        return '<details class="ph-cont">' +
+          '<summary>' +
+            '<span class="ph-badge">' + phEsc(row.type) + '</span>' +
+            '<span class="ph-vnc">' + phEsc(row.invoice) + '</span>' +
+            '<span class="ph-csr">' + phEsc(row.csr) + '</span>' +
+            '<span class="ph-date">' + phEsc(row.loadDate) + ' · ' + phEsc(row.planTime) + '</span>' +
+            '<span class="ph-qty">SL Plan: ' + phFmt(row.planQty) + '</span>' +
+            '<span class="ph-cbm">CBM: ' + phFmtDec(totalCbm, 2) + '</span>' +
+          '</summary>' +
+          '<table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th>SL Plan</th>' + khoTh + '</tr></thead>' + itemsHtml + '</table>' +
+        '</details>';
+      };
+
       var phRefresh = function(){
         var btn = document.getElementById('ph-refresh-btn');
         var status = document.getElementById('ph-refresh-status');
         btn.disabled = true;
-        status.textContent = 'Đang tải tồn kho mới nhất từ Cloud...';
-        var url = PH_LIVE_CONFIG.url.replace(/\\/+$/, '') + '/dashboard_data/' + PH_LIVE_CONFIG.invKey + '.json?auth=' + encodeURIComponent(PH_LIVE_CONFIG.token) + '&_ts=' + Date.now();
+        status.textContent = 'Đang tải dữ liệu mới nhất từ Cloud...';
+        // Lấy CẢ node dashboard_data trong 1 lượt (thay vì chỉ đúng khoá tồn kho như trước) — cần thêm
+        // Plan/Pick tay/Ẩn/SPP/Ship để dựng lại đúng danh sách container theo "Pick xong" mới nhất.
+        var url = PH_LIVE_CONFIG.url.replace(/\\/+$/, '') + '/dashboard_data.json?auth=' + encodeURIComponent(PH_LIVE_CONFIG.token) + '&_ts=' + Date.now();
         fetch(url, { cache: 'no-store' }).then(function(res){
           if(!res.ok) throw new Error('HTTP ' + res.status);
           return res.text();
         }).then(function(text){
-          var currentData = text ? JSON.parse(JSON.parse(text)) : null; // Firebase trả về CHUỖI JSON (đã stringify 2 lớp) tại node này
+          var root = text ? JSON.parse(text) : {}; // mỗi khoá con vẫn là CHUỖI JSON đã stringify 1 lớp nữa
+          var parseSub = function(key){
+            var raw = root[key];
+            if(raw === undefined || raw === null) return null;
+            return JSON.parse(raw);
+          };
+          var currentData = parseSub(PH_LIVE_CONFIG.invKey);
           var khoDetail = (currentData && currentData.kho_detail) || {};
-          var idx = phBuildIndex(khoDetail);
-          var groups = document.querySelectorAll('.ph-item-group');
-          groups.forEach(function(g, i){
-            var item = g.dataset.item, po = g.dataset.po, qty = Number(g.dataset.qty) || 0;
-            var locs = phLocatorDetail(idx, item, po);
-            g.innerHTML = phGroupBodyHtml(item, po, qty, locs, 'r' + i);
-          });
+          var invIdx = phBuildIndex(khoDetail);
+
+          var planDataLive = parseSub(PH_LIVE_CONFIG.plansKey);
+          if(planDataLive){
+            var manualPicked = parseSub(PH_LIVE_CONFIG.manualPickedKey) || {};
+            var hidden = parseSub(PH_LIVE_CONFIG.hiddenKey) || {};
+            var sppOk = parseSub(PH_LIVE_CONFIG.sppOkStorageKey) || {};
+            var contShipRaw = parseSub(PH_LIVE_CONFIG.contShipKey);
+            var contShipByRef = (contShipRaw && contShipRaw.byRef) || {};
+            var pickingIdx = phBuildPickingIndex(khoDetail);
+            var rows = phBuildContainers(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx);
+            var uidState = { n: 0 };
+            document.getElementById('ph-list').innerHTML = rows.map(function(row){ return phBuildContainerHtml(row, uidState); }).join('');
+            var countEl = document.getElementById('ph-cont-count');
+            if(countEl) countEl.textContent = phFmt(rows.length) + ' container';
+          } else {
+            // Cloud chưa từng lưu dữ liệu Plan (hiếm) -> chỉ làm mới đúng phần tồn kho của các mã hàng
+            // đang hiển thị, giữ nguyên danh sách container như lúc xuất.
+            document.querySelectorAll('.ph-item-group').forEach(function(g, i){
+              var item = g.dataset.item, po = g.dataset.po, qty = Number(g.dataset.qty) || 0;
+              var locs = phLocatorDetail(invIdx, item, po);
+              g.innerHTML = phGroupBodyHtml(item, po, qty, locs, 'r' + i);
+            });
+          }
           btn.disabled = false;
-          status.textContent = '✓ Đã làm mới tồn kho lúc ' + new Date().toLocaleString('vi-VN');
+          status.textContent = '✓ Đã làm mới lúc ' + new Date().toLocaleString('vi-VN');
         }).catch(function(err){
           btn.disabled = false;
-          status.textContent = '✗ Không làm mới được (kiểm tra mạng) — vẫn đang xem bản tồn kho cũ. Lỗi: ' + err.message;
+          status.textContent = '✗ Không làm mới được (kiểm tra mạng) — vẫn đang xem bản cũ. Lỗi: ' + err.message;
         });
       };
       document.getElementById('ph-refresh-btn').addEventListener('click', phRefresh);
