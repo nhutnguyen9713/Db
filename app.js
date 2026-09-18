@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.46';
+const APP_VERSION = 'v2.47';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5552,25 +5552,32 @@ function exportCombinedPlanToHtml(){
   const totalCols = 3 + khoHeaderLabelsHtml.length;
   let uid = 0;
 
-  const itemsTableHtml = (row) => row.items.map(it => {
-    const locs = (it.locs && it.locs.length) ? it.locs : [];
+  // Mỗi mã hàng nằm trong 1 <tbody> RIÊNG (data-item/data-po/data-qty) — không phải để hiển thị khác gì
+  // (nhìn vẫn liền 1 bảng như cũ), mà để script "Làm mới tồn kho" phía dưới có thể dựng lại ĐÚNG NGUYÊN
+  // group đó (số lượng theo kho + Locator/OQC/SL tồn) từ dữ liệu Cloud mới nhất, không đụng các mã khác.
+  const groupBodyHtml = (item, po, qty, locs, uidPrefix) => {
     const groups = computeItemKhoGroups(locs);
-    const rowId = 'k' + (uid++);
-    const khoTds = khoHeaderLabelsHtml.map(label => {
+    const khoTds = khoHeaderLabelsHtml.map((label, i) => {
       const g = groups[label];
       const bg = `background:${khoColColor.get(label)};`;
       if(!g.qty) return `<td class="ph-num" style="${bg}">0</td>`;
-      const detailId = `${rowId}-${khoHeaderLabelsHtml.indexOf(label)}`;
+      const detailId = `${uidPrefix}-${i}`;
       return `<td class="ph-num ph-kho-cell" data-target="${detailId}" style="${bg}" title="Bấm để xem Locator/OQC/SL tồn">${fmt(g.qty)}</td>`;
     }).join('');
-    const detailRows = khoHeaderLabelsHtml.map(label => {
+    const detailRows = khoHeaderLabelsHtml.map((label, i) => {
       const g = groups[label];
       if(!g.qty) return '';
-      const detailId = `${rowId}-${khoHeaderLabelsHtml.indexOf(label)}`;
+      const detailId = `${uidPrefix}-${i}`;
       const body = g.locs.map(l => `<tr><td>${escHtml(l.locator)}</td><td>${escHtml(l.oqc || '—')}</td><td class="ph-num">${fmt(l.qty)}</td></tr>`).join('');
-      return `<tr class="ph-detail-row" id="${escAttr(detailId)}" style="display:none;"><td colspan="${totalCols}"><div class="ph-detail-label">${escHtml(label)} — ${escHtml(it.item)}</div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>${body}</tbody></table></td></tr>`;
+      return `<tr class="ph-detail-row" id="${escAttr(detailId)}" style="display:none;"><td colspan="${totalCols}"><div class="ph-detail-label">${escHtml(label)} — ${escHtml(item)}</div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>${body}</tbody></table></td></tr>`;
     }).join('');
-    return `<tr><td>${escHtml(it.item)}</td><td>${escHtml(it.po || '—')}</td><td class="ph-num">${fmt(it.qty)}</td>${khoTds}</tr>${detailRows}`;
+    return `<tr><td>${escHtml(item)}</td><td>${escHtml(po || '—')}</td><td class="ph-num">${fmt(qty)}</td>${khoTds}</tr>${detailRows}`;
+  };
+
+  const itemsTableHtml = (row) => row.items.map(it => {
+    const locs = (it.locs && it.locs.length) ? it.locs : [];
+    const uidPrefix = 'k' + (uid++);
+    return `<tbody class="ph-item-group" data-item="${escAttr(it.item)}" data-po="${escAttr(it.po || '')}" data-qty="${it.qty}">${groupBodyHtml(it.item, it.po, it.qty, locs, uidPrefix)}</tbody>`;
   }).join('');
 
   const contsHtml = containers.map(row => {
@@ -5587,10 +5594,20 @@ function exportCombinedPlanToHtml(){
       </summary>
       <table class="ph-items">
         <thead><tr><th>Item No.</th><th>Cust PO</th><th>SL Plan</th>${khoTh}</tr></thead>
-        <tbody>${itemsTableHtml(row)}</tbody>
+        ${itemsTableHtml(row)}
       </table>
     </details>`;
   }).join('');
+
+  // Nhúng thông tin để trang HTML tự lấy tồn kho MỚI NHẤT từ Cloud (Firebase) mỗi lần mở/bấm "Làm
+  // mới" — CHỈ phần tồn kho (Locator/OQC/SL tồn + số lượng theo kho) cập nhật theo Cloud, phần
+  // Container/VNC/SL Plan/CBM giữ NGUYÊN đúng bản Plan lúc xuất (không tự đổi số container theo thời
+  // gian thực — đó là phạm vi khác, không phải điều đang làm ở đây). CHỈ nhúng khi máy này ĐANG kết
+  // nối Cloud lúc xuất — nếu chưa kết nối thì bỏ qua, HTML vẫn dùng được ở dạng snapshot tĩnh như cũ.
+  const canLiveRefresh = !!(typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token);
+  const liveConfigJson = canLiveRefresh
+    ? JSON.stringify({ url: CloudVault.url, token: CloudVault.token, invKey: STORAGE_KEY_INVENTORY, khoLabels: khoHeaderLabelsHtml, khoColors: Object.fromEntries(khoColColor) })
+    : 'null';
 
   const pad = n => String(n).padStart(2, '0');
   const now = new Date();
@@ -5630,11 +5647,19 @@ function exportCombinedPlanToHtml(){
   .ph-locs th,.ph-locs td{padding:5px 14px 5px 28px; border-top:1px solid #eef0f3; text-align:left;}
   .ph-locs th{background:#fafbfc; color:#8a97ac; font-weight:600; font-size:10.5px; text-transform:uppercase;}
   .ph-locs td.ph-num{text-align:right; font-family:ui-monospace,monospace; padding-right:14px;}
+  #ph-refresh-btn{padding:8px 14px; border-radius:8px; border:1px solid #2c6fcb; background:#2c6fcb; color:#fff; font-size:13px; font-weight:600; cursor:pointer;}
+  #ph-refresh-btn:disabled{opacity:.6; cursor:default;}
+  #ph-refresh-status{font-size:12.5px; color:#6b7280; margin-left:10px;}
+  .ph-toolbar{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:16px;}
 </style></head>
 <body>
   <h1>Tổng hợp 3 Plan — Xem theo Container</h1>
   <div class="ph-meta">Tạo lúc ${fmtDateTime(now)} · ${fmt(containers.length)} container (đã bỏ container "Đã Load Xong") · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm vào số lượng của 1 kho để xem Locator/OQC/SL tồn</div>
   <input id="ph-search" type="text" placeholder="Tìm theo VNC, CSR, mã hàng...">
+  <div class="ph-toolbar">
+    <button id="ph-refresh-btn" type="button"${canLiveRefresh ? '' : ' disabled'}>🔄 Làm mới tồn kho (Cloud)</button>
+    <span id="ph-refresh-status">${canLiveRefresh ? 'Chưa làm mới — số liệu tồn kho đang là bản lúc xuất file.' : 'Không kết nối được Cloud lúc xuất file — chỉ xem được bản tồn kho lúc xuất, không làm mới được.'}</span>
+  </div>
   <div id="ph-list">${contsHtml}</div>
   <script>
     document.getElementById('ph-search').addEventListener('input', function(e){
@@ -5650,6 +5675,103 @@ function exportCombinedPlanToHtml(){
       if(!target) return;
       target.style.display = (target.style.display === 'none') ? 'table-row' : 'none';
     });
+
+    // ===== Làm mới tồn kho từ Cloud (Firebase) — CHỈ phần Locator/OQC/SL tồn + số lượng theo kho của
+    // từng mã, KHÔNG đụng danh sách container/VNC/SL Plan/CBM (giữ nguyên đúng bản Plan lúc xuất). =====
+    var PH_LIVE_CONFIG = ${liveConfigJson};
+    if(PH_LIVE_CONFIG){
+      var phEsc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+      var phFmt = function(n){ return Math.round(n || 0).toLocaleString('en-US'); };
+      var phBuildIndex = function(khoDetail){
+        var idx = {};
+        Object.keys(khoDetail || {}).forEach(function(kho){
+          (khoDetail[kho] || []).forEach(function(r){
+            var item = r[0], custpo = r[1], locator = r[2], oqc = r[3], qty = r[4];
+            var key = String(item || '').toLowerCase();
+            if(!idx[key]) idx[key] = [];
+            idx[key].push({ kho: kho, locator: locator, custpo: custpo, oqc: oqc, qty: qty });
+          });
+        });
+        return idx;
+      };
+      var phLocatorDetail = function(idx, item, po){
+        var entries = idx[String(item || '').toLowerCase()] || [];
+        var poLower = po ? String(po).trim().toLowerCase() : '';
+        var rows = [];
+        entries.forEach(function(e){
+          if(poLower && String(e.custpo || '').trim().toLowerCase() !== poLower) return;
+          if(/prod/i.test(e.locator || '')) return;
+          rows.push(e);
+        });
+        rows.sort(function(a,b){ return (b.qty||0) - (a.qty||0); });
+        return rows;
+      };
+      var phKhoGroups = function(locs){
+        var groups = {};
+        PH_LIVE_CONFIG.khoLabels.forEach(function(l){ groups[l] = { qty: 0, locs: [] }; });
+        locs.forEach(function(l){
+          var key;
+          if(l.kho === 'Kho 3A'){
+            var loc = String(l.locator || '');
+            key = /^3AFG-M[12]/i.test(loc) ? '3A lầu' : (/^3A-[A-Z]\\d+-T\\d+/i.test(loc) ? '3A Rack' : '3A trệt');
+          } else {
+            key = l.kho.replace('Kho ', '');
+            if(!(key in groups)) return;
+          }
+          groups[key].qty += (l.qty || 0);
+          groups[key].locs.push(l);
+        });
+        return groups;
+      };
+      var phGroupBodyHtml = function(item, po, qty, locs, uidPrefix){
+        var groups = phKhoGroups(locs);
+        var totalCols = 3 + PH_LIVE_CONFIG.khoLabels.length;
+        var khoTds = PH_LIVE_CONFIG.khoLabels.map(function(label, i){
+          var g = groups[label];
+          var bg = 'background:' + PH_LIVE_CONFIG.khoColors[label] + ';';
+          if(!g.qty) return '<td class="ph-num" style="' + bg + '">0</td>';
+          var detailId = uidPrefix + '-' + i;
+          return '<td class="ph-num ph-kho-cell" data-target="' + detailId + '" style="' + bg + '" title="Bấm để xem Locator/OQC/SL tồn">' + phFmt(g.qty) + '</td>';
+        }).join('');
+        var detailRows = PH_LIVE_CONFIG.khoLabels.map(function(label, i){
+          var g = groups[label];
+          if(!g.qty) return '';
+          var detailId = uidPrefix + '-' + i;
+          var body = g.locs.map(function(l){ return '<tr><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
+          return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label">' + phEsc(label) + ' — ' + phEsc(item) + '</div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
+        }).join('');
+        return '<tr><td>' + phEsc(item) + '</td><td>' + phEsc(po || '—') + '</td><td class="ph-num">' + phFmt(qty) + '</td>' + khoTds + '</tr>' + detailRows;
+      };
+
+      var phRefresh = function(){
+        var btn = document.getElementById('ph-refresh-btn');
+        var status = document.getElementById('ph-refresh-status');
+        btn.disabled = true;
+        status.textContent = 'Đang tải tồn kho mới nhất từ Cloud...';
+        var url = PH_LIVE_CONFIG.url.replace(/\\/+$/, '') + '/dashboard_data/' + PH_LIVE_CONFIG.invKey + '.json?auth=' + encodeURIComponent(PH_LIVE_CONFIG.token) + '&_ts=' + Date.now();
+        fetch(url, { cache: 'no-store' }).then(function(res){
+          if(!res.ok) throw new Error('HTTP ' + res.status);
+          return res.text();
+        }).then(function(text){
+          var currentData = text ? JSON.parse(JSON.parse(text)) : null; // Firebase trả về CHUỖI JSON (đã stringify 2 lớp) tại node này
+          var khoDetail = (currentData && currentData.kho_detail) || {};
+          var idx = phBuildIndex(khoDetail);
+          var groups = document.querySelectorAll('.ph-item-group');
+          groups.forEach(function(g, i){
+            var item = g.dataset.item, po = g.dataset.po, qty = Number(g.dataset.qty) || 0;
+            var locs = phLocatorDetail(idx, item, po);
+            g.innerHTML = phGroupBodyHtml(item, po, qty, locs, 'r' + i);
+          });
+          btn.disabled = false;
+          status.textContent = '✓ Đã làm mới tồn kho lúc ' + new Date().toLocaleString('vi-VN');
+        }).catch(function(err){
+          btn.disabled = false;
+          status.textContent = '✗ Không làm mới được (kiểm tra mạng) — vẫn đang xem bản tồn kho cũ. Lỗi: ' + err.message;
+        });
+      };
+      document.getElementById('ph-refresh-btn').addEventListener('click', phRefresh);
+      phRefresh(); // tự làm mới ngay khi mở file, không cần bấm
+    }
   </script>
 </body></html>`;
 
