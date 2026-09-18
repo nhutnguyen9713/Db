@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.43';
+const APP_VERSION = 'v2.44';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5270,6 +5270,26 @@ function renderCombinedPlanPanel(){
     </table>`;
 }
 
+// Container đã "Đã Load Xong" (dữ liệu Ship khớp Reference, SL Ship >= SL Plan container) — dùng
+// CHUNG cho cả xuất Excel lẫn xuất HTML "Tổng hợp 3 Plan" (2 nơi đều cần bỏ các container này ra
+// khỏi kết quả). Tính lại ĐÚNG công thức đang dùng ở cột "Trạng thái Loading" trên bảng Picking
+// Status (renderContPickTable — xem "loadingHtml"/"shipPct"), gộp theo groupKey (type|cNo|loadDate|
+// planTime) để lọc trực tiếp danh sách container của từng mã.
+function computeLoadedDoneContainerKeys(){
+  const keys = new Set();
+  if(contShipData && contShipData.byRef.size){
+    contPickAllRows.forEach(row => {
+      const refs = String(row.csr || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      let shipQty = 0, matched = false;
+      refs.forEach(ref => { if(contShipData.byRef.has(ref)){ matched = true; shipQty += contShipData.byRef.get(ref); } });
+      if(!matched || shipQty <= 0) return;
+      const shipPct = row.planQty > 0 ? (shipQty / row.planQty * 100) : 0;
+      if(shipPct >= 99.995) keys.add(`${row.type}|${row.cNo}|${row.loadDate}|${row.planTime}`);
+    });
+  }
+  return keys;
+}
+
 // Đổi từ SheetJS (XLSX.*) sang ExcelJS cho riêng sheet "Tổng hợp 3 Plan" — SheetJS bản miễn phí không
 // ghi được style (kẻ khung/tô nền), ExcelJS thì có (đã dùng sẵn ở các chỗ xuất Excel khác trong app,
 // xem exportPickSlipToExcel()/ccBuildDaXacNhanSheetFromRecords() — dùng lại đúng quy ước màu/viền đó
@@ -5363,21 +5383,7 @@ async function exportCombinedPlanToExcel(){
   const colMaxLen1 = headers1.map(h => h.length);
   const trackWidth1 = (idx, text) => { const len = String(text==null?'':text).length; if(len > colMaxLen1[idx]) colMaxLen1[idx] = len; };
 
-  // Container đã "Đã Load Xong" (dữ liệu Ship khớp Reference, SL Ship >= SL Plan container) — bỏ HẲN
-  // khỏi Excel xuất, không còn cần theo dõi nữa. Tính lại ĐÚNG công thức đang dùng ở cột "Trạng thái
-  // Loading" trên bảng Picking Status (renderContPickTable — xem "loadingHtml"/"shipPct") nhưng gộp
-  // theo groupKey (type|cNo|loadDate|planTime) để lọc trực tiếp danh sách container mỗi mã bên dưới.
-  const loadedDoneContainerKeys = new Set();
-  if(contShipData && contShipData.byRef.size){
-    contPickAllRows.forEach(row => {
-      const refs = String(row.csr || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-      let shipQty = 0, matched = false;
-      refs.forEach(ref => { if(contShipData.byRef.has(ref)){ matched = true; shipQty += contShipData.byRef.get(ref); } });
-      if(!matched || shipQty <= 0) return;
-      const shipPct = row.planQty > 0 ? (shipQty / row.planQty * 100) : 0;
-      if(shipPct >= 99.995) loadedDoneContainerKeys.add(`${row.type}|${row.cNo}|${row.loadDate}|${row.planTime}`);
-    });
-  }
+  const loadedDoneContainerKeys = computeLoadedDoneContainerKeys();
 
   // Dàn phẳng ra 1 dòng/(mã, container) — mã nào dùng nhiều container thì lặp lại đủ số dòng; mã nào
   // không có container nào thì vẫn giữ 1 dòng (cột container để trống), groupKey riêng theo mã đó để
@@ -5478,6 +5484,108 @@ async function exportCombinedPlanToExcel(){
 
 const btnExportCombinedPlan = document.getElementById('btn-export-combined-plan');
 if(btnExportCombinedPlan) btnExportCombinedPlan.addEventListener('click', exportCombinedPlanToExcel);
+
+// Xuất file HTML tự chứa (mở bằng trình duyệt, không cần Excel/mạng) — mỗi container là 1 khối
+// <details> gấp gọn theo số VNC (Invoice), bấm vào mới xổ ra bảng con Item No./Cust PO/Locator/SL
+// tồn của ĐÚNG container đó — dùng buildItemLocatorDetail() sẵn có trong item.locs của mỗi container
+// (đã tính đúng theo PO khi container được dựng ở renderContPickTable(), CÙNG dữ liệu popup "Xem
+// container" trên giao diện) nên không cần tính lại. Dùng CHUNG computeLoadedDoneContainerKeys() với
+// bản Excel để bỏ đúng các container đã "Đã Load Xong" như nhau ở cả 2 định dạng xuất.
+function exportCombinedPlanToHtml(){
+  const loadedTypes = PLAN_TYPES.filter(t => planData[t]);
+  if(!loadedTypes.length) return;
+
+  const loadedDoneContainerKeys = computeLoadedDoneContainerKeys();
+  const containers = (contPickAllRows || [])
+    .filter(row => row.planQty > 0 && !loadedDoneContainerKeys.has(`${row.type}|${row.cNo}|${row.loadDate}|${row.planTime}`))
+    .slice()
+    .sort((a,b) => ovParseDateTimeSortKey(a.loadDate, a.planTime) - ovParseDateTimeSortKey(b.loadDate, b.planTime));
+
+  if(!containers.length){ alert('Không có container nào để xuất (có thể tất cả đã "Đã Load Xong").'); return; }
+
+  const itemsTableHtml = (row) => row.items.map(it => {
+    const locs = (it.locs && it.locs.length) ? it.locs : null;
+    if(!locs) return `<tr><td>${escHtml(it.item)}</td><td>${escHtml(it.po || '—')}</td><td colspan="2" class="ph-empty">(không có tồn kho)</td></tr>`;
+    return locs.map((l, i) => `<tr>${i === 0 ? `<td rowspan="${locs.length}">${escHtml(it.item)}</td><td rowspan="${locs.length}">${escHtml(it.po || '—')}</td>` : ''}<td>${escHtml(l.locator)}</td><td class="ph-num">${fmt(l.qty)}</td></tr>`).join('');
+  }).join('');
+
+  const contsHtml = containers.map(row => {
+    const totalCbm = row.items.reduce((s, it) => s + (it.cbm || 0), 0);
+    return `
+    <details class="ph-cont">
+      <summary>
+        <span class="ph-badge">${escHtml(row.type)}</span>
+        <span class="ph-vnc">${escHtml(row.invoice)}</span>
+        <span class="ph-csr">${escHtml(row.csr)}</span>
+        <span class="ph-date">${escHtml(row.loadDate)} · ${escHtml(row.planTime)}</span>
+        <span class="ph-qty">SL Plan: ${fmt(row.planQty)}</span>
+        <span class="ph-cbm">CBM: ${fmtDec(totalCbm, 2)}</span>
+      </summary>
+      <table class="ph-items">
+        <thead><tr><th>Item No.</th><th>Cust PO</th><th>Locator</th><th>SL tồn</th></tr></thead>
+        <tbody>${itemsTableHtml(row)}</tbody>
+      </table>
+    </details>`;
+  }).join('');
+
+  const pad = n => String(n).padStart(2, '0');
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+
+  const html = `<!DOCTYPE html>
+<html lang="vi"><head><meta charset="UTF-8"><title>Tổng hợp 3 Plan — Xem theo Container</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#f4f5f7; color:#12161F; margin:0; padding:24px;}
+  h1{font-size:19px; margin:0 0 4px;}
+  .ph-meta{color:#6b7280; font-size:13px; margin-bottom:16px;}
+  #ph-search{width:100%; max-width:420px; padding:9px 12px; border-radius:8px; border:1px solid #d7dae0; font-size:14px; margin-bottom:16px; box-sizing:border-box;}
+  .ph-cont{background:#fff; border:1px solid #e2e5ea; border-radius:10px; margin-bottom:10px; overflow:hidden;}
+  .ph-cont summary{cursor:pointer; padding:12px 14px; display:flex; flex-wrap:wrap; gap:14px; align-items:center; font-size:13px; list-style:none;}
+  .ph-cont summary::-webkit-details-marker{display:none;}
+  .ph-cont summary:before{content:'▸'; color:#8a97ac; font-size:12px; margin-right:2px;}
+  .ph-cont[open] summary:before{content:'▾';}
+  /* Không cậy hẳn vào hành vi mặc định của trình duyệt cho <details> (thiếu ổn định trên 1 số
+     WebView cũ/thiết bị cầm tay quét kho) — tự ẩn/hiện rõ ràng bằng class theo thuộc tính [open]. */
+  .ph-cont:not([open]) .ph-items{display:none;}
+  .ph-badge{font-weight:700; color:#2c6fcb;}
+  .ph-vnc{font-weight:700; font-family:ui-monospace,monospace;}
+  .ph-csr{color:#6b7280; font-family:ui-monospace,monospace;}
+  .ph-date{color:#6b7280;}
+  .ph-qty,.ph-cbm{margin-left:auto; font-weight:600;}
+  .ph-items{width:100%; border-collapse:collapse; font-size:13px;}
+  .ph-items th,.ph-items td{padding:7px 14px; border-top:1px solid #eef0f3; text-align:left;}
+  .ph-items th{background:#f8f9fb; color:#6b7280; font-weight:600; font-size:11.5px; text-transform:uppercase;}
+  .ph-items td.ph-num{text-align:right; font-family:ui-monospace,monospace;}
+  .ph-items td.ph-empty{color:#8a97ac; font-style:italic;}
+  .ph-cont.ph-hide{display:none;}
+</style></head>
+<body>
+  <h1>Tổng hợp 3 Plan — Xem theo Container</h1>
+  <div class="ph-meta">Tạo lúc ${fmtDateTime(now)} · ${fmt(containers.length)} container (đã bỏ container "Đã Load Xong") · Bấm vào 1 dòng để xem Item No./Cust PO/Locator/SL tồn</div>
+  <input id="ph-search" type="text" placeholder="Tìm theo VNC, CSR, mã hàng...">
+  <div id="ph-list">${contsHtml}</div>
+  <script>
+    document.getElementById('ph-search').addEventListener('input', function(e){
+      var q = e.target.value.trim().toLowerCase();
+      document.querySelectorAll('.ph-cont').forEach(function(el){
+        el.classList.toggle('ph-hide', !!q && el.textContent.toLowerCase().indexOf(q) === -1);
+      });
+    });
+  </script>
+</body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Tong_hop_3_Plan_theo_Container_${stamp}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+const btnExportCombinedPlanHtml = document.getElementById('btn-export-combined-plan-html');
+if(btnExportCombinedPlanHtml) btnExportCombinedPlanHtml.addEventListener('click', exportCombinedPlanToHtml);
 
 function buildTopItemsBarHtml(topItems, color){
   if(!topItems || !topItems.length) return '<div class="kho-empty" style="display:block; padding:14px 0;">Không có dữ liệu</div>';
