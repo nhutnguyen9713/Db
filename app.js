@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.51';
+const APP_VERSION = 'v2.52';
 const APP_VERSION_DATE = '18/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5573,7 +5573,7 @@ function exportCombinedPlanToHtml(){
       if(!g.qty) return '';
       const detailId = `${uidPrefix}-${i}`;
       const body = g.locs.map(l => `<tr><td>${escHtml(l.locator)}</td><td>${escHtml(l.oqc || '—')}</td><td class="ph-num">${fmt(l.qty)}</td></tr>`).join('');
-      return `<tr class="ph-detail-row" id="${escAttr(detailId)}" style="display:none;"><td colspan="${totalCols}"><div class="ph-detail-label">${escHtml(label)} — ${escHtml(item)}</div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>${body}</tbody></table></td></tr>`;
+      return `<tr class="ph-detail-row" id="${escAttr(detailId)}" style="display:none;"><td colspan="${totalCols}"><div class="ph-detail-label"><span class="ph-detail-label-text">${escHtml(label)} — ${escHtml(item)}</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>${body}</tbody></table></td></tr>`;
     }).join('');
     return `<tr><td>${escHtml(item)}</td><td>${escHtml(po || '—')}</td><td class="ph-num">${fmt(qty)}</td>${khoTds}</tr>${detailRows}`;
   };
@@ -5739,7 +5739,10 @@ function exportCombinedPlanToHtml(){
   .ph-kho-cell{cursor:pointer; text-decoration:underline dotted; text-decoration-color:#8a97ac;}
   .ph-kho-cell:hover{filter:brightness(0.94);}
   .ph-detail-row td{padding:0; border-top:none;}
-  .ph-detail-label{padding:8px 14px 2px; font-size:11px; font-weight:700; color:#6b7280; text-transform:uppercase;}
+  .ph-detail-label{padding:8px 14px 2px; font-size:11px; font-weight:700; color:#6b7280; text-transform:uppercase; display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .ph-shot-btn{font-size:10.5px; font-weight:600; text-transform:none; padding:2px 8px; border-radius:6px; border:1px solid #d7dae0; background:#fff; color:#374151; cursor:pointer; white-space:nowrap;}
+  .ph-shot-btn:hover{background:#f4f5f7;}
+  .ph-shot-btn:active{background:#eceef1;}
   .ph-locs{width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:6px;}
   .ph-locs th,.ph-locs td{padding:5px 14px 5px 28px; border-top:1px solid #eef0f3; text-align:left;}
   .ph-locs th{background:#fafbfc; color:#8a97ac; font-weight:600; font-size:10.5px; text-transform:uppercase;}
@@ -5787,6 +5790,98 @@ function exportCombinedPlanToHtml(){
         detail.style.display = isOpen ? 'none' : 'table-row';
         row.classList.toggle('ph-open', !isOpen);
       }
+    });
+
+    // ===== Nút "📷 Lưu ảnh" ngay cạnh tiêu đề mỗi khối Locator/OQC/SL tồn — chụp lại ĐÚNG khối đó
+    // (label + bảng Locator/OQC/SL tồn) thành 1 file ảnh PNG tải về máy, để dễ gửi qua Zalo/Messenger...
+    // khi cần báo vị trí lấy hàng, không cần chụp màn hình cả trang rồi cắt tay. Tự vẽ lại bằng canvas
+    // (không cậy 1 thư viện chụp DOM bên ngoài như html2canvas) để file HTML vẫn tự chạy hoàn toàn độc
+    // lập, không cần mạng — vẽ tay thì nhẹ hơn nhiều và đủ dùng vì nội dung chỉ là 1 bảng đơn giản.
+    var phSaveDetailImage = function(title, rows){
+      var scale = 2, padX = 16, padTop = 14, rowH = 26, headerH = 30;
+      var mctx = document.createElement('canvas').getContext('2d');
+      mctx.font = 'bold 14px system-ui, sans-serif';
+      var titleW = mctx.measureText(title).width;
+      mctx.font = '12.5px ui-monospace, monospace';
+      var locW = 90, oqcW = 60, qtyW = 70;
+      for(var i = 0; i < rows.length; i++){
+        locW = Math.max(locW, mctx.measureText(rows[i][0]).width + 12);
+        oqcW = Math.max(oqcW, mctx.measureText(rows[i][1]).width + 12);
+        qtyW = Math.max(qtyW, mctx.measureText(rows[i][2]).width + 12);
+      }
+      var tableW = locW + oqcW + qtyW;
+      var width = Math.max(titleW + padX * 2, tableW + padX * 2, 280);
+      var tableTop = padTop + 24 + headerH;
+      var height = tableTop + rowH * Math.max(rows.length, 1) + 14;
+
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(width * scale);
+      canvas.height = Math.ceil(height * scale);
+      var ctx = canvas.getContext('2d');
+      ctx.scale(scale, scale);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = '#12161F';
+      ctx.font = 'bold 14px system-ui, sans-serif';
+      ctx.fillText(title, padX, padTop + 14);
+
+      ctx.fillStyle = '#f8f9fb';
+      ctx.fillRect(padX - 8, tableTop - headerH, tableW + 16, headerH);
+      ctx.fillStyle = '#6b7280';
+      ctx.font = 'bold 10.5px system-ui, sans-serif';
+      ctx.fillText('LOCATOR', padX, tableTop - 11);
+      ctx.fillText('OQC', padX + locW, tableTop - 11);
+      ctx.textAlign = 'right';
+      ctx.fillText('SL TỒN', padX + tableW - 6, tableTop - 11);
+      ctx.textAlign = 'left';
+
+      ctx.font = '12.5px ui-monospace, monospace';
+      if(!rows.length){
+        ctx.fillStyle = '#8a97ac';
+        ctx.fillText('(Không có dòng nào)', padX, tableTop + 17);
+      }
+      for(var r = 0; r < rows.length; r++){
+        var ry = tableTop + rowH * r;
+        if(r % 2 === 1){ ctx.fillStyle = '#fafbfc'; ctx.fillRect(padX - 8, ry, tableW + 16, rowH); }
+        ctx.fillStyle = '#12161F';
+        ctx.fillText(rows[r][0], padX, ry + 17);
+        ctx.fillText(rows[r][1], padX + locW, ry + 17);
+        ctx.textAlign = 'right';
+        ctx.fillText(rows[r][2], padX + tableW - 6, ry + 17);
+        ctx.textAlign = 'left';
+      }
+
+      canvas.toBlob(function(blob){
+        if(!blob) return;
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        var safeName = title.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'chi_tiet';
+        a.href = url;
+        a.download = 'TonKho_' + safeName + '.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      }, 'image/png');
+    };
+    document.addEventListener('click', function(e){
+      var btn = e.target.closest('.ph-shot-btn');
+      if(!btn) return;
+      var labelDiv = btn.closest('.ph-detail-label');
+      var wrap = labelDiv ? labelDiv.parentElement : null;
+      var titleEl = labelDiv ? labelDiv.querySelector('.ph-detail-label-text') : null;
+      var title = titleEl ? titleEl.textContent.trim() : 'Chi tiết';
+      var table = wrap ? wrap.querySelector('.ph-locs') : null;
+      var rows = [];
+      if(table){
+        var trs = table.querySelectorAll('tbody tr');
+        for(var i = 0; i < trs.length; i++){
+          var tds = trs[i].querySelectorAll('td');
+          if(tds.length >= 3) rows.push([tds[0].textContent.trim(), tds[1].textContent.trim(), tds[2].textContent.trim()]);
+        }
+      }
+      phSaveDetailImage(title, rows);
     });
 
     // ===== Chọn tay ở cột "Kho" -> tự chuyển dòng đó sang bảng của đúng kho vừa chọn (hoặc quay lại
@@ -5904,7 +5999,7 @@ function exportCombinedPlanToHtml(){
           if(!g.qty) return '';
           var detailId = uidPrefix + '-' + i;
           var body = g.locs.map(function(l){ return '<tr><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
-          return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label">' + phEsc(label) + ' — ' + phEsc(item) + '</div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
+          return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
         }).join('');
         return '<tr><td>' + phEsc(item) + '</td><td>' + phEsc(po || '—') + '</td><td class="ph-num">' + phFmt(qty) + '</td>' + khoTds + '</tr>' + detailRows;
       };
