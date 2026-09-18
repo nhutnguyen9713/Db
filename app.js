@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.50';
+const APP_VERSION = 'v2.51';
 const APP_VERSION_DATE = '18/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5620,7 +5620,7 @@ function exportCombinedPlanToHtml(){
         ${khoOptionsHtml}
       </select>`;
     return `
-    <tr class="ph-cont-row" data-target="${escAttr(detailId)}" style="background:${rowBg};">
+    <tr class="ph-cont-row" data-target="${escAttr(detailId)}" data-sort-key="${ovParseDateTimeSortKey(row.loadDate, row.planTime)}" style="background:${rowBg};">
       <td class="ph-arrow-cell" style="border-left:4px solid ${contColor};"><span class="ph-arrow">▸</span></td>
       <td><span class="ph-badge" style="background:${contColor};">${escHtml(row.type)}</span></td>
       <td class="ph-vnc">${escHtml(row.invoice)}</td>
@@ -5805,6 +5805,27 @@ function exportCombinedPlanToHtml(){
       if(countEl) countEl.textContent = count + ' container';
       groupEl.classList.toggle('ph-group-empty', count === 0);
     };
+    // Chèn ĐÚNG vị trí theo Ngày·Giờ tăng dần (data-sort-key gán sẵn lúc dựng dòng) — KHÔNG chỉ nối vào
+    // cuối bảng đích, để dòng vừa "nhảy" bảng vẫn nằm đúng thứ tự thời gian như các dòng còn lại (lỗi
+    // thật đã gặp: dòng chọn tay luôn rơi xuống cuối bảng, phá thứ tự đang sort tăng dần).
+    var phInsertRowSorted = function(targetTbody, row, detail){
+      var myKey = Number(row.dataset.sortKey);
+      if(isNaN(myKey)) myKey = Infinity;
+      var existingRows = targetTbody.querySelectorAll('.ph-cont-row');
+      var before = null;
+      for(var i = 0; i < existingRows.length; i++){
+        var k = Number(existingRows[i].dataset.sortKey);
+        if(isNaN(k)) k = Infinity;
+        if(k > myKey){ before = existingRows[i]; break; }
+      }
+      if(before){
+        targetTbody.insertBefore(row, before);
+        if(detail) targetTbody.insertBefore(detail, before);
+      } else {
+        targetTbody.appendChild(row);
+        if(detail) targetTbody.appendChild(detail);
+      }
+    };
     document.addEventListener('change', function(e){
       var sel = e.target.closest('.ph-kho-select');
       if(!sel) return;
@@ -5816,8 +5837,7 @@ function exportCombinedPlanToHtml(){
       if(!targetTbody) return; // không có sẵn bảng đích (không nên xảy ra vì đã dựng sẵn đủ 3 kho + "Chưa xác định")
       var sourceGroup = row.closest('.ph-group');
       var targetGroup = targetTbody.closest('.ph-group');
-      targetTbody.appendChild(row);
-      if(detail) targetTbody.appendChild(detail);
+      phInsertRowSorted(targetTbody, row, detail);
       phUpdateGroupUI(sourceGroup);
       phUpdateGroupUI(targetGroup);
     });
@@ -6050,7 +6070,7 @@ function exportCombinedPlanToHtml(){
           var uidPrefix = 'k' + (uidState.n++);
           return '<tbody class="ph-item-group" data-item="' + phEsc(it.item) + '" data-po="' + phEsc(it.po || '') + '" data-qty="' + it.qty + '">' + phGroupBodyHtml(it.item, it.po, it.qty, it.locs, uidPrefix) + '</tbody>';
         }).join('');
-        return '<tr class="ph-cont-row" data-target="' + detailId + '" style="background:' + rowBg + ';">' +
+        return '<tr class="ph-cont-row" data-target="' + detailId + '" data-sort-key="' + phDateTimeSortKey(row.loadDate, row.planTime) + '" style="background:' + rowBg + ';">' +
             '<td class="ph-arrow-cell" style="border-left:4px solid ' + contColor + ';"><span class="ph-arrow">▸</span></td>' +
             '<td><span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span></td>' +
             '<td class="ph-vnc">' + phEsc(row.invoice) + '</td>' +
