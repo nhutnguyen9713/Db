@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.52';
+const APP_VERSION = 'v2.53';
 const APP_VERSION_DATE = '18/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5573,7 +5573,7 @@ function exportCombinedPlanToHtml(){
       if(!g.qty) return '';
       const detailId = `${uidPrefix}-${i}`;
       const body = g.locs.map(l => `<tr><td>${escHtml(l.locator)}</td><td>${escHtml(l.oqc || '—')}</td><td class="ph-num">${fmt(l.qty)}</td></tr>`).join('');
-      return `<tr class="ph-detail-row" id="${escAttr(detailId)}" style="display:none;"><td colspan="${totalCols}"><div class="ph-detail-label"><span class="ph-detail-label-text">${escHtml(label)} — ${escHtml(item)}</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>${body}</tbody></table></td></tr>`;
+      return `<tr class="ph-detail-row" id="${escAttr(detailId)}" style="display:none;"><td colspan="${totalCols}"><div class="ph-detail-label"><span class="ph-detail-label-text">${escHtml(label)} — ${escHtml(item)} · PO ${escHtml(po || '—')}</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>${body}</tbody></table></td></tr>`;
     }).join('');
     return `<tr><td>${escHtml(item)}</td><td>${escHtml(po || '—')}</td><td class="ph-num">${fmt(qty)}</td>${khoTds}</tr>${detailRows}`;
   };
@@ -5999,7 +5999,7 @@ function exportCombinedPlanToHtml(){
           if(!g.qty) return '';
           var detailId = uidPrefix + '-' + i;
           var body = g.locs.map(function(l){ return '<tr><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
-          return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
+          return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(po || '—') + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
         }).join('');
         return '<tr><td>' + phEsc(item) + '</td><td>' + phEsc(po || '—') + '</td><td class="ph-num">' + phFmt(qty) + '</td>' + khoTds + '</tr>' + detailRows;
       };
