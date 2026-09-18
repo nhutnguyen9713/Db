@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.49';
+const APP_VERSION = 'v2.50';
 const APP_VERSION_DATE = '18/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5584,34 +5584,49 @@ function exportCombinedPlanToHtml(){
     return `<tbody class="ph-item-group" data-item="${escAttr(it.item)}" data-po="${escAttr(it.po || '')}" data-qty="${it.qty}">${groupBodyHtml(it.item, it.po, it.qty, locs, uidPrefix)}</tbody>`;
   }).join('');
 
-  // Danh sách container dựng thành 1 BẢNG THẬT (không phải flex như trước) — trình duyệt tự canh cột
+  // Danh sách container dựng thành BẢNG THẬT (không phải flex như trước) — trình duyệt tự canh cột
   // thẳng hàng giữa mọi dòng, khớp đúng yêu cầu "căn thẳng hàng" mà không cần tự tính độ rộng từng cột.
-  // Mỗi container 1 màu xoay vòng theo ĐÚNG bảng màu "Mỗi màu = 1 container" của thẻ Plan (renderPlanPanel,
-  // GROUP_COLOR_PALETTE) — viền trái + tô nhạt cả dòng, để mắt dễ tách từng container khi cuộn dọc.
-  // Cột "Kho" = kho có SL tồn (PASS+NG) nhiều nhất của container này (topKho, y hệt cột Kho trong bảng
-  // Trạng thái Picking) — cho chọn tay 1 trong 3 kho cố định (MANUAL_KHO_OPTIONS) NGAY TRONG file này để
-  // xem thử, không ảnh hưởng gì tới dữ liệu gốc/Cloud (chỉ là lựa chọn hiển thị cục bộ khi xem file).
-  const contRowHtml = (row, idx) => {
+  // Tô màu theo LOẠI Plan (Row/FC/HCP) — ĐÚNG bảng màu PLAN_COLORS đang dùng ở thẻ Plan (badge/viền thẻ),
+  // không còn tô riêng từng container như trước — viền trái + badge "Loại" theo màu đó.
+  // Kho = kho có SL tồn (PASS+NG) nhiều nhất của container này (tính riêng — KHÔNG dùng lại row.topKho
+  // sẵn có trên contPickAllRows vì field đó có thể đã bị tinh chỉnh theo dữ liệu Ship, làm auto-value
+  // dùng để "nhảy bảng"/hiện lại khi bỏ chọn tay không nhất quán) — cho chọn tay 1 trong 3 kho cố định
+  // (MANUAL_KHO_OPTIONS) để xem thử, không ảnh hưởng dữ liệu gốc/Cloud. Container được GOM theo đúng kho
+  // hiện tại (tự động hoặc đã chọn tay) thành từng bảng riêng (mỗi kho 1 bảng) — không có kho thì gom
+  // vào bảng "Chưa xác định kho" — chọn tay 1 kho khác sẽ tự chuyển dòng đó sang bảng tương ứng (xem
+  // phMoveRowToGroup() trong script nhúng bên dưới).
+  const computeAutoKho = (row) => {
+    const qtyByKho = {};
+    row.items.forEach(it => (it.locs || []).forEach(l => { qtyByKho[l.kho] = (qtyByKho[l.kho] || 0) + (l.qty || 0); }));
+    let topKho = null, topQty = 0;
+    Object.entries(qtyByKho).forEach(([k, q]) => { if(q > topQty){ topKho = k; topQty = q; } });
+    return topKho;
+  };
+  let contRowUid = 0;
+  const contRowHtml = (row) => {
     const totalCbm = row.items.reduce((s, it) => s + (it.cbm || 0), 0);
-    const contColor = GROUP_COLOR_PALETTE[idx % GROUP_COLOR_PALETTE.length];
-    const rowBg = hexToRgba(contColor, 0.14);
-    const detailBg = hexToRgba(contColor, 0.05);
-    const detailId = `cd${idx}`;
-    const khoManualVal = row.isManualKho ? row.topKho : '';
-    const khoAutoLabel = row.isManualKho ? '' : (row.topKho ? row.topKho.replace('Kho ', '') : '—');
-    const khoOptionsHtml = MANUAL_KHO_OPTIONS.map(opt => `<option value="${escAttr(opt)}"${khoManualVal === opt ? ' selected' : ''}>${escHtml(opt.replace('Kho ', ''))}</option>`).join('');
-    const khoSelect = `<select class="ph-kho-select" title="Kho tự động theo SL tồn nhiều nhất trong container này — có thể chọn tay để xem thử (chỉ áp dụng khi xem file này, không đổi dữ liệu gốc)">
-        <option value=""${!row.isManualKho ? ' selected' : ''}>${escHtml(khoAutoLabel || 'Tự động')}${row.isManualKho ? '' : ' (auto)'}</option>
+    const contColor = PLAN_COLORS[row.type] || '#8892A0';
+    const rowBg = hexToRgba(contColor, 0.10);
+    const detailBg = hexToRgba(contColor, 0.04);
+    const detailId = `cd${contRowUid++}`;
+    const manualKey = contInstanceKey(row.type, row.cNo, row.loadDate, row.planTime);
+    const manualVal = manualKhoOverrides[manualKey];
+    const isManualKho = !!manualVal;
+    const autoKho = computeAutoKho(row);
+    const khoAutoLabel = autoKho ? autoKho.replace('Kho ', '') : '—';
+    const khoOptionsHtml = MANUAL_KHO_OPTIONS.map(opt => `<option value="${escAttr(opt)}"${isManualKho && manualVal === opt ? ' selected' : ''}>${escHtml(opt.replace('Kho ', ''))}</option>`).join('');
+    const khoSelect = `<select class="ph-kho-select" data-auto-kho="${escAttr(autoKho || '')}" title="Kho tự động theo SL tồn nhiều nhất trong container này — có thể chọn tay để xem thử (chỉ áp dụng khi xem file này, không đổi dữ liệu gốc)">
+        <option value=""${!isManualKho ? ' selected' : ''}>${escHtml(khoAutoLabel)}${isManualKho ? '' : ' (auto)'}</option>
         ${khoOptionsHtml}
       </select>`;
     return `
     <tr class="ph-cont-row" data-target="${escAttr(detailId)}" style="background:${rowBg};">
       <td class="ph-arrow-cell" style="border-left:4px solid ${contColor};"><span class="ph-arrow">▸</span></td>
-      <td><span class="ph-badge">${escHtml(row.type)}</span></td>
-      <td>${khoSelect}</td>
+      <td><span class="ph-badge" style="background:${contColor};">${escHtml(row.type)}</span></td>
       <td class="ph-vnc">${escHtml(row.invoice)}</td>
       <td class="ph-csr">${escHtml(row.csr)}</td>
       <td class="ph-date">${escHtml(row.loadDate)} · ${escHtml(row.planTime)}</td>
+      <td>${khoSelect}</td>
       <td class="ph-num">${fmt(row.planQty)}</td>
       <td class="ph-num">${fmtDec(totalCbm, 2)}</td>
     </tr>
@@ -5625,7 +5640,44 @@ function exportCombinedPlanToHtml(){
     </tr>`;
   };
 
-  const contsHtml = containers.map((row, idx) => contRowHtml(row, idx)).join('');
+  // Thứ tự các bảng Kho: theo đúng khoOrderForHtml (thứ tự kho đang dùng ở nơi khác trong dashboard),
+  // cộng thêm 3 kho luôn chọn tay được (MANUAL_KHO_OPTIONS) dù hiện KHÔNG có tồn kho ở đó (để luôn có
+  // sẵn bảng đích khi người dùng chọn tay), và cuối cùng luôn có 1 bảng "Chưa xác định kho".
+  const khoGroupOrder = [];
+  khoOrderForHtml.forEach(k => { if(!khoGroupOrder.includes(k)) khoGroupOrder.push(k); });
+  MANUAL_KHO_OPTIONS.forEach(k => { if(!khoGroupOrder.includes(k)) khoGroupOrder.push(k); });
+
+  const groupsMap = new Map();
+  khoGroupOrder.forEach(k => groupsMap.set(k, []));
+  groupsMap.set('', []);
+  // Tính lại đúng key mỗi container (khớp CHÍNH XÁC với giá trị dùng để render select ở trên) để gom
+  // đúng vào bảng — không dùng lại row.topKho có sẵn (như đã giải thích ở trên).
+  containers.forEach(row => {
+    const manualKey = contInstanceKey(row.type, row.cNo, row.loadDate, row.planTime);
+    const manualVal = manualKhoOverrides[manualKey];
+    const key = manualVal || computeAutoKho(row) || '';
+    if(!groupsMap.has(key)) groupsMap.set(key, []);
+    groupsMap.get(key).push(row);
+  });
+
+  const finalKhoOrder = khoGroupOrder.slice();
+  groupsMap.forEach((_, k) => { if(k !== '' && !finalKhoOrder.includes(k)) finalKhoOrder.push(k); });
+  finalKhoOrder.push('');
+
+  const groupsHtml = finalKhoOrder.map(key => {
+    const rows = groupsMap.get(key) || [];
+    const title = key || 'Chưa xác định kho';
+    return `
+    <div class="ph-group${rows.length ? '' : ' ph-group-empty'}">
+      <div class="ph-group-title">${escHtml(title)} <span class="ph-group-count">${fmt(rows.length)} container</span></div>
+      <div class="ph-scroll">
+        <table class="ph-cont-table">
+          <thead><tr><th></th><th>Loại</th><th>VNC</th><th>CSR</th><th>Ngày · Giờ</th><th>Kho</th><th style="text-align:right">SL Plan</th><th style="text-align:right">CBM</th></tr></thead>
+          <tbody class="ph-cont-tbody" data-kho-group="${escAttr(key)}">${rows.map(row => contRowHtml(row)).join('')}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
 
   // Nhúng thông tin để trang HTML tự lấy tồn kho MỚI NHẤT từ Cloud (Firebase) mỗi lần mở/bấm "Làm
   // mới" — CHỈ phần tồn kho (Locator/OQC/SL tồn + số lượng theo kho) cập nhật theo Cloud, phần
@@ -5641,7 +5693,7 @@ function exportCombinedPlanToHtml(){
         sppOkStorageKey: STORAGE_KEY_SPP_OK, contShipKey: STORAGE_KEY_CONT_SHIP,
         manualKhoKey: STORAGE_KEY_MANUAL_KHO,
         khoLabels: khoHeaderLabelsHtml, khoColors: Object.fromEntries(khoColColor),
-        contColors: GROUP_COLOR_PALETTE, manualKhoOptions: MANUAL_KHO_OPTIONS,
+        typeColors: PLAN_COLORS, manualKhoOptions: MANUAL_KHO_OPTIONS, khoGroupOrder: khoGroupOrder,
       })
     : 'null';
 
@@ -5668,12 +5720,16 @@ function exportCombinedPlanToHtml(){
   .ph-arrow-cell{width:20px; padding-left:12px !important;}
   .ph-arrow{display:inline-block; color:#6b7280; font-size:11px; transition:transform .15s;}
   .ph-cont-row.ph-open .ph-arrow{transform:rotate(90deg);}
-  .ph-badge{font-weight:700; color:#2c6fcb;}
+  .ph-badge{font-weight:700; color:#fff; padding:2px 8px; border-radius:5px; font-size:11.5px; display:inline-block;}
   .ph-vnc{font-weight:700; font-family:ui-monospace,monospace;}
   .ph-csr{color:#6b7280; font-family:ui-monospace,monospace;}
   .ph-date{color:#6b7280;}
   .ph-cont-row td.ph-num{text-align:right; font-family:ui-monospace,monospace;}
   .ph-kho-select{font-size:12px; padding:3px 5px; border-radius:6px; border:1px solid #d7dae0; background:#fff; max-width:120px;}
+  .ph-group{margin-bottom:20px;}
+  .ph-group.ph-group-empty{display:none;}
+  .ph-group-title{font-weight:700; font-size:13.5px; margin-bottom:7px; display:flex; align-items:baseline; gap:8px;}
+  .ph-group-count{font-weight:400; font-size:11.5px; color:#6b7280;}
   .ph-cont-detail > td{padding:0 0 10px; border-top:none;}
   .ph-items{width:100%; border-collapse:collapse; font-size:13px;}
   .ph-items th,.ph-items td{padding:7px 14px; border-top:1px solid #eef0f3; text-align:left;}
@@ -5695,18 +5751,13 @@ function exportCombinedPlanToHtml(){
 </style></head>
 <body>
   <h1>Tổng hợp 3 Plan — Xem theo Container</h1>
-  <div class="ph-meta">Tạo lúc ${fmtDateTime(now)} · <span id="ph-cont-count">${fmt(containers.length)} container</span> (đã bỏ container "Pick xong") · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm số lượng của 1 kho để xem Locator/OQC/SL tồn · Cột "Kho" tự động theo tồn kho nhiều nhất, có thể chọn tay để xem thử</div>
+  <div class="ph-meta">Tạo lúc ${fmtDateTime(now)} · <span id="ph-cont-count">${fmt(containers.length)} container</span> (đã bỏ container "Pick xong") · Container được gom theo Kho (mỗi kho 1 bảng) · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm số lượng của 1 kho để xem Locator/OQC/SL tồn · Chọn tay ở cột "Kho" để chuyển dòng sang bảng kho khác nếu muốn</div>
   <input id="ph-search" type="text" placeholder="Tìm theo VNC, CSR, mã hàng...">
   <div class="ph-toolbar">
     <button id="ph-refresh-btn" type="button"${canLiveRefresh ? '' : ' disabled'}>🔄 Làm mới từ Cloud</button>
     <span id="ph-refresh-status">${canLiveRefresh ? 'Chưa làm mới — danh sách container + tồn kho đang là bản lúc xuất file.' : 'Không kết nối được Cloud lúc xuất file — chỉ xem được bản lúc xuất, không làm mới được.'}</span>
   </div>
-  <div class="ph-scroll">
-    <table class="ph-cont-table" id="ph-cont-table">
-      <thead><tr><th></th><th>Loại</th><th>Kho</th><th>VNC</th><th>CSR</th><th>Ngày · Giờ</th><th style="text-align:right">SL Plan</th><th style="text-align:right">CBM</th></tr></thead>
-      <tbody id="ph-cont-tbody">${contsHtml}</tbody>
-    </table>
-  </div>
+  <div id="ph-groups">${groupsHtml}</div>
   <script>
     document.getElementById('ph-search').addEventListener('input', function(e){
       var q = e.target.value.trim().toLowerCase();
@@ -5736,6 +5787,39 @@ function exportCombinedPlanToHtml(){
         detail.style.display = isOpen ? 'none' : 'table-row';
         row.classList.toggle('ph-open', !isOpen);
       }
+    });
+
+    // ===== Chọn tay ở cột "Kho" -> tự chuyển dòng đó sang bảng của đúng kho vừa chọn (hoặc quay lại
+    // bảng kho tự động khi chọn "(auto)"). Chỉ là lựa chọn hiển thị cục bộ khi xem file này, không đổi
+    // dữ liệu gốc/Cloud. Hoạt động độc lập với việc có kết nối Cloud hay không. =====
+    var phFindGroupTbody = function(khoKey){
+      var tbodies = document.querySelectorAll('.ph-cont-tbody');
+      for(var i = 0; i < tbodies.length; i++){ if(tbodies[i].dataset.khoGroup === khoKey) return tbodies[i]; }
+      return null;
+    };
+    var phUpdateGroupUI = function(groupEl){
+      if(!groupEl) return;
+      var tbody = groupEl.querySelector('.ph-cont-tbody');
+      var count = tbody ? tbody.querySelectorAll('.ph-cont-row').length : 0;
+      var countEl = groupEl.querySelector('.ph-group-count');
+      if(countEl) countEl.textContent = count + ' container';
+      groupEl.classList.toggle('ph-group-empty', count === 0);
+    };
+    document.addEventListener('change', function(e){
+      var sel = e.target.closest('.ph-kho-select');
+      if(!sel) return;
+      var row = sel.closest('.ph-cont-row');
+      if(!row) return;
+      var detail = document.getElementById(row.dataset.target);
+      var khoKey = sel.value || sel.dataset.autoKho || '';
+      var targetTbody = phFindGroupTbody(khoKey);
+      if(!targetTbody) return; // không có sẵn bảng đích (không nên xảy ra vì đã dựng sẵn đủ 3 kho + "Chưa xác định")
+      var sourceGroup = row.closest('.ph-group');
+      var targetGroup = targetTbody.closest('.ph-group');
+      targetTbody.appendChild(row);
+      if(detail) targetTbody.appendChild(detail);
+      phUpdateGroupUI(sourceGroup);
+      phUpdateGroupUI(targetGroup);
     });
 
     // ===== Làm mới tồn kho từ Cloud (Firebase) — CHỈ phần Locator/OQC/SL tồn + số lượng theo kho của
@@ -5933,32 +6017,33 @@ function exportCombinedPlanToHtml(){
 
           var manualKhoVal = manualKho && manualKho[instanceKey];
           var isManualKho = !!manualKhoVal;
-          var topKho = isManualKho ? manualKhoVal : phTopKho(items);
+          var autoKho = phTopKho(items);
+          var topKho = isManualKho ? manualKhoVal : autoKho;
 
           rows.push({
             type: entry.type, cNo: entry.cNo, status: status,
             loadDate: entry.loadDate, planTime: entry.planTime,
             invoice: entry.invoices.join(', ') || '—', csr: entry.csrs.join(', ') || '—',
-            planQty: entry.planQty, items: items, topKho: topKho, isManualKho: isManualKho
+            planQty: entry.planQty, items: items, topKho: topKho, autoKho: autoKho, isManualKho: isManualKho
           });
         });
         rows.sort(function(a, b){ return phDateTimeSortKey(a.loadDate, a.planTime) - phDateTimeSortKey(b.loadDate, b.planTime); });
         return rows;
       };
 
-      var phBuildContainerRowHtml = function(row, idx, uidState){
+      var phBuildContainerRowHtml = function(row, uidState){
         var totalCbm = row.items.reduce(function(s, it){ return s + (it.cbm || 0); }, 0);
-        var contColor = PH_LIVE_CONFIG.contColors[idx % PH_LIVE_CONFIG.contColors.length];
-        var rowBg = phRgba(contColor, 0.14);
-        var detailBg = phRgba(contColor, 0.05);
-        var detailId = 'cd' + idx;
+        var contColor = PH_LIVE_CONFIG.typeColors[row.type] || '#8892A0';
+        var rowBg = phRgba(contColor, 0.10);
+        var detailBg = phRgba(contColor, 0.04);
+        var detailId = 'cd' + (uidState.c++);
         var khoManualVal = row.isManualKho ? row.topKho : '';
-        var khoAutoLabel = row.isManualKho ? '' : (row.topKho ? row.topKho.replace('Kho ', '') : '—');
+        var khoAutoLabel = row.autoKho ? row.autoKho.replace('Kho ', '') : '—';
         var khoOptionsHtml = PH_LIVE_CONFIG.manualKhoOptions.map(function(opt){
           return '<option value="' + phEsc(opt) + '"' + (khoManualVal === opt ? ' selected' : '') + '>' + phEsc(opt.replace('Kho ', '')) + '</option>';
         }).join('');
-        var khoSelect = '<select class="ph-kho-select" title="Kho tự động theo SL tồn nhiều nhất — có thể chọn tay để xem thử">' +
-          '<option value=""' + (!row.isManualKho ? ' selected' : '') + '>' + phEsc(khoAutoLabel || 'Tự động') + (row.isManualKho ? '' : ' (auto)') + '</option>' +
+        var khoSelect = '<select class="ph-kho-select" data-auto-kho="' + phEsc(row.autoKho || '') + '" title="Kho tự động theo SL tồn nhiều nhất — có thể chọn tay để xem thử">' +
+          '<option value=""' + (!row.isManualKho ? ' selected' : '') + '>' + phEsc(khoAutoLabel) + (row.isManualKho ? '' : ' (auto)') + '</option>' +
           khoOptionsHtml + '</select>';
         var khoTh = PH_LIVE_CONFIG.khoLabels.map(function(label){ return '<th style="background:' + PH_LIVE_CONFIG.khoColors[label] + ';">' + phEsc(label) + '</th>'; }).join('');
         var itemsHtml = row.items.map(function(it){
@@ -5967,17 +6052,49 @@ function exportCombinedPlanToHtml(){
         }).join('');
         return '<tr class="ph-cont-row" data-target="' + detailId + '" style="background:' + rowBg + ';">' +
             '<td class="ph-arrow-cell" style="border-left:4px solid ' + contColor + ';"><span class="ph-arrow">▸</span></td>' +
-            '<td><span class="ph-badge">' + phEsc(row.type) + '</span></td>' +
-            '<td>' + khoSelect + '</td>' +
+            '<td><span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span></td>' +
             '<td class="ph-vnc">' + phEsc(row.invoice) + '</td>' +
             '<td class="ph-csr">' + phEsc(row.csr) + '</td>' +
             '<td class="ph-date">' + phEsc(row.loadDate) + ' · ' + phEsc(row.planTime) + '</td>' +
+            '<td>' + khoSelect + '</td>' +
             '<td class="ph-num">' + phFmt(row.planQty) + '</td>' +
             '<td class="ph-num">' + phFmtDec(totalCbm, 2) + '</td>' +
           '</tr>' +
           '<tr class="ph-cont-detail" id="' + detailId + '" style="display:none; background:' + detailBg + ';">' +
             '<td colspan="8"><table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th>SL Plan</th>' + khoTh + '</tr></thead>' + itemsHtml + '</table></td>' +
           '</tr>';
+      };
+
+      var phGroupTitle = function(key){ return key || 'Chưa xác định kho'; };
+      var phBuildGroupHtml = function(key, rows, uidState){
+        var rowsHtml = rows.map(function(row){ return phBuildContainerRowHtml(row, uidState); }).join('');
+        return '<div class="ph-group' + (rows.length ? '' : ' ph-group-empty') + '">' +
+          '<div class="ph-group-title">' + phEsc(phGroupTitle(key)) + ' <span class="ph-group-count">' + phFmt(rows.length) + ' container</span></div>' +
+          '<div class="ph-scroll"><table class="ph-cont-table"><thead><tr><th></th><th>Loại</th><th>VNC</th><th>CSR</th><th>Ngày · Giờ</th><th>Kho</th><th style="text-align:right">SL Plan</th><th style="text-align:right">CBM</th></tr></thead>' +
+          '<tbody class="ph-cont-tbody" data-kho-group="' + phEsc(key) + '">' + rowsHtml + '</tbody></table></div></div>';
+      };
+      // Gom container theo ĐÚNG kho hiện tại (topKho, đã tính sẵn ở phBuildContainers) thành từng bảng
+      // riêng — y hệt cách gom ở bản tĩnh lúc xuất (exportCombinedPlanToHtml), theo cùng thứ tự kho
+      // (PH_LIVE_CONFIG.khoGroupOrder) rồi cuối cùng luôn có 1 bảng "Chưa xác định kho".
+      var phBuildGroupsHtml = function(rows){
+        var order = PH_LIVE_CONFIG.khoGroupOrder.slice();
+        var map = {};
+        order.forEach(function(k){ map[k] = []; });
+        map[''] = [];
+        rows.forEach(function(row){
+          var key = row.topKho || '';
+          if(!(key in map)){ map[key] = []; order.push(key); }
+          map[key].push(row);
+        });
+        var uidState = { n: 0, c: 0 };
+        var seen = {};
+        var htmlParts = [];
+        order.concat(['']).forEach(function(k){
+          if(seen[k]) return;
+          seen[k] = true;
+          htmlParts.push(phBuildGroupHtml(k, map[k] || [], uidState));
+        });
+        return htmlParts.join('');
       };
 
       var phRefresh = function(){
@@ -6012,8 +6129,7 @@ function exportCombinedPlanToHtml(){
             var manualKho = parseSub(PH_LIVE_CONFIG.manualKhoKey) || {};
             var pickingIdx = phBuildPickingIndex(khoDetail);
             var rows = phBuildContainers(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx, manualKho);
-            var uidState = { n: 0 };
-            document.getElementById('ph-cont-tbody').innerHTML = rows.map(function(row, idx){ return phBuildContainerRowHtml(row, idx, uidState); }).join('');
+            document.getElementById('ph-groups').innerHTML = phBuildGroupsHtml(rows);
             var countEl = document.getElementById('ph-cont-count');
             if(countEl) countEl.textContent = phFmt(rows.length) + ' container';
           } else {
