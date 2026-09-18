@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.42';
+const APP_VERSION = 'v2.43';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4541,7 +4541,7 @@ function buildItemContainerList(item, po){
       if(String(it.item||'').trim().toLowerCase() !== itemKey) return;
       if(String(it.po||'').trim().toLowerCase() !== poKey) return;
       result.push({
-        type: row.type, cNo: row.cNo, qty: it.qty,
+        type: row.type, cNo: row.cNo, qty: it.qty, cbm: it.cbm,
         loadDate: row.loadDate, planTime: row.planTime,
         invoice: row.invoice, csr: row.csr,
         status: row.status
@@ -5312,7 +5312,7 @@ async function exportCombinedPlanToExcel(){
     if(label === '3A') itemHeaderParts.push('3A trệt', '3A lầu', '3A Rack');
     else itemHeaderParts.push(label);
   });
-  itemHeaderParts.push('Tổng tồn (PASS+NG)', 'PASS', 'NG', 'SL Plan', 'Chênh lệch', 'Trạng thái');
+  itemHeaderParts.push('Tổng tồn (PASS+NG)', 'PASS', 'NG', 'SL Plan', 'CBM', 'Chênh lệch', 'Trạng thái');
   const itemHeaders = itemHeaderParts;
   const computeKho3AQty = (r) => {
     const locs = buildItemLocatorDetail(r.item, r.anyPO ? null : r.custpo, true);
@@ -5416,7 +5416,7 @@ async function exportCombinedPlanToExcel(){
       if(khoHeaderLabels[i] === '3A') itemValues.push(kho3A.treQty, kho3A.floorQty, kho3A.rackQty);
       else itemValues.push(qty);
     });
-    itemValues.push(r.pass + r.ng, r.pass, r.ng, c ? c.qty : '—', r.diff, (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu');
+    itemValues.push(r.pass + r.ng, r.pass, r.ng, c ? c.qty : '—', c ? Math.round((c.cbm || 0) * 100) / 100 : '—', r.diff, (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu');
     const rowValues = [...contValues, ...itemValues];
     rowValues.forEach((v,i) => trackWidth1(i, v));
     const isGroupFirst = groupKey !== prevGroupKey;
