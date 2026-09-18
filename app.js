@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.41';
+const APP_VERSION = 'v2.42';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5363,20 +5363,39 @@ async function exportCombinedPlanToExcel(){
   const colMaxLen1 = headers1.map(h => h.length);
   const trackWidth1 = (idx, text) => { const len = String(text==null?'':text).length; if(len > colMaxLen1[idx]) colMaxLen1[idx] = len; };
 
+  // Container đã "Đã Load Xong" (dữ liệu Ship khớp Reference, SL Ship >= SL Plan container) — bỏ HẲN
+  // khỏi Excel xuất, không còn cần theo dõi nữa. Tính lại ĐÚNG công thức đang dùng ở cột "Trạng thái
+  // Loading" trên bảng Picking Status (renderContPickTable — xem "loadingHtml"/"shipPct") nhưng gộp
+  // theo groupKey (type|cNo|loadDate|planTime) để lọc trực tiếp danh sách container mỗi mã bên dưới.
+  const loadedDoneContainerKeys = new Set();
+  if(contShipData && contShipData.byRef.size){
+    contPickAllRows.forEach(row => {
+      const refs = String(row.csr || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      let shipQty = 0, matched = false;
+      refs.forEach(ref => { if(contShipData.byRef.has(ref)){ matched = true; shipQty += contShipData.byRef.get(ref); } });
+      if(!matched || shipQty <= 0) return;
+      const shipPct = row.planQty > 0 ? (shipQty / row.planQty * 100) : 0;
+      if(shipPct >= 99.995) loadedDoneContainerKeys.add(`${row.type}|${row.cNo}|${row.loadDate}|${row.planTime}`);
+    });
+  }
+
   // Dàn phẳng ra 1 dòng/(mã, container) — mã nào dùng nhiều container thì lặp lại đủ số dòng; mã nào
   // không có container nào thì vẫn giữ 1 dòng (cột container để trống), groupKey riêng theo mã đó để
   // không bị gộp nhầm với mã khác. Container CÙNG groupKey (cùng type+cNo+loadDate+planTime) LUÔN có
-  // cùng sortKey (cùng ngày/giờ) nên sort ổn định vẫn giữ các mã của 1 container nằm liền nhau.
+  // cùng sortKey (cùng ngày/giờ) nên sort ổn định vẫn giữ các mã của 1 container nằm liền nhau. Mã nào
+  // MỌI container đều đã Load Xong thì bỏ HẲN (không rơi vào nhóm "không có container" — 2 trường hợp
+  // khác nghĩa nhau: 1 bên là chưa gán container, 1 bên là container đã xong việc).
   const exportEntries = [];
   combined.rows.forEach(r => {
-    const containers = buildItemContainerList(r.item, r.anyPO ? '' : r.custpo);
+    const allContainers = buildItemContainerList(r.item, r.anyPO ? '' : r.custpo);
+    const containers = allContainers.filter(c => !loadedDoneContainerKeys.has(`${c.type}|${c.cNo}|${c.loadDate}|${c.planTime}`));
     if(containers.length){
       containers.forEach(c => exportEntries.push({
         r, c,
         groupKey: `${c.type}|${c.cNo}|${c.loadDate}|${c.planTime}`,
         sortKey: ovParseDateTimeSortKey(c.loadDate, c.planTime)
       }));
-    } else {
+    } else if(!allContainers.length){
       exportEntries.push({ r, c: null, groupKey: `__nocont__${r.item.toLowerCase()}␟${r.custpo.toLowerCase()}`, sortKey: Infinity });
     }
   });
