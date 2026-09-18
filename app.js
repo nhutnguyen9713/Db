@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.39';
+const APP_VERSION = 'v2.40';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5299,7 +5299,7 @@ async function exportCombinedPlanToExcel(){
   // không thuộc container nào (chưa gán/không tìm thấy) rơi xuống cuối bảng. Dữ liệu lấy từ
   // buildItemContainerList() — đúng nội dung popup "Xem container" trên giao diện.
   const ws1 = workbook.addWorksheet('Tong hop 3 Plan'.slice(0,31));
-  const contHeaders = ['Loại Plan', 'Ngày Load', 'Giờ Plan', 'SL trong Cont', 'Invoice', 'CSR'];
+  const contHeaders = ['Loại Plan', 'Ngày Load', 'Giờ Plan', 'Invoice', 'CSR'];
   const khoHeaderLabels = khoOrder.map(k => k.replace('Kho ', ''));
   // Cột "3A" (tổng tồn kho 3A) được TÁCH thành 3 cột SỐ liền nhau, thay vì hiện tổng gộp: "3A trệt"
   // (mọi locator kho 3A KHÔNG thuộc 2 dạng bên dưới), "3A lầu" (gộp cả lầu M1+M2), "3A Rack" (vị trí
@@ -5312,7 +5312,7 @@ async function exportCombinedPlanToExcel(){
     if(label === '3A') itemHeaderParts.push('3A trệt', '3A lầu', '3A Rack');
     else itemHeaderParts.push(label);
   });
-  itemHeaderParts.push('Tổng tồn (PASS+NG)', 'PASS', 'NG', 'Chênh lệch', 'Trạng thái');
+  itemHeaderParts.push('Tổng tồn (PASS+NG)', 'PASS', 'NG', 'SL Plan', 'Chênh lệch', 'Trạng thái');
   const itemHeaders = itemHeaderParts;
   const computeKho3AQty = (r) => {
     const locs = buildItemLocatorDetail(r.item, r.anyPO ? null : r.custpo, true);
@@ -5385,8 +5385,8 @@ async function exportCombinedPlanToExcel(){
   let prevGroupKey = null;
   exportEntries.forEach(({ r, c, groupKey }) => {
     const contValues = c
-      ? [c.type, c.loadDate, c.planTime, c.qty, c.invoice || '—', c.csr || '—']
-      : ['—', '—', '—', '—', '—', '—'];
+      ? [c.type, c.loadDate, c.planTime, c.invoice || '—', c.csr || '—']
+      : ['—', '—', '—', '—', '—'];
     const kho3A = computeKho3AQty(r);
     const itemValues = [
       r.item,
@@ -5396,7 +5396,7 @@ async function exportCombinedPlanToExcel(){
       if(khoHeaderLabels[i] === '3A') itemValues.push(kho3A.treQty, kho3A.floorQty, kho3A.rackQty);
       else itemValues.push(qty);
     });
-    itemValues.push(r.pass + r.ng, r.pass, r.ng, r.diff, (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu');
+    itemValues.push(r.pass + r.ng, r.pass, r.ng, c ? c.qty : '—', r.diff, (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu');
     const rowValues = [...contValues, ...itemValues];
     rowValues.forEach((v,i) => trackWidth1(i, v));
     const isGroupFirst = groupKey !== prevGroupKey;
