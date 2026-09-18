@@ -1391,8 +1391,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.54';
-const APP_VERSION_DATE = '18/09/2026';
+const APP_VERSION = 'v2.55';
+const APP_VERSION_DATE = '19/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -5728,7 +5728,7 @@ function exportCombinedPlanToHtml(){
   .ph-kho-select{font-size:12px; padding:3px 5px; border-radius:6px; border:1px solid #d7dae0; background:#fff; max-width:120px;}
   .ph-group{margin-bottom:20px;}
   .ph-group.ph-group-empty{display:none;}
-  .ph-group-title{font-weight:700; font-size:13.5px; margin-bottom:7px; display:flex; align-items:baseline; gap:8px;}
+  .ph-group-title{font-weight:700; font-size:17px; margin-bottom:8px; display:flex; align-items:baseline; gap:8px;}
   .ph-group-count{font-weight:400; font-size:11.5px; color:#6b7280;}
   .ph-cont-detail > td{padding:0 0 10px; border-top:none;}
   .ph-items{width:100%; border-collapse:collapse; font-size:13px;}
