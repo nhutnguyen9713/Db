@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.53';
+const APP_VERSION = 'v2.54';
 const APP_VERSION_DATE = '18/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6212,36 +6212,44 @@ function exportCombinedPlanToHtml(){
         return htmlParts.join('');
       };
 
+      // Chỉ gọi ĐÚNG 1 khoá con (không phải cả node dashboard_data) — node đó còn chứa rất nhiều dữ
+      // liệu KHÔNG liên quan gì tới bảng này (lịch sử quét QR/kiểm tồn, log GI, Transaction Master,
+      // sơ đồ kho tuỳ chỉnh...), tải cả node sẽ ngốn băng thông Firebase vô ích mỗi lần mở file/bấm
+      // "Làm mới" — tốn hơn RẤT NHIỀU so với 7 khoá thật sự cần dùng ở đây.
+      var phFetchKey = function(key){
+        var url = PH_LIVE_CONFIG.url.replace(/\\/+$/, '') + '/dashboard_data/' + encodeURIComponent(key) + '.json?auth=' + encodeURIComponent(PH_LIVE_CONFIG.token) + '&_ts=' + Date.now();
+        return fetch(url, { cache: 'no-store' }).then(function(res){
+          if(!res.ok) throw new Error('HTTP ' + res.status);
+          return res.text();
+        }).then(function(text){
+          var once = text ? JSON.parse(text) : null; // node rỗng -> Firebase trả "null"
+          return once ? JSON.parse(once) : null; // còn lại vẫn là CHUỖI JSON đã stringify 1 lớp nữa
+        });
+      };
+
       var phRefresh = function(){
         var btn = document.getElementById('ph-refresh-btn');
         var status = document.getElementById('ph-refresh-status');
         btn.disabled = true;
         status.textContent = 'Đang tải dữ liệu mới nhất từ Cloud...';
-        // Lấy CẢ node dashboard_data trong 1 lượt (thay vì chỉ đúng khoá tồn kho như trước) — cần thêm
-        // Plan/Pick tay/Ẩn/SPP/Ship để dựng lại đúng danh sách container theo "Pick xong" mới nhất.
-        var url = PH_LIVE_CONFIG.url.replace(/\\/+$/, '') + '/dashboard_data.json?auth=' + encodeURIComponent(PH_LIVE_CONFIG.token) + '&_ts=' + Date.now();
-        fetch(url, { cache: 'no-store' }).then(function(res){
-          if(!res.ok) throw new Error('HTTP ' + res.status);
-          return res.text();
-        }).then(function(text){
-          var root = text ? JSON.parse(text) : {}; // mỗi khoá con vẫn là CHUỖI JSON đã stringify 1 lớp nữa
-          var parseSub = function(key){
-            var raw = root[key];
-            if(raw === undefined || raw === null) return null;
-            return JSON.parse(raw);
-          };
-          var currentData = parseSub(PH_LIVE_CONFIG.invKey);
+        var keys = [
+          PH_LIVE_CONFIG.invKey, PH_LIVE_CONFIG.plansKey, PH_LIVE_CONFIG.manualPickedKey,
+          PH_LIVE_CONFIG.hiddenKey, PH_LIVE_CONFIG.sppOkStorageKey, PH_LIVE_CONFIG.contShipKey,
+          PH_LIVE_CONFIG.manualKhoKey
+        ];
+        Promise.all(keys.map(phFetchKey)).then(function(results){
+          var currentData = results[0];
+          var planDataLive = results[1];
+          var manualPicked = results[2] || {};
+          var hidden = results[3] || {};
+          var sppOk = results[4] || {};
+          var contShipRaw = results[5];
+          var manualKho = results[6] || {};
+          var contShipByRef = (contShipRaw && contShipRaw.byRef) || {};
           var khoDetail = (currentData && currentData.kho_detail) || {};
           var invIdx = phBuildIndex(khoDetail);
 
-          var planDataLive = parseSub(PH_LIVE_CONFIG.plansKey);
           if(planDataLive){
-            var manualPicked = parseSub(PH_LIVE_CONFIG.manualPickedKey) || {};
-            var hidden = parseSub(PH_LIVE_CONFIG.hiddenKey) || {};
-            var sppOk = parseSub(PH_LIVE_CONFIG.sppOkStorageKey) || {};
-            var contShipRaw = parseSub(PH_LIVE_CONFIG.contShipKey);
-            var contShipByRef = (contShipRaw && contShipRaw.byRef) || {};
-            var manualKho = parseSub(PH_LIVE_CONFIG.manualKhoKey) || {};
             var pickingIdx = phBuildPickingIndex(khoDetail);
             var rows = phBuildContainers(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx, manualKho);
             document.getElementById('ph-groups').innerHTML = phBuildGroupsHtml(rows);
