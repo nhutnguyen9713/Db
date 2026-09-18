@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.54';
+const APP_VERSION = 'v2.55';
 const APP_VERSION_DATE = '18/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5684,6 +5684,15 @@ function exportCombinedPlanToHtml(){
   // Container/VNC/SL Plan/CBM giữ NGUYÊN đúng bản Plan lúc xuất (không tự đổi số container theo thời
   // gian thực — đó là phạm vi khác, không phải điều đang làm ở đây). CHỈ nhúng khi máy này ĐANG kết
   // nối Cloud lúc xuất — nếu chưa kết nối thì bỏ qua, HTML vẫn dùng được ở dạng snapshot tĩnh như cũ.
+  //
+  // CẢNH BÁO BẢO MẬT (đã trao đổi + xác nhận với người dùng): CloudVault.token nhúng vào đây là
+  // Database Secret — CÓ TOÀN QUYỀN đọc/ghi cả Firebase, không riêng phần tồn kho/Plan. File HTML này
+  // có thể bị chuyển tay qua nhiều người (Zalo/Messenger...) mà không cách nào ngăn được ở tầng file.
+  // Để giới hạn rủi ro đó, khả năng "Làm mới từ Cloud" TỰ HẾT HẠN sau PH_LIVE_EXPIRY_DAYS ngày kể từ
+  // lúc xuất — quá hạn thì nút tự vô hiệu hoá, chỉ còn xem được đúng bản tĩnh lúc xuất. Đây KHÔNG phải
+  // 1 lớp bảo mật thật (ai đọc mã nguồn file vẫn lấy được token) — chỉ là giới hạn thời hạn sử dụng
+  // thông thường, không thay được việc tự đổi Database Secret trên Firebase Console khi cần khoá hẳn.
+  const PH_LIVE_EXPIRY_DAYS = 7;
   const canLiveRefresh = !!(typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token);
   const liveConfigJson = canLiveRefresh
     ? JSON.stringify({
@@ -5694,6 +5703,7 @@ function exportCombinedPlanToHtml(){
         manualKhoKey: STORAGE_KEY_MANUAL_KHO,
         khoLabels: khoHeaderLabelsHtml, khoColors: Object.fromEntries(khoColColor),
         typeColors: PLAN_COLORS, manualKhoOptions: MANUAL_KHO_OPTIONS, khoGroupOrder: khoGroupOrder,
+        expiresAt: Date.now() + PH_LIVE_EXPIRY_DAYS * 24 * 60 * 60 * 1000, expiryDays: PH_LIVE_EXPIRY_DAYS,
       })
     : 'null';
 
@@ -5754,7 +5764,7 @@ function exportCombinedPlanToHtml(){
 </style></head>
 <body>
   <h1>Tổng hợp 3 Plan — Xem theo Container</h1>
-  <div class="ph-meta">Tạo lúc ${fmtDateTime(now)} · <span id="ph-cont-count">${fmt(containers.length)} container</span> (đã bỏ container "Pick xong") · Container được gom theo Kho (mỗi kho 1 bảng) · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm số lượng của 1 kho để xem Locator/OQC/SL tồn · Chọn tay ở cột "Kho" để chuyển dòng sang bảng kho khác nếu muốn</div>
+  <div class="ph-meta">Tạo lúc ${fmtDateTime(now)} · <span id="ph-cont-count">${fmt(containers.length)} container</span> (đã bỏ container "Pick xong") · Container được gom theo Kho (mỗi kho 1 bảng) · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm số lượng của 1 kho để xem Locator/OQC/SL tồn · Chọn tay ở cột "Kho" để chuyển dòng sang bảng kho khác nếu muốn${canLiveRefresh ? ` · Kết nối Cloud của file này tự hết hạn sau ${PH_LIVE_EXPIRY_DAYS} ngày kể từ lúc xuất` : ''}</div>
   <input id="ph-search" type="text" placeholder="Tìm theo VNC, CSR, mã hàng...">
   <div class="ph-toolbar">
     <button id="ph-refresh-btn" type="button"${canLiveRefresh ? '' : ' disabled'}>🔄 Làm mới từ Cloud</button>
@@ -6227,7 +6237,19 @@ function exportCombinedPlanToHtml(){
         });
       };
 
+      // File này có thể đã bị chuyển tay qua nhiều người từ lúc xuất — không có cách nào ngăn việc
+      // chuyển tay đó ở tầng file, nhưng ít nhất GIỚI HẠN THỜI HẠN khả năng gọi Cloud (token nhúng
+      // trong file có toàn quyền đọc/ghi, không riêng phần này) bằng cách tự khoá sau
+      // PH_LIVE_CONFIG.expiryDays ngày, dù file vẫn còn lưu hành. Không phải 1 lớp bảo mật thật (ai
+      // đọc mã nguồn vẫn thấy token) — chỉ giới hạn thời hạn dùng thông thường.
+      var phIsExpired = function(){ return Date.now() > PH_LIVE_CONFIG.expiresAt; };
+      var phShowExpired = function(){
+        document.getElementById('ph-refresh-btn').disabled = true;
+        document.getElementById('ph-refresh-status').textContent = '✗ File đã quá hạn xem trực tiếp Cloud (tự hết hạn sau ' + PH_LIVE_CONFIG.expiryDays + ' ngày kể từ lúc xuất) — chỉ còn xem được bản tĩnh lúc xuất. Vui lòng xuất file mới nếu cần dữ liệu mới nhất.';
+      };
+
       var phRefresh = function(){
+        if(phIsExpired()){ phShowExpired(); return; }
         var btn = document.getElementById('ph-refresh-btn');
         var status = document.getElementById('ph-refresh-status');
         btn.disabled = true;
@@ -6272,7 +6294,8 @@ function exportCombinedPlanToHtml(){
         });
       };
       document.getElementById('ph-refresh-btn').addEventListener('click', phRefresh);
-      phRefresh(); // tự làm mới ngay khi mở file, không cần bấm
+      if(phIsExpired()) phShowExpired();
+      else phRefresh(); // tự làm mới ngay khi mở file, không cần bấm
     }
   </script>
 </body></html>`;
