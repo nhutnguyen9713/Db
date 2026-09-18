@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.45';
+const APP_VERSION = 'v2.46';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5505,8 +5505,8 @@ function exportCombinedPlanToHtml(){
 
   // Cột theo từng kho (2B/3A.../3B/DG1...) NGAY TRONG bảng con của mỗi container — Kho 3A tách 3 cột
   // "trệt/lầu/Rack" y hệt cách tách ở sheet Excel "Tổng hợp 3 Plan" (xem computeKho3AQty() bên trên).
-  // Tính trực tiếp từ it.locs (đã lọc đúng PO của item trong container đó — CÙNG dữ liệu dùng cho các
-  // dòng Locator/SL tồn bên dưới), không gọi lại buildItemLocatorDetail().
+  // Tính trực tiếp từ it.locs (đã lọc đúng PO của item trong container đó — CÙNG dữ liệu dùng cho phần
+  // Locator/SL tồn/OQC bên dưới), không gọi lại buildItemLocatorDetail().
   const khoOrderForHtml = (combinedPlanCache || buildCombinedPlanCompareTable()).khoOrder || [];
   const khoHeaderLabelsHtml = [];
   khoOrderForHtml.forEach(k => {
@@ -5514,34 +5514,63 @@ function exportCombinedPlanToHtml(){
     if(label === '3A') khoHeaderLabelsHtml.push('3A trệt', '3A lầu', '3A Rack');
     else khoHeaderLabelsHtml.push(label);
   });
+  // Bảng màu + cách gán CHÍNH XÁC như sheet Excel "Tổng hợp 3 Plan": 1 màu cho MỖI KHO trong
+  // khoOrderForHtml (không phải mỗi cột hiển thị) — 3 cột con "3A trệt/lầu/Rack" cùng thuộc kho 3A nên
+  // CHUNG 1 màu, các kho khác (2B/3B/DG1...) mỗi kho 1 màu riêng — khớp highlightColorByCol ở Excel.
   const KHO_COL_COLORS = ['#dceef5', '#e1f5dc', '#faf3d0', '#ede3f5', '#fce0d6', '#e0f7f5', '#f5e0ea'];
-  const khoColColor = new Map(khoHeaderLabelsHtml.map((label, i) => [label, KHO_COL_COLORS[i % KHO_COL_COLORS.length]]));
-  const computeItemKhoBreakdown = (locs) => {
-    const byKho = {};
-    khoHeaderLabelsHtml.forEach(label => { byKho[label] = 0; });
+  const khoColColor = new Map();
+  let khoColorIdx = 0;
+  khoOrderForHtml.forEach(k => {
+    const label = k.replace('Kho ', '');
+    const color = KHO_COL_COLORS[(khoColorIdx++) % KHO_COL_COLORS.length];
+    if(label === '3A') ['3A trệt', '3A lầu', '3A Rack'].forEach(h => khoColColor.set(h, color));
+    else khoColColor.set(label, color);
+  });
+
+  // Gộp tồn kho theo từng NHÓM kho (đồng thời giữ lại danh sách locator gốc trong nhóm đó) — số lượng
+  // hiện ngay trong bảng, còn Locator/OQC/SL tồn CHỈ hiện khi bấm vào đúng số lượng của nhóm kho đó
+  // (ẩn mặc định để tránh bảng dài vô tận khi 1 mã có hàng chục/hàng trăm vị trí — lỗi thật đã gặp).
+  const computeItemKhoGroups = (locs) => {
+    const groups = {};
+    khoHeaderLabelsHtml.forEach(label => { groups[label] = { qty: 0, locs: [] }; });
     locs.forEach(l => {
+      let key;
       if(l.kho === 'Kho 3A'){
         const loc = String(l.locator || '');
-        const key = /^3AFG-M[12]/i.test(loc) ? '3A lầu' : (/^3A-[A-Z]\d+-T\d+/i.test(loc) ? '3A Rack' : '3A trệt');
-        byKho[key] += (l.qty || 0);
-        return;
+        key = /^3AFG-M[12]/i.test(loc) ? '3A lầu' : (/^3A-[A-Z]\d+-T\d+/i.test(loc) ? '3A Rack' : '3A trệt');
+      } else {
+        key = l.kho.replace('Kho ', '');
+        if(!(key in groups)) return;
       }
-      const label = l.kho.replace('Kho ', '');
-      if(label in byKho) byKho[label] += (l.qty || 0);
+      groups[key].qty += (l.qty || 0);
+      groups[key].locs.push(l);
     });
-    return byKho;
+    return groups;
   };
 
   const khoTh = khoHeaderLabelsHtml.map(label => `<th style="background:${khoColColor.get(label)};">${escHtml(label)}</th>`).join('');
-  const khoTdStyle = label => ` style="background:${khoColColor.get(label)};"`;
+  const totalCols = 3 + khoHeaderLabelsHtml.length;
+  let uid = 0;
 
   const itemsTableHtml = (row) => row.items.map(it => {
     const locs = (it.locs && it.locs.length) ? it.locs : [];
-    const khoBreakdown = computeItemKhoBreakdown(locs);
-    const khoTdFirst = khoHeaderLabelsHtml.map(label => `<td class="ph-num" rowspan="${Math.max(locs.length,1)}"${khoTdStyle(label)}>${fmt(khoBreakdown[label])}</td>`).join('');
-    const leadCells = `<td rowspan="${Math.max(locs.length,1)}">${escHtml(it.item)}</td><td rowspan="${Math.max(locs.length,1)}">${escHtml(it.po || '—')}</td><td class="ph-num" rowspan="${Math.max(locs.length,1)}">${fmt(it.qty)}</td>${khoTdFirst}`;
-    if(!locs.length) return `<tr>${leadCells}<td colspan="2" class="ph-empty">(không có tồn kho)</td></tr>`;
-    return locs.map((l, i) => `<tr>${i === 0 ? leadCells : ''}<td>${escHtml(l.locator)}</td><td class="ph-num">${fmt(l.qty)}</td></tr>`).join('');
+    const groups = computeItemKhoGroups(locs);
+    const rowId = 'k' + (uid++);
+    const khoTds = khoHeaderLabelsHtml.map(label => {
+      const g = groups[label];
+      const bg = `background:${khoColColor.get(label)};`;
+      if(!g.qty) return `<td class="ph-num" style="${bg}">0</td>`;
+      const detailId = `${rowId}-${khoHeaderLabelsHtml.indexOf(label)}`;
+      return `<td class="ph-num ph-kho-cell" data-target="${detailId}" style="${bg}" title="Bấm để xem Locator/OQC/SL tồn">${fmt(g.qty)}</td>`;
+    }).join('');
+    const detailRows = khoHeaderLabelsHtml.map(label => {
+      const g = groups[label];
+      if(!g.qty) return '';
+      const detailId = `${rowId}-${khoHeaderLabelsHtml.indexOf(label)}`;
+      const body = g.locs.map(l => `<tr><td>${escHtml(l.locator)}</td><td>${escHtml(l.oqc || '—')}</td><td class="ph-num">${fmt(l.qty)}</td></tr>`).join('');
+      return `<tr class="ph-detail-row" id="${escAttr(detailId)}" style="display:none;"><td colspan="${totalCols}"><div class="ph-detail-label">${escHtml(label)} — ${escHtml(it.item)}</div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>${body}</tbody></table></td></tr>`;
+    }).join('');
+    return `<tr><td>${escHtml(it.item)}</td><td>${escHtml(it.po || '—')}</td><td class="ph-num">${fmt(it.qty)}</td>${khoTds}</tr>${detailRows}`;
   }).join('');
 
   const contsHtml = containers.map(row => {
@@ -5557,7 +5586,7 @@ function exportCombinedPlanToHtml(){
         <span class="ph-cbm">CBM: ${fmtDec(totalCbm, 2)}</span>
       </summary>
       <table class="ph-items">
-        <thead><tr><th>Item No.</th><th>Cust PO</th><th>SL Plan</th>${khoTh}<th>Locator</th><th>SL tồn</th></tr></thead>
+        <thead><tr><th>Item No.</th><th>Cust PO</th><th>SL Plan</th>${khoTh}</tr></thead>
         <tbody>${itemsTableHtml(row)}</tbody>
       </table>
     </details>`;
@@ -5593,10 +5622,18 @@ function exportCombinedPlanToHtml(){
   .ph-items td.ph-num{text-align:right; font-family:ui-monospace,monospace;}
   .ph-items td.ph-empty{color:#8a97ac; font-style:italic;}
   .ph-cont.ph-hide{display:none;}
+  .ph-kho-cell{cursor:pointer; text-decoration:underline dotted; text-decoration-color:#8a97ac;}
+  .ph-kho-cell:hover{filter:brightness(0.94);}
+  .ph-detail-row td{padding:0; border-top:none;}
+  .ph-detail-label{padding:8px 14px 2px; font-size:11px; font-weight:700; color:#6b7280; text-transform:uppercase;}
+  .ph-locs{width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:6px;}
+  .ph-locs th,.ph-locs td{padding:5px 14px 5px 28px; border-top:1px solid #eef0f3; text-align:left;}
+  .ph-locs th{background:#fafbfc; color:#8a97ac; font-weight:600; font-size:10.5px; text-transform:uppercase;}
+  .ph-locs td.ph-num{text-align:right; font-family:ui-monospace,monospace; padding-right:14px;}
 </style></head>
 <body>
   <h1>Tổng hợp 3 Plan — Xem theo Container</h1>
-  <div class="ph-meta">Tạo lúc ${fmtDateTime(now)} · ${fmt(containers.length)} container (đã bỏ container "Đã Load Xong") · Bấm vào 1 dòng để xem Item No./Cust PO/Locator/SL tồn</div>
+  <div class="ph-meta">Tạo lúc ${fmtDateTime(now)} · ${fmt(containers.length)} container (đã bỏ container "Đã Load Xong") · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm vào số lượng của 1 kho để xem Locator/OQC/SL tồn</div>
   <input id="ph-search" type="text" placeholder="Tìm theo VNC, CSR, mã hàng...">
   <div id="ph-list">${contsHtml}</div>
   <script>
@@ -5605,6 +5642,13 @@ function exportCombinedPlanToHtml(){
       document.querySelectorAll('.ph-cont').forEach(function(el){
         el.classList.toggle('ph-hide', !!q && el.textContent.toLowerCase().indexOf(q) === -1);
       });
+    });
+    document.getElementById('ph-list').addEventListener('click', function(e){
+      var cell = e.target.closest('.ph-kho-cell');
+      if(!cell) return;
+      var target = document.getElementById(cell.dataset.target);
+      if(!target) return;
+      target.style.display = (target.style.display === 'none') ? 'table-row' : 'none';
     });
   </script>
 </body></html>`;
