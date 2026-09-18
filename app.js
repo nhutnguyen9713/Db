@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.44';
+const APP_VERSION = 'v2.45';
 const APP_VERSION_DATE = '17/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5503,10 +5503,45 @@ function exportCombinedPlanToHtml(){
 
   if(!containers.length){ alert('Không có container nào để xuất (có thể tất cả đã "Đã Load Xong").'); return; }
 
+  // Cột theo từng kho (2B/3A.../3B/DG1...) NGAY TRONG bảng con của mỗi container — Kho 3A tách 3 cột
+  // "trệt/lầu/Rack" y hệt cách tách ở sheet Excel "Tổng hợp 3 Plan" (xem computeKho3AQty() bên trên).
+  // Tính trực tiếp từ it.locs (đã lọc đúng PO của item trong container đó — CÙNG dữ liệu dùng cho các
+  // dòng Locator/SL tồn bên dưới), không gọi lại buildItemLocatorDetail().
+  const khoOrderForHtml = (combinedPlanCache || buildCombinedPlanCompareTable()).khoOrder || [];
+  const khoHeaderLabelsHtml = [];
+  khoOrderForHtml.forEach(k => {
+    const label = k.replace('Kho ', '');
+    if(label === '3A') khoHeaderLabelsHtml.push('3A trệt', '3A lầu', '3A Rack');
+    else khoHeaderLabelsHtml.push(label);
+  });
+  const KHO_COL_COLORS = ['#dceef5', '#e1f5dc', '#faf3d0', '#ede3f5', '#fce0d6', '#e0f7f5', '#f5e0ea'];
+  const khoColColor = new Map(khoHeaderLabelsHtml.map((label, i) => [label, KHO_COL_COLORS[i % KHO_COL_COLORS.length]]));
+  const computeItemKhoBreakdown = (locs) => {
+    const byKho = {};
+    khoHeaderLabelsHtml.forEach(label => { byKho[label] = 0; });
+    locs.forEach(l => {
+      if(l.kho === 'Kho 3A'){
+        const loc = String(l.locator || '');
+        const key = /^3AFG-M[12]/i.test(loc) ? '3A lầu' : (/^3A-[A-Z]\d+-T\d+/i.test(loc) ? '3A Rack' : '3A trệt');
+        byKho[key] += (l.qty || 0);
+        return;
+      }
+      const label = l.kho.replace('Kho ', '');
+      if(label in byKho) byKho[label] += (l.qty || 0);
+    });
+    return byKho;
+  };
+
+  const khoTh = khoHeaderLabelsHtml.map(label => `<th style="background:${khoColColor.get(label)};">${escHtml(label)}</th>`).join('');
+  const khoTdStyle = label => ` style="background:${khoColColor.get(label)};"`;
+
   const itemsTableHtml = (row) => row.items.map(it => {
-    const locs = (it.locs && it.locs.length) ? it.locs : null;
-    if(!locs) return `<tr><td>${escHtml(it.item)}</td><td>${escHtml(it.po || '—')}</td><td colspan="2" class="ph-empty">(không có tồn kho)</td></tr>`;
-    return locs.map((l, i) => `<tr>${i === 0 ? `<td rowspan="${locs.length}">${escHtml(it.item)}</td><td rowspan="${locs.length}">${escHtml(it.po || '—')}</td>` : ''}<td>${escHtml(l.locator)}</td><td class="ph-num">${fmt(l.qty)}</td></tr>`).join('');
+    const locs = (it.locs && it.locs.length) ? it.locs : [];
+    const khoBreakdown = computeItemKhoBreakdown(locs);
+    const khoTdFirst = khoHeaderLabelsHtml.map(label => `<td class="ph-num" rowspan="${Math.max(locs.length,1)}"${khoTdStyle(label)}>${fmt(khoBreakdown[label])}</td>`).join('');
+    const leadCells = `<td rowspan="${Math.max(locs.length,1)}">${escHtml(it.item)}</td><td rowspan="${Math.max(locs.length,1)}">${escHtml(it.po || '—')}</td><td class="ph-num" rowspan="${Math.max(locs.length,1)}">${fmt(it.qty)}</td>${khoTdFirst}`;
+    if(!locs.length) return `<tr>${leadCells}<td colspan="2" class="ph-empty">(không có tồn kho)</td></tr>`;
+    return locs.map((l, i) => `<tr>${i === 0 ? leadCells : ''}<td>${escHtml(l.locator)}</td><td class="ph-num">${fmt(l.qty)}</td></tr>`).join('');
   }).join('');
 
   const contsHtml = containers.map(row => {
@@ -5522,7 +5557,7 @@ function exportCombinedPlanToHtml(){
         <span class="ph-cbm">CBM: ${fmtDec(totalCbm, 2)}</span>
       </summary>
       <table class="ph-items">
-        <thead><tr><th>Item No.</th><th>Cust PO</th><th>Locator</th><th>SL tồn</th></tr></thead>
+        <thead><tr><th>Item No.</th><th>Cust PO</th><th>SL Plan</th>${khoTh}<th>Locator</th><th>SL tồn</th></tr></thead>
         <tbody>${itemsTableHtml(row)}</tbody>
       </table>
     </details>`;
