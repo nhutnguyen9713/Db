@@ -73,6 +73,42 @@
   .ph-locs th{background:#fafbfc; color:#8a97ac; font-weight:600; font-size:10.5px; text-transform:uppercase;}
   .ph-locs td.ph-num{text-align:right; font-family:ui-monospace,monospace; padding-right:14px;}
   .ph-empty-note{color:#8a97ac; font-size:13px; padding:20px 0;}
+  .ph-td-label{display:none;}
+
+  /* ===== Màn hình hẹp (điện thoại): 2 bảng dày cột nhất (danh sách container + mã hàng theo kho)
+     chuyển thành từng "thẻ" xếp dọc kiểu Nhãn: Giá trị — KHÔNG cần lướt ngang mới xem hết được nữa.
+     Bảng Locator/OQC/SL tồn (.ph-locs, chỉ 3 cột) giữ nguyên dạng bảng thật vì đã đủ hẹp. Dùng bộ
+     chọn "> " (con trực tiếp) để KHÔNG lỡ áp dụng vào .ph-items/.ph-locs lồng bên trong .ph-cont-table,
+     hay .ph-locs lồng bên trong .ph-items. */
+  @media (max-width: 700px){
+    .ph-cont-table{min-width:0;}
+    .ph-cont-table > thead{display:none;}
+    .ph-cont-table > tbody > tr.ph-cont-row{
+      display:flex; flex-direction:column; padding:10px 34px 10px 12px; position:relative;
+    }
+    .ph-cont-table > tbody > tr.ph-cont-row::after{
+      content:'▸'; position:absolute; top:12px; right:12px; color:#8a97ac; font-size:12px; transition:transform .15s;
+    }
+    .ph-cont-table > tbody > tr.ph-cont-row.ph-open::after{ transform:rotate(90deg); }
+    .ph-cont-table > tbody > tr.ph-cont-row > td{
+      display:flex; justify-content:space-between; align-items:center; gap:10px;
+      padding:3px 0; border-top:none; white-space:normal; text-align:right;
+    }
+    .ph-cont-table > tbody > tr.ph-cont-row > td.ph-arrow-cell{display:none;}
+    .ph-cont-table > tbody > tr.ph-cont-detail > td{display:block; padding:0;}
+
+    .ph-items{min-width:0;}
+    .ph-items > thead{display:none;}
+    .ph-items > tbody.ph-item-group{display:block; padding:10px 12px; border-top:1px solid #eef0f3;}
+    .ph-items > tbody.ph-item-group > tr:not(.ph-detail-row){display:flex; flex-direction:column;}
+    .ph-items > tbody.ph-item-group > tr:not(.ph-detail-row) > td{
+      display:flex; justify-content:space-between; align-items:center; gap:10px;
+      padding:3px 0; border-top:none; white-space:normal; text-align:right;
+    }
+    .ph-items > tbody.ph-item-group > tr.ph-detail-row > td{padding:0;}
+
+    .ph-td-label{display:inline-block; font-size:10.5px; font-weight:700; color:#8a97ac; text-transform:uppercase; flex-shrink:0; text-align:left;}
+  }
 </style>
 </head>
 <body>
@@ -252,9 +288,10 @@
     var khoTds = khoMeta.khoLabels.map(function(label, i){
       var g = groups[label];
       var bg = 'background:' + khoMeta.khoColors[label] + ';';
-      if(!g.qty) return '<td class="ph-num" style="' + bg + '">0</td>';
+      var lbl = '<span class="ph-td-label">' + phEsc(label) + '</span>';
+      if(!g.qty) return '<td class="ph-num" style="' + bg + '">' + lbl + '0</td>';
       var detailId = uidPrefix + '-' + i;
-      return '<td class="ph-num ph-kho-cell" data-target="' + detailId + '" style="' + bg + '" title="Bấm để xem Locator/OQC/SL tồn">' + phFmt(g.qty) + '</td>';
+      return '<td class="ph-num ph-kho-cell" data-target="' + detailId + '" style="' + bg + '" title="Bấm để xem Locator/OQC/SL tồn">' + lbl + phFmt(g.qty) + '</td>';
     }).join('');
     var detailRows = khoMeta.khoLabels.map(function(label, i){
       var g = groups[label];
@@ -263,7 +300,7 @@
       var body = g.locs.map(function(l){ return '<tr><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
       return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(po || '—') + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
     }).join('');
-    return '<tr><td>' + phEsc(item) + '</td><td>' + phEsc(po || '—') + '</td><td class="ph-num">' + phFmt(qty) + '</td>' + khoTds + '</tr>' + detailRows;
+    return '<tr><td><span class="ph-td-label">Item No.</span>' + phEsc(item) + '</td><td><span class="ph-td-label">Cust PO</span>' + phEsc(po || '—') + '</td><td class="ph-num"><span class="ph-td-label">SL Plan</span>' + phFmt(qty) + '</td>' + khoTds + '</tr>' + detailRows;
   };
 
   var phBuildContainers = function(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx, manualKho){
@@ -357,13 +394,13 @@
     }).join('');
     return '<tr class="ph-cont-row" data-target="' + detailId + '" data-sort-key="' + phDateTimeSortKey(row.loadDate, row.planTime) + '" style="background:' + rowBg + ';">' +
         '<td class="ph-arrow-cell" style="border-left:4px solid ' + contColor + ';"><span class="ph-arrow">▸</span></td>' +
-        '<td><span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span></td>' +
-        '<td class="ph-vnc">' + phEsc(row.invoice) + '</td>' +
-        '<td class="ph-csr">' + phEsc(row.csr) + '</td>' +
-        '<td class="ph-date">' + phEsc(row.loadDate) + ' · ' + phEsc(row.planTime) + '</td>' +
-        '<td>' + khoSelect + '</td>' +
-        '<td class="ph-num">' + phFmt(row.planQty) + '</td>' +
-        '<td class="ph-num">' + phFmtDec(totalCbm, 2) + '</td>' +
+        '<td><span class="ph-td-label">Loại</span><span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span></td>' +
+        '<td class="ph-vnc"><span class="ph-td-label">VNC</span>' + phEsc(row.invoice) + '</td>' +
+        '<td class="ph-csr"><span class="ph-td-label">CSR</span>' + phEsc(row.csr) + '</td>' +
+        '<td class="ph-date"><span class="ph-td-label">Ngày · Giờ</span>' + phEsc(row.loadDate) + ' · ' + phEsc(row.planTime) + '</td>' +
+        '<td><span class="ph-td-label">Kho</span>' + khoSelect + '</td>' +
+        '<td class="ph-num"><span class="ph-td-label">SL Plan</span>' + phFmt(row.planQty) + '</td>' +
+        '<td class="ph-num"><span class="ph-td-label">CBM</span>' + phFmtDec(totalCbm, 2) + '</td>' +
       '</tr>' +
       '<tr class="ph-cont-detail" id="' + detailId + '" style="display:none; background:' + detailBg + ';">' +
         '<td colspan="8"><table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th>SL Plan</th>' + khoTh + '</tr></thead>' + itemsHtml + '</table></td>' +
