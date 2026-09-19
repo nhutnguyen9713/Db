@@ -1,4 +1,5 @@
 {
+  "id": "./index.html",
   "name": "TN5 Dashboard",
   "short_name": "TN5",
   "description": "Dashboard quản lý kho TN5 — Picking Status, Kiểm tồn kho, Tìm mã hàng, Transaction",

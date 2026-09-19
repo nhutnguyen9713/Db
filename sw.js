@@ -42,6 +42,15 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
         return res;
       })
-      .catch(() => caches.match(req).then((cached) => cached || caches.match('./index.html')))
+      .catch(() => caches.match(req).then((cached) => {
+        if (cached) return cached;
+        // CHỈ dự phòng về index.html khi chính request đang điều hướng vào trang chủ (index.html/./)
+        // lúc mất mạng — KHÔNG áp dụng cho các trang KHÁC cùng gốc (VD tong-hop-3-plan.html), để
+        // tránh hiện NHẦM nội dung TN5 Dashboard khi người dùng đang mở 1 trang khác mà mất mạng.
+        if (req.mode === 'navigate' && (req.url === self.registration.scope || req.url.endsWith('/index.html'))) {
+          return caches.match('./index.html');
+        }
+        return new Response('', { status: 504, statusText: 'Offline' });
+      }))
   );
 });

@@ -720,7 +720,11 @@
       phShowConnect();
     }
     if('serviceWorker' in navigator){
-      navigator.serviceWorker.register('sw-3p.js').catch(function(){});
+      // Chỉ định RÕ scope chỉ riêng trang này (mặc định nếu không chỉ định sẽ là './' — TRÙNG với
+      // scope của sw.js bên app chính, gây tranh chấp: 2 Service Worker khác kịch bản đăng ký cùng 1
+      // scope sẽ ghi đè lẫn nhau, khiến trang này bị kiểm soát nhầm bởi sw.js của TN5 Dashboard — đúng
+      // lỗi "đọc đè lên PWA TN5" đã gặp. Scope hẹp = registration RIÊNG, không đụng tới sw.js.
+      navigator.serviceWorker.register('sw-3p.js', { scope: './tong-hop-3-plan.html' }).catch(function(){});
     }
   })();
 </script>
