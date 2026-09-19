@@ -16,6 +16,9 @@
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#f4f5f7; color:#12161F; margin:0; padding:24px; padding-bottom:60px;}
   h1{font-size:19px; margin:0 0 4px;}
   .ph-meta{color:#6b7280; font-size:13px; margin-bottom:16px;}
+  .ph-snapshot{display:none; font-size:13px; color:#374151; background:#eef2f7; border-radius:8px; padding:9px 12px; margin-bottom:14px;}
+  .ph-snapshot b{color:#12161F; font-weight:700;}
+  .ph-snapshot .ph-snapshot-sub{margin-top:3px; font-size:11.5px; color:#6b7280;}
 
   /* ===== Màn hình kết nối Cloud ===== */
   .ph-connect{max-width:420px; margin:40px auto; background:#fff; border:1px solid #e2e5ea; border-radius:12px; padding:22px;}
@@ -138,6 +141,7 @@
   </div>
 
   <div id="ph-app" style="display:none;">
+    <div class="ph-snapshot" id="ph-snapshot"></div>
     <input id="ph-search" type="text" placeholder="Tìm theo VNC, CSR, mã hàng...">
     <div class="ph-toolbar">
       <button id="ph-refresh-btn" type="button">🔄 Làm mới</button>
@@ -445,7 +449,7 @@
     var keys = [
       'tn5_dashboard_inventory_v1', 'tn5_dashboard_plans_v1', 'tn5_dashboard_manual_picked_v1',
       'tn5_dashboard_hidden_containers_v1', 'tn5_dashboard_spp_ok_v1', 'tn5_dashboard_cont_ship_v1',
-      'tn5_dashboard_manual_kho_v1'
+      'tn5_dashboard_manual_kho_v1', 'tn5_dashboard_meta_v1'
     ];
     return Promise.all(keys.map(phFetchKey)).then(function(results){
       var currentData = results[0];
@@ -455,6 +459,7 @@
       var sppOk = results[4] || {};
       var contShipRaw = results[5];
       var manualKho = results[6] || {};
+      var meta = results[7] || {};
       var contShipByRef = (contShipRaw && contShipRaw.byRef) || {};
       var khoDetail = (currentData && currentData.kho_detail) || {};
       var invIdx = phBuildIndex(khoDetail);
@@ -472,6 +477,21 @@
         listEl.innerHTML = phBuildContainerListHtml(rows, khoMeta);
       }
       document.getElementById('ph-meta').textContent = 'Tự lấy dữ liệu trực tiếp từ Cloud mỗi lần mở/làm mới · ' + phFmt(rows.length) + ' container (đã bỏ container "Pick xong") · Sắp xếp theo Ngày · Giờ tăng dần · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm số lượng của 1 kho để xem Locator/OQC/SL tồn';
+
+      var snapEl = document.getElementById('ph-snapshot');
+      var snapDate = currentData && currentData.snapshot_date;
+      if(snapDate){
+        var subParts = [];
+        if(meta.updatedAtText) subParts.push(meta.updatedAtText);
+        if(meta.inventoryFileName) subParts.push('File: ' + meta.inventoryFileName);
+        snapEl.innerHTML = 'NGÀY CHỐT DỮ LIỆU: <b>' + phEsc(snapDate) + '</b>' +
+          (subParts.length ? '<div class="ph-snapshot-sub">' + phEsc(subParts.join(' · ')) + '</div>' : '');
+        snapEl.style.display = '';
+      } else {
+        snapEl.style.display = 'none';
+        snapEl.innerHTML = '';
+      }
+
       btn.disabled = false;
       status.textContent = '✓ Đã tải lúc ' + new Date().toLocaleString('vi-VN');
     }).catch(function(err){
@@ -523,6 +543,8 @@
     document.getElementById('ph-conn-url').value = '';
     document.getElementById('ph-conn-token').value = '';
     document.getElementById('ph-cont-list').innerHTML = '';
+    document.getElementById('ph-snapshot').innerHTML = '';
+    document.getElementById('ph-snapshot').style.display = 'none';
     phShowConnect();
   });
   document.getElementById('ph-refresh-btn').addEventListener('click', phLoad);
