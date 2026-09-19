@@ -1,0 +1,15 @@
+{
+  "name": "Tổng hợp 3 Plan — Container",
+  "short_name": "3 Plan",
+  "description": "Xem Plan Row/FC/HCP theo container, gom theo Kho, đồng bộ trực tiếp với Cloud TN5 Dashboard.",
+  "start_url": "./tong-hop-3-plan.html",
+  "scope": "./tong-hop-3-plan.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f5f7",
+  "theme_color": "#2c6fcb",
+  "icons": [
+    { "src": "icon-3p-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-3p-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

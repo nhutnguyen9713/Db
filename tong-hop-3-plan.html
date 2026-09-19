@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tổng hợp 3 Plan — Xem theo Container</title>
+<meta name="description" content="Xem Plan Row/FC/HCP theo container, gom theo Kho, đồng bộ trực tiếp với Cloud TN5 Dashboard.">
+<link rel="manifest" href="manifest-3p.json">
+<meta name="theme-color" content="#2c6fcb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="3 Plan">
+<link rel="apple-touch-icon" href="icon-3p-180.png">
+<link rel="icon" href="icon-3p-192.png">
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#f4f5f7; color:#12161F; margin:0; padding:24px; padding-bottom:60px;}
+  h1{font-size:19px; margin:0 0 4px;}
+  .ph-meta{color:#6b7280; font-size:13px; margin-bottom:16px;}
+
+  /* ===== Màn hình kết nối Cloud ===== */
+  .ph-connect{max-width:420px; margin:40px auto; background:#fff; border:1px solid #e2e5ea; border-radius:12px; padding:22px;}
+  .ph-connect h2{font-size:16px; margin:0 0 8px;}
+  .ph-connect p{font-size:13px; color:#6b7280; line-height:1.5; margin:0 0 16px;}
+  .ph-connect label{display:block; font-size:12.5px; font-weight:600; color:#374151; margin-bottom:14px;}
+  .ph-connect input{display:block; width:100%; margin-top:6px; padding:10px 12px; border-radius:8px; border:1px solid #d7dae0; font-size:14px; box-sizing:border-box;}
+  #ph-conn-btn{width:100%; padding:11px; border-radius:8px; border:none; background:#2c6fcb; color:#fff; font-size:14px; font-weight:700; cursor:pointer;}
+  #ph-conn-btn:disabled{opacity:.6; cursor:default;}
+  .ph-conn-error{color:#c0392b; font-size:12.5px; margin-top:12px; min-height:1em;}
+  .ph-conn-note{font-size:11.5px; color:#8a97ac; margin-top:14px; line-height:1.5;}
+
+  /* ===== Toolbar + tìm kiếm ===== */
+  #ph-search{width:100%; max-width:420px; padding:9px 12px; border-radius:8px; border:1px solid #d7dae0; font-size:14px; margin-bottom:16px; box-sizing:border-box;}
+  .ph-toolbar{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:16px;}
+  #ph-refresh-btn{padding:8px 14px; border-radius:8px; border:1px solid #2c6fcb; background:#2c6fcb; color:#fff; font-size:13px; font-weight:600; cursor:pointer;}
+  #ph-refresh-btn:disabled{opacity:.6; cursor:default;}
+  #ph-refresh-status{font-size:12.5px; color:#6b7280;}
+  .ph-link-btn{margin-left:auto; background:none; border:none; color:#8a97ac; font-size:12px; text-decoration:underline; cursor:pointer; padding:4px;}
+
+  /* ===== Bảng container theo kho ===== */
+  .ph-group{margin-bottom:20px;}
+  .ph-group.ph-group-empty{display:none;}
+  .ph-group-title{font-weight:700; font-size:17px; margin-bottom:8px; display:flex; align-items:baseline; gap:8px;}
+  .ph-group-count{font-weight:400; font-size:11.5px; color:#6b7280;}
+  .ph-scroll{overflow-x:auto; border:1px solid #e2e5ea; border-radius:10px; background:#fff;}
+  .ph-cont-table{width:100%; min-width:760px; border-collapse:collapse; font-size:13px;}
+  .ph-cont-table > thead > tr > th{padding:9px 10px; background:#f8f9fb; color:#6b7280; font-weight:600; font-size:11px; text-transform:uppercase; text-align:left; white-space:nowrap;}
+  .ph-cont-row{cursor:pointer;}
+  .ph-cont-row:hover{filter:brightness(0.97);}
+  .ph-cont-row > td{padding:9px 10px; border-top:1px solid rgba(18,22,31,0.08); white-space:nowrap;}
+  .ph-arrow-cell{width:20px; padding-left:12px !important;}
+  .ph-arrow{display:inline-block; color:#6b7280; font-size:11px; transition:transform .15s;}
+  .ph-cont-row.ph-open .ph-arrow{transform:rotate(90deg);}
+  .ph-badge{font-weight:700; color:#fff; padding:2px 8px; border-radius:5px; font-size:11.5px; display:inline-block;}
+  .ph-vnc{font-weight:700; font-family:ui-monospace,monospace;}
+  .ph-csr{color:#6b7280; font-family:ui-monospace,monospace;}
+  .ph-date{color:#6b7280;}
+  .ph-cont-row td.ph-num{text-align:right; font-family:ui-monospace,monospace;}
+  .ph-kho-select{font-size:12px; padding:3px 5px; border-radius:6px; border:1px solid #d7dae0; background:#fff; max-width:120px;}
+  .ph-cont-detail > td{padding:0 0 10px; border-top:none;}
+  .ph-items{width:100%; border-collapse:collapse; font-size:13px;}
+  .ph-items th,.ph-items td{padding:7px 14px; border-top:1px solid #eef0f3; text-align:left;}
+  .ph-items th{background:#f8f9fb; color:#6b7280; font-weight:600; font-size:11.5px; text-transform:uppercase;}
+  .ph-items td.ph-num{text-align:right; font-family:ui-monospace,monospace;}
+  .ph-kho-cell{cursor:pointer; text-decoration:underline dotted; text-decoration-color:#8a97ac;}
+  .ph-kho-cell:hover{filter:brightness(0.94);}
+  .ph-detail-row td{padding:0; border-top:none;}
+  .ph-detail-label{padding:8px 14px 2px; font-size:11px; font-weight:700; color:#6b7280; text-transform:uppercase; display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .ph-shot-btn{font-size:10.5px; font-weight:600; text-transform:none; padding:2px 8px; border-radius:6px; border:1px solid #d7dae0; background:#fff; color:#374151; cursor:pointer; white-space:nowrap;}
+  .ph-shot-btn:hover{background:#f4f5f7;}
+  .ph-shot-btn:active{background:#eceef1;}
+  .ph-locs{width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:6px;}
+  .ph-locs th,.ph-locs td{padding:5px 14px 5px 28px; border-top:1px solid #eef0f3; text-align:left;}
+  .ph-locs th{background:#fafbfc; color:#8a97ac; font-weight:600; font-size:10.5px; text-transform:uppercase;}
+  .ph-locs td.ph-num{text-align:right; font-family:ui-monospace,monospace; padding-right:14px;}
+  .ph-empty-note{color:#8a97ac; font-size:13px; padding:20px 0;}
+</style>
+</head>
+<body>
+  <h1>Tổng hợp 3 Plan — Xem theo Container</h1>
+  <div class="ph-meta" id="ph-meta">Trang này luôn lấy dữ liệu trực tiếp từ Cloud — cần kết nối trước khi xem.</div>
+
+  <div class="ph-connect" id="ph-connect">
+    <h2>Kết nối Cloud</h2>
+    <p>Nhập đúng thông tin Cloud (Firebase) đang dùng ở TN5 Dashboard để xem Plan/Container mới nhất. Thông tin chỉ lưu trên máy này (trình duyệt), không gửi đi đâu khác ngoài đúng địa chỉ Cloud bạn nhập.</p>
+    <label>Database URL
+      <input id="ph-conn-url" type="text" placeholder="https://xxxx.firebaseio.com" autocapitalize="off" autocorrect="off" spellcheck="false">
+    </label>
+    <label>Mã Cloud (token)
+      <input id="ph-conn-token" type="password" placeholder="Dán mã Cloud vào đây" autocapitalize="off" autocorrect="off" spellcheck="false">
+    </label>
+    <button id="ph-conn-btn" type="button">Kết nối</button>
+    <div class="ph-conn-error" id="ph-conn-error"></div>
+    <div class="ph-conn-note">Lấy thông tin này trong app TN5 Dashboard chính, mục "Kết nối Cloud" (⚙️ Cài đặt).</div>
+  </div>
+
+  <div id="ph-app" style="display:none;">
+    <input id="ph-search" type="text" placeholder="Tìm theo VNC, CSR, mã hàng...">
+    <div class="ph-toolbar">
+      <button id="ph-refresh-btn" type="button">🔄 Làm mới</button>
+      <span id="ph-refresh-status"></span>
+      <button id="ph-disconnect-btn" type="button" class="ph-link-btn">Ngắt kết nối</button>
+    </div>
+    <div id="ph-groups"></div>
+  </div>
+
+<script>
+  var PH_URL_KEY = 'tp3_cloud_url';
+  var PH_TOKEN_KEY = 'tp3_cloud_token';
+  var PH_MANUAL_KHO_OPTIONS = ['Kho 3B', 'Kho 3A', 'Kho 2B'];
+  var PH_TYPE_COLORS = { Row: '#2C6FCB', FC: '#6E4FE0', HCP: '#B76E00' };
+  var phCloudUrl = '';
+  var phCloudToken = '';
+
+  var phEsc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+  var phFmt = function(n){ return Math.round(n || 0).toLocaleString('en-US'); };
+  var phFmtDec = function(v, dec){
+    if(v === null || v === undefined || v === '') return '—';
+    var n = Number(v);
+    return isNaN(n) ? String(v) : n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: dec == null ? 2 : dec });
+  };
+  var phFmtDateUtc = function(d){
+    var p = function(n){ return String(n).padStart(2, '0'); };
+    return p(d.getUTCDate()) + '/' + p(d.getUTCMonth() + 1) + '/' + d.getUTCFullYear();
+  };
+  var phParseDateField = function(v){
+    if(v && typeof v === 'object' && v.__date) return new Date(v.__date);
+    return v ? new Date(v) : null;
+  };
+  var phContInstanceKey = function(type, cNo, loadDate, planTime){
+    return type + '|' + cNo + '|' + (loadDate || '') + '|' + (planTime || '');
+  };
+  var phIsSppItem = function(item){ return !/^0/.test(String(item || '').trim()); };
+  var phSppOkKey = function(item, custpo){ return String(item || '').toLowerCase() + '␟' + String(custpo || '').toLowerCase(); };
+  var phRgba = function(hex, alpha){
+    var h = String(hex || '#8892A0').replace('#', '');
+    var r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  };
+  var phDateTimeSortKey = function(dateStr, timeStr){
+    var d = String(dateStr || '').split(',')[0].trim();
+    var t = String(timeStr || '').split(',')[0].trim();
+    var dm = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if(!dm) return Infinity;
+    var tm = t.match(/^(\d{1,2}):(\d{2})/);
+    var hh = tm ? Number(tm[1]) : 0, mi = tm ? Number(tm[2]) : 0;
+    return new Date(Number(dm[3]), Number(dm[2]) - 1, Number(dm[1]), hh, mi).getTime();
+  };
+
+  var phBuildIndex = function(khoDetail){
+    var idx = {};
+    Object.keys(khoDetail || {}).forEach(function(kho){
+      (khoDetail[kho] || []).forEach(function(r){
+        var item = r[0], custpo = r[1], locator = r[2], oqc = r[3], qty = r[4];
+        var key = String(item || '').toLowerCase();
+        if(!idx[key]) idx[key] = [];
+        idx[key].push({ kho: kho, locator: locator, custpo: custpo, oqc: oqc, qty: qty });
+      });
+    });
+    return idx;
+  };
+  var phLocatorDetail = function(idx, item, po){
+    var entries = idx[String(item || '').toLowerCase()] || [];
+    var poLower = po ? String(po).trim().toLowerCase() : '';
+    var rows = [];
+    entries.forEach(function(e){
+      if(poLower && String(e.custpo || '').trim().toLowerCase() !== poLower) return;
+      if(/prod/i.test(e.locator || '')) return;
+      rows.push(e);
+    });
+    rows.sort(function(a,b){ return (b.qty||0) - (a.qty||0); });
+    return rows;
+  };
+  var phBuildPickingIndex = function(khoDetail){
+    var idx = {};
+    Object.keys(khoDetail || {}).forEach(function(kho){
+      (khoDetail[kho] || []).forEach(function(r){
+        var item = r[0], oqc = r[3], qty = r[4], ref = r[5];
+        if(String(oqc || '').toUpperCase() !== 'PASS') return;
+        if(ref && String(ref).trim()){
+          var key = String(item || '').toLowerCase() + '|' + String(ref).trim().toLowerCase();
+          idx[key] = (idx[key] || 0) + qty;
+        }
+      });
+    });
+    return idx;
+  };
+  var phShipIsFullyLoaded = function(contShipByRef, csrs, planQty){
+    if(!contShipByRef || !csrs || !csrs.length) return false;
+    var shipQty = 0, matched = false;
+    csrs.forEach(function(csr){
+      var ref = String(csr || '').trim().toUpperCase().replace(/[;,.\s]+$/, '');
+      if(Object.prototype.hasOwnProperty.call(contShipByRef, ref)){ matched = true; shipQty += Number(contShipByRef[ref]) || 0; }
+    });
+    if(!matched) return false;
+    var pct = planQty > 0 ? (shipQty / planQty * 100) : 0;
+    return pct >= 99.995;
+  };
+  var phTopKho = function(items){
+    var qtyByKho = {};
+    items.forEach(function(it){ (it.locs || []).forEach(function(l){ qtyByKho[l.kho] = (qtyByKho[l.kho] || 0) + (l.qty || 0); }); });
+    var topKho = null, topQty = 0;
+    Object.keys(qtyByKho).forEach(function(k){ if(qtyByKho[k] > topQty){ topKho = k; topQty = qtyByKho[k]; } });
+    return topKho;
+  };
+
+  // Kho hiển thị theo dữ liệu MỚI NHẤT lấy từ Cloud (kho_order của bản tồn kho) — Kho 3A tách 3 cột
+  // "trệt/lầu/Rack" y hệt cách tách ở Excel/bản xuất HTML trước đây (xem computeKho3AQty trong app.js).
+  var phComputeKhoMeta = function(currentData){
+    var khoOrderRaw = (currentData && currentData.kho_order && currentData.kho_order.length) ? currentData.kho_order : ['Kho 2B','Kho 3A','Kho 3B','Kho DG1'];
+    var khoOrderForHtml = [];
+    khoOrderRaw.forEach(function(k){ if(khoOrderForHtml.indexOf(k) === -1) khoOrderForHtml.push(k); });
+    var khoLabels = [];
+    khoOrderForHtml.forEach(function(k){
+      var label = k.replace('Kho ', '');
+      if(label === '3A'){ khoLabels.push('3A trệt'); khoLabels.push('3A lầu'); khoLabels.push('3A Rack'); }
+      else khoLabels.push(label);
+    });
+    var KHO_COL_COLORS = ['#dceef5', '#e1f5dc', '#faf3d0', '#ede3f5', '#fce0d6', '#e0f7f5', '#f5e0ea'];
+    var khoColors = {};
+    var idx = 0;
+    khoOrderForHtml.forEach(function(k){
+      var label = k.replace('Kho ', '');
+      var color = KHO_COL_COLORS[idx % KHO_COL_COLORS.length]; idx++;
+      if(label === '3A'){ khoColors['3A trệt']=color; khoColors['3A lầu']=color; khoColors['3A Rack']=color; }
+      else khoColors[label] = color;
+    });
+    var khoGroupOrder = khoOrderForHtml.slice();
+    PH_MANUAL_KHO_OPTIONS.forEach(function(k){ if(khoGroupOrder.indexOf(k) === -1) khoGroupOrder.push(k); });
+    return { khoLabels: khoLabels, khoColors: khoColors, khoGroupOrder: khoGroupOrder };
+  };
+
+  var phKhoGroups = function(locs, khoLabels){
+    var groups = {};
+    khoLabels.forEach(function(l){ groups[l] = { qty: 0, locs: [] }; });
+    locs.forEach(function(l){
+      var key;
+      if(l.kho === 'Kho 3A'){
+        var loc = String(l.locator || '');
+        key = /^3AFG-M[12]/i.test(loc) ? '3A lầu' : (/^3A-[A-Z]\d+-T\d+/i.test(loc) ? '3A Rack' : '3A trệt');
+      } else {
+        key = l.kho.replace('Kho ', '');
+        if(!(key in groups)) return;
+      }
+      groups[key].qty += (l.qty || 0);
+      groups[key].locs.push(l);
+    });
+    return groups;
+  };
+  var phGroupBodyHtml = function(item, po, qty, locs, uidPrefix, khoMeta){
+    var groups = phKhoGroups(locs, khoMeta.khoLabels);
+    var totalCols = 3 + khoMeta.khoLabels.length;
+    var khoTds = khoMeta.khoLabels.map(function(label, i){
+      var g = groups[label];
+      var bg = 'background:' + khoMeta.khoColors[label] + ';';
+      if(!g.qty) return '<td class="ph-num" style="' + bg + '">0</td>';
+      var detailId = uidPrefix + '-' + i;
+      return '<td class="ph-num ph-kho-cell" data-target="' + detailId + '" style="' + bg + '" title="Bấm để xem Locator/OQC/SL tồn">' + phFmt(g.qty) + '</td>';
+    }).join('');
+    var detailRows = khoMeta.khoLabels.map(function(label, i){
+      var g = groups[label];
+      if(!g.qty) return '';
+      var detailId = uidPrefix + '-' + i;
+      var body = g.locs.map(function(l){ return '<tr><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
+      return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(po || '—') + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
+    }).join('');
+    return '<tr><td>' + phEsc(item) + '</td><td>' + phEsc(po || '—') + '</td><td class="ph-num">' + phFmt(qty) + '</td>' + khoTds + '</tr>' + detailRows;
+  };
+
+  var phBuildContainers = function(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx, manualKho){
+    var contMap = {};
+    ['Row', 'FC', 'HCP'].forEach(function(type){
+      var plan = planDataLive[type];
+      if(!plan || !plan.detailRows) return;
+      plan.detailRows.forEach(function(r){
+        var cNo = r.containerNo;
+        if(!cNo || cNo === '—') return;
+        var loadDateVal = phParseDateField(r.loadDate);
+        var loadDateStr = loadDateVal ? phFmtDateUtc(loadDateVal) : '';
+        var planTimeStr = r.planTime || '';
+        var key = phContInstanceKey(type, cNo, loadDateStr, planTimeStr);
+        var itemKey = String(r.item || '').toLowerCase();
+        var csrKey = String(r.csr || '').trim().toLowerCase();
+        var passQty = 0;
+        if(csrKey) passQty = pickingIdx[itemKey + '|' + csrKey] || 0;
+        var planQty = r.qty || 0;
+        var contribution = planQty > 0 ? Math.min(passQty, planQty) : 0;
+        var custPoForSppKey = (r.custPo && r.custPo.trim()) ? r.custPo.trim() : '(Khong co)';
+        if(phIsSppItem(r.item) && sppOk[phSppOkKey(r.item, custPoForSppKey)]) contribution = planQty;
+        var entry = contMap[key];
+        if(!entry){
+          entry = { type: type, cNo: cNo, loadDate: loadDateStr, planTime: planTimeStr, planQty: 0, contribution: 0, invoices: [], csrs: [], items: {} };
+          contMap[key] = entry;
+        }
+        entry.planQty += planQty;
+        entry.contribution += contribution;
+        if(r.invoice && entry.invoices.indexOf(r.invoice) === -1) entry.invoices.push(r.invoice);
+        if(r.csr && entry.csrs.indexOf(r.csr) === -1) entry.csrs.push(r.csr);
+        var itemPoKey = r.item + '||' + (r.custPo || '');
+        if(!entry.items[itemPoKey]) entry.items[itemPoKey] = { item: r.item, po: r.custPo || '', qty: 0, cbm: 0 };
+        entry.items[itemPoKey].qty += planQty;
+        entry.items[itemPoKey].cbm += (parseFloat(r.cbm) || 0);
+      });
+    });
+
+    var rows = [];
+    Object.keys(contMap).forEach(function(key){
+      var entry = contMap[key];
+      if(entry.planQty <= 0) return;
+      var instanceKey = phContInstanceKey(entry.type, entry.cNo, entry.loadDate, entry.planTime);
+      if(hidden[instanceKey]) return; // đã bị ẩn/xoá thủ công khỏi Plan
+      var pct = (entry.contribution / entry.planQty) * 100;
+      var autoStatus = pct >= 99.995 ? 'done' : (pct <= 0.005 ? 'notStarted' : 'inProgress');
+      var isManualUser = !!(manualPicked && manualPicked[instanceKey]);
+      var isShipDone = !isManualUser && phShipIsFullyLoaded(contShipByRef, entry.csrs, entry.planQty);
+      var status = (isManualUser || isShipDone) ? 'manualDone' : autoStatus;
+      if(status === 'done' || status === 'manualDone') return; // Pick xong -> loại khỏi danh sách
+
+      var items = Object.keys(entry.items).map(function(k){
+        var it = entry.items[k];
+        return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, locs: phLocatorDetail(invIdx, it.item, it.po) };
+      });
+
+      var manualKhoVal = manualKho && manualKho[instanceKey];
+      var isManualKho = !!manualKhoVal;
+      var autoKho = phTopKho(items);
+      var topKho = isManualKho ? manualKhoVal : autoKho;
+
+      rows.push({
+        type: entry.type, cNo: entry.cNo, status: status,
+        loadDate: entry.loadDate, planTime: entry.planTime,
+        invoice: entry.invoices.join(', ') || '—', csr: entry.csrs.join(', ') || '—',
+        planQty: entry.planQty, items: items, topKho: topKho, autoKho: autoKho, isManualKho: isManualKho
+      });
+    });
+    rows.sort(function(a, b){ return phDateTimeSortKey(a.loadDate, a.planTime) - phDateTimeSortKey(b.loadDate, b.planTime); });
+    return rows;
+  };
+
+  var phBuildContainerRowHtml = function(row, khoMeta, uidState){
+    var totalCbm = row.items.reduce(function(s, it){ return s + (it.cbm || 0); }, 0);
+    var contColor = PH_TYPE_COLORS[row.type] || '#8892A0';
+    var rowBg = phRgba(contColor, 0.10);
+    var detailBg = phRgba(contColor, 0.04);
+    var detailId = 'cd' + (uidState.c++);
+    var khoManualVal = row.isManualKho ? row.topKho : '';
+    var khoAutoLabel = row.autoKho ? row.autoKho.replace('Kho ', '') : '—';
+    var khoOptionsHtml = PH_MANUAL_KHO_OPTIONS.map(function(opt){
+      return '<option value="' + phEsc(opt) + '"' + (khoManualVal === opt ? ' selected' : '') + '>' + phEsc(opt.replace('Kho ', '')) + '</option>';
+    }).join('');
+    var khoSelect = '<select class="ph-kho-select" data-auto-kho="' + phEsc(row.autoKho || '') + '" title="Kho tự động theo SL tồn nhiều nhất — có thể chọn tay để xem thử">' +
+      '<option value=""' + (!row.isManualKho ? ' selected' : '') + '>' + phEsc(khoAutoLabel) + (row.isManualKho ? '' : ' (auto)') + '</option>' +
+      khoOptionsHtml + '</select>';
+    var khoTh = khoMeta.khoLabels.map(function(label){ return '<th style="background:' + khoMeta.khoColors[label] + ';">' + phEsc(label) + '</th>'; }).join('');
+    var itemsHtml = row.items.map(function(it){
+      var uidPrefix = 'k' + (uidState.n++);
+      return '<tbody class="ph-item-group">' + phGroupBodyHtml(it.item, it.po, it.qty, it.locs, uidPrefix, khoMeta) + '</tbody>';
+    }).join('');
+    return '<tr class="ph-cont-row" data-target="' + detailId + '" data-sort-key="' + phDateTimeSortKey(row.loadDate, row.planTime) + '" style="background:' + rowBg + ';">' +
+        '<td class="ph-arrow-cell" style="border-left:4px solid ' + contColor + ';"><span class="ph-arrow">▸</span></td>' +
+        '<td><span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span></td>' +
+        '<td class="ph-vnc">' + phEsc(row.invoice) + '</td>' +
+        '<td class="ph-csr">' + phEsc(row.csr) + '</td>' +
+        '<td class="ph-date">' + phEsc(row.loadDate) + ' · ' + phEsc(row.planTime) + '</td>' +
+        '<td>' + khoSelect + '</td>' +
+        '<td class="ph-num">' + phFmt(row.planQty) + '</td>' +
+        '<td class="ph-num">' + phFmtDec(totalCbm, 2) + '</td>' +
+      '</tr>' +
+      '<tr class="ph-cont-detail" id="' + detailId + '" style="display:none; background:' + detailBg + ';">' +
+        '<td colspan="8"><table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th>SL Plan</th>' + khoTh + '</tr></thead>' + itemsHtml + '</table></td>' +
+      '</tr>';
+  };
+
+  var phGroupTitle = function(key){ return key || 'Chưa xác định kho'; };
+  var phBuildGroupHtml = function(key, rows, khoMeta, uidState){
+    var rowsHtml = rows.map(function(row){ return phBuildContainerRowHtml(row, khoMeta, uidState); }).join('');
+    return '<div class="ph-group' + (rows.length ? '' : ' ph-group-empty') + '">' +
+      '<div class="ph-group-title">' + phEsc(phGroupTitle(key)) + ' <span class="ph-group-count">' + phFmt(rows.length) + ' container</span></div>' +
+      '<div class="ph-scroll"><table class="ph-cont-table"><thead><tr><th></th><th>Loại</th><th>VNC</th><th>CSR</th><th>Ngày · Giờ</th><th>Kho</th><th style="text-align:right">SL Plan</th><th style="text-align:right">CBM</th></tr></thead>' +
+      '<tbody class="ph-cont-tbody" data-kho-group="' + phEsc(key) + '">' + rowsHtml + '</tbody></table></div></div>';
+  };
+  var phBuildGroupsHtml = function(rows, khoMeta){
+    var order = khoMeta.khoGroupOrder.slice();
+    var map = {};
+    order.forEach(function(k){ map[k] = []; });
+    map[''] = [];
+    rows.forEach(function(row){
+      var key = row.topKho || '';
+      if(!(key in map)){ map[key] = []; order.push(key); }
+      map[key].push(row);
+    });
+    var uidState = { n: 0, c: 0 };
+    var seen = {};
+    var htmlParts = [];
+    order.concat(['']).forEach(function(k){
+      if(seen[k]) return;
+      seen[k] = true;
+      htmlParts.push(phBuildGroupHtml(k, map[k] || [], khoMeta, uidState));
+    });
+    return htmlParts.join('');
+  };
+
+  // Chỉ gọi ĐÚNG 1 khoá con mỗi lần (không phải cả node dashboard_data) — node đó còn chứa rất nhiều
+  // dữ liệu KHÔNG liên quan gì tới trang này (lịch sử quét QR/kiểm tồn, log GI, Transaction Master...),
+  // tải cả node sẽ ngốn băng thông Firebase vô ích mỗi lần mở trang/bấm "Làm mới".
+  var phFetchKey = function(key){
+    var url = phCloudUrl.replace(/\/+$/, '') + '/dashboard_data/' + encodeURIComponent(key) + '.json?auth=' + encodeURIComponent(phCloudToken) + '&_ts=' + Date.now();
+    return fetch(url, { cache: 'no-store' }).then(function(res){
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      return res.text();
+    }).then(function(text){
+      var once = text ? JSON.parse(text) : null; // node rỗng -> Firebase trả "null"
+      return once ? JSON.parse(once) : null; // còn lại vẫn là CHUỖI JSON đã stringify 1 lớp nữa
+    });
+  };
+
+  var phLoad = function(){
+    var btn = document.getElementById('ph-refresh-btn');
+    var status = document.getElementById('ph-refresh-status');
+    btn.disabled = true;
+    status.textContent = 'Đang tải dữ liệu từ Cloud...';
+    var keys = [
+      'tn5_dashboard_inventory_v1', 'tn5_dashboard_plans_v1', 'tn5_dashboard_manual_picked_v1',
+      'tn5_dashboard_hidden_containers_v1', 'tn5_dashboard_spp_ok_v1', 'tn5_dashboard_cont_ship_v1',
+      'tn5_dashboard_manual_kho_v1'
+    ];
+    return Promise.all(keys.map(phFetchKey)).then(function(results){
+      var currentData = results[0];
+      var planDataLive = results[1];
+      var manualPicked = results[2] || {};
+      var hidden = results[3] || {};
+      var sppOk = results[4] || {};
+      var contShipRaw = results[5];
+      var manualKho = results[6] || {};
+      var contShipByRef = (contShipRaw && contShipRaw.byRef) || {};
+      var khoDetail = (currentData && currentData.kho_detail) || {};
+      var invIdx = phBuildIndex(khoDetail);
+      var khoMeta = phComputeKhoMeta(currentData);
+
+      var rows = planDataLive ? (function(){
+        var pickingIdx = phBuildPickingIndex(khoDetail);
+        return phBuildContainers(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx, manualKho);
+      })() : [];
+
+      var groupsEl = document.getElementById('ph-groups');
+      if(!planDataLive){
+        groupsEl.innerHTML = '<div class="ph-empty-note">Chưa có dữ liệu Plan nào trên Cloud — hãy tải Plan Row/FC/HCP trên TN5 Dashboard rồi bấm "Làm mới" ở đây.</div>';
+      } else {
+        groupsEl.innerHTML = phBuildGroupsHtml(rows, khoMeta);
+      }
+      document.getElementById('ph-meta').textContent = 'Tự lấy dữ liệu trực tiếp từ Cloud mỗi lần mở/làm mới · ' + phFmt(rows.length) + ' container (đã bỏ container "Pick xong") · Container được gom theo Kho (mỗi kho 1 bảng) · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm số lượng của 1 kho để xem Locator/OQC/SL tồn · Chọn tay ở cột "Kho" để chuyển dòng sang bảng kho khác nếu muốn';
+      btn.disabled = false;
+      status.textContent = '✓ Đã tải lúc ' + new Date().toLocaleString('vi-VN');
+    }).catch(function(err){
+      btn.disabled = false;
+      status.textContent = '✗ Không tải được (kiểm tra mạng/thông tin kết nối) — Lỗi: ' + err.message;
+    });
+  };
+
+  // ===== Kết nối Cloud (lưu cục bộ trên máy đang xem, không nhúng cứng vào mã nguồn trang vì trang
+  // này công khai trên GitHub Pages) =====
+  var phShowApp = function(){
+    document.getElementById('ph-connect').style.display = 'none';
+    document.getElementById('ph-app').style.display = '';
+  };
+  var phShowConnect = function(){
+    document.getElementById('ph-app').style.display = 'none';
+    document.getElementById('ph-connect').style.display = '';
+  };
+  var phTryConnect = function(url, token){
+    var btn = document.getElementById('ph-conn-btn');
+    var errEl = document.getElementById('ph-conn-error');
+    btn.disabled = true;
+    errEl.textContent = '';
+    var testUrl = url.replace(/\/+$/, '') + '/dashboard_data/tn5_dashboard_meta_v1.json?auth=' + encodeURIComponent(token) + '&_ts=' + Date.now();
+    return fetch(testUrl, { cache: 'no-store' }).then(function(res){
+      if(!res.ok) throw new Error('HTTP ' + res.status + ' — kiểm tra lại URL/mã Cloud');
+      return res.text();
+    }).then(function(text){
+      if(/permission denied/i.test(text || '')) throw new Error('Sai mã Cloud (không có quyền đọc)');
+      phCloudUrl = url; phCloudToken = token;
+      try{ localStorage.setItem(PH_URL_KEY, url); localStorage.setItem(PH_TOKEN_KEY, token); }catch(e){}
+      btn.disabled = false;
+      phShowApp();
+      phLoad();
+    }).catch(function(err){
+      btn.disabled = false;
+      errEl.textContent = '✗ Kết nối thất bại — ' + err.message;
+    });
+  };
+  document.getElementById('ph-conn-btn').addEventListener('click', function(){
+    var url = document.getElementById('ph-conn-url').value.trim();
+    var token = document.getElementById('ph-conn-token').value.trim();
+    if(!url || !token){ document.getElementById('ph-conn-error').textContent = '✗ Nhập đủ Database URL và mã Cloud.'; return; }
+    phTryConnect(url, token);
+  });
+  document.getElementById('ph-disconnect-btn').addEventListener('click', function(){
+    try{ localStorage.removeItem(PH_URL_KEY); localStorage.removeItem(PH_TOKEN_KEY); }catch(e){}
+    phCloudUrl = ''; phCloudToken = '';
+    document.getElementById('ph-conn-url').value = '';
+    document.getElementById('ph-conn-token').value = '';
+    document.getElementById('ph-groups').innerHTML = '';
+    phShowConnect();
+  });
+  document.getElementById('ph-refresh-btn').addEventListener('click', phLoad);
+
+  // ===== Tìm kiếm + mở/đóng dòng + xem Locator theo kho — gắn trên document để vẫn hoạt động đúng
+  // sau khi "Làm mới" dựng lại toàn bộ nội dung #ph-groups. =====
+  document.getElementById('ph-search').addEventListener('input', function(e){
+    var q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll('.ph-cont-row').forEach(function(row){
+      var detail = document.getElementById(row.dataset.target);
+      var hay = row.textContent.toLowerCase() + (detail ? detail.textContent.toLowerCase() : '');
+      var hide = !!q && hay.indexOf(q) === -1;
+      row.style.display = hide ? 'none' : '';
+      if(hide && detail){ detail.style.display = 'none'; row.classList.remove('ph-open'); }
+    });
+  });
+  document.addEventListener('click', function(e){
+    if(e.target.closest('.ph-kho-select')) return;
+    var khoCell = e.target.closest('.ph-kho-cell');
+    if(khoCell){
+      var target = document.getElementById(khoCell.dataset.target);
+      if(target) target.style.display = (target.style.display === 'none') ? 'table-row' : 'none';
+      return;
+    }
+    var row = e.target.closest('.ph-cont-row');
+    if(row){
+      var detail = document.getElementById(row.dataset.target);
+      if(!detail) return;
+      var isOpen = detail.style.display !== 'none';
+      detail.style.display = isOpen ? 'none' : 'table-row';
+      row.classList.toggle('ph-open', !isOpen);
+    }
+  });
+
+  // ===== Chọn tay ở cột "Kho" -> tự chuyển dòng sang bảng của đúng kho vừa chọn, chèn đúng vị trí
+  // theo Ngày·Giờ tăng dần (không rơi xuống cuối bảng). =====
+  var phFindGroupTbody = function(khoKey){
+    var tbodies = document.querySelectorAll('.ph-cont-tbody');
+    for(var i = 0; i < tbodies.length; i++){ if(tbodies[i].dataset.khoGroup === khoKey) return tbodies[i]; }
+    return null;
+  };
+  var phUpdateGroupUI = function(groupEl){
+    if(!groupEl) return;
+    var tbody = groupEl.querySelector('.ph-cont-tbody');
+    var count = tbody ? tbody.querySelectorAll('.ph-cont-row').length : 0;
+    var countEl = groupEl.querySelector('.ph-group-count');
+    if(countEl) countEl.textContent = count + ' container';
+    groupEl.classList.toggle('ph-group-empty', count === 0);
+  };
+  var phInsertRowSorted = function(targetTbody, row, detail){
+    var myKey = Number(row.dataset.sortKey);
+    if(isNaN(myKey)) myKey = Infinity;
+    var existingRows = targetTbody.querySelectorAll('.ph-cont-row');
+    var before = null;
+    for(var i = 0; i < existingRows.length; i++){
+      var k = Number(existingRows[i].dataset.sortKey);
+      if(isNaN(k)) k = Infinity;
+      if(k > myKey){ before = existingRows[i]; break; }
+    }
+    if(before){
+      targetTbody.insertBefore(row, before);
+      if(detail) targetTbody.insertBefore(detail, before);
+    } else {
+      targetTbody.appendChild(row);
+      if(detail) targetTbody.appendChild(detail);
+    }
+  };
+  document.addEventListener('change', function(e){
+    var sel = e.target.closest('.ph-kho-select');
+    if(!sel) return;
+    var row = sel.closest('.ph-cont-row');
+    if(!row) return;
+    var detail = document.getElementById(row.dataset.target);
+    var khoKey = sel.value || sel.dataset.autoKho || '';
+    var targetTbody = phFindGroupTbody(khoKey);
+    if(!targetTbody) return;
+    var sourceGroup = row.closest('.ph-group');
+    var targetGroup = targetTbody.closest('.ph-group');
+    phInsertRowSorted(targetTbody, row, detail);
+    phUpdateGroupUI(sourceGroup);
+    phUpdateGroupUI(targetGroup);
+  });
+
+  // ===== Nút "📷 Lưu ảnh" — chụp lại đúng khối Locator/OQC/SL tồn thành 1 file PNG tải về máy. =====
+  var phSaveDetailImage = function(title, rows){
+    var scale = 2, padX = 16, padTop = 14, rowH = 26, headerH = 30;
+    var mctx = document.createElement('canvas').getContext('2d');
+    mctx.font = 'bold 14px system-ui, sans-serif';
+    var titleW = mctx.measureText(title).width;
+    mctx.font = '12.5px ui-monospace, monospace';
+    var locW = 90, oqcW = 60, qtyW = 70;
+    for(var i = 0; i < rows.length; i++){
+      locW = Math.max(locW, mctx.measureText(rows[i][0]).width + 12);
+      oqcW = Math.max(oqcW, mctx.measureText(rows[i][1]).width + 12);
+      qtyW = Math.max(qtyW, mctx.measureText(rows[i][2]).width + 12);
+    }
+    var tableW = locW + oqcW + qtyW;
+    var width = Math.max(titleW + padX * 2, tableW + padX * 2, 280);
+    var tableTop = padTop + 24 + headerH;
+    var height = tableTop + rowH * Math.max(rows.length, 1) + 14;
+
+    var canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(width * scale);
+    canvas.height = Math.ceil(height * scale);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = '#12161F';
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.fillText(title, padX, padTop + 14);
+
+    ctx.fillStyle = '#f8f9fb';
+    ctx.fillRect(padX - 8, tableTop - headerH, tableW + 16, headerH);
+    ctx.fillStyle = '#6b7280';
+    ctx.font = 'bold 10.5px system-ui, sans-serif';
+    ctx.fillText('LOCATOR', padX, tableTop - 11);
+    ctx.fillText('OQC', padX + locW, tableTop - 11);
+    ctx.textAlign = 'right';
+    ctx.fillText('SL TỒN', padX + tableW - 6, tableTop - 11);
+    ctx.textAlign = 'left';
+
+    ctx.font = '12.5px ui-monospace, monospace';
+    if(!rows.length){
+      ctx.fillStyle = '#8a97ac';
+      ctx.fillText('(Không có dòng nào)', padX, tableTop + 17);
+    }
+    for(var r = 0; r < rows.length; r++){
+      var ry = tableTop + rowH * r;
+      if(r % 2 === 1){ ctx.fillStyle = '#fafbfc'; ctx.fillRect(padX - 8, ry, tableW + 16, rowH); }
+      ctx.fillStyle = '#12161F';
+      ctx.fillText(rows[r][0], padX, ry + 17);
+      ctx.fillText(rows[r][1], padX + locW, ry + 17);
+      ctx.textAlign = 'right';
+      ctx.fillText(rows[r][2], padX + tableW - 6, ry + 17);
+      ctx.textAlign = 'left';
+    }
+
+    canvas.toBlob(function(blob){
+      if(!blob) return;
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      var safeName = title.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'chi_tiet';
+      a.href = url;
+      a.download = 'TonKho_' + safeName + '.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    }, 'image/png');
+  };
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest('.ph-shot-btn');
+    if(!btn) return;
+    var labelDiv = btn.closest('.ph-detail-label');
+    var wrap = labelDiv ? labelDiv.parentElement : null;
+    var titleEl = labelDiv ? labelDiv.querySelector('.ph-detail-label-text') : null;
+    var title = titleEl ? titleEl.textContent.trim() : 'Chi tiết';
+    var table = wrap ? wrap.querySelector('.ph-locs') : null;
+    var rows = [];
+    if(table){
+      var trs = table.querySelectorAll('tbody tr');
+      for(var i = 0; i < trs.length; i++){
+        var tds = trs[i].querySelectorAll('td');
+        if(tds.length >= 3) rows.push([tds[0].textContent.trim(), tds[1].textContent.trim(), tds[2].textContent.trim()]);
+      }
+    }
+    phSaveDetailImage(title, rows);
+  });
+
+  // ===== Khởi động: đã có sẵn thông tin kết nối trên máy này thì vào thẳng, chưa có thì hiện màn
+  // hình kết nối. =====
+  (function init(){
+    var savedUrl = '', savedToken = '';
+    try{ savedUrl = localStorage.getItem(PH_URL_KEY) || ''; savedToken = localStorage.getItem(PH_TOKEN_KEY) || ''; }catch(e){}
+    if(savedUrl && savedToken){
+      phCloudUrl = savedUrl; phCloudToken = savedToken;
+      phShowApp();
+      phLoad();
+    } else {
+      phShowConnect();
+    }
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.register('sw-3p.js').catch(function(){});
+    }
+  })();
+</script>
+</body>
+</html>
