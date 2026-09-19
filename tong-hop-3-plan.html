@@ -37,10 +37,6 @@
   .ph-link-btn{margin-left:auto; background:none; border:none; color:#8a97ac; font-size:12px; text-decoration:underline; cursor:pointer; padding:4px;}
 
   /* ===== Bảng container theo kho ===== */
-  .ph-group{margin-bottom:20px;}
-  .ph-group.ph-group-empty{display:none;}
-  .ph-group-title{font-weight:700; font-size:17px; margin-bottom:8px; display:flex; align-items:baseline; gap:8px;}
-  .ph-group-count{font-weight:400; font-size:11.5px; color:#6b7280;}
   .ph-scroll{overflow-x:auto; border:1px solid #e2e5ea; border-radius:10px; background:#fff;}
   .ph-cont-table{width:100%; min-width:760px; border-collapse:collapse; font-size:13px;}
   .ph-cont-table > thead > tr > th{padding:9px 10px; background:#f8f9fb; color:#6b7280; font-weight:600; font-size:11px; text-transform:uppercase; text-align:left; white-space:nowrap;}
@@ -148,7 +144,7 @@
       <span id="ph-refresh-status"></span>
       <button id="ph-disconnect-btn" type="button" class="ph-link-btn">Ngắt kết nối</button>
     </div>
-    <div id="ph-groups"></div>
+    <div id="ph-cont-list"></div>
   </div>
 
 <script>
@@ -272,9 +268,7 @@
       if(label === '3A'){ khoColors['3A trệt']=color; khoColors['3A lầu']=color; khoColors['3A Rack']=color; }
       else khoColors[label] = color;
     });
-    var khoGroupOrder = khoOrderForHtml.slice();
-    PH_MANUAL_KHO_OPTIONS.forEach(function(k){ if(khoGroupOrder.indexOf(k) === -1) khoGroupOrder.push(k); });
-    return { khoLabels: khoLabels, khoColors: khoColors, khoGroupOrder: khoGroupOrder };
+    return { khoLabels: khoLabels, khoColors: khoColors };
   };
 
   var phKhoGroups = function(locs, khoLabels){
@@ -404,7 +398,7 @@
       var uidPrefix = 'k' + (uidState.n++);
       return '<tbody class="ph-item-group">' + phGroupBodyHtml(it.item, it.po, it.qty, it.locs, uidPrefix, khoMeta) + '</tbody>';
     }).join('');
-    return '<tr class="ph-cont-row" data-target="' + detailId + '" data-sort-key="' + phDateTimeSortKey(row.loadDate, row.planTime) + '" style="background:' + rowBg + ';">' +
+    return '<tr class="ph-cont-row" data-target="' + detailId + '" style="background:' + rowBg + ';">' +
         '<td class="ph-arrow-cell" style="border-left:4px solid ' + contColor + ';"><span class="ph-arrow">▸</span></td>' +
         '<td><span class="ph-td-label">Loại</span><span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span></td>' +
         '<td class="ph-vnc"><span class="ph-td-label">VNC</span>' + phEsc(row.invoice) + '</td>' +
@@ -419,33 +413,14 @@
       '</tr>';
   };
 
-  var phGroupTitle = function(key){ return key || 'Chưa xác định kho'; };
-  var phBuildGroupHtml = function(key, rows, khoMeta, uidState){
-    var rowsHtml = rows.map(function(row){ return phBuildContainerRowHtml(row, khoMeta, uidState); }).join('');
-    return '<div class="ph-group' + (rows.length ? '' : ' ph-group-empty') + '">' +
-      '<div class="ph-group-title">' + phEsc(phGroupTitle(key)) + ' <span class="ph-group-count">' + phFmt(rows.length) + ' container</span></div>' +
-      '<div class="ph-scroll"><table class="ph-cont-table"><thead><tr><th></th><th>Loại</th><th>VNC</th><th>CSR</th><th>Ngày · Giờ</th><th>Kho</th><th style="text-align:right">SL Plan</th><th style="text-align:right">CBM</th></tr></thead>' +
-      '<tbody class="ph-cont-tbody" data-kho-group="' + phEsc(key) + '">' + rowsHtml + '</tbody></table></div></div>';
-  };
-  var phBuildGroupsHtml = function(rows, khoMeta){
-    var order = khoMeta.khoGroupOrder.slice();
-    var map = {};
-    order.forEach(function(k){ map[k] = []; });
-    map[''] = [];
-    rows.forEach(function(row){
-      var key = row.topKho || '';
-      if(!(key in map)){ map[key] = []; order.push(key); }
-      map[key].push(row);
-    });
+  // KHÔNG còn chia theo Kho thành nhiều bảng nữa — chỉ 1 danh sách DUY NHẤT, sắp theo Ngày·Giờ tăng
+  // dần (đã sort sẵn ở phBuildContainers). Cột "Kho" vẫn giữ lại (auto-detect + chọn tay để xem thử)
+  // như 1 cột thông tin bình thường, không còn tác dụng "chuyển dòng sang bảng khác" nữa.
+  var phBuildContainerListHtml = function(rows, khoMeta){
     var uidState = { n: 0, c: 0 };
-    var seen = {};
-    var htmlParts = [];
-    order.concat(['']).forEach(function(k){
-      if(seen[k]) return;
-      seen[k] = true;
-      htmlParts.push(phBuildGroupHtml(k, map[k] || [], khoMeta, uidState));
-    });
-    return htmlParts.join('');
+    var rowsHtml = rows.map(function(row){ return phBuildContainerRowHtml(row, khoMeta, uidState); }).join('');
+    return '<div class="ph-scroll"><table class="ph-cont-table"><thead><tr><th></th><th>Loại</th><th>VNC</th><th>CSR</th><th>Ngày · Giờ</th><th>Kho</th><th style="text-align:right">SL Plan</th><th style="text-align:right">CBM</th></tr></thead>' +
+      '<tbody>' + rowsHtml + '</tbody></table></div>';
   };
 
   // Chỉ gọi ĐÚNG 1 khoá con mỗi lần (không phải cả node dashboard_data) — node đó còn chứa rất nhiều
@@ -490,13 +465,13 @@
         return phBuildContainers(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx, manualKho);
       })() : [];
 
-      var groupsEl = document.getElementById('ph-groups');
+      var listEl = document.getElementById('ph-cont-list');
       if(!planDataLive){
-        groupsEl.innerHTML = '<div class="ph-empty-note">Chưa có dữ liệu Plan nào trên Cloud — hãy tải Plan Row/FC/HCP trên TN5 Dashboard rồi bấm "Làm mới" ở đây.</div>';
+        listEl.innerHTML = '<div class="ph-empty-note">Chưa có dữ liệu Plan nào trên Cloud — hãy tải Plan Row/FC/HCP trên TN5 Dashboard rồi bấm "Làm mới" ở đây.</div>';
       } else {
-        groupsEl.innerHTML = phBuildGroupsHtml(rows, khoMeta);
+        listEl.innerHTML = phBuildContainerListHtml(rows, khoMeta);
       }
-      document.getElementById('ph-meta').textContent = 'Tự lấy dữ liệu trực tiếp từ Cloud mỗi lần mở/làm mới · ' + phFmt(rows.length) + ' container (đã bỏ container "Pick xong") · Container được gom theo Kho (mỗi kho 1 bảng) · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm số lượng của 1 kho để xem Locator/OQC/SL tồn · Chọn tay ở cột "Kho" để chuyển dòng sang bảng kho khác nếu muốn';
+      document.getElementById('ph-meta').textContent = 'Tự lấy dữ liệu trực tiếp từ Cloud mỗi lần mở/làm mới · ' + phFmt(rows.length) + ' container (đã bỏ container "Pick xong") · Sắp xếp theo Ngày · Giờ tăng dần · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm số lượng của 1 kho để xem Locator/OQC/SL tồn';
       btn.disabled = false;
       status.textContent = '✓ Đã tải lúc ' + new Date().toLocaleString('vi-VN');
     }).catch(function(err){
@@ -547,13 +522,13 @@
     phCloudUrl = ''; phCloudToken = '';
     document.getElementById('ph-conn-url').value = '';
     document.getElementById('ph-conn-token').value = '';
-    document.getElementById('ph-groups').innerHTML = '';
+    document.getElementById('ph-cont-list').innerHTML = '';
     phShowConnect();
   });
   document.getElementById('ph-refresh-btn').addEventListener('click', phLoad);
 
   // ===== Tìm kiếm + mở/đóng dòng + xem Locator theo kho — gắn trên document để vẫn hoạt động đúng
-  // sau khi "Làm mới" dựng lại toàn bộ nội dung #ph-groups. =====
+  // sau khi "Làm mới" dựng lại toàn bộ nội dung #ph-cont-list. =====
   document.getElementById('ph-search').addEventListener('input', function(e){
     var q = e.target.value.trim().toLowerCase();
     document.querySelectorAll('.ph-cont-row').forEach(function(row){
@@ -580,55 +555,6 @@
       detail.style.display = isOpen ? 'none' : 'table-row';
       row.classList.toggle('ph-open', !isOpen);
     }
-  });
-
-  // ===== Chọn tay ở cột "Kho" -> tự chuyển dòng sang bảng của đúng kho vừa chọn, chèn đúng vị trí
-  // theo Ngày·Giờ tăng dần (không rơi xuống cuối bảng). =====
-  var phFindGroupTbody = function(khoKey){
-    var tbodies = document.querySelectorAll('.ph-cont-tbody');
-    for(var i = 0; i < tbodies.length; i++){ if(tbodies[i].dataset.khoGroup === khoKey) return tbodies[i]; }
-    return null;
-  };
-  var phUpdateGroupUI = function(groupEl){
-    if(!groupEl) return;
-    var tbody = groupEl.querySelector('.ph-cont-tbody');
-    var count = tbody ? tbody.querySelectorAll('.ph-cont-row').length : 0;
-    var countEl = groupEl.querySelector('.ph-group-count');
-    if(countEl) countEl.textContent = count + ' container';
-    groupEl.classList.toggle('ph-group-empty', count === 0);
-  };
-  var phInsertRowSorted = function(targetTbody, row, detail){
-    var myKey = Number(row.dataset.sortKey);
-    if(isNaN(myKey)) myKey = Infinity;
-    var existingRows = targetTbody.querySelectorAll('.ph-cont-row');
-    var before = null;
-    for(var i = 0; i < existingRows.length; i++){
-      var k = Number(existingRows[i].dataset.sortKey);
-      if(isNaN(k)) k = Infinity;
-      if(k > myKey){ before = existingRows[i]; break; }
-    }
-    if(before){
-      targetTbody.insertBefore(row, before);
-      if(detail) targetTbody.insertBefore(detail, before);
-    } else {
-      targetTbody.appendChild(row);
-      if(detail) targetTbody.appendChild(detail);
-    }
-  };
-  document.addEventListener('change', function(e){
-    var sel = e.target.closest('.ph-kho-select');
-    if(!sel) return;
-    var row = sel.closest('.ph-cont-row');
-    if(!row) return;
-    var detail = document.getElementById(row.dataset.target);
-    var khoKey = sel.value || sel.dataset.autoKho || '';
-    var targetTbody = phFindGroupTbody(khoKey);
-    if(!targetTbody) return;
-    var sourceGroup = row.closest('.ph-group');
-    var targetGroup = targetTbody.closest('.ph-group');
-    phInsertRowSorted(targetTbody, row, detail);
-    phUpdateGroupUI(sourceGroup);
-    phUpdateGroupUI(targetGroup);
   });
 
   // ===== Nút "📷 Lưu ảnh" — chụp lại đúng khối Locator/OQC/SL tồn thành 1 file PNG tải về máy. =====
