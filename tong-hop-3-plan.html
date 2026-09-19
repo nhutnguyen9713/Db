@@ -83,8 +83,17 @@
   @media (max-width: 700px){
     .ph-cont-table{min-width:0;}
     .ph-cont-table > thead{display:none;}
+    /* Mỗi container = 1 "thẻ" có KHUNG VIỀN riêng để dễ phân biệt dòng nọ với dòng kia khi cuộn —
+       dòng tóm tắt (.ph-cont-row) và khối chi tiết mở ra (.ph-cont-detail) là 2 <tr> RIÊNG nên phải
+       ghép viền thủ công: dòng tóm tắt viền đủ 4 cạnh + bo góc khi ĐANG ĐÓNG; khi MỞ RA thì bỏ viền
+       dưới + chỉ bo góc trên (để liền mạch với khối chi tiết ngay bên dưới, khối đó viền 3 cạnh còn
+       lại + bo góc dưới) — trông liền thành 1 khung duy nhất bao trọn cả container đó. */
     .ph-cont-table > tbody > tr.ph-cont-row{
       display:flex; flex-direction:column; padding:10px 34px 10px 12px; position:relative;
+      margin:0 0 10px; border:1px solid #e2e5ea; border-radius:10px;
+    }
+    .ph-cont-table > tbody > tr.ph-cont-row.ph-open{
+      margin-bottom:0; border-radius:10px 10px 0 0; border-bottom:none;
     }
     .ph-cont-table > tbody > tr.ph-cont-row::after{
       content:'▸'; position:absolute; top:12px; right:12px; color:#8a97ac; font-size:12px; transition:transform .15s;
@@ -95,6 +104,9 @@
       padding:3px 0; border-top:none; white-space:normal; text-align:right;
     }
     .ph-cont-table > tbody > tr.ph-cont-row > td.ph-arrow-cell{display:none;}
+    .ph-cont-table > tbody > tr.ph-cont-detail{
+      border:1px solid #e2e5ea; border-top:none; border-radius:0 0 10px 10px; margin:0 0 10px; overflow:hidden;
+    }
     .ph-cont-table > tbody > tr.ph-cont-detail > td{display:block; padding:0;}
 
     .ph-items{min-width:0;}
