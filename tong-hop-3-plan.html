@@ -308,7 +308,7 @@
       if(!g.qty) return '';
       var detailId = uidPrefix + '-' + i;
       var body = g.locs.map(function(l){ return '<tr><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
-      return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(po || '—') + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th>SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
+      return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(po || '—') + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
     }).join('');
     return '<tr><td><span class="ph-td-label">Item No.</span>' + phEsc(item) + '</td><td><span class="ph-td-label">Cust PO</span>' + phEsc(po || '—') + '</td><td class="ph-num"><span class="ph-td-label">SL Plan</span>' + phFmt(qty) + '</td>' + khoTds + '</tr>' + detailRows;
   };
@@ -397,7 +397,7 @@
     var khoSelect = '<select class="ph-kho-select" data-auto-kho="' + phEsc(row.autoKho || '') + '" title="Kho tự động theo SL tồn nhiều nhất — có thể chọn tay để xem thử">' +
       '<option value=""' + (!row.isManualKho ? ' selected' : '') + '>' + phEsc(khoAutoLabel) + (row.isManualKho ? '' : ' (auto)') + '</option>' +
       khoOptionsHtml + '</select>';
-    var khoTh = khoMeta.khoLabels.map(function(label){ return '<th style="background:' + khoMeta.khoColors[label] + ';">' + phEsc(label) + '</th>'; }).join('');
+    var khoTh = khoMeta.khoLabels.map(function(label){ return '<th style="background:' + khoMeta.khoColors[label] + '; text-align:right;">' + phEsc(label) + '</th>'; }).join('');
     var itemsHtml = row.items.map(function(it){
       var uidPrefix = 'k' + (uidState.n++);
       return '<tbody class="ph-item-group">' + phGroupBodyHtml(it.item, it.po, it.qty, it.locs, uidPrefix, khoMeta) + '</tbody>';
@@ -413,7 +413,7 @@
         '<td class="ph-num"><span class="ph-td-label">CBM</span>' + phFmtDec(totalCbm, 2) + '</td>' +
       '</tr>' +
       '<tr class="ph-cont-detail" id="' + detailId + '" style="display:none; background:' + detailBg + ';">' +
-        '<td colspan="8"><table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th>SL Plan</th>' + khoTh + '</tr></thead>' + itemsHtml + '</table></td>' +
+        '<td colspan="8"><table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th style="text-align:right;">SL Plan</th>' + khoTh + '</tr></thead>' + itemsHtml + '</table></td>' +
       '</tr>';
   };
 
