@@ -486,7 +486,7 @@
         if(meta.inventoryFileName) subParts.push('File: ' + meta.inventoryFileName);
         snapEl.innerHTML = 'NGÀY CHỐT DỮ LIỆU: <b>' + phEsc(snapDate) + '</b>' +
           (subParts.length ? '<div class="ph-snapshot-sub">' + phEsc(subParts.join(' · ')) + '</div>' : '');
-        snapEl.style.display = '';
+        snapEl.style.display = 'block';
       } else {
         snapEl.style.display = 'none';
         snapEl.innerHTML = '';
