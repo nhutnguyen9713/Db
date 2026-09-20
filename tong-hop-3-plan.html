@@ -45,8 +45,9 @@
   .ph-tab-btn.ph-tab-active{color:#2c6fcb; border-bottom-color:#2c6fcb;}
   #ph-item-search{width:100%; max-width:420px; padding:9px 12px; border-radius:8px; border:1px solid #d7dae0; font-size:14px; margin-bottom:16px; box-sizing:border-box;}
   .ph-search-result-card{border:2px solid #d7dae0; border-radius:10px; margin-bottom:14px; overflow:hidden; background:#fff;}
-  .ph-search-hdr{padding:9px 14px; font-size:12.5px; color:#374151; background:#f8f9fb; border-bottom:1px solid #eef0f3;}
+  .ph-search-hdr{padding:9px 14px; font-size:13px; color:#374151; background:#f8f9fb; border-bottom:1px solid #eef0f3;}
   .ph-search-hdr .ph-badge{margin-right:6px;}
+  .ph-pick-kho-hdr{padding:6px 14px; font-size:11px; font-weight:700; color:#374151; text-transform:uppercase; border-top:1px solid rgba(18,22,31,0.08);}
 
   /* ===== Bảng container theo kho ===== */
   .ph-scroll{overflow-x:auto; border:1px solid #e2e5ea; border-radius:10px; background:#fff;}
@@ -462,56 +463,43 @@
       '<tbody>' + rowsHtml + '</tbody></table></div>';
   };
 
-  // Tab "Tìm mã hàng" — tìm TRỰC TIẾP trên dữ liệu TỒN KHO (invIdx), KHÔNG qua Plan/container. Gom
-  // theo mã hàng + PO, hiện Tổng SL tồn + breakdown 6 kho (giống hệt cách hiện trong bảng container),
-  // bấm số lượng 1 kho để xem Locator/OQC/SL tồn — dùng lại đúng cấu trúc/handler click đã có.
-  var phBuildInventoryItemRowHtml = function(item, po, locs, uidPrefix, khoMeta){
-    var groups = phKhoGroups(locs, khoMeta.khoLabels);
-    var totalCols = 3 + khoMeta.khoLabels.length;
-    var totalQty = locs.reduce(function(s, l){ return s + (l.qty || 0); }, 0);
-    var khoTds = khoMeta.khoLabels.map(function(label, i){
-      var g = groups[label];
-      var bg = 'background:' + khoMeta.khoColors[label] + ';';
-      var lbl = '<span class="ph-td-label">' + phEsc(label) + '</span>';
-      if(!g.qty) return '<td class="ph-num" style="' + bg + '">' + lbl + '0</td>';
-      var detailId = uidPrefix + '-' + i;
-      return '<td class="ph-num ph-kho-cell" data-target="' + detailId + '" style="' + bg + '" title="Bấm để xem Locator/OQC/SL tồn">' + lbl + phFmt(g.qty) + '</td>';
-    }).join('');
-    var detailRows = khoMeta.khoLabels.map(function(label, i){
+  // Tab "Tìm mã hàng" — tìm TRỰC TIẾP trên dữ liệu TỒN KHO (invIdx), KHÔNG qua Plan/container, và
+  // KHÔNG tách theo PO (đi lấy hàng thì PO nào không quan trọng, chỉ cần biết vị trí). Gom theo TỪNG
+  // VỊ TRÍ (kho + locator, cộng dồn SL nếu trùng vị trí nhưng khác PO), hiện thành 1 danh sách LIỀN
+  // MẠCH đã mở sẵn (không cần bấm mở từng ô), sắp theo đúng thứ tự kho rồi tới locator tăng dần để đi
+  // lấy hàng theo 1 đường thẳng, không phải đi qua đi lại tìm.
+  var phBuildItemPickListHtml = function(item, entries, khoMeta){
+    var totalQty = entries.reduce(function(s, e){ return s + (e.qty || 0); }, 0);
+    var groups = phKhoGroups(entries, khoMeta.khoLabels);
+    var sectionsHtml = khoMeta.khoLabels.map(function(label){
       var g = groups[label];
       if(!g.qty) return '';
-      var detailId = uidPrefix + '-' + i;
-      var body = g.locs.map(function(l){ return '<tr><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
-      return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(po || '—') + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
+      var byLoc = {};
+      g.locs.forEach(function(l){
+        var lk = String(l.locator || '');
+        if(!byLoc[lk]) byLoc[lk] = { locator: l.locator, oqc: l.oqc, qty: 0 };
+        byLoc[lk].qty += (l.qty || 0);
+      });
+      var locRows = Object.keys(byLoc).map(function(k){ return byLoc[k]; });
+      locRows.sort(function(a, b){ return String(a.locator).localeCompare(String(b.locator), 'vi', { numeric: true }); });
+      var rowsHtml = locRows.map(function(l){ return '<tr><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
+      return '<div class="ph-pick-kho-hdr" style="background:' + khoMeta.khoColors[label] + ';">' + phEsc(label) + ' · ' + phFmt(g.qty) + '</div>' +
+        '<table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>';
     }).join('');
-    return '<tr><td><span class="ph-td-label">Item No.</span>' + phEsc(item) + '</td><td><span class="ph-td-label">Cust PO</span>' + phEsc(po || '—') + '</td><td class="ph-num"><span class="ph-td-label">Tổng SL tồn</span>' + phFmt(totalQty) + '</td>' + khoTds + '</tr>' + detailRows;
+    return '<div class="ph-search-result-card"><div class="ph-search-hdr"><b>' + phEsc(item) + '</b> · Tổng SL tồn: ' + phFmt(totalQty) + '</div>' + sectionsHtml + '</div>';
   };
   var phBuildInventorySearchResultHtml = function(query, khoMeta, invIdx){
     var q = String(query || '').trim().toLowerCase();
     if(!q) return '<div class="ph-empty-note">Nhập mã hàng (hoặc 1 phần mã hàng) để tìm.</div>';
     var matchedKeys = Object.keys(invIdx || {}).filter(function(k){ return k.indexOf(q) !== -1; });
-    var groups = {};
-    matchedKeys.forEach(function(key){
-      invIdx[key].forEach(function(e){
-        if(/prod/i.test(e.locator || '')) return; // bỏ vị trí PROD, giống phLocatorDetail
-        var poKey = String(e.custpo || '').trim();
-        var groupKey = key + '||' + poKey.toLowerCase();
-        if(!groups[groupKey]) groups[groupKey] = { item: e.item, po: poKey, locs: [] };
-        groups[groupKey].locs.push(e);
-      });
-    });
-    var groupList = Object.keys(groups).map(function(k){ return groups[k]; });
-    if(!groupList.length) return '<div class="ph-empty-note">Không tìm thấy mã hàng nào khớp "' + phEsc(query) + '" trong dữ liệu tồn kho.</div>';
-    groupList.sort(function(a, b){ return a.item.localeCompare(b.item) || a.po.localeCompare(b.po); });
-    var khoTh = khoMeta.khoLabels.map(function(label){ return '<th style="background:' + khoMeta.khoColors[label] + '; text-align:right;">' + phEsc(label) + '</th>'; }).join('');
-    var uidState = { n: 0 };
-    var cardsHtml = groupList.map(function(g){
-      var uidPrefix = 'inv' + (uidState.n++);
-      var bodyHtml = '<table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th style="text-align:right;">Tổng SL tồn</th>' + khoTh + '</tr></thead>' +
-        '<tbody class="ph-item-group">' + phBuildInventoryItemRowHtml(g.item, g.po, g.locs, uidPrefix, khoMeta) + '</tbody></table>';
-      return '<div class="ph-search-result-card">' + bodyHtml + '</div>';
+    matchedKeys.sort();
+    var cardsHtml = matchedKeys.map(function(key){
+      var entries = (invIdx[key] || []).filter(function(e){ return !/prod/i.test(e.locator || '') && (e.qty || 0) > 0; });
+      if(!entries.length) return '';
+      return phBuildItemPickListHtml(entries[0].item, entries, khoMeta);
     }).join('');
-    return '<div class="ph-meta">Tìm thấy ' + phFmt(groupList.length) + ' kết quả (theo mã hàng + PO) trong dữ liệu tồn kho khớp "' + phEsc(query) + '".</div>' + cardsHtml;
+    if(!cardsHtml.trim()) return '<div class="ph-empty-note">Không tìm thấy mã hàng nào khớp "' + phEsc(query) + '" trong dữ liệu tồn kho.</div>';
+    return '<div class="ph-meta">Tìm thấy ' + phFmt(matchedKeys.length) + ' mã hàng khớp "' + phEsc(query) + '" — mỗi mã liệt kê đủ vị trí theo thứ tự kho · locator để đi lấy hàng.</div>' + cardsHtml;
   };
   var phRenderItemSearch = function(){
     var input = document.getElementById('ph-item-search');
