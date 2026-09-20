@@ -104,7 +104,7 @@
     }
     .ph-cont-table > tbody > tr.ph-cont-row > td.ph-arrow-cell{display:none;}
     .ph-cont-table > tbody > tr.ph-cont-detail{
-      border:2px solid #aeb4c0; border-top:none; border-radius:0 0 10px 10px; margin:0 0 14px; overflow:hidden;
+      display:block; border:2px solid #aeb4c0; border-top:none; border-radius:0 0 10px 10px; margin:0 0 14px; overflow:hidden;
     }
     .ph-cont-table > tbody > tr.ph-cont-detail > td{display:block; padding:0;}
 
@@ -579,7 +579,7 @@
       var detail = document.getElementById(row.dataset.target);
       if(!detail) return;
       var isOpen = detail.style.display !== 'none';
-      detail.style.display = isOpen ? 'none' : 'table-row';
+      detail.style.display = isOpen ? 'none' : '';
       row.classList.toggle('ph-open', !isOpen);
     }
   });
