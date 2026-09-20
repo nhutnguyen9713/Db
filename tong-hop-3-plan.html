@@ -48,6 +48,7 @@
   .ph-search-hdr{padding:9px 14px; font-size:13px; color:#374151; background:#f8f9fb; border-bottom:1px solid #eef0f3;}
   .ph-search-hdr .ph-badge{margin-right:6px;}
   .ph-pick-kho-hdr{padding:6px 14px; font-size:11px; font-weight:700; color:#374151; text-transform:uppercase; border-top:1px solid rgba(18,22,31,0.08);}
+  .ph-pick-po-summary{margin-top:3px; font-size:11.5px; color:#6b7280; font-weight:400;}
 
   /* ===== Bảng container theo kho ===== */
   .ph-scroll{overflow-x:auto; border:1px solid #e2e5ea; border-radius:10px; background:#fff;}
@@ -463,30 +464,44 @@
       '<tbody>' + rowsHtml + '</tbody></table></div>';
   };
 
-  // Tab "Tìm mã hàng" — tìm TRỰC TIẾP trên dữ liệu TỒN KHO (invIdx), KHÔNG qua Plan/container, và
-  // KHÔNG tách theo PO (đi lấy hàng thì PO nào không quan trọng, chỉ cần biết vị trí). Gom theo TỪNG
-  // VỊ TRÍ (kho + locator, cộng dồn SL nếu trùng vị trí nhưng khác PO), hiện thành 1 danh sách LIỀN
-  // MẠCH đã mở sẵn (không cần bấm mở từng ô), sắp theo đúng thứ tự kho rồi tới locator tăng dần để đi
-  // lấy hàng theo 1 đường thẳng, không phải đi qua đi lại tìm.
+  // Tab "Tìm mã hàng" — tìm TRỰC TIẾP trên dữ liệu TỒN KHO (invIdx), KHÔNG qua Plan/container. Gom
+  // theo TỪNG VỊ TRÍ (kho + locator + PO), hiện thành 1 danh sách LIỀN MẠCH đã mở sẵn (không cần bấm
+  // mở từng ô), sắp theo đúng thứ tự kho rồi tới locator tăng dần để đi lấy hàng theo 1 đường thẳng,
+  // không phải đi qua đi lại tìm. Có cột PO ở từng dòng + tổng riêng theo từng PO để tiện đối chiếu.
   var phBuildItemPickListHtml = function(item, entries, khoMeta){
     var totalQty = entries.reduce(function(s, e){ return s + (e.qty || 0); }, 0);
+    var poTotals = {};
+    var poOrder = [];
+    entries.forEach(function(e){
+      var poKey = String(e.custpo || '').trim() || '—';
+      if(poTotals[poKey] === undefined){ poTotals[poKey] = 0; poOrder.push(poKey); }
+      poTotals[poKey] += (e.qty || 0);
+    });
+    poOrder.sort(function(a, b){ return a.localeCompare(b, 'vi', { numeric: true }); });
+    var poSummaryHtml = poOrder.map(function(po){ return phEsc(po) + ': ' + phFmt(poTotals[po]); }).join(' · ');
+
     var groups = phKhoGroups(entries, khoMeta.khoLabels);
     var sectionsHtml = khoMeta.khoLabels.map(function(label){
       var g = groups[label];
       if(!g.qty) return '';
-      var byLoc = {};
+      var byLocPo = {};
       g.locs.forEach(function(l){
-        var lk = String(l.locator || '');
-        if(!byLoc[lk]) byLoc[lk] = { locator: l.locator, oqc: l.oqc, qty: 0 };
-        byLoc[lk].qty += (l.qty || 0);
+        var poKey = String(l.custpo || '').trim() || '—';
+        var lk = String(l.locator || '') + '␟' + poKey;
+        if(!byLocPo[lk]) byLocPo[lk] = { locator: l.locator, po: poKey, oqc: l.oqc, qty: 0 };
+        byLocPo[lk].qty += (l.qty || 0);
       });
-      var locRows = Object.keys(byLoc).map(function(k){ return byLoc[k]; });
-      locRows.sort(function(a, b){ return String(a.locator).localeCompare(String(b.locator), 'vi', { numeric: true }); });
-      var rowsHtml = locRows.map(function(l){ return '<tr><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
+      var rowsList = Object.keys(byLocPo).map(function(k){ return byLocPo[k]; });
+      rowsList.sort(function(a, b){
+        return String(a.locator).localeCompare(String(b.locator), 'vi', { numeric: true }) || a.po.localeCompare(b.po, 'vi', { numeric: true });
+      });
+      var rowsHtml = rowsList.map(function(l){ return '<tr><td>' + phEsc(l.po) + '</td><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
       return '<div class="ph-pick-kho-hdr" style="background:' + khoMeta.khoColors[label] + ';">' + phEsc(label) + ' · ' + phFmt(g.qty) + '</div>' +
-        '<table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>';
+        '<table class="ph-locs"><thead><tr><th>PO</th><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>';
     }).join('');
-    return '<div class="ph-search-result-card"><div class="ph-search-hdr"><b>' + phEsc(item) + '</b> · Tổng SL tồn: ' + phFmt(totalQty) + '</div>' + sectionsHtml + '</div>';
+    return '<div class="ph-search-result-card"><div class="ph-search-hdr"><b>' + phEsc(item) + '</b> · Tổng SL tồn: ' + phFmt(totalQty) +
+      (poSummaryHtml ? '<div class="ph-pick-po-summary">Theo PO: ' + poSummaryHtml + '</div>' : '') +
+      '</div>' + sectionsHtml + '</div>';
   };
   var phBuildInventorySearchResultHtml = function(query, khoMeta, invIdx){
     var q = String(query || '').trim().toLowerCase();
