@@ -187,10 +187,9 @@
   var PH_CARD_BORDER_PALETTE = ['#6f9bd6', '#6cc084', '#e3a256', '#a97fd9', '#e08672', '#55b8ac', '#d97ba3', '#a7ac82'];
   var phCloudUrl = '';
   var phCloudToken = '';
-  // Chỉ mục phẳng theo TỪNG MÃ HÀNG (không theo container) — dựng lại mỗi lần phLoad() thành công,
-  // dùng cho tab "Tìm mã hàng" để tìm 1 mã hàng và thấy ngay nó nằm ở container nào, không cần mở
-  // từng container để dò.
-  var phItemSearchIndex = [];
+  // Tab "Tìm mã hàng" tìm TRỰC TIẾP trên dữ liệu TỒN KHO (invIdx, dựng lại mỗi lần phLoad() thành
+  // công) — KHÔNG phụ thuộc Plan/container, nên tìm được cả mã hàng chưa có trong Plan nào.
+  var phLastInvIdx = null;
   var phLastKhoMeta = null;
 
   var phEsc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
@@ -235,7 +234,7 @@
         var item = r[0], custpo = r[1], locator = r[2], oqc = r[3], qty = r[4];
         var key = String(item || '').toLowerCase();
         if(!idx[key]) idx[key] = [];
-        idx[key].push({ kho: kho, locator: locator, custpo: custpo, oqc: oqc, qty: qty });
+        idx[key].push({ item: item, kho: kho, locator: locator, custpo: custpo, oqc: oqc, qty: qty });
       });
     });
     return idx;
@@ -463,35 +462,63 @@
       '<tbody>' + rowsHtml + '</tbody></table></div>';
   };
 
-  // Tab "Tìm mã hàng" — tìm theo TỪNG MÃ HÀNG (không theo container), hiện ngay container/VNC nào
-  // đang chứa mã đó, không cần mở lần lượt từng container để dò như tab "Container".
-  var phBuildItemSearchResultHtml = function(query, khoMeta){
+  // Tab "Tìm mã hàng" — tìm TRỰC TIẾP trên dữ liệu TỒN KHO (invIdx), KHÔNG qua Plan/container. Gom
+  // theo mã hàng + PO, hiện Tổng SL tồn + breakdown 6 kho (giống hệt cách hiện trong bảng container),
+  // bấm số lượng 1 kho để xem Locator/OQC/SL tồn — dùng lại đúng cấu trúc/handler click đã có.
+  var phBuildInventoryItemRowHtml = function(item, po, locs, uidPrefix, khoMeta){
+    var groups = phKhoGroups(locs, khoMeta.khoLabels);
+    var totalCols = 3 + khoMeta.khoLabels.length;
+    var totalQty = locs.reduce(function(s, l){ return s + (l.qty || 0); }, 0);
+    var khoTds = khoMeta.khoLabels.map(function(label, i){
+      var g = groups[label];
+      var bg = 'background:' + khoMeta.khoColors[label] + ';';
+      var lbl = '<span class="ph-td-label">' + phEsc(label) + '</span>';
+      if(!g.qty) return '<td class="ph-num" style="' + bg + '">' + lbl + '0</td>';
+      var detailId = uidPrefix + '-' + i;
+      return '<td class="ph-num ph-kho-cell" data-target="' + detailId + '" style="' + bg + '" title="Bấm để xem Locator/OQC/SL tồn">' + lbl + phFmt(g.qty) + '</td>';
+    }).join('');
+    var detailRows = khoMeta.khoLabels.map(function(label, i){
+      var g = groups[label];
+      if(!g.qty) return '';
+      var detailId = uidPrefix + '-' + i;
+      var body = g.locs.map(function(l){ return '<tr><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
+      return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(po || '—') + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
+    }).join('');
+    return '<tr><td><span class="ph-td-label">Item No.</span>' + phEsc(item) + '</td><td><span class="ph-td-label">Cust PO</span>' + phEsc(po || '—') + '</td><td class="ph-num"><span class="ph-td-label">Tổng SL tồn</span>' + phFmt(totalQty) + '</td>' + khoTds + '</tr>' + detailRows;
+  };
+  var phBuildInventorySearchResultHtml = function(query, khoMeta, invIdx){
     var q = String(query || '').trim().toLowerCase();
     if(!q) return '<div class="ph-empty-note">Nhập mã hàng (hoặc 1 phần mã hàng) để tìm.</div>';
-    var matches = phItemSearchIndex.filter(function(e){ return e.item.toLowerCase().indexOf(q) !== -1; });
-    if(!matches.length) return '<div class="ph-empty-note">Không tìm thấy mã hàng nào khớp "' + phEsc(query) + '".</div>';
+    var matchedKeys = Object.keys(invIdx || {}).filter(function(k){ return k.indexOf(q) !== -1; });
+    var groups = {};
+    matchedKeys.forEach(function(key){
+      invIdx[key].forEach(function(e){
+        if(/prod/i.test(e.locator || '')) return; // bỏ vị trí PROD, giống phLocatorDetail
+        var poKey = String(e.custpo || '').trim();
+        var groupKey = key + '||' + poKey.toLowerCase();
+        if(!groups[groupKey]) groups[groupKey] = { item: e.item, po: poKey, locs: [] };
+        groups[groupKey].locs.push(e);
+      });
+    });
+    var groupList = Object.keys(groups).map(function(k){ return groups[k]; });
+    if(!groupList.length) return '<div class="ph-empty-note">Không tìm thấy mã hàng nào khớp "' + phEsc(query) + '" trong dữ liệu tồn kho.</div>';
+    groupList.sort(function(a, b){ return a.item.localeCompare(b.item) || a.po.localeCompare(b.po); });
     var khoTh = khoMeta.khoLabels.map(function(label){ return '<th style="background:' + khoMeta.khoColors[label] + '; text-align:right;">' + phEsc(label) + '</th>'; }).join('');
-    var uidState = { n: 0, c: 0 };
-    var cardsHtml = matches.map(function(e){
-      var row = e.contRow;
-      var contColor = PH_TYPE_COLORS[row.type] || '#8892A0';
-      var header = '<div class="ph-search-hdr" style="border-left:4px solid ' + contColor + ';">' +
-        '<span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span>' +
-        '<b>' + phEsc(row.invoice) + '</b> · CSR ' + phEsc(row.csr) + ' · ' + phEsc(row.loadDate) + ' · ' + phEsc(row.planTime) +
-        '</div>';
-      var uidPrefix = 's' + (uidState.n++);
-      var bodyHtml = '<table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th style="text-align:right;">SL Plan</th><th style="text-align:right;">CBM</th>' + khoTh + '</tr></thead>' +
-        '<tbody class="ph-item-group">' + phGroupBodyHtml(e.item, e.po, e.qty, e.cbm, e.locs, uidPrefix, khoMeta) + '</tbody></table>';
-      return '<div class="ph-search-result-card">' + header + bodyHtml + '</div>';
+    var uidState = { n: 0 };
+    var cardsHtml = groupList.map(function(g){
+      var uidPrefix = 'inv' + (uidState.n++);
+      var bodyHtml = '<table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th style="text-align:right;">Tổng SL tồn</th>' + khoTh + '</tr></thead>' +
+        '<tbody class="ph-item-group">' + phBuildInventoryItemRowHtml(g.item, g.po, g.locs, uidPrefix, khoMeta) + '</tbody></table>';
+      return '<div class="ph-search-result-card">' + bodyHtml + '</div>';
     }).join('');
-    return '<div class="ph-meta">Tìm thấy ' + phFmt(matches.length) + ' kết quả khớp "' + phEsc(query) + '".</div>' + cardsHtml;
+    return '<div class="ph-meta">Tìm thấy ' + phFmt(groupList.length) + ' kết quả (theo mã hàng + PO) trong dữ liệu tồn kho khớp "' + phEsc(query) + '".</div>' + cardsHtml;
   };
   var phRenderItemSearch = function(){
     var input = document.getElementById('ph-item-search');
     var resultEl = document.getElementById('ph-item-search-result');
     if(!input || !resultEl) return;
-    if(!phLastKhoMeta){ resultEl.innerHTML = '<div class="ph-empty-note">Chưa có dữ liệu Plan nào trên Cloud.</div>'; return; }
-    resultEl.innerHTML = phBuildItemSearchResultHtml(input.value, phLastKhoMeta);
+    if(!phLastKhoMeta){ resultEl.innerHTML = '<div class="ph-empty-note">Chưa có dữ liệu tồn kho trên Cloud.</div>'; return; }
+    resultEl.innerHTML = phBuildInventorySearchResultHtml(input.value, phLastKhoMeta, phLastInvIdx);
   };
 
   // Chỉ gọi ĐÚNG 1 khoá con mỗi lần (không phải cả node dashboard_data) — node đó còn chứa rất nhiều
@@ -538,12 +565,7 @@
       })() : [];
 
       phLastKhoMeta = khoMeta;
-      phItemSearchIndex = [];
-      rows.forEach(function(row){
-        row.items.forEach(function(it){
-          phItemSearchIndex.push({ item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, locs: it.locs, contRow: row });
-        });
-      });
+      phLastInvIdx = invIdx;
       phRenderItemSearch();
 
       var listEl = document.getElementById('ph-cont-list');
@@ -621,7 +643,7 @@
     document.getElementById('ph-cont-list').innerHTML = '';
     document.getElementById('ph-item-search-result').innerHTML = '';
     document.getElementById('ph-item-search').value = '';
-    phItemSearchIndex = [];
+    phLastInvIdx = null;
     phLastKhoMeta = null;
     document.getElementById('ph-snapshot').innerHTML = '';
     document.getElementById('ph-snapshot').style.display = 'none';
