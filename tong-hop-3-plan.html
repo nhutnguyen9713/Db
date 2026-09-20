@@ -299,9 +299,9 @@
     });
     return groups;
   };
-  var phGroupBodyHtml = function(item, po, qty, locs, uidPrefix, khoMeta){
+  var phGroupBodyHtml = function(item, po, qty, cbm, locs, uidPrefix, khoMeta){
     var groups = phKhoGroups(locs, khoMeta.khoLabels);
-    var totalCols = 3 + khoMeta.khoLabels.length;
+    var totalCols = 4 + khoMeta.khoLabels.length;
     var khoTds = khoMeta.khoLabels.map(function(label, i){
       var g = groups[label];
       var bg = 'background:' + khoMeta.khoColors[label] + ';';
@@ -317,7 +317,7 @@
       var body = g.locs.map(function(l){ return '<tr><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
       return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(po || '—') + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
     }).join('');
-    return '<tr><td><span class="ph-td-label">Item No.</span>' + phEsc(item) + '</td><td><span class="ph-td-label">Cust PO</span>' + phEsc(po || '—') + '</td><td class="ph-num"><span class="ph-td-label">SL Plan</span>' + phFmt(qty) + '</td>' + khoTds + '</tr>' + detailRows;
+    return '<tr><td><span class="ph-td-label">Item No.</span>' + phEsc(item) + '</td><td><span class="ph-td-label">Cust PO</span>' + phEsc(po || '—') + '</td><td class="ph-num"><span class="ph-td-label">SL Plan</span>' + phFmt(qty) + '</td><td class="ph-num"><span class="ph-td-label">CBM</span>' + phFmtDec(cbm, 2) + '</td>' + khoTds + '</tr>' + detailRows;
   };
 
   var phBuildContainers = function(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx, manualKho){
@@ -409,7 +409,7 @@
     var khoTh = khoMeta.khoLabels.map(function(label){ return '<th style="background:' + khoMeta.khoColors[label] + '; text-align:right;">' + phEsc(label) + '</th>'; }).join('');
     var itemsHtml = row.items.map(function(it){
       var uidPrefix = 'k' + (uidState.n++);
-      return '<tbody class="ph-item-group">' + phGroupBodyHtml(it.item, it.po, it.qty, it.locs, uidPrefix, khoMeta) + '</tbody>';
+      return '<tbody class="ph-item-group">' + phGroupBodyHtml(it.item, it.po, it.qty, it.cbm, it.locs, uidPrefix, khoMeta) + '</tbody>';
     }).join('');
     return '<tr class="ph-cont-row" data-target="' + detailId + '" style="background:' + rowBg + '; border-color:' + cardBorder + ';">' +
         '<td class="ph-arrow-cell" style="border-left:4px solid ' + contColor + ';"><span class="ph-arrow">▸</span></td>' +
@@ -422,7 +422,7 @@
         '<td class="ph-num"><span class="ph-td-label">CBM</span>' + phFmtDec(totalCbm, 2) + '</td>' +
       '</tr>' +
       '<tr class="ph-cont-detail" id="' + detailId + '" style="display:none; background:' + detailBg + '; border-color:' + cardBorder + ';">' +
-        '<td colspan="8"><table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th style="text-align:right;">SL Plan</th>' + khoTh + '</tr></thead>' + itemsHtml + '</table></td>' +
+        '<td colspan="8"><table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th style="text-align:right;">SL Plan</th><th style="text-align:right;">CBM</th>' + khoTh + '</tr></thead>' + itemsHtml + '</table></td>' +
       '</tr>';
   };
 
