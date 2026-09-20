@@ -39,6 +39,15 @@
   #ph-refresh-status{font-size:12.5px; color:#6b7280;}
   .ph-link-btn{margin-left:auto; background:none; border:none; color:#8a97ac; font-size:12px; text-decoration:underline; cursor:pointer; padding:4px;}
 
+  /* ===== Tab điều hướng: "Container" / "Tìm mã hàng" ===== */
+  .ph-tabs{display:flex; gap:4px; border-bottom:1px solid #e2e5ea; margin-bottom:16px;}
+  .ph-tab-btn{padding:9px 16px; border:none; background:none; font-size:13.5px; font-weight:600; color:#8a97ac; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px;}
+  .ph-tab-btn.ph-tab-active{color:#2c6fcb; border-bottom-color:#2c6fcb;}
+  #ph-item-search{width:100%; max-width:420px; padding:9px 12px; border-radius:8px; border:1px solid #d7dae0; font-size:14px; margin-bottom:16px; box-sizing:border-box;}
+  .ph-search-result-card{border:2px solid #d7dae0; border-radius:10px; margin-bottom:14px; overflow:hidden; background:#fff;}
+  .ph-search-hdr{padding:9px 14px; font-size:12.5px; color:#374151; background:#f8f9fb; border-bottom:1px solid #eef0f3;}
+  .ph-search-hdr .ph-badge{margin-right:6px;}
+
   /* ===== Bảng container theo kho ===== */
   .ph-scroll{overflow-x:auto; border:1px solid #e2e5ea; border-radius:10px; background:#fff;}
   .ph-cont-table{width:100%; min-width:760px; border-collapse:collapse; font-size:13px;}
@@ -142,13 +151,26 @@
 
   <div id="ph-app" style="display:none;">
     <div class="ph-snapshot" id="ph-snapshot"></div>
-    <input id="ph-search" type="text" placeholder="Tìm theo VNC, CSR, mã hàng...">
     <div class="ph-toolbar">
       <button id="ph-refresh-btn" type="button">🔄 Làm mới</button>
       <span id="ph-refresh-status"></span>
       <button id="ph-disconnect-btn" type="button" class="ph-link-btn">Ngắt kết nối</button>
     </div>
-    <div id="ph-cont-list"></div>
+
+    <div class="ph-tabs" id="ph-tabs">
+      <button class="ph-tab-btn ph-tab-active" data-tab="cont" type="button">📦 Container</button>
+      <button class="ph-tab-btn" data-tab="search" type="button">🔍 Tìm mã hàng</button>
+    </div>
+
+    <div id="ph-tab-cont">
+      <input id="ph-search" type="text" placeholder="Tìm theo VNC, CSR, mã hàng...">
+      <div id="ph-cont-list"></div>
+    </div>
+
+    <div id="ph-tab-search" style="display:none;">
+      <input id="ph-item-search" type="text" placeholder="Nhập mã hàng cần tìm (VD: 095079971)...">
+      <div id="ph-item-search-result"></div>
+    </div>
   </div>
 
 <script>
@@ -165,6 +187,11 @@
   var PH_CARD_BORDER_PALETTE = ['#6f9bd6', '#6cc084', '#e3a256', '#a97fd9', '#e08672', '#55b8ac', '#d97ba3', '#a7ac82'];
   var phCloudUrl = '';
   var phCloudToken = '';
+  // Chỉ mục phẳng theo TỪNG MÃ HÀNG (không theo container) — dựng lại mỗi lần phLoad() thành công,
+  // dùng cho tab "Tìm mã hàng" để tìm 1 mã hàng và thấy ngay nó nằm ở container nào, không cần mở
+  // từng container để dò.
+  var phItemSearchIndex = [];
+  var phLastKhoMeta = null;
 
   var phEsc = function(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
   var phFmt = function(n){ return Math.round(n || 0).toLocaleString('en-US'); };
@@ -436,6 +463,37 @@
       '<tbody>' + rowsHtml + '</tbody></table></div>';
   };
 
+  // Tab "Tìm mã hàng" — tìm theo TỪNG MÃ HÀNG (không theo container), hiện ngay container/VNC nào
+  // đang chứa mã đó, không cần mở lần lượt từng container để dò như tab "Container".
+  var phBuildItemSearchResultHtml = function(query, khoMeta){
+    var q = String(query || '').trim().toLowerCase();
+    if(!q) return '<div class="ph-empty-note">Nhập mã hàng (hoặc 1 phần mã hàng) để tìm.</div>';
+    var matches = phItemSearchIndex.filter(function(e){ return e.item.toLowerCase().indexOf(q) !== -1; });
+    if(!matches.length) return '<div class="ph-empty-note">Không tìm thấy mã hàng nào khớp "' + phEsc(query) + '".</div>';
+    var khoTh = khoMeta.khoLabels.map(function(label){ return '<th style="background:' + khoMeta.khoColors[label] + '; text-align:right;">' + phEsc(label) + '</th>'; }).join('');
+    var uidState = { n: 0, c: 0 };
+    var cardsHtml = matches.map(function(e){
+      var row = e.contRow;
+      var contColor = PH_TYPE_COLORS[row.type] || '#8892A0';
+      var header = '<div class="ph-search-hdr" style="border-left:4px solid ' + contColor + ';">' +
+        '<span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span>' +
+        '<b>' + phEsc(row.invoice) + '</b> · CSR ' + phEsc(row.csr) + ' · ' + phEsc(row.loadDate) + ' · ' + phEsc(row.planTime) +
+        '</div>';
+      var uidPrefix = 's' + (uidState.n++);
+      var bodyHtml = '<table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th style="text-align:right;">SL Plan</th><th style="text-align:right;">CBM</th>' + khoTh + '</tr></thead>' +
+        '<tbody class="ph-item-group">' + phGroupBodyHtml(e.item, e.po, e.qty, e.cbm, e.locs, uidPrefix, khoMeta) + '</tbody></table>';
+      return '<div class="ph-search-result-card">' + header + bodyHtml + '</div>';
+    }).join('');
+    return '<div class="ph-meta">Tìm thấy ' + phFmt(matches.length) + ' kết quả khớp "' + phEsc(query) + '".</div>' + cardsHtml;
+  };
+  var phRenderItemSearch = function(){
+    var input = document.getElementById('ph-item-search');
+    var resultEl = document.getElementById('ph-item-search-result');
+    if(!input || !resultEl) return;
+    if(!phLastKhoMeta){ resultEl.innerHTML = '<div class="ph-empty-note">Chưa có dữ liệu Plan nào trên Cloud.</div>'; return; }
+    resultEl.innerHTML = phBuildItemSearchResultHtml(input.value, phLastKhoMeta);
+  };
+
   // Chỉ gọi ĐÚNG 1 khoá con mỗi lần (không phải cả node dashboard_data) — node đó còn chứa rất nhiều
   // dữ liệu KHÔNG liên quan gì tới trang này (lịch sử quét QR/kiểm tồn, log GI, Transaction Master...),
   // tải cả node sẽ ngốn băng thông Firebase vô ích mỗi lần mở trang/bấm "Làm mới".
@@ -478,6 +536,15 @@
         var pickingIdx = phBuildPickingIndex(khoDetail);
         return phBuildContainers(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx, manualKho);
       })() : [];
+
+      phLastKhoMeta = khoMeta;
+      phItemSearchIndex = [];
+      rows.forEach(function(row){
+        row.items.forEach(function(it){
+          phItemSearchIndex.push({ item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, locs: it.locs, contRow: row });
+        });
+      });
+      phRenderItemSearch();
 
       var listEl = document.getElementById('ph-cont-list');
       if(!planDataLive){
@@ -552,11 +619,24 @@
     document.getElementById('ph-conn-url').value = '';
     document.getElementById('ph-conn-token').value = '';
     document.getElementById('ph-cont-list').innerHTML = '';
+    document.getElementById('ph-item-search-result').innerHTML = '';
+    document.getElementById('ph-item-search').value = '';
+    phItemSearchIndex = [];
+    phLastKhoMeta = null;
     document.getElementById('ph-snapshot').innerHTML = '';
     document.getElementById('ph-snapshot').style.display = 'none';
     phShowConnect();
   });
   document.getElementById('ph-refresh-btn').addEventListener('click', phLoad);
+
+  // ===== Tab "Container" / "Tìm mã hàng" =====
+  document.getElementById('ph-tabs').addEventListener('click', function(e){
+    var btn = e.target.closest('.ph-tab-btn');
+    if(!btn) return;
+    document.querySelectorAll('.ph-tab-btn').forEach(function(b){ b.classList.toggle('ph-tab-active', b === btn); });
+    document.getElementById('ph-tab-cont').style.display = (btn.dataset.tab === 'cont') ? '' : 'none';
+    document.getElementById('ph-tab-search').style.display = (btn.dataset.tab === 'search') ? '' : 'none';
+  });
 
   // ===== Tìm kiếm + mở/đóng dòng + xem Locator theo kho — gắn trên document để vẫn hoạt động đúng
   // sau khi "Làm mới" dựng lại toàn bộ nội dung #ph-cont-list. =====
@@ -570,6 +650,7 @@
       if(hide && detail){ detail.style.display = 'none'; row.classList.remove('ph-open'); }
     });
   });
+  document.getElementById('ph-item-search').addEventListener('input', phRenderItemSearch);
   document.addEventListener('click', function(e){
     if(e.target.closest('.ph-kho-select')) return;
     var khoCell = e.target.closest('.ph-kho-cell');
