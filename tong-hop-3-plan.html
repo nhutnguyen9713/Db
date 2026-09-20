@@ -160,6 +160,9 @@
   // này với container kế tiếp khi cuộn — kể cả 2 container liền nhau CÙNG Loại (VD 2 HCP liên tiếp)
   // trước đây có nền giống hệt nhau nên nhìn dính liền thành 1 khối dù đã có khung viền riêng.
   var PH_CARD_BG_PALETTE = ['#eaf2fc', '#eaf8ec', '#fdf2e3', '#f3ecfa', '#fde9e5', '#e6f7f5', '#faeef3', '#f2f3ec'];
+  // Viền mỗi container CÙNG tông màu với nền của nó (chỉ đậm/rõ hơn), thay vì 1 màu xám trung tính
+  // chung cho tất cả — khớp theo đúng thứ tự với PH_CARD_BG_PALETTE ở trên.
+  var PH_CARD_BORDER_PALETTE = ['#6f9bd6', '#6cc084', '#e3a256', '#a97fd9', '#e08672', '#55b8ac', '#d97ba3', '#a7ac82'];
   var phCloudUrl = '';
   var phCloudToken = '';
 
@@ -391,6 +394,7 @@
     var totalCbm = row.items.reduce(function(s, it){ return s + (it.cbm || 0); }, 0);
     var contColor = PH_TYPE_COLORS[row.type] || '#8892A0';
     var cardBg = PH_CARD_BG_PALETTE[uidState.c % PH_CARD_BG_PALETTE.length];
+    var cardBorder = PH_CARD_BORDER_PALETTE[uidState.c % PH_CARD_BORDER_PALETTE.length];
     var rowBg = cardBg;
     var detailBg = phRgba(cardBg, 0.5);
     var detailId = 'cd' + (uidState.c++);
@@ -407,7 +411,7 @@
       var uidPrefix = 'k' + (uidState.n++);
       return '<tbody class="ph-item-group">' + phGroupBodyHtml(it.item, it.po, it.qty, it.locs, uidPrefix, khoMeta) + '</tbody>';
     }).join('');
-    return '<tr class="ph-cont-row" data-target="' + detailId + '" style="background:' + rowBg + ';">' +
+    return '<tr class="ph-cont-row" data-target="' + detailId + '" style="background:' + rowBg + '; border-color:' + cardBorder + ';">' +
         '<td class="ph-arrow-cell" style="border-left:4px solid ' + contColor + ';"><span class="ph-arrow">▸</span></td>' +
         '<td><span class="ph-td-label">Loại</span><span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span></td>' +
         '<td class="ph-vnc"><span class="ph-td-label">VNC</span>' + phEsc(row.invoice) + '</td>' +
@@ -417,7 +421,7 @@
         '<td class="ph-num"><span class="ph-td-label">SL Plan</span>' + phFmt(row.planQty) + '</td>' +
         '<td class="ph-num"><span class="ph-td-label">CBM</span>' + phFmtDec(totalCbm, 2) + '</td>' +
       '</tr>' +
-      '<tr class="ph-cont-detail" id="' + detailId + '" style="display:none; background:' + detailBg + ';">' +
+      '<tr class="ph-cont-detail" id="' + detailId + '" style="display:none; background:' + detailBg + '; border-color:' + cardBorder + ';">' +
         '<td colspan="8"><table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th style="text-align:right;">SL Plan</th>' + khoTh + '</tr></thead>' + itemsHtml + '</table></td>' +
       '</tr>';
   };
