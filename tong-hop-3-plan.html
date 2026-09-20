@@ -47,8 +47,13 @@
   .ph-search-result-card{border:2px solid #d7dae0; border-radius:10px; margin-bottom:14px; overflow:hidden; background:#fff;}
   .ph-search-hdr{padding:9px 14px; font-size:13px; color:#374151; background:#f8f9fb; border-bottom:1px solid #eef0f3;}
   .ph-search-hdr .ph-badge{margin-right:6px;}
-  .ph-pick-kho-hdr{padding:6px 14px; font-size:11px; font-weight:700; color:#374151; text-transform:uppercase; border-top:1px solid rgba(18,22,31,0.08);}
+  .ph-pick-kho-hdr{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 10px 6px 14px; font-size:11px; font-weight:700; color:#374151; text-transform:uppercase; border-top:1px solid rgba(18,22,31,0.08);}
   .ph-pick-po-summary{margin-top:3px; font-size:11.5px; color:#6b7280; font-weight:400;}
+  .ph-pick-po-line{line-height:1.5;}
+  .ph-pick-shot-btn{font-size:12px; text-transform:none; padding:1px 7px; border-radius:6px; border:1px solid #d7dae0; background:#fff; color:#374151; cursor:pointer; white-space:nowrap; flex-shrink:0;}
+  .ph-pick-shot-btn:hover{background:#f4f5f7;}
+  .ph-pick-shot-all-btn{display:block; margin-top:8px; font-size:11.5px; font-weight:600; text-transform:none; padding:5px 10px; border-radius:6px; border:1px solid #d7dae0; background:#fff; color:#374151; cursor:pointer;}
+  .ph-pick-shot-all-btn:hover{background:#f4f5f7;}
 
   /* ===== Bảng container theo kho ===== */
   .ph-scroll{overflow-x:auto; border:1px solid #e2e5ea; border-radius:10px; background:#fff;}
@@ -478,7 +483,7 @@
       poTotals[poKey] += (e.qty || 0);
     });
     poOrder.sort(function(a, b){ return a.localeCompare(b, 'vi', { numeric: true }); });
-    var poSummaryHtml = poOrder.map(function(po){ return phEsc(po) + ': ' + phFmt(poTotals[po]); }).join(' · ');
+    var poSummaryHtml = poOrder.map(function(po){ return '<div class="ph-pick-po-line">' + phEsc(po) + ': ' + phFmt(poTotals[po]) + '</div>'; }).join('');
 
     var groups = phKhoGroups(entries, khoMeta.khoLabels);
     var sectionsHtml = khoMeta.khoLabels.map(function(label){
@@ -496,17 +501,27 @@
         return String(a.locator).localeCompare(String(b.locator), 'vi', { numeric: true }) || a.po.localeCompare(b.po, 'vi', { numeric: true });
       });
       var rowsHtml = rowsList.map(function(l){ return '<tr><td>' + phEsc(l.po) + '</td><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
-      return '<div class="ph-pick-kho-hdr" style="background:' + khoMeta.khoColors[label] + ';">' + phEsc(label) + ' · ' + phFmt(g.qty) + '</div>' +
+      return '<div class="ph-pick-kho-hdr" style="background:' + khoMeta.khoColors[label] + ';"><span>' + phEsc(label) + ' · ' + phFmt(g.qty) + '</span><button class="ph-pick-shot-btn" type="button" title="Lưu ảnh danh sách vị trí kho này">📷</button></div>' +
         '<table class="ph-locs"><thead><tr><th>PO</th><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>';
     }).join('');
     return '<div class="ph-search-result-card"><div class="ph-search-hdr"><b>' + phEsc(item) + '</b> · Tổng SL tồn: ' + phFmt(totalQty) +
-      (poSummaryHtml ? '<div class="ph-pick-po-summary">Theo PO: ' + poSummaryHtml + '</div>' : '') +
+      (poSummaryHtml ? '<div class="ph-pick-po-summary">Theo PO:' + poSummaryHtml + '</div>' : '') +
       '</div>' + sectionsHtml + '</div>';
   };
+  // Cú pháp tìm: dấu PHẨY (,) tách nhiều NHÓM tìm riêng biệt (OR — khớp 1 trong các nhóm là được,
+  // dùng để tìm gộp nhiều mã khác nhau cùng lúc); trong 1 nhóm, các từ cách nhau bằng dấu CÁCH phải
+  // khớp HẾT (AND — dùng để gõ thêm từ khoá lọc bớt kết quả).
+  var phParseItemSearchQuery = function(raw){
+    return String(raw || '').split(',').map(function(g){
+      return g.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    }).filter(function(terms){ return terms.length > 0; });
+  };
   var phBuildInventorySearchResultHtml = function(query, khoMeta, invIdx){
-    var q = String(query || '').trim().toLowerCase();
-    if(!q) return '<div class="ph-empty-note">Nhập mã hàng (hoặc 1 phần mã hàng) để tìm.</div>';
-    var matchedKeys = Object.keys(invIdx || {}).filter(function(k){ return k.indexOf(q) !== -1; });
+    var orGroups = phParseItemSearchQuery(query);
+    if(!orGroups.length) return '<div class="ph-empty-note">Nhập mã hàng (hoặc 1 phần mã hàng) để tìm. Cách nhau bằng dấu cách để lọc thêm từ khoá, dấu phẩy (,) để tìm gộp nhiều mã khác nhau.</div>';
+    var matchedKeys = Object.keys(invIdx || {}).filter(function(k){
+      return orGroups.some(function(terms){ return terms.every(function(t){ return k.indexOf(t) !== -1; }); });
+    });
     matchedKeys.sort();
     var cardsHtml = matchedKeys.map(function(key){
       var entries = (invIdx[key] || []).filter(function(e){ return !/prod/i.test(e.locator || '') && (e.qty || 0) > 0; });
@@ -514,7 +529,8 @@
       return phBuildItemPickListHtml(entries[0].item, entries, khoMeta);
     }).join('');
     if(!cardsHtml.trim()) return '<div class="ph-empty-note">Không tìm thấy mã hàng nào khớp "' + phEsc(query) + '" trong dữ liệu tồn kho.</div>';
-    return '<div class="ph-meta">Tìm thấy ' + phFmt(matchedKeys.length) + ' mã hàng khớp "' + phEsc(query) + '" — mỗi mã liệt kê đủ vị trí theo thứ tự kho · locator để đi lấy hàng.</div>' + cardsHtml;
+    return '<div class="ph-meta">Tìm thấy ' + phFmt(matchedKeys.length) + ' mã hàng khớp "' + phEsc(query) + '" — mỗi mã liệt kê đủ vị trí theo thứ tự kho · locator để đi lấy hàng.' +
+      '<button class="ph-pick-shot-all-btn" type="button">📷 Lưu ảnh toàn bộ kết quả</button></div>' + cardsHtml;
   };
   var phRenderItemSearch = function(){
     var input = document.getElementById('ph-item-search');
@@ -694,20 +710,26 @@
     }
   });
 
-  // ===== Nút "📷 Lưu ảnh" — chụp lại đúng khối Locator/OQC/SL tồn thành 1 file PNG tải về máy. =====
-  var phSaveDetailImage = function(title, rows){
+  // ===== Nút "📷 Lưu ảnh" — chụp lại 1 bảng (Locator/OQC/SL tồn, hoặc PO/Locator/OQC/SL tồn, hoặc cả
+  // danh sách gộp nhiều cột hơn) thành 1 file PNG tải về máy. Cột CUỐI luôn coi là cột số (căn phải),
+  // các cột còn lại căn trái — số cột tuỳ theo headers.length, không cố định 3 cột như trước nữa. =====
+  var phSaveDetailImage = function(title, headers, rows){
     var scale = 2, padX = 16, padTop = 14, rowH = 26, headerH = 30;
     var mctx = document.createElement('canvas').getContext('2d');
     mctx.font = 'bold 14px system-ui, sans-serif';
     var titleW = mctx.measureText(title).width;
+    mctx.font = 'bold 10.5px system-ui, sans-serif';
+    var colW = headers.map(function(h){ return mctx.measureText(h).width + 16; });
     mctx.font = '12.5px ui-monospace, monospace';
-    var locW = 90, oqcW = 60, qtyW = 70;
     for(var i = 0; i < rows.length; i++){
-      locW = Math.max(locW, mctx.measureText(rows[i][0]).width + 12);
-      oqcW = Math.max(oqcW, mctx.measureText(rows[i][1]).width + 12);
-      qtyW = Math.max(qtyW, mctx.measureText(rows[i][2]).width + 12);
+      for(var c = 0; c < headers.length; c++){
+        colW[c] = Math.max(colW[c], mctx.measureText(String(rows[i][c] == null ? '' : rows[i][c])).width + 12);
+      }
     }
-    var tableW = locW + oqcW + qtyW;
+    var colX = []; var xAcc = padX;
+    for(var c2 = 0; c2 < headers.length; c2++){ colX.push(xAcc); xAcc += colW[c2]; }
+    var tableW = colW.reduce(function(s, w){ return s + w; }, 0);
+    var lastIdx = headers.length - 1;
     var width = Math.max(titleW + padX * 2, tableW + padX * 2, 280);
     var tableTop = padTop + 24 + headerH;
     var height = tableTop + rowH * Math.max(rows.length, 1) + 14;
@@ -728,11 +750,10 @@
     ctx.fillRect(padX - 8, tableTop - headerH, tableW + 16, headerH);
     ctx.fillStyle = '#6b7280';
     ctx.font = 'bold 10.5px system-ui, sans-serif';
-    ctx.fillText('LOCATOR', padX, tableTop - 11);
-    ctx.fillText('OQC', padX + locW, tableTop - 11);
-    ctx.textAlign = 'right';
-    ctx.fillText('SL TỒN', padX + tableW - 6, tableTop - 11);
-    ctx.textAlign = 'left';
+    headers.forEach(function(h, i){
+      if(i === lastIdx){ ctx.textAlign = 'right'; ctx.fillText(h, colX[i] + colW[i] - 6, tableTop - 11); ctx.textAlign = 'left'; }
+      else ctx.fillText(h, colX[i], tableTop - 11);
+    });
 
     ctx.font = '12.5px ui-monospace, monospace';
     if(!rows.length){
@@ -743,11 +764,11 @@
       var ry = tableTop + rowH * r;
       if(r % 2 === 1){ ctx.fillStyle = '#fafbfc'; ctx.fillRect(padX - 8, ry, tableW + 16, rowH); }
       ctx.fillStyle = '#12161F';
-      ctx.fillText(rows[r][0], padX, ry + 17);
-      ctx.fillText(rows[r][1], padX + locW, ry + 17);
-      ctx.textAlign = 'right';
-      ctx.fillText(rows[r][2], padX + tableW - 6, ry + 17);
-      ctx.textAlign = 'left';
+      for(var c3 = 0; c3 < headers.length; c3++){
+        var val = String(rows[r][c3] == null ? '' : rows[r][c3]);
+        if(c3 === lastIdx){ ctx.textAlign = 'right'; ctx.fillText(val, colX[c3] + colW[c3] - 6, ry + 17); ctx.textAlign = 'left'; }
+        else ctx.fillText(val, colX[c3], ry + 17);
+      }
     }
 
     canvas.toBlob(function(blob){
@@ -779,7 +800,51 @@
         if(tds.length >= 3) rows.push([tds[0].textContent.trim(), tds[1].textContent.trim(), tds[2].textContent.trim()]);
       }
     }
-    phSaveDetailImage(title, rows);
+    phSaveDetailImage(title, ['LOCATOR', 'OQC', 'SL TỒN'], rows);
+  });
+
+  // ===== Nút "📷" trong tab "Tìm mã hàng" — chụp riêng 1 kho, hoặc chụp gộp TOÀN BỘ kết quả tìm
+  // được (mọi mã hàng · mọi kho) thành 1 ảnh duy nhất. =====
+  document.addEventListener('click', function(e){
+    var pickBtn = e.target.closest('.ph-pick-shot-btn');
+    if(pickBtn){
+      var khoHdr = pickBtn.closest('.ph-pick-kho-hdr');
+      var card = pickBtn.closest('.ph-search-result-card');
+      var itemEl = card ? card.querySelector('.ph-search-hdr b') : null;
+      var item = itemEl ? itemEl.textContent.trim() : '';
+      var khoLabelEl = khoHdr ? khoHdr.querySelector('span') : null;
+      var khoLabel = khoLabelEl ? khoLabelEl.textContent.split('·')[0].trim() : '';
+      var table = khoHdr ? khoHdr.nextElementSibling : null;
+      var rows = [];
+      if(table){
+        table.querySelectorAll('tbody tr').forEach(function(tr){
+          var tds = tr.querySelectorAll('td');
+          if(tds.length >= 4) rows.push([tds[0].textContent.trim(), tds[1].textContent.trim(), tds[2].textContent.trim(), tds[3].textContent.trim()]);
+        });
+      }
+      phSaveDetailImage(item + ' · ' + khoLabel, ['PO', 'LOCATOR', 'OQC', 'SL TỒN'], rows);
+      return;
+    }
+    var allBtn = e.target.closest('.ph-pick-shot-all-btn');
+    if(allBtn){
+      var allRows = [];
+      document.querySelectorAll('#ph-item-search-result .ph-search-result-card').forEach(function(cardEl){
+        var itemElAll = cardEl.querySelector('.ph-search-hdr b');
+        var itemName = itemElAll ? itemElAll.textContent.trim() : '';
+        cardEl.querySelectorAll('.ph-pick-kho-hdr').forEach(function(hdr){
+          var span = hdr.querySelector('span');
+          var khoLabelAll = span ? span.textContent.split('·')[0].trim() : '';
+          var tableAll = hdr.nextElementSibling;
+          if(!tableAll) return;
+          tableAll.querySelectorAll('tbody tr').forEach(function(tr){
+            var tds = tr.querySelectorAll('td');
+            if(tds.length >= 4) allRows.push([itemName, khoLabelAll, tds[0].textContent.trim(), tds[1].textContent.trim(), tds[2].textContent.trim(), tds[3].textContent.trim()]);
+          });
+        });
+      });
+      var q = document.getElementById('ph-item-search').value.trim();
+      phSaveDetailImage('Tìm mã hàng: ' + q, ['ITEM', 'KHO', 'PO', 'LOCATOR', 'OQC', 'SL TỒN'], allRows);
+    }
   });
 
   // ===== Khởi động: đã có sẵn thông tin kết nối trên máy này thì vào thẳng, chưa có thì hiện màn
