@@ -156,6 +156,10 @@
   var PH_TOKEN_KEY = 'tp3_cloud_token';
   var PH_MANUAL_KHO_OPTIONS = ['Kho 3B', 'Kho 3A', 'Kho 2B'];
   var PH_TYPE_COLORS = { Row: '#2C6FCB', FC: '#6E4FE0', HCP: '#B76E00' };
+  // Mỗi container 1 màu nền riêng (xoay vòng theo thứ tự, KHÔNG theo Loại) để phân biệt rõ container
+  // này với container kế tiếp khi cuộn — kể cả 2 container liền nhau CÙNG Loại (VD 2 HCP liên tiếp)
+  // trước đây có nền giống hệt nhau nên nhìn dính liền thành 1 khối dù đã có khung viền riêng.
+  var PH_CARD_BG_PALETTE = ['#eaf2fc', '#eaf8ec', '#fdf2e3', '#f3ecfa', '#fde9e5', '#e6f7f5', '#faeef3', '#f2f3ec'];
   var phCloudUrl = '';
   var phCloudToken = '';
 
@@ -386,8 +390,9 @@
   var phBuildContainerRowHtml = function(row, khoMeta, uidState){
     var totalCbm = row.items.reduce(function(s, it){ return s + (it.cbm || 0); }, 0);
     var contColor = PH_TYPE_COLORS[row.type] || '#8892A0';
-    var rowBg = phRgba(contColor, 0.10);
-    var detailBg = phRgba(contColor, 0.04);
+    var cardBg = PH_CARD_BG_PALETTE[uidState.c % PH_CARD_BG_PALETTE.length];
+    var rowBg = cardBg;
+    var detailBg = phRgba(cardBg, 0.5);
     var detailId = 'cd' + (uidState.c++);
     var khoManualVal = row.isManualKho ? row.topKho : '';
     var khoAutoLabel = row.autoKho ? row.autoKho.replace('Kho ', '') : '—';
