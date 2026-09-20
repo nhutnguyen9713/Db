@@ -83,8 +83,9 @@
   .ph-shot-btn{font-size:10.5px; font-weight:600; text-transform:none; padding:2px 8px; border-radius:6px; border:1px solid #d7dae0; background:#fff; color:#374151; cursor:pointer; white-space:nowrap;}
   .ph-shot-btn:hover{background:#f4f5f7;}
   .ph-shot-btn:active{background:#eceef1;}
+  .ph-locs-scroll{overflow-x:auto;}
   .ph-locs{width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:6px;}
-  .ph-locs th,.ph-locs td{padding:5px 14px 5px 28px; border-top:1px solid #eef0f3; text-align:left;}
+  .ph-locs th,.ph-locs td{padding:6px 10px; border-top:1px solid #eef0f3; text-align:left; white-space:nowrap;}
   .ph-locs th{background:#fafbfc; color:#8a97ac; font-weight:600; font-size:10.5px; text-transform:uppercase;}
   .ph-locs td.ph-num{text-align:right; font-family:ui-monospace,monospace; padding-right:14px;}
   .ph-empty-note{color:#8a97ac; font-size:13px; padding:20px 0;}
@@ -315,18 +316,22 @@
     return { khoLabels: khoLabels, khoColors: khoColors };
   };
 
+  // Nhãn kho hiển thị của 1 dòng tồn kho (tách riêng "Kho 3A" thành 3A trệt/lầu/Rack theo locator) —
+  // dùng chung cho cả phKhoGroups (gom nhóm hiển thị) lẫn tìm kiếm theo "3a rack"/"3b"/... ở tab
+  // "Tìm mã hàng".
+  var phEntryKhoLabel = function(l){
+    if(l.kho === 'Kho 3A'){
+      var loc = String(l.locator || '');
+      return /^3AFG-M[12]/i.test(loc) ? '3A lầu' : (/^3A-[A-Z]\d+-T\d+/i.test(loc) ? '3A Rack' : '3A trệt');
+    }
+    return String(l.kho || '').replace('Kho ', '');
+  };
   var phKhoGroups = function(locs, khoLabels){
     var groups = {};
     khoLabels.forEach(function(l){ groups[l] = { qty: 0, locs: [] }; });
     locs.forEach(function(l){
-      var key;
-      if(l.kho === 'Kho 3A'){
-        var loc = String(l.locator || '');
-        key = /^3AFG-M[12]/i.test(loc) ? '3A lầu' : (/^3A-[A-Z]\d+-T\d+/i.test(loc) ? '3A Rack' : '3A trệt');
-      } else {
-        key = l.kho.replace('Kho ', '');
-        if(!(key in groups)) return;
-      }
+      var key = phEntryKhoLabel(l);
+      if(!(key in groups)) return;
       groups[key].qty += (l.qty || 0);
       groups[key].locs.push(l);
     });
@@ -348,7 +353,7 @@
       if(!g.qty) return '';
       var detailId = uidPrefix + '-' + i;
       var body = g.locs.map(function(l){ return '<tr><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
-      return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(po || '—') + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></td></tr>';
+      return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(po || '—') + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button></div><div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></div></td></tr>';
     }).join('');
     return '<tr><td><span class="ph-td-label">Item No.</span>' + phEsc(item) + '</td><td><span class="ph-td-label">Cust PO</span>' + phEsc(po || '—') + '</td><td class="ph-num"><span class="ph-td-label">SL Plan</span>' + phFmt(qty) + '</td><td class="ph-num"><span class="ph-td-label">CBM</span>' + phFmtDec(cbm, 2) + '</td>' + khoTds + '</tr>' + detailRows;
   };
@@ -502,7 +507,7 @@
       });
       var rowsHtml = rowsList.map(function(l){ return '<tr><td>' + phEsc(l.po) + '</td><td>' + phEsc(l.locator) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
       return '<div class="ph-pick-kho-hdr" style="background:' + khoMeta.khoColors[label] + ';"><span>' + phEsc(label) + ' · ' + phFmt(g.qty) + '</span><button class="ph-pick-shot-btn" type="button" title="Lưu ảnh danh sách vị trí kho này">📷</button></div>' +
-        '<table class="ph-locs"><thead><tr><th>PO</th><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>';
+        '<div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th>PO</th><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
     }).join('');
     return '<div class="ph-search-result-card"><div class="ph-search-hdr"><b>' + phEsc(item) + '</b> · Tổng SL tồn: ' + phFmt(totalQty) +
       (poSummaryHtml ? '<div class="ph-pick-po-summary">Theo PO:' + poSummaryHtml + '</div>' : '') +
@@ -510,7 +515,10 @@
   };
   // Cú pháp tìm: dấu PHẨY (,) tách nhiều NHÓM tìm riêng biệt (OR — khớp 1 trong các nhóm là được,
   // dùng để tìm gộp nhiều mã khác nhau cùng lúc); trong 1 nhóm, các từ cách nhau bằng dấu CÁCH phải
-  // khớp HẾT (AND — dùng để gõ thêm từ khoá lọc bớt kết quả).
+  // khớp HẾT (AND — dùng để gõ thêm từ khoá lọc bớt kết quả, VD "<mã hàng> 3a rack" hay "<mã hàng>
+  // 7459" để lọc riêng đúng kho/PO cần tìm). Khớp theo TỪNG DÒNG tồn kho (mã hàng + kho + PO +
+  // locator gộp lại thành 1 chuỗi để so khớp) — không chỉ theo mã hàng — nên chỉ những dòng thật sự
+  // khớp đủ từ khoá mới hiện ra, không phải hiện nguyên cả mã hàng rồi mới lọc.
   var phParseItemSearchQuery = function(raw){
     return String(raw || '').split(',').map(function(g){
       return g.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -519,13 +527,22 @@
   var phBuildInventorySearchResultHtml = function(query, khoMeta, invIdx){
     var orGroups = phParseItemSearchQuery(query);
     if(!orGroups.length) return '<div class="ph-empty-note">Nhập mã hàng (hoặc 1 phần mã hàng) để tìm. Cách nhau bằng dấu cách để lọc thêm từ khoá, dấu phẩy (,) để tìm gộp nhiều mã khác nhau.</div>';
-    var matchedKeys = Object.keys(invIdx || {}).filter(function(k){
-      return orGroups.some(function(terms){ return terms.every(function(t){ return k.indexOf(t) !== -1; }); });
+    var matchedByItem = {};
+    Object.keys(invIdx || {}).forEach(function(key){
+      (invIdx[key] || []).forEach(function(e){
+        if(/prod/i.test(e.locator || '') || !((e.qty || 0) > 0)) return;
+        var haystack = (key + ' ' + String(e.kho || '') + ' ' + phEntryKhoLabel(e) + ' ' + String(e.custpo || '') + ' ' + String(e.locator || '')).toLowerCase();
+        var matches = orGroups.some(function(terms){ return terms.every(function(t){ return haystack.indexOf(t) !== -1; }); });
+        if(matches){
+          if(!matchedByItem[key]) matchedByItem[key] = [];
+          matchedByItem[key].push(e);
+        }
+      });
     });
+    var matchedKeys = Object.keys(matchedByItem);
     matchedKeys.sort();
     var cardsHtml = matchedKeys.map(function(key){
-      var entries = (invIdx[key] || []).filter(function(e){ return !/prod/i.test(e.locator || '') && (e.qty || 0) > 0; });
-      if(!entries.length) return '';
+      var entries = matchedByItem[key];
       return phBuildItemPickListHtml(entries[0].item, entries, khoMeta);
     }).join('');
     if(!cardsHtml.trim()) return '<div class="ph-empty-note">Không tìm thấy mã hàng nào khớp "' + phEsc(query) + '" trong dữ liệu tồn kho.</div>';
@@ -814,7 +831,7 @@
       var item = itemEl ? itemEl.textContent.trim() : '';
       var khoLabelEl = khoHdr ? khoHdr.querySelector('span') : null;
       var khoLabel = khoLabelEl ? khoLabelEl.textContent.split('·')[0].trim() : '';
-      var table = khoHdr ? khoHdr.nextElementSibling : null;
+      var table = khoHdr && khoHdr.nextElementSibling ? khoHdr.nextElementSibling.querySelector('.ph-locs') : null;
       var rows = [];
       if(table){
         table.querySelectorAll('tbody tr').forEach(function(tr){
@@ -834,7 +851,7 @@
         cardEl.querySelectorAll('.ph-pick-kho-hdr').forEach(function(hdr){
           var span = hdr.querySelector('span');
           var khoLabelAll = span ? span.textContent.split('·')[0].trim() : '';
-          var tableAll = hdr.nextElementSibling;
+          var tableAll = hdr.nextElementSibling ? hdr.nextElementSibling.querySelector('.ph-locs') : null;
           if(!tableAll) return;
           tableAll.querySelectorAll('tbody tr').forEach(function(tr){
             var tds = tr.querySelectorAll('td');
