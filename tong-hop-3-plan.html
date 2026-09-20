@@ -516,23 +516,29 @@
   // Cú pháp tìm: dấu PHẨY (,) tách nhiều NHÓM tìm riêng biệt (OR — khớp 1 trong các nhóm là được,
   // dùng để tìm gộp nhiều mã khác nhau cùng lúc); trong 1 nhóm, các từ cách nhau bằng dấu CÁCH phải
   // khớp HẾT (AND — dùng để gõ thêm từ khoá lọc bớt kết quả, VD "<mã hàng> 3a rack" hay "<mã hàng>
-  // 7459" để lọc riêng đúng kho/PO cần tìm). Khớp theo TỪNG DÒNG tồn kho (mã hàng + kho + PO +
-  // locator gộp lại thành 1 chuỗi để so khớp) — không chỉ theo mã hàng — nên chỉ những dòng thật sự
-  // khớp đủ từ khoá mới hiện ra, không phải hiện nguyên cả mã hàng rồi mới lọc.
+  // 7459" để lọc riêng đúng kho/PO cần tìm) — MỖI từ lại có thể là nhiều LỰA CHỌN cách nhau bằng dấu
+  // CHẤM PHẨY (;), chỉ cần khớp 1 trong các lựa chọn đó (VD "<mã hàng> 7437;7438" = mã hàng VÀ (PO
+  // 7437 HOẶC PO 7438) — liệt kê nhiều PO/vị trí cùng lúc mà không phải gõ lại mã hàng từng lần).
+  // Khớp theo TỪNG DÒNG tồn kho (mã hàng + kho + PO + locator gộp lại thành 1 chuỗi để so khớp) —
+  // không chỉ theo mã hàng — nên chỉ những dòng thật sự khớp đủ điều kiện mới hiện ra.
   var phParseItemSearchQuery = function(raw){
     return String(raw || '').split(',').map(function(g){
-      return g.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    }).filter(function(terms){ return terms.length > 0; });
+      return g.trim().toLowerCase().split(/\s+/).filter(Boolean).map(function(term){
+        return term.split(';').map(function(t){ return t.trim(); }).filter(Boolean);
+      });
+    }).filter(function(termSlots){ return termSlots.length > 0; });
   };
   var phBuildInventorySearchResultHtml = function(query, khoMeta, invIdx){
     var orGroups = phParseItemSearchQuery(query);
-    if(!orGroups.length) return '<div class="ph-empty-note">Nhập mã hàng (hoặc 1 phần mã hàng) để tìm. Cách nhau bằng dấu cách để lọc thêm từ khoá, dấu phẩy (,) để tìm gộp nhiều mã khác nhau.</div>';
+    if(!orGroups.length) return '<div class="ph-empty-note">Nhập mã hàng (hoặc 1 phần mã hàng) để tìm. Dấu cách để lọc thêm từ khoá, dấu chấm phẩy (;) để liệt kê nhiều lựa chọn cho 1 từ khoá, dấu phẩy (,) để tìm gộp nhiều mã khác nhau.</div>';
     var matchedByItem = {};
     Object.keys(invIdx || {}).forEach(function(key){
       (invIdx[key] || []).forEach(function(e){
         if(/prod/i.test(e.locator || '') || !((e.qty || 0) > 0)) return;
         var haystack = (key + ' ' + String(e.kho || '') + ' ' + phEntryKhoLabel(e) + ' ' + String(e.custpo || '') + ' ' + String(e.locator || '')).toLowerCase();
-        var matches = orGroups.some(function(terms){ return terms.every(function(t){ return haystack.indexOf(t) !== -1; }); });
+        var matches = orGroups.some(function(termSlots){
+          return termSlots.every(function(alts){ return alts.some(function(alt){ return haystack.indexOf(alt) !== -1; }); });
+        });
         if(matches){
           if(!matchedByItem[key]) matchedByItem[key] = [];
           matchedByItem[key].push(e);
