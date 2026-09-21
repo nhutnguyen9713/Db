@@ -1391,8 +1391,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.76';
-const APP_VERSION_DATE = '20/09/2026';
+const APP_VERSION = 'v2.77';
+const APP_VERSION_DATE = '21/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -5270,23 +5270,21 @@ function renderCombinedPlanPanel(){
     </table>`;
 }
 
-// Container đã "Đã Load Xong" (dữ liệu Ship khớp Reference, SL Ship >= SL Plan container) — dùng
-// CHUNG cho cả xuất Excel lẫn xuất HTML "Tổng hợp 3 Plan" (2 nơi đều cần bỏ các container này ra
-// khỏi kết quả). Tính lại ĐÚNG công thức đang dùng ở cột "Trạng thái Loading" trên bảng Picking
-// Status (renderContPickTable — xem "loadingHtml"/"shipPct"), gộp theo groupKey (type|cNo|loadDate|
+// Container "Pick xong" — dùng CHUNG cho cả xuất Excel lẫn xuất HTML "Tổng hợp 3 Plan" (2 nơi đều
+// cần bỏ các container này ra khỏi kết quả). Đọc thẳng "status" đã tính sẵn trên contPickAllRows
+// (xem renderContainerPickingOverview()) thay vì tự tính lại riêng — status đó đã gộp ĐỦ CẢ 3 cách
+// 1 container được coi là xong: tự động 100% theo GI (autoStatus 'done'), đánh dấu Pick xong thủ
+// công (isManualUser), và Đã Load Xong theo dữ liệu Ship (isShipDone).
+//
+// LỖI THẬT ĐÃ GẶP: bản cũ tự tính lại RIÊNG chỉ theo dữ liệu Ship (shipPct >= 99.995), bỏ sót 2
+// trường hợp còn lại (Pick xong tự động theo GI hoặc đánh dấu tay) — khiến các container đó vẫn bị
+// xuất ra trong Excel dù trên giao diện đã hiện rõ "Pick xong". Gộp theo groupKey (type|cNo|loadDate|
 // planTime) để lọc trực tiếp danh sách container của từng mã.
 function computeLoadedDoneContainerKeys(){
   const keys = new Set();
-  if(contShipData && contShipData.byRef.size){
-    contPickAllRows.forEach(row => {
-      const refs = String(row.csr || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
-      let shipQty = 0, matched = false;
-      refs.forEach(ref => { if(contShipData.byRef.has(ref)){ matched = true; shipQty += contShipData.byRef.get(ref); } });
-      if(!matched || shipQty <= 0) return;
-      const shipPct = row.planQty > 0 ? (shipQty / row.planQty * 100) : 0;
-      if(shipPct >= 99.995) keys.add(`${row.type}|${row.cNo}|${row.loadDate}|${row.planTime}`);
-    });
-  }
+  contPickAllRows.forEach(row => {
+    if(row.status === 'done' || row.status === 'manualDone') keys.add(`${row.type}|${row.cNo}|${row.loadDate}|${row.planTime}`);
+  });
   return keys;
 }
 
