@@ -1391,8 +1391,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.77';
-const APP_VERSION_DATE = '21/09/2026';
+const APP_VERSION = 'v2.78';
+const APP_VERSION_DATE = '24/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -13055,6 +13055,43 @@ function resolveKhoForLocator(locator, lookupMap){
   return guess ? guess.replace('Kho ', '') : '—';
 }
 
+// Ghép các dòng cùng "Transaction Set ID" lại thành 1 giao dịch — mỗi lần chuyển pallet thường ghi 2
+// dòng: 1 dòng SL âm tại vị trí XUẤT (nơi lấy đi) và 1 dòng SL dương tại vị trí ĐẾN (nơi chuyển tới).
+// Dòng không có Set ID thì tự thành 1 giao dịch riêng.
+function txGroupBySetId(records){
+  const bySetId = new Map();
+  records.forEach(rec => {
+    const key = rec.setId || Symbol('no-set-id');
+    if(!bySetId.has(key)) bySetId.set(key, []);
+    bySetId.get(key).push(rec);
+  });
+  return [...bySetId.values()];
+}
+
+// Phân loại 1 giao dịch (1 nhóm Set ID) thành Nhận / Chuyển / Pick cont — DÙNG CHUNG cho cả bảng chi
+// tiết lẫn các bảng tổng hợp, để 2 nơi không bao giờ phân loại lệch nhau. kind = null: không tính
+// (SHIP / dòng không có Menu Name).
+function txDescribeSet(group, locatorKhoMap){
+  const first = group[0];
+  const { transType, menuName, item, user } = first;
+  const negRow = group.find(r => r.qty < 0);
+  const posRow = group.find(r => r.qty > 0);
+  const locatorXuat = negRow ? negRow.locator : (transType === 'SHIP' ? first.locator : '');
+  const locatorDen = posRow ? posRow.locator : (transType === 'RECEIVE' ? first.locator : '');
+  const dt = first.dt || (negRow && negRow.dt) || (posRow && posRow.dt) || null;
+  const qty = Math.abs((posRow || negRow || first).qty || 0);
+  const menuLower = menuName.toLowerCase();
+  const isPicking = menuLower.startsWith('pick(') || menuLower === 'pick order';
+  const reference = first.reference || (negRow && negRow.reference) || (posRow && posRow.reference) || '';
+  let kind = null, kho = '—';
+  if(transType === 'RECEIVE'){ kind = 'receive'; kho = resolveKhoForLocator(locatorDen || first.locator, locatorKhoMap); }
+  else if(!menuName){ kind = null; }
+  else if(isPicking){ kind = 'picking'; kho = resolveKhoForLocator(locatorXuat, locatorKhoMap); }
+  else { kind = 'transfer'; kho = resolveKhoForLocator(locatorXuat, locatorKhoMap); }
+  const crCodes = kind === 'picking' ? (reference.match(/CR\d+/gi) || []).map(c => c.toUpperCase()) : [];
+  return { first, transType, menuName, item, user, locatorXuat, locatorDen, dt, qty, reference, kind, kho, crCodes };
+}
+
 function txBuildStatsFromRecords(records, masterMap){
   const locatorKhoMap = buildLocatorKhoMap();
   const receiveMap = new Map();
@@ -13063,29 +13100,9 @@ function txBuildStatsFromRecords(records, masterMap){
   const itnEntries = []; // theo dõi riêng ITN Transfer / ITN Receiving theo Reference — không gộp nhóm
   let countReceive = 0, countTransfer = 0, countPicking = 0;
 
-  // Ghép các dòng cùng "Transaction Set ID" lại thành 1 giao dịch — mỗi lần chuyển pallet thường
-  // ghi 2 dòng: 1 dòng SL âm tại vị trí XUẤT (nơi lấy đi) và 1 dòng SL dương tại vị trí ĐẾN (nơi
-  // chuyển tới). Ghép đúng cặp này để lấy được Locator xuất / Locator đến thật, thay vì đoán qua
-  // bảng Master (User -> Kho) như trước.
-  const bySetId = new Map();
-  records.forEach(rec => {
-    const key = rec.setId || Symbol('no-set-id-' + Math.random());
-    if(!bySetId.has(key)) bySetId.set(key, []);
-    bySetId.get(key).push(rec);
-  });
-
-  for(const group of bySetId.values()){
-    const first = group[0];
-    const { transType, menuName, item: itemText, user } = first;
-    const negRow = group.find(r => r.qty < 0);
-    const posRow = group.find(r => r.qty > 0);
-    const locatorXuat = negRow ? negRow.locator : (transType === 'SHIP' ? first.locator : '');
-    const locatorDen = posRow ? posRow.locator : (transType === 'RECEIVE' ? first.locator : '');
-    const dt = first.dt || (negRow && negRow.dt) || (posRow && posRow.dt) || null;
-    const qty = Math.abs((posRow || negRow || first).qty || 0);
-    const menuLower = menuName.toLowerCase();
-    const isPicking = menuLower.startsWith('pick(') || menuLower === 'pick order';
-    const reference = first.reference || (negRow && negRow.reference) || (posRow && posRow.reference) || '';
+  for(const group of txGroupBySetId(records)){
+    const d = txDescribeSet(group, locatorKhoMap);
+    const { first, transType, menuName, item: itemText, user, locatorXuat, locatorDen, dt, qty, reference } = d;
 
     // ITN Transfer = chuyển hàng ĐI (ra khỏi kho, đưa vào khu ITN) — ITN Receiving = NHẬN hàng về
     // (từ khu ITN nhập lại vào kho). Theo dõi riêng theo từng Reference (mã ITN/Seal) để xem đúng
@@ -13104,9 +13121,9 @@ function txBuildStatsFromRecords(records, masterMap){
       });
     }
 
-    if(transType === 'RECEIVE'){
+    if(d.kind === 'receive'){
       countReceive++;
-      const khoXuat = resolveKhoForLocator(locatorDen || first.locator, locatorKhoMap);
+      const khoXuat = d.kho;
       const key = [khoXuat, transType, itemText, locatorDen || first.locator, user].join('||');
       const cur = receiveMap.get(key);
       if(cur) cur.total++;
@@ -13114,14 +13131,14 @@ function txBuildStatsFromRecords(records, masterMap){
       continue;
     }
 
-    if(!menuName) continue; // SHIP / dòng không có Menu Name — không tính vào Transfer hay Picking
+    if(!d.kind) continue; // SHIP / dòng không có Menu Name — không tính vào Transfer hay Picking
 
-    if(isPicking){
+    if(d.kind === 'picking'){
       countPicking++;
-      const khoXuat = resolveKhoForLocator(locatorXuat, locatorKhoMap);
+      const khoXuat = d.kho;
       // Bỏ Locator xuất khỏi tiêu chí nhóm — chỉ còn Kho xuất / Locator đến / Item / User.
       const key = [khoXuat, locatorDen || '—', itemText, user].join('||');
-      const crCodes = (reference.match(/CR\d+/gi) || []).map(c => c.toUpperCase());
+      const crCodes = d.crCodes;
       const cur = pickingMap.get(key);
       if(cur){
         cur.total++;
@@ -13131,7 +13148,7 @@ function txBuildStatsFromRecords(records, masterMap){
       }
     } else {
       countTransfer++;
-      const khoXuat = resolveKhoForLocator(locatorXuat, locatorKhoMap);
+      const khoXuat = d.kho;
       const refKey = reference || '(không có Reference)';
       // Không đưa Locator xuất vào tiêu chí nhóm — cùng mã + cùng chuyến (Reference) thì gộp làm 1
       // dòng, dù pallet nằm rải ở nhiều vị trí xuất khác nhau. Vẫn ghi nhận lại đầy đủ các vị trí đó
@@ -13651,8 +13668,97 @@ function renderTxKpiStrip(){
   `;
 }
 
+// Bảng TỔNG HỢP cho 3 loại Nhận / Chuyển / Pick cont — tính thẳng từ records gốc (không phụ thuộc bộ
+// lọc cột của bảng chi tiết, luôn là toàn bộ file). Dùng chung txDescribeSet() với bảng chi tiết.
+function txBuildSummaries(records){
+  const locatorKhoMap = buildLocatorKhoMap();
+  const mk = () => ({ byKho: new Map(), byUser: new Map() });
+  const out = { receive: mk(), transfer: mk(), picking: mk(), pickByCont: new Map() };
+  const bump = (map, key, qty, user, kho) => {
+    let e = map.get(key);
+    if(!e){ e = { key, count: 0, qty: 0, users: new Set(), khos: new Set() }; map.set(key, e); }
+    e.count++;
+    e.qty += qty;
+    if(user) e.users.add(user);
+    if(kho && kho !== '—') e.khos.add(kho);
+  };
+  for(const group of txGroupBySetId(records || [])){
+    const d = txDescribeSet(group, locatorKhoMap);
+    if(!d.kind) continue;
+    const s = out[d.kind];
+    bump(s.byKho, d.kho || '—', d.qty, d.user, null);
+    bump(s.byUser, d.user || '—', d.qty, null, d.kho);
+    if(d.kind === 'picking'){
+      (d.crCodes.length ? d.crCodes : ['(không có CR)']).forEach(cr => bump(out.pickByCont, cr, d.qty, d.user, d.kho));
+    }
+  }
+  return out;
+}
+
+// cols: [{ label, get(row), num }] — bảng nhỏ có tiêu đề, cuộn trong khung, dòng Tổng cố định ở đáy.
+function txSumCardHtml(title, badge, rows, cols, footCells){
+  const head = cols.map(c => `<th${c.num ? ' class="num"' : ''}>${escHtml(c.label)}</th>`).join('');
+  const body = rows.map(r => `<tr>${cols.map(c => `<td${c.num ? ' class="num"' : ''}>${escHtml(String(c.get(r)))}</td>`).join('')}</tr>`).join('');
+  const foot = footCells ? `<tfoot><tr>${footCells.map((v, i) => `<td${cols[i] && cols[i].num ? ' class="num"' : ''}>${escHtml(String(v))}</td>`).join('')}</tr></tfoot>` : '';
+  return `<div class="tx-sum-card">
+    <h3><span>${escHtml(title)}</span><span class="tx-sum-badge">${escHtml(badge)}</span></h3>
+    <div class="tx-sum-scroll"><table class="tx-sum-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table></div>
+  </div>`;
+}
+
+function renderTxSummaries(){
+  const kinds = ['receive', 'transfer', 'picking'];
+  const grids = {};
+  kinds.forEach(k => { grids[k] = document.getElementById(`tx-${k}-sumgrid`); });
+  if(!txState || !txState.records){
+    kinds.forEach(k => { if(grids[k]) grids[k].innerHTML = '<div class="tx-sum-empty">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>'; });
+    return;
+  }
+  const sum = txBuildSummaries(txState.records);
+  const byCountDesc = (a, b) => (b.count - a.count) || String(a.key).localeCompare(String(b.key), 'vi', { numeric: true });
+  const joinSet = s => [...s].sort().join(', ') || '—';
+
+  kinds.forEach(k => {
+    const grid = grids[k];
+    if(!grid) return;
+    const s = sum[k];
+    const khoRows = [...s.byKho.values()].sort(byCountDesc);
+    const userRows = [...s.byUser.values()].sort(byCountDesc);
+    if(!khoRows.length){
+      grid.innerHTML = '<div class="tx-sum-empty">Không có giao dịch loại này trong file.</div>';
+      return;
+    }
+    const totalCount = khoRows.reduce((t, r) => t + r.count, 0);
+    const totalQty = khoRows.reduce((t, r) => t + r.qty, 0);
+    let html = txSumCardHtml('Theo kho', `${fmt(khoRows.length)} kho`, khoRows, [
+      { label: 'Kho', get: r => r.key },
+      { label: 'Lượt', get: r => fmt(r.count), num: true },
+      { label: 'SL', get: r => fmt(r.qty), num: true },
+    ], ['Tổng', fmt(totalCount), fmt(totalQty)]);
+    html += txSumCardHtml('Theo người thao tác', `${fmt(userRows.length)} người`, userRows, [
+      { label: 'Người', get: r => r.key },
+      { label: 'Kho', get: r => joinSet(r.khos) },
+      { label: 'Lượt', get: r => fmt(r.count), num: true },
+      { label: 'SL', get: r => fmt(r.qty), num: true },
+    ], ['Tổng', '', fmt(totalCount), fmt(totalQty)]);
+    if(k === 'picking'){
+      const contRows = [...sum.pickByCont.values()].sort((a, b) => String(a.key).localeCompare(String(b.key), 'vi', { numeric: true }));
+      const realConts = contRows.filter(r => r.key !== '(không có CR)').length;
+      html += txSumCardHtml('Theo container (CR)', `${fmt(realConts)} container`, contRows, [
+        { label: 'Container', get: r => r.key },
+        { label: 'Lượt', get: r => fmt(r.count), num: true },
+        { label: 'SL', get: r => fmt(r.qty), num: true },
+        { label: 'Kho', get: r => joinSet(r.khos) },
+        { label: 'Người pick', get: r => joinSet(r.users) },
+      ], null);
+    }
+    grid.innerHTML = html;
+  });
+}
+
 function renderTransactionPage(){
   renderTxKpiStrip();
+  renderTxSummaries();
   renderTxTable('receive');
   renderTxTable('transfer');
   renderTxTable('picking');

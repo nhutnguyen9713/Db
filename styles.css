@@ -1704,3 +1704,21 @@
     .sidebar-nav-btn{width:42px; height:42px; border-radius:12px;}
     .sidebar-nav-btn svg{width:19px; height:19px;}
   }
+
+  /* ===== Trang Thống kê Transaction: bảng TỔNG HỢP (theo kho / người / container) ===== */
+  .tx-sum-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin-bottom:10px;}
+  .tx-sum-card{border:1px solid var(--line); border-radius:10px; background:var(--panel-2); overflow:hidden; display:flex; flex-direction:column; min-width:0;}
+  .tx-sum-card h3{margin:0; padding:9px 12px; font-size:11.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px;}
+  .tx-sum-badge{font-weight:600; letter-spacing:0; text-transform:none; color:var(--muted-2);}
+  .tx-sum-scroll{max-height:280px; overflow:auto;}
+  .tx-sum-table{width:100%; border-collapse:collapse; font-size:13px;}
+  .tx-sum-table th, .tx-sum-table td{padding:6px 12px; text-align:left; border-bottom:1px solid var(--line-soft); white-space:nowrap;}
+  .tx-sum-table th{font-size:11px; font-weight:600; color:var(--muted-2); position:sticky; top:0; background:var(--panel-2);}
+  .tx-sum-table .num{text-align:right; font-variant-numeric:tabular-nums;}
+  .tx-sum-table tfoot td{font-weight:700; border-top:2px solid var(--line); border-bottom:none; position:sticky; bottom:0; background:var(--panel-2);}
+  .tx-sum-empty{padding:14px 0; color:var(--muted); font-size:13px;}
+  .tx-detail-toggle > summary{cursor:pointer; list-style:none; font-size:13px; font-weight:600; color:var(--muted); padding:8px 0;}
+  .tx-detail-toggle > summary::-webkit-details-marker{display:none;}
+  .tx-detail-toggle > summary::before{content:'▸ ';}
+  .tx-detail-toggle[open] > summary::before{content:'▾ ';}
+  .tx-detail-toggle > summary:hover{color:var(--text);}

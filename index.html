@@ -1346,9 +1346,12 @@ function gateBustedUrl(base){
         <div>
           <div class="brand-eyebrow"><span class="dot"></span>RECEIVE</div>
           <h1 style="font-size:17px;">Nhập kho (Receive)</h1>
-          <div class="sub" style="margin-top:2px;">Count of Transaction Qty — nhóm theo Kho xuất / Transaction Type / Item / Locator / User. Mặc định lọc Kho xuất = 3B.</div>
+          <div class="sub" style="margin-top:2px;">Hàng nhập vào kho — tổng theo kho và theo người thao tác (toàn bộ file).</div>
         </div>
       </div>
+      <div class="tx-sum-grid" id="tx-receive-sumgrid"></div>
+      <details class="tx-detail-toggle">
+      <summary>Xem chi tiết từng dòng</summary>
       <div class="kho-modal-toolbar" style="padding:0 0 12px;">
         <input type="text" class="kho-search" id="tx-receive-search" placeholder="Tìm theo Kho, Item, Locator, User…">
         <div class="kho-summary" id="tx-receive-summary">—</div>
@@ -1371,6 +1374,7 @@ function gateBustedUrl(base){
         </table>
         <div class="kho-empty" id="tx-receive-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
       </div>
+      </details>
     </div>
 
     <div class="panel search-panel" id="tx-panel-transfer" style="margin-top:16px; border-color:var(--blue);">
@@ -1378,9 +1382,12 @@ function gateBustedUrl(base){
         <div>
           <div class="brand-eyebrow"><span class="dot" style="background:var(--blue);box-shadow:0 0 8px var(--blue);"></span>TRANSFER</div>
           <h1 style="font-size:17px;">Chuyển pallet (Transfer)</h1>
-          <div class="sub" style="margin-top:2px;">Sum of Flag — nhóm theo Kho xuất / Menu Name / Item / Locator đến / User / Reference (ghép cặp đúng 2 dòng +/- của cùng 1 Transaction Set ID, không đếm trùng). Các dòng cùng Reference được tính là cùng 1 "Chuyến" — đánh số Chuyến theo thời gian tăng dần, sớm nhất là Chuyến 1. Cùng mã hàng + cùng Chuyến sẽ gộp làm 1 dòng dù pallet nằm ở nhiều vị trí xuất khác nhau (cột Locator xuất liệt kê đủ các vị trí đó). Gồm mọi giá trị Menu Name trong file có tính chất di chuyển (trừ Pick(CSR) — đã tách riêng ở bảng Picking bên dưới). "Kho xuất" đọc trực tiếp từ tồn kho thực tế của Locator xuất. Mặc định lọc Kho xuất = 3B.</div>
+          <div class="sub" style="margin-top:2px;">Chuyển pallet giữa các vị trí (mọi thao tác di chuyển, trừ Pick cont) — tổng theo kho xuất và theo người thao tác (toàn bộ file).</div>
         </div>
       </div>
+      <div class="tx-sum-grid" id="tx-transfer-sumgrid"></div>
+      <details class="tx-detail-toggle">
+      <summary>Xem chi tiết từng dòng (theo Chuyến, có tick đã kiểm)</summary>
       <div class="kho-modal-toolbar" style="padding:0 0 12px;">
         <input type="text" class="kho-search" id="tx-transfer-search" placeholder="Tìm theo Kho, Item, Locator, User…">
         <div class="kho-summary" id="tx-transfer-summary">—</div>
@@ -1407,16 +1414,20 @@ function gateBustedUrl(base){
         </table>
         <div class="kho-empty" id="tx-transfer-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
       </div>
+      </details>
     </div>
 
     <div class="panel search-panel" id="tx-panel-picking" style="margin-top:16px; border-color:var(--violet);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
         <div>
           <div class="brand-eyebrow"><span class="dot" style="background:var(--violet);box-shadow:0 0 8px var(--violet);"></span>PICKING</div>
-          <h1 style="font-size:17px;">Lấy hàng (Pick Order)</h1>
-          <div class="sub" style="margin-top:2px;">Sum of Flag — nhóm theo Kho xuất / Locator đến / Item / User (Menu Name = "Pick(CSR)", ghép cặp 2 dòng +/- cùng Transaction Set ID để lấy đúng vị trí lấy hàng thật). "Số lượng cont" đếm số mã CRxxxxx khác nhau trong cột Reference (cùng CR = cùng 1 container) — dòng Grand Total đếm số CR khác nhau trên TOÀN BỘ dữ liệu đang hiển thị, không cộng dồn từng dòng. Mặc định lọc Kho xuất = 3B.</div>
+          <h1 style="font-size:17px;">Pick cont (Pick Order)</h1>
+          <div class="sub" style="margin-top:2px;">Lấy hàng xuất container — tổng theo kho, theo người pick và theo từng container (mã CR trong Reference, toàn bộ file).</div>
         </div>
       </div>
+      <div class="tx-sum-grid" id="tx-picking-sumgrid"></div>
+      <details class="tx-detail-toggle">
+      <summary>Xem chi tiết từng dòng</summary>
       <div class="kho-modal-toolbar" style="padding:0 0 12px;">
         <input type="text" class="kho-search" id="tx-picking-search" placeholder="Tìm theo Kho, Locator, Item, User…">
         <div class="kho-summary" id="tx-picking-summary">—</div>
@@ -1440,6 +1451,7 @@ function gateBustedUrl(base){
         </table>
         <div class="kho-empty" id="tx-picking-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
       </div>
+      </details>
     </div>
 
     <div class="panel search-panel" id="tx-panel-itn" style="margin-top:16px; border-color:var(--amber);">
