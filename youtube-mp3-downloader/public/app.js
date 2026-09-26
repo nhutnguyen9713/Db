@@ -68,8 +68,9 @@ async function startDownload(url) {
 
     const blob = await res.blob();
     const disposition = res.headers.get('Content-Disposition') || '';
-    const match = disposition.match(/filename="(.+)"/);
-    const filename = match ? match[1] : 'audio.mp3';
+    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    const asciiMatch = disposition.match(/filename="(.+)"/);
+    const filename = utf8Match ? decodeURIComponent(utf8Match[1]) : (asciiMatch ? asciiMatch[1] : 'audio.mp3');
 
     const blobUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');

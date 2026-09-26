@@ -45,6 +45,16 @@ function sanitizeFilename(name) {
   return (name || '').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 150) || 'audio';
 }
 
+// Content-Disposition chi chap nhan ky tu ASCII thuan tren phan filename=""
+// (tieu de video co dau tieng Viet se bi Node tu choi voi loi "Invalid
+// character in header content"). Dung ban ASCII lam fallback, kem theo
+// filename*=UTF-8''... (RFC 5987) de trinh duyet hien dung ten co dau.
+function contentDispositionHeader(title) {
+  const asciiName = title.replace(/[^\x20-\x7E]/g, '_').replace(/_+/g, '_').trim() || 'audio';
+  const utf8Name = encodeURIComponent(`${title}.mp3`);
+  return `attachment; filename="${asciiName}.mp3"; filename*=UTF-8''${utf8Name}`;
+}
+
 function baseFlags() {
   return {
     noPlaylist: true,
@@ -180,7 +190,7 @@ app.get('/api/download', async (req, res) => {
 
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Length', fileSize);
-    res.setHeader('Content-Disposition', `attachment; filename="${title}.mp3"`);
+    res.setHeader('Content-Disposition', contentDispositionHeader(title));
 
     const stream = fs.createReadStream(outFile);
     stream.pipe(res);
