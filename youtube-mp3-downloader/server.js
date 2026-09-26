@@ -83,7 +83,7 @@ try {
   console.log(`[debug] PLUGIN_DIR=${PLUGIN_DIR} exists=${exists}`);
   if (exists) {
     console.log(`[debug] PLUGIN_DIR contents: ${fs.readdirSync(PLUGIN_DIR).join(', ')}`);
-    const extractorDir = path.join(PLUGIN_DIR, 'yt_dlp_plugins', 'extractor');
+    const extractorDir = path.join(PLUGIN_DIR, 'bgutil', 'yt_dlp_plugins', 'extractor');
     if (fs.existsSync(extractorDir)) {
       console.log(`[debug] extractor plugin files: ${fs.readdirSync(extractorDir).join(', ')}`);
     }
