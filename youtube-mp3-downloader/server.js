@@ -12,6 +12,20 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
+// YouTube hay chan request tu server cloud vi nghi la bot ("Sign in to confirm
+// you're not a bot"). Set bien moi truong YTDL_COOKIES (JSON export cookie tu
+// trinh duyet, khi da dang nhap YouTube) de vuot qua kiem tra nay.
+let ytdlAgent;
+if (process.env.YTDL_COOKIES) {
+  try {
+    const cookies = JSON.parse(process.env.YTDL_COOKIES);
+    ytdlAgent = ytdl.createAgent(cookies);
+    console.log('Da nap YTDL_COOKIES, dung agent co xac thuc.');
+  } catch (err) {
+    console.error('YTDL_COOKIES khong hop le (phai la JSON mang cookie):', err.message);
+  }
+}
+
 function sanitizeFilename(name) {
   return name.replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 150) || 'audio';
 }
@@ -23,7 +37,7 @@ app.get('/api/info', async (req, res) => {
     return res.status(400).json({ error: 'Link YouTube khong hop le' });
   }
   try {
-    const info = await ytdl.getInfo(url);
+    const info = await ytdl.getInfo(url, ytdlAgent ? { agent: ytdlAgent } : undefined);
     const { videoDetails } = info;
     res.json({
       title: videoDetails.title,
@@ -44,7 +58,7 @@ app.get('/api/download', async (req, res) => {
   }
 
   try {
-    const info = await ytdl.getInfo(url);
+    const info = await ytdl.getInfo(url, ytdlAgent ? { agent: ytdlAgent } : undefined);
     const title = sanitizeFilename(info.videoDetails.title);
 
     res.setHeader('Content-Type', 'audio/mpeg');
@@ -53,6 +67,7 @@ app.get('/api/download', async (req, res) => {
     const audioStream = ytdl.downloadFromInfo(info, {
       quality: 'highestaudio',
       filter: 'audioonly',
+      ...(ytdlAgent ? { agent: ytdlAgent } : {}),
     });
 
     audioStream.on('error', (err) => {

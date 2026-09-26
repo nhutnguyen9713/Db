@@ -42,6 +42,19 @@ Sau đó mở trình duyệt tại `http://localhost:3000`.
 2. Chrome sẽ tự hiện thông báo **"Thêm vào Màn hình chính" / "Install app"** — bấm để cài. Nếu không thấy, bấm menu (⋮ góc trên phải) → **Thêm vào Màn hình chính**.
 3. App sẽ có icon riêng, mở toàn màn hình như app thật — dán link YouTube và tải MP3 như bình thường.
 
+## Sửa lỗi "Sign in to confirm you're not a bot"
+
+Khi server chạy trên IP của dịch vụ cloud (Render, Railway...), YouTube hay chặn vì nghi là bot. Cách khắc phục: cung cấp cookie của tài khoản YouTube đã đăng nhập để server "xác thực" thay bạn.
+
+1. Trên máy tính, đăng nhập [youtube.com](https://youtube.com) bằng Chrome.
+2. Cài extension **[Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)** hoặc **EditThisCookie**, dùng chức năng **xuất cookie ra JSON** cho domain `youtube.com` (mảng object dạng `{name, value, domain, path, ...}`).
+3. Trên Render, vào Web Service `youtube-mp3-downloader` → **Environment** → thêm biến:
+   - **Key**: `YTDL_COOKIES`
+   - **Value**: dán nguyên nội dung JSON vừa xuất
+4. Bấm **Save, rebuild and deploy**. Server sẽ tự dùng cookie này cho mọi request tới YouTube.
+
+> Cookie có hạn dùng và có thể hết hạn/đăng xuất theo thời gian — nếu lỗi quay lại, xuất cookie mới và cập nhật lại biến `YTDL_COOKIES`. Không chia sẻ cookie này cho ai vì nó tương đương quyền đăng nhập tài khoản YouTube của bạn.
+
 ## Lưu ý
 
 - YouTube thường xuyên thay đổi cách phát video nên thư viện `ytdl-core` đôi khi cần cập nhật (`npm update @distube/ytdl-core`) nếu gặp lỗi tải.
