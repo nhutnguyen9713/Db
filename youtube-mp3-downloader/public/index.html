@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Tải nhạc MP3 từ YouTube</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="wrap">
+    <h1>🎵 Tải nhạc MP3 từ YouTube</h1>
+    <p class="hint">Dán link video YouTube vào ô bên dưới, chỉ dùng cho nội dung bạn có quyền tải (video của bạn, nội dung được cấp phép tự do, v.v).</p>
+
+    <form id="form" class="box">
+      <input id="url" type="url" placeholder="https://www.youtube.com/watch?v=..." required autocomplete="off">
+      <button type="submit" id="btnFetch">Kiểm tra video</button>
+    </form>
+
+    <div id="error" class="error" hidden></div>
+
+    <div id="result" class="result" hidden>
+      <img id="thumb" alt="Thumbnail">
+      <div class="meta">
+        <div id="title" class="title"></div>
+        <div id="sub" class="sub"></div>
+        <button id="btnDownload" class="download">⬇ Tải MP3</button>
+        <div id="status" class="status"></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
