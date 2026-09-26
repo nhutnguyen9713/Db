@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: youtube-mp3-downloader
+    runtime: node
+    plan: free
+    rootDir: youtube-mp3-downloader
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22
