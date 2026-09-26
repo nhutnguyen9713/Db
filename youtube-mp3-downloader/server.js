@@ -67,6 +67,20 @@ const PLAYER_CLIENTS = (process.env.YTDLP_PLAYER_CLIENTS || 'tv,android,ios,web_
 // Token"). PO_PROVIDER_URL tro toi server do, vd "http://host:4416" hoac
 // "https://bgutil-pot-server-xxxx.onrender.com".
 const PLUGIN_DIR = path.join(__dirname, 'yt-dlp-plugins');
+try {
+  const exists = fs.existsSync(PLUGIN_DIR);
+  console.log(`[debug] PLUGIN_DIR=${PLUGIN_DIR} exists=${exists}`);
+  if (exists) {
+    console.log(`[debug] PLUGIN_DIR contents: ${fs.readdirSync(PLUGIN_DIR).join(', ')}`);
+    const extractorDir = path.join(PLUGIN_DIR, 'yt_dlp_plugins', 'extractor');
+    if (fs.existsSync(extractorDir)) {
+      console.log(`[debug] extractor plugin files: ${fs.readdirSync(extractorDir).join(', ')}`);
+    }
+  }
+} catch (err) {
+  console.error('[debug] Loi khi kiem tra PLUGIN_DIR:', err.message);
+}
+
 const rawPotUrl = process.env.POT_PROVIDER_URL;
 const potProviderUrl = rawPotUrl
   ? rawPotUrl.startsWith('http')
@@ -76,6 +90,12 @@ const potProviderUrl = rawPotUrl
 if (potProviderUrl) {
   console.log(`Da cau hinh PO Token provider tai ${potProviderUrl}`);
 }
+
+// yt-dlp can 1 JS runtime (node/deno/bun/quickjs) de giai ma "n challenge"
+// cua YouTube. Ban than app nay da chay bang Node, nhung yt-dlp tu do tim
+// "node" qua PATH co the khong thay khi chay nhu tien trinh con — tro thang
+// den binary Node dang chay app (process.execPath) de chac chan.
+const JS_RUNTIME_ARG = `node:${process.execPath}`;
 
 async function runYoutubeDl(url, extraFlags) {
   const attempts = [];
@@ -90,6 +110,7 @@ async function runYoutubeDl(url, extraFlags) {
         ...extraFlags,
         pluginDirs: PLUGIN_DIR,
         extractorArgs,
+        jsRuntimes: JS_RUNTIME_ARG,
         verbose: true,
       });
       console.log(`[yt-dlp] client=${client} -> OK`);
