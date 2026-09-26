@@ -36,6 +36,28 @@ Sau đó mở trình duyệt tại `http://localhost:3000`.
 
 > Lưu ý: gói free của Render sẽ "ngủ" sau ~15 phút không dùng, lần mở lại đầu tiên có thể chậm khoảng 30-60 giây để server thức dậy.
 
+### Bước 1 (thay thế): Deploy lên Google Cloud Run — nhanh hơn Render Free
+
+Render Free tier CPU rất yếu (mỗi lần tải nhạc mất 60-70 giây). Google Cloud Run cấp CPU thật khi xử lý request (không bị chia sẻ/giới hạn như Render Free), miễn phí tới 2 triệu request/tháng — đủ dùng cá nhân thoải mái. Bù lại cần tài khoản Google Cloud (yêu cầu thẻ thanh toán để xác minh, nhưng không bị trừ tiền nếu ở trong hạn mức free) và setup nhiều bước hơn Render.
+
+1. Tạo tài khoản tại [console.cloud.google.com](https://console.cloud.google.com) (cần thẻ để xác minh danh tính, gói Free Tier không tự động trừ tiền).
+2. Tạo 1 **Project** mới (góc trên bên trái, "Select a project" → "New Project").
+3. Vào **Cloud Run** (tìm "Cloud Run" trong ô tìm kiếm trên cùng) → bấm **Create Service**.
+4. Chọn **"Continuously deploy from a repository"** → **Set up with Cloud Build** → **Connect** tài khoản GitHub → chọn repo `nhutnguyen9713/Db`.
+5. Ở phần cấu hình build:
+   - **Branch**: `mp3`
+   - **Build Type**: Dockerfile
+   - **Source location**: `/youtube-mp3-downloader/Dockerfile`
+6. Cấu hình service:
+   - **Region**: chọn gần Việt Nam (vd `asia-southeast1` - Singapore)
+   - **Authentication**: **Allow unauthenticated invocations** (để ai cũng mở được link, không cần đăng nhập Google)
+   - **Memory**: 512 MiB là đủ, có thể tăng lên 1 GiB nếu muốn chắc chắn hơn
+   - **CPU allocation**: "CPU is only allocated during request processing" (mặc định, giữ free)
+7. Bấm **Create**. Sau vài phút sẽ có link dạng `https://youtube-mp3-downloader-xxxxx-as.a.run.app`.
+8. (Khuyên dùng) Vào service vừa tạo → **Edit & Deploy New Revision** → tab **Variables & Secrets** → thêm biến `YTDL_COOKIES` (xem hướng dẫn lấy cookie ở mục bên dưới) để tránh bị chặn bot.
+
+> Lưu ý: Cloud Run cũng "scale về 0" khi không dùng (giống Render), nhưng do CPU mạnh hơn nên lần đánh thức đầu và mỗi lần tải nhạc đều nhanh hơn Render Free rõ rệt.
+
 ### Bước 2: Cài vào màn hình chính điện thoại
 
 1. Trên điện thoại Android, mở **Chrome**, vào link Render ở bước 1.
@@ -55,9 +77,11 @@ Khi server chạy trên IP của dịch vụ cloud (Render, Railway...), YouTube
 
 > ⚠️ **Chỉ dán cookie vào ô Environment Variable trên Render, không dán/chia sẻ ở bất kỳ đâu khác** — chuỗi này chứa cookie đăng nhập toàn bộ tài khoản Google của bạn (SID, HSID, APISID...), ai có được có thể đăng nhập giả danh bạn mà không cần mật khẩu. Cookie cũng có hạn dùng, nếu lỗi quay lại thì lấy cookie mới và cập nhật lại biến `YTDL_COOKIES`.
 
-## Sửa lỗi "Requested format is not available" (PO Token)
+## Sửa lỗi "Requested format is not available" (PO Token / JS runtime)
 
-Ngay cả khi có cookie hợp lệ, YouTube gần đây còn yêu cầu thêm một **PO Token** (Proof-of-Origin Token) mới trả về được link phát nhạc, đặc biệt với IP của các dịch vụ cloud. `render.yaml` trong repo đã khai báo sẵn 1 service phụ tên `bgutil-pot-server` (thư mục `pot-server/`) chuyên sinh PO Token, dùng [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider).
+Lỗi này thường không phải do PO Token mà do `yt-dlp` không tìm thấy JS runtime (Node) để giải mã tín hiệu của YouTube — server.js đã tự trỏ thẳng `--js-runtimes` vào Node đang chạy app nên phần này không cần cấu hình gì thêm, kể cả trên Cloud Run.
+
+`render.yaml` trong repo vẫn có khai báo 1 service phụ tên `bgutil-pot-server` (thư mục `pot-server/`, dùng [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider)) để sinh **PO Token** — cơ chế xác thực bổ sung mà YouTube áp dụng ngày càng nhiều. Trên Render, phần này chưa từng thực sự kết nối được (không bắt buộc phải deploy nó) — chỉ dùng đến nếu sau này lỗi format quay lại dù JS runtime đã đúng. Bỏ qua phần dưới đây nếu deploy lên Cloud Run.
 
 ### Nếu bạn deploy qua Blueprint (`render.yaml`)
 
