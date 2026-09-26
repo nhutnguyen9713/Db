@@ -47,7 +47,6 @@ function sanitizeFilename(name) {
 
 function baseFlags() {
   return {
-    noWarnings: true,
     noPlaylist: true,
     ...(cookiesFilePath ? { cookies: cookiesFilePath } : {}),
   };
@@ -91,12 +90,16 @@ async function runYoutubeDl(url, extraFlags) {
         ...extraFlags,
         pluginDirs: PLUGIN_DIR,
         extractorArgs,
+        verbose: true,
       });
       console.log(`[yt-dlp] client=${client} -> OK`);
       return result;
     } catch (err) {
-      const msg = (err.stderr || err.message || String(err)).trim().slice(0, 300);
-      console.error(`[yt-dlp] client=${client} -> FAIL: ${msg}`);
+      const fullMsg = (err.stderr || err.message || String(err)).trim();
+      // Log toan bo (khong cat bot) ra Render Logs de chan doan; chi rut gon
+      // phan hien thi ngay trong app cho gon.
+      console.error(`[yt-dlp] client=${client} -> FAIL:\n${fullMsg}`);
+      const msg = fullMsg.slice(0, 300);
       attempts.push(`${client}: ${msg}`);
     }
   }
