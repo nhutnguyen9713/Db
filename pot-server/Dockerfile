@@ -4,13 +4,11 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 
-RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 \
-    npm ci --omit=dev --no-audit --no-fund
+RUN npm ci --omit=dev --no-audit --no-fund
 
 FROM install AS build_node
 
-RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000 \
-    npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 
 COPY types/ types/
 COPY tsconfig.json ./
