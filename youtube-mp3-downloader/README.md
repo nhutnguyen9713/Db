@@ -20,7 +20,7 @@ Sau đó mở trình duyệt tại `http://localhost:3000`.
 
 ## Công nghệ
 
-- **Backend**: Node.js + Express, dùng `@distube/ytdl-core` để lấy luồng audio và `ffmpeg` (qua `ffmpeg-static`/`fluent-ffmpeg`) để chuyển sang MP3.
+- **Backend**: Node.js + Express, dùng [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) (qua `youtube-dl-exec`, tự tải bản yt-dlp mới nhất mỗi lần `npm install`) để tải và trích xuất audio, cùng `ffmpeg` (qua `ffmpeg-static`) để chuyển sang MP3.
 - **Frontend**: HTML/CSS/JS thuần, không cần build. Có sẵn PWA (manifest + service worker) nên cài được thành app trên điện thoại.
 
 ## Cài lên điện thoại Android (PWA)
@@ -57,5 +57,5 @@ Khi server chạy trên IP của dịch vụ cloud (Render, Railway...), YouTube
 
 ## Lưu ý
 
-- YouTube thường xuyên thay đổi cách phát video nên thư viện `ytdl-core` đôi khi cần cập nhật (`npm update @distube/ytdl-core`) nếu gặp lỗi tải.
+- YouTube thường xuyên thay đổi cách phát video. Mỗi lần deploy lại (Render build lại từ đầu), `youtube-dl-exec` tự tải bản `yt-dlp` mới nhất nên thường tự khắc phục được các lỗi kiểu "Failed to find any playable formats". Nếu vẫn lỗi, thử **Manual Deploy → Clear build cache & deploy** trên Render để chắc chắn lấy bản yt-dlp mới nhất.
 - Chỉ nên tự host và dùng riêng, không nên public server này để tải hàng loạt nội dung có bản quyền.

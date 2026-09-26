@@ -1,11 +1,10 @@
 const path = require('path');
+const os = require('os');
+const fs = require('fs');
+const crypto = require('crypto');
 const express = require('express');
-const ytdl = require('@distube/ytdl-core');
 const ffmpegPath = require('ffmpeg-static');
-const ffmpeg = require('fluent-ffmpeg');
-const { CookieJar, Cookie } = require('tough-cookie');
-
-ffmpeg.setFfmpegPath(ffmpegPath);
+const youtubedl = require('youtube-dl-exec');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,89 +12,108 @@ const PORT = process.env.PORT || 3000;
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// YouTube hay chan request tu server cloud vi nghi la bot ("Sign in to confirm
-// you're not a bot"). Set bien moi truong YTDL_COOKIES = chuoi cookie dang
-// "ten1=gia_tri1; ten2=gia_tri2; ..." (copy tu header Cookie cua trinh duyet
-// khi da dang nhap YouTube) de vuot qua kiem tra nay.
-let ytdlAgent;
+const YOUTUBE_URL_RE = /^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i;
+
+// YouTube hay chan request tu server cloud vi nghi la bot. Set bien moi
+// truong YTDL_COOKIES = chuoi cookie dang "ten1=gia_tri1; ten2=gia_tri2; ..."
+// (copy tu header Cookie cua trinh duyet khi da dang nhap YouTube) de yt-dlp
+// dung cookie nay xac thuc thay ban.
+let cookiesFilePath;
 if (process.env.YTDL_COOKIES) {
   try {
-    const jar = new CookieJar();
-    let count = 0;
-    for (const pair of process.env.YTDL_COOKIES.split(';')) {
-      const cookie = Cookie.parse(pair.trim());
-      if (!cookie) continue;
-      jar.setCookieSync(cookie, 'https://www.youtube.com');
-      count++;
+    const pairs = process.env.YTDL_COOKIES.split(';').map((s) => s.trim()).filter(Boolean);
+    const expiry = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 180; // 180 ngay
+    const lines = ['# Netscape HTTP Cookie File'];
+    for (const pair of pairs) {
+      const idx = pair.indexOf('=');
+      if (idx === -1) continue;
+      const name = pair.slice(0, idx).trim();
+      const value = pair.slice(idx + 1).trim();
+      if (!name) continue;
+      lines.push(['.youtube.com', 'TRUE', '/', 'TRUE', expiry, name, value].join('\t'));
     }
-    if (count === 0) throw new Error('Khong doc duoc cookie nao tu YTDL_COOKIES');
-    ytdlAgent = ytdl.createAgent([], { cookies: { jar } });
-    console.log(`Da nap YTDL_COOKIES (${count} cookie), dung agent co xac thuc.`);
+    if (lines.length <= 1) throw new Error('Khong doc duoc cookie nao tu YTDL_COOKIES');
+    cookiesFilePath = path.join(os.tmpdir(), 'yt-cookies.txt');
+    fs.writeFileSync(cookiesFilePath, lines.join('\n') + '\n');
+    console.log(`Da ghi ${lines.length - 1} cookie vao file, se dung cho yt-dlp.`);
   } catch (err) {
     console.error('YTDL_COOKIES khong hop le:', err.message);
   }
 }
 
 function sanitizeFilename(name) {
-  return name.replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 150) || 'audio';
+  return (name || '').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 150) || 'audio';
+}
+
+function baseFlags() {
+  return {
+    noWarnings: true,
+    noPlaylist: true,
+    ...(cookiesFilePath ? { cookies: cookiesFilePath } : {}),
+  };
 }
 
 // Lay thong tin video (tieu de, anh thu nho, thoi luong)
 app.get('/api/info', async (req, res) => {
   const { url } = req.query;
-  if (!url || !ytdl.validateURL(url)) {
+  if (!url || !YOUTUBE_URL_RE.test(url)) {
     return res.status(400).json({ error: 'Link YouTube khong hop le' });
   }
   try {
-    const info = await ytdl.getInfo(url, ytdlAgent ? { agent: ytdlAgent } : undefined);
-    const { videoDetails } = info;
+    const info = await youtubedl(url, { dumpSingleJson: true, ...baseFlags() });
     res.json({
-      title: videoDetails.title,
-      author: videoDetails.author?.name,
-      lengthSeconds: Number(videoDetails.lengthSeconds || 0),
-      thumbnail: videoDetails.thumbnails?.at(-1)?.url || '',
+      title: info.title,
+      author: info.uploader || info.channel || '',
+      lengthSeconds: Number(info.duration || 0),
+      thumbnail: info.thumbnail || '',
     });
   } catch (err) {
-    res.status(500).json({ error: 'Khong lay duoc thong tin video: ' + err.message });
+    res.status(500).json({ error: 'Khong lay duoc thong tin video: ' + (err.stderr || err.message) });
   }
 });
 
-// Tai va chuyen doi sang MP3, stream truc tiep ve trinh duyet
+// Tai va chuyen doi sang MP3 (qua yt-dlp + ffmpeg), roi stream file ve trinh duyet
 app.get('/api/download', async (req, res) => {
   const { url } = req.query;
-  if (!url || !ytdl.validateURL(url)) {
+  if (!url || !YOUTUBE_URL_RE.test(url)) {
     return res.status(400).json({ error: 'Link YouTube khong hop le' });
   }
 
+  const jobId = crypto.randomUUID();
+  const outTemplate = path.join(os.tmpdir(), `${jobId}.%(ext)s`);
+  const outFile = path.join(os.tmpdir(), `${jobId}.mp3`);
+
   try {
-    const info = await ytdl.getInfo(url, ytdlAgent ? { agent: ytdlAgent } : undefined);
-    const title = sanitizeFilename(info.videoDetails.title);
+    const info = await youtubedl(url, { dumpSingleJson: true, ...baseFlags() });
+    const title = sanitizeFilename(info.title);
+
+    await youtubedl(url, {
+      extractAudio: true,
+      audioFormat: 'mp3',
+      audioQuality: '192K',
+      ffmpegLocation: ffmpegPath,
+      output: outTemplate,
+      ...baseFlags(),
+    });
+
+    if (!fs.existsSync(outFile)) {
+      throw new Error('Khong tao duoc file MP3');
+    }
 
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Disposition', `attachment; filename="${title}.mp3"`);
 
-    const audioStream = ytdl.downloadFromInfo(info, {
-      quality: 'highestaudio',
-      filter: 'audioonly',
-      ...(ytdlAgent ? { agent: ytdlAgent } : {}),
+    const stream = fs.createReadStream(outFile);
+    stream.pipe(res);
+    stream.on('close', () => fs.unlink(outFile, () => {}));
+    stream.on('error', () => {
+      fs.unlink(outFile, () => {});
+      if (!res.headersSent) res.status(500).end('Loi khi doc file MP3');
     });
-
-    audioStream.on('error', (err) => {
-      if (!res.headersSent) res.status(500).end('Loi tai audio: ' + err.message);
-      else res.end();
-    });
-
-    ffmpeg(audioStream)
-      .audioBitrate(192)
-      .format('mp3')
-      .on('error', (err) => {
-        if (!res.headersSent) res.status(500).end('Loi chuyen doi MP3: ' + err.message);
-        else res.end();
-      })
-      .pipe(res, { end: true });
   } catch (err) {
+    fs.unlink(outFile, () => {});
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Khong tai duoc: ' + err.message });
+      res.status(500).json({ error: 'Khong tai duoc: ' + (err.stderr || err.message) });
     }
   }
 });
