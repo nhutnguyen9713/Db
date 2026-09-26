@@ -53,6 +53,32 @@ function baseFlags() {
   };
 }
 
+// YouTube gan day bat client "web" mac dinh phai co PO Token moi tra ve
+// duoc format phat nhac hop le ("Requested format is not available"). Cac
+// client khac (tv, android, ios...) thuong chua bi bat PO Token nen thu lan
+// luot cho den khi co client nao thanh cong. Co the tuy chinh qua bien moi
+// truong YTDLP_PLAYER_CLIENTS (vd: "tv,android").
+const PLAYER_CLIENTS = (process.env.YTDLP_PLAYER_CLIENTS || 'tv,android,ios,web_safari,web')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+async function runYoutubeDl(url, extraFlags) {
+  let lastErr;
+  for (const client of PLAYER_CLIENTS) {
+    try {
+      return await youtubedl(url, {
+        ...baseFlags(),
+        ...extraFlags,
+        extractorArgs: `youtube:player_client=${client}`,
+      });
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 // Lay thong tin video (tieu de, anh thu nho, thoi luong)
 app.get('/api/info', async (req, res) => {
   const { url } = req.query;
@@ -60,7 +86,7 @@ app.get('/api/info', async (req, res) => {
     return res.status(400).json({ error: 'Link YouTube khong hop le' });
   }
   try {
-    const info = await youtubedl(url, { dumpSingleJson: true, ...baseFlags() });
+    const info = await runYoutubeDl(url, { dumpSingleJson: true });
     res.json({
       title: info.title,
       author: info.uploader || info.channel || '',
@@ -84,16 +110,15 @@ app.get('/api/download', async (req, res) => {
   const outFile = path.join(os.tmpdir(), `${jobId}.mp3`);
 
   try {
-    const info = await youtubedl(url, { dumpSingleJson: true, ...baseFlags() });
+    const info = await runYoutubeDl(url, { dumpSingleJson: true });
     const title = sanitizeFilename(info.title);
 
-    await youtubedl(url, {
+    await runYoutubeDl(url, {
       extractAudio: true,
       audioFormat: 'mp3',
       audioQuality: '192K',
       ffmpegLocation: ffmpegPath,
       output: outTemplate,
-      ...baseFlags(),
     });
 
     if (!fs.existsSync(outFile)) {
