@@ -92,11 +92,14 @@ try {
   console.error('[debug] Loi khi kiem tra PLUGIN_DIR:', err.message);
 }
 
+// Neu chi la "host" hoac "host:port" (khong co tien to giao thuc), doan xem
+// co port hay khong de chon http (thuong la noi bo, cung mang private) hay
+// https (domain cong khai tren Railway/Render... deu chi phuc vu qua TLS).
 const rawPotUrl = process.env.POT_PROVIDER_URL;
 const potProviderUrl = rawPotUrl
   ? rawPotUrl.startsWith('http')
     ? rawPotUrl
-    : `http://${rawPotUrl}`
+    : `${/:\d+$/.test(rawPotUrl) ? 'http' : 'https'}://${rawPotUrl}`
   : undefined;
 if (potProviderUrl) {
   console.log(`Da cau hinh PO Token provider tai ${potProviderUrl}`);
