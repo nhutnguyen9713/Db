@@ -156,9 +156,11 @@ app.get('/api/download', async (req, res) => {
   const outTemplate = path.join(os.tmpdir(), `${jobId}.%(ext)s`);
   const outFile = path.join(os.tmpdir(), `${jobId}.mp3`);
 
+  console.log(`[download] jobId=${jobId} bat dau: ${url}`);
   try {
     const info = await runYoutubeDl(url, { dumpSingleJson: true });
     const title = sanitizeFilename(info.title);
+    console.log(`[download] jobId=${jobId} da lay info, title="${title}"`);
 
     await runYoutubeDl(url, {
       extractAudio: true,
@@ -167,25 +169,36 @@ app.get('/api/download', async (req, res) => {
       ffmpegLocation: ffmpegPath,
       output: outTemplate,
     });
+    console.log(`[download] jobId=${jobId} yt-dlp extractAudio xong`);
 
     if (!fs.existsSync(outFile)) {
-      throw new Error('Khong tao duoc file MP3');
+      const dirListing = fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith(jobId));
+      throw new Error(`Khong tao duoc file MP3 (tmp co: ${dirListing.join(', ') || 'khong co gi'})`);
     }
+    const fileSize = fs.statSync(outFile).size;
+    console.log(`[download] jobId=${jobId} file MP3 san sang, size=${fileSize} bytes`);
 
     res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Length', fileSize);
     res.setHeader('Content-Disposition', `attachment; filename="${title}.mp3"`);
 
     const stream = fs.createReadStream(outFile);
     stream.pipe(res);
-    stream.on('close', () => fs.unlink(outFile, () => {}));
-    stream.on('error', () => {
+    stream.on('close', () => {
+      console.log(`[download] jobId=${jobId} da gui xong cho client`);
+      fs.unlink(outFile, () => {});
+    });
+    stream.on('error', (err) => {
+      console.error(`[download] jobId=${jobId} loi khi doc file:`, err.message);
       fs.unlink(outFile, () => {});
       if (!res.headersSent) res.status(500).end('Loi khi doc file MP3');
     });
   } catch (err) {
+    const msg = err.stderr || err.message || String(err);
+    console.error(`[download] jobId=${jobId} that bai:`, msg);
     fs.unlink(outFile, () => {});
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Khong tai duoc: ' + (err.stderr || err.message) });
+      res.status(500).json({ error: 'Khong tai duoc: ' + msg });
     }
   }
 });

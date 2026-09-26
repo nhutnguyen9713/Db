@@ -51,17 +51,39 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
-function startDownload(url) {
+async function startDownload(url) {
   btnDownload.disabled = true;
-  statusEl.textContent = 'Đang tải và chuyển sang MP3, vui lòng chờ...';
-  const link = document.createElement('a');
-  link.href = `/api/download?url=${encodeURIComponent(url)}`;
-  link.download = '';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => {
+  statusEl.textContent = 'Đang tải và chuyển sang MP3, vui lòng chờ (có thể mất 30-60 giây)...';
+
+  try {
+    const res = await fetch(`/api/download?url=${encodeURIComponent(url)}`);
+    if (!res.ok) {
+      let msg = `Lỗi server (${res.status})`;
+      try {
+        const data = await res.json();
+        if (data.error) msg = data.error;
+      } catch {}
+      throw new Error(msg);
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="(.+)"/);
+    const filename = match ? match[1] : 'audio.mp3';
+
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(blobUrl);
+
+    statusEl.textContent = 'Đã tải xong!';
+  } catch (err) {
+    statusEl.textContent = 'Lỗi khi tải MP3: ' + err.message;
+  } finally {
     btnDownload.disabled = false;
-    statusEl.textContent = 'Nếu trình duyệt chưa tự tải, hãy thử lại.';
-  }, 4000);
+  }
 }
