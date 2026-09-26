@@ -64,19 +64,23 @@ const PLAYER_CLIENTS = (process.env.YTDLP_PLAYER_CLIENTS || 'tv,android,ios,web_
   .filter(Boolean);
 
 async function runYoutubeDl(url, extraFlags) {
-  let lastErr;
+  const attempts = [];
   for (const client of PLAYER_CLIENTS) {
     try {
-      return await youtubedl(url, {
+      const result = await youtubedl(url, {
         ...baseFlags(),
         ...extraFlags,
         extractorArgs: `youtube:player_client=${client}`,
       });
+      console.log(`[yt-dlp] client=${client} -> OK`);
+      return result;
     } catch (err) {
-      lastErr = err;
+      const msg = (err.stderr || err.message || String(err)).trim().slice(0, 300);
+      console.error(`[yt-dlp] client=${client} -> FAIL: ${msg}`);
+      attempts.push(`${client}: ${msg}`);
     }
   }
-  throw lastErr;
+  throw new Error(`Tat ca ${PLAYER_CLIENTS.length} player client deu that bai:\n` + attempts.join('\n'));
 }
 
 // Lay thong tin video (tieu de, anh thu nho, thoi luong)
