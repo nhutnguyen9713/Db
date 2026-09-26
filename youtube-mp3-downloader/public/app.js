@@ -37,11 +37,13 @@ form.addEventListener('submit', async (e) => {
 
     thumb.src = data.thumbnail;
     titleEl.textContent = data.title;
-    subEl.textContent = `${data.author || ''} · ${formatDuration(data.lengthSeconds)}`;
+    subEl.textContent = data.lengthSeconds
+      ? `${data.author || ''} · ${formatDuration(data.lengthSeconds)}`
+      : (data.author || '');
     statusEl.textContent = '';
     btnDownload.disabled = false;
     btnDownload.textContent = '⬇ Tải MP3';
-    btnDownload.onclick = () => startDownload(url);
+    btnDownload.onclick = () => startDownload(url, data.title);
     result.hidden = false;
   } catch (err) {
     showError(err.message);
@@ -51,12 +53,13 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
-async function startDownload(url) {
+async function startDownload(url, title) {
   btnDownload.disabled = true;
-  statusEl.textContent = 'Đang tải và chuyển sang MP3, vui lòng chờ (có thể mất 30-60 giây)...';
+  statusEl.textContent = 'Đang tải và chuyển sang MP3, vui lòng chờ (có thể mất 20-40 giây)...';
 
   try {
-    const res = await fetch(`/api/download?url=${encodeURIComponent(url)}`);
+    const titleParam = title ? `&title=${encodeURIComponent(title)}` : '';
+    const res = await fetch(`/api/download?url=${encodeURIComponent(url)}${titleParam}`);
     if (!res.ok) {
       let msg = `Lỗi server (${res.status})`;
       try {

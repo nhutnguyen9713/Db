@@ -1,6 +1,7 @@
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
+const https = require('https');
 const crypto = require('crypto');
 const express = require('express');
 const ffmpegPath = require('ffmpeg-static');
@@ -136,12 +137,53 @@ async function runYoutubeDl(url, extraFlags) {
   throw new Error(`Tat ca ${PLAYER_CLIENTS.length} player client deu that bai:\n` + attempts.join('\n'));
 }
 
-// Lay thong tin video (tieu de, anh thu nho, thoi luong)
+// oEmbed cua YouTube: API cong khai, nhe, khong can yt-dlp giai ma gi ca —
+// dung de xem truoc (tieu de/anh/tac gia) that nhanh. Khong co thoi luong.
+function fetchOembed(url) {
+  return new Promise((resolve, reject) => {
+    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+    https
+      .get(oembedUrl, { timeout: 8000 }, (res) => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`oEmbed status ${res.statusCode}`));
+        }
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          try {
+            resolve(JSON.parse(data));
+          } catch (err) {
+            reject(err);
+          }
+        });
+      })
+      .on('error', reject)
+      .on('timeout', function () {
+        this.destroy(new Error('oEmbed timeout'));
+      });
+  });
+}
+
+// Lay thong tin video (tieu de, anh thu nho, thoi luong) de xem truoc
 app.get('/api/info', async (req, res) => {
   const { url } = req.query;
   if (!url || !YOUTUBE_URL_RE.test(url)) {
     return res.status(400).json({ error: 'Link YouTube khong hop le' });
   }
+
+  try {
+    const oembed = await fetchOembed(url);
+    return res.json({
+      title: oembed.title,
+      author: oembed.author_name || '',
+      lengthSeconds: 0,
+      thumbnail: oembed.thumbnail_url || '',
+    });
+  } catch (oembedErr) {
+    console.log('[info] oEmbed that bai, fallback sang yt-dlp:', oembedErr.message);
+  }
+
   try {
     const info = await runYoutubeDl(url, { dumpSingleJson: true });
     res.json({
@@ -168,9 +210,14 @@ app.get('/api/download', async (req, res) => {
 
   console.log(`[download] jobId=${jobId} bat dau: ${url}`);
   try {
-    const info = await runYoutubeDl(url, { dumpSingleJson: true });
-    const title = sanitizeFilename(info.title);
-    console.log(`[download] jobId=${jobId} da lay info, title="${title}"`);
+    // Neu frontend da co san tieu de (tu /api/info goi truoc do) thi dung
+    // luon, khoi phai goi yt-dlp them 1 lan chi de lay lai tieu de.
+    let title = req.query.title ? sanitizeFilename(req.query.title) : null;
+    if (!title) {
+      const info = await runYoutubeDl(url, { dumpSingleJson: true });
+      title = sanitizeFilename(info.title);
+    }
+    console.log(`[download] jobId=${jobId} title="${title}"`);
 
     await runYoutubeDl(url, {
       extractAudio: true,
