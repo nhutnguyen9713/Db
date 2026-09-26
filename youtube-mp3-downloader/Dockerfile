@@ -6,6 +6,10 @@ WORKDIR /app
 # even though we only use the prebuilt yt-dlp binary it downloads (no Python
 # needed at runtime). Skip that check on slim images that don't ship Python.
 ENV YOUTUBE_DL_SKIP_PYTHON_CHECK=1
+# The default GitHub release asset ("yt-dlp") is a zipapp that still needs a
+# system python3 to run. yt-dlp_linux is the real standalone PyInstaller
+# binary (glibc Linux, matches this Debian-based image) with no such need.
+ENV YOUTUBE_DL_FILENAME=yt-dlp_linux
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
