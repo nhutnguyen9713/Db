@@ -1,4 +1,4 @@
-const CACHE_NAME = 'yt2mp3-shell-v1';
+const CACHE_NAME = 'yt2mp3-shell-v2';
 const SHELL_FILES = ['./', './index.html', './styles.css', './app.js', './manifest.json', './icon-192.png'];
 
 self.addEventListener('install', (event) => {
@@ -15,11 +15,20 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Network-first cho shell: luon lay ban moi nhat khi co mang, chi dung cache
+// luc mat mang. Tranh tinh trang cai PWA xong bi "ket" ban JS/CSS cu du sau
+// nay server co deploy code moi.
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET' || request.url.includes('/api/')) return;
 
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request))
+    fetch(request)
+      .then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        return response;
+      })
+      .catch(() => caches.match(request))
   );
 });
