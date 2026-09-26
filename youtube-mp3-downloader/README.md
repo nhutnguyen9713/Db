@@ -46,14 +46,14 @@ Sau đó mở trình duyệt tại `http://localhost:3000`.
 
 Khi server chạy trên IP của dịch vụ cloud (Render, Railway...), YouTube hay chặn vì nghi là bot. Cách khắc phục: cung cấp cookie của tài khoản YouTube đã đăng nhập để server "xác thực" thay bạn.
 
-1. Trên máy tính, đăng nhập [youtube.com](https://youtube.com) bằng Chrome.
-2. Cài extension **[Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)** hoặc **EditThisCookie**, dùng chức năng **xuất cookie ra JSON** cho domain `youtube.com` (mảng object dạng `{name, value, domain, path, ...}`).
+1. Đăng nhập [youtube.com](https://youtube.com) trên trình duyệt (máy tính hoặc điện thoại đều được — trên Android có thể dùng Kiwi Browser để có DevTools).
+2. Mở DevTools → tab **Network** → bấm vào 1 request bất kỳ tới `youtube.com` → tìm **Request Headers** → copy toàn bộ giá trị của header **`Cookie`** (chuỗi dạng `ten1=gia_tri1; ten2=gia_tri2; ...`).
 3. Trên Render, vào Web Service `youtube-mp3-downloader` → **Environment** → thêm biến:
    - **Key**: `YTDL_COOKIES`
-   - **Value**: dán nguyên nội dung JSON vừa xuất
+   - **Value**: dán nguyên chuỗi cookie vừa copy
 4. Bấm **Save, rebuild and deploy**. Server sẽ tự dùng cookie này cho mọi request tới YouTube.
 
-> Cookie có hạn dùng và có thể hết hạn/đăng xuất theo thời gian — nếu lỗi quay lại, xuất cookie mới và cập nhật lại biến `YTDL_COOKIES`. Không chia sẻ cookie này cho ai vì nó tương đương quyền đăng nhập tài khoản YouTube của bạn.
+> ⚠️ **Chỉ dán cookie vào ô Environment Variable trên Render, không dán/chia sẻ ở bất kỳ đâu khác** — chuỗi này chứa cookie đăng nhập toàn bộ tài khoản Google của bạn (SID, HSID, APISID...), ai có được có thể đăng nhập giả danh bạn mà không cần mật khẩu. Cookie cũng có hạn dùng, nếu lỗi quay lại thì lấy cookie mới và cập nhật lại biến `YTDL_COOKIES`.
 
 ## Lưu ý
 

@@ -3,6 +3,7 @@ const express = require('express');
 const ytdl = require('@distube/ytdl-core');
 const ffmpegPath = require('ffmpeg-static');
 const ffmpeg = require('fluent-ffmpeg');
+const { CookieJar, Cookie } = require('tough-cookie');
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
@@ -13,16 +14,25 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
 // YouTube hay chan request tu server cloud vi nghi la bot ("Sign in to confirm
-// you're not a bot"). Set bien moi truong YTDL_COOKIES (JSON export cookie tu
-// trinh duyet, khi da dang nhap YouTube) de vuot qua kiem tra nay.
+// you're not a bot"). Set bien moi truong YTDL_COOKIES = chuoi cookie dang
+// "ten1=gia_tri1; ten2=gia_tri2; ..." (copy tu header Cookie cua trinh duyet
+// khi da dang nhap YouTube) de vuot qua kiem tra nay.
 let ytdlAgent;
 if (process.env.YTDL_COOKIES) {
   try {
-    const cookies = JSON.parse(process.env.YTDL_COOKIES);
-    ytdlAgent = ytdl.createAgent(cookies);
-    console.log('Da nap YTDL_COOKIES, dung agent co xac thuc.');
+    const jar = new CookieJar();
+    let count = 0;
+    for (const pair of process.env.YTDL_COOKIES.split(';')) {
+      const cookie = Cookie.parse(pair.trim());
+      if (!cookie) continue;
+      jar.setCookieSync(cookie, 'https://www.youtube.com');
+      count++;
+    }
+    if (count === 0) throw new Error('Khong doc duoc cookie nao tu YTDL_COOKIES');
+    ytdlAgent = ytdl.createAgent([], { cookies: { jar } });
+    console.log(`Da nap YTDL_COOKIES (${count} cookie), dung agent co xac thuc.`);
   } catch (err) {
-    console.error('YTDL_COOKIES khong hop le (phai la JSON mang cookie):', err.message);
+    console.error('YTDL_COOKIES khong hop le:', err.message);
   }
 }
 
