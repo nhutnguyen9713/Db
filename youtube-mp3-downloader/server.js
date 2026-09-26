@@ -52,12 +52,12 @@ function baseFlags() {
   };
 }
 
-// YouTube gan day bat client "web" mac dinh phai co PO Token moi tra ve
-// duoc format phat nhac hop le ("Requested format is not available"). Cac
-// client khac (tv, android, ios...) thuong chua bi bat PO Token nen thu lan
-// luot cho den khi co client nao thanh cong. Co the tuy chinh qua bien moi
-// truong YTDLP_PLAYER_CLIENTS (vd: "tv,android").
-const PLAYER_CLIENTS = (process.env.YTDLP_PLAYER_CLIENTS || 'tv,android,ios,web_safari,web')
+// Client "web" hoat dong on dinh khi da co --js-runtimes tro dung Node (giai
+// duoc "n challenge") + cookie dang nhap. Uu tien thu no truoc tien de nhanh
+// va tranh timeout; cac client khac chi la du phong (thuong that bai vi
+// khong ho tro cookie hoac bi 403 API rieng, khong lien quan gi nhau). Co
+// the tuy chinh qua bien moi truong YTDLP_PLAYER_CLIENTS.
+const PLAYER_CLIENTS = (process.env.YTDLP_PLAYER_CLIENTS || 'web,tv,android,ios,web_safari')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
@@ -111,7 +111,6 @@ async function runYoutubeDl(url, extraFlags) {
         pluginDirs: PLUGIN_DIR,
         extractorArgs,
         jsRuntimes: JS_RUNTIME_ARG,
-        verbose: true,
       });
       console.log(`[yt-dlp] client=${client} -> OK`);
       return result;
