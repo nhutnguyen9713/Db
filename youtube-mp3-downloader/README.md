@@ -55,6 +55,26 @@ Khi server chạy trên IP của dịch vụ cloud (Render, Railway...), YouTube
 
 > ⚠️ **Chỉ dán cookie vào ô Environment Variable trên Render, không dán/chia sẻ ở bất kỳ đâu khác** — chuỗi này chứa cookie đăng nhập toàn bộ tài khoản Google của bạn (SID, HSID, APISID...), ai có được có thể đăng nhập giả danh bạn mà không cần mật khẩu. Cookie cũng có hạn dùng, nếu lỗi quay lại thì lấy cookie mới và cập nhật lại biến `YTDL_COOKIES`.
 
+## Sửa lỗi "Requested format is not available" (PO Token)
+
+Ngay cả khi có cookie hợp lệ, YouTube gần đây còn yêu cầu thêm một **PO Token** (Proof-of-Origin Token) mới trả về được link phát nhạc, đặc biệt với IP của các dịch vụ cloud. `render.yaml` trong repo đã khai báo sẵn 1 service phụ tên `bgutil-pot-server` (thư mục `pot-server/`) chuyên sinh PO Token, dùng [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider).
+
+### Nếu bạn deploy qua Blueprint (`render.yaml`)
+
+Render sẽ tự tạo **cả 2 service** (`youtube-mp3-downloader` và `bgutil-pot-server`) và tự nối chúng qua biến `POT_PROVIDER_URL`. Không cần làm gì thêm — nếu Render đã hỗ trợ đồng bộ Blueprint tự động.
+
+### Nếu Render không tự nối được (hoặc bạn deploy service thủ công)
+
+1. Deploy `bgutil-pot-server` là 1 Web Service riêng: **New +** → **Web Service** → chọn repo → **Runtime: Docker** → **Root Directory**: `pot-server`. Deploy xong sẽ có link dạng `https://bgutil-pot-server-xxxx.onrender.com`.
+2. Vào Web Service `youtube-mp3-downloader` → **Environment** → thêm biến:
+   - **Key**: `POT_PROVIDER_URL`
+   - **Value**: link ở bước 1 (vd `https://bgutil-pot-server-xxxx.onrender.com`)
+3. Deploy lại `youtube-mp3-downloader`. Log lúc khởi động sẽ có dòng `Da cau hinh PO Token provider tai ...` xác nhận đã nối thành công.
+
+> Lưu ý: đây vẫn không phải giải pháp đảm bảo 100% — theo README gốc của bgutil: *"Providing a PO token does not guarantee bypassing 403 errors or bot checks, but it may help your traffic seem more legitimate."* Đây là "cuộc đua" liên tục giữa YouTube và cộng đồng, có thể cần cập nhật thêm trong tương lai.
+
+Thư mục `pot-server/` và `youtube-mp3-downloader/yt-dlp-plugins/` chứa code vendor nguyên bản từ dự án mã nguồn mở [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) (giấy phép GPL-3.0, xem file `LICENSE` trong mỗi thư mục), không phải code tự viết.
+
 ## Lưu ý
 
 - YouTube thường xuyên thay đổi cách phát video. Mỗi lần deploy lại (Render build lại từ đầu), `youtube-dl-exec` tự tải bản `yt-dlp` mới nhất nên thường tự khắc phục được các lỗi kiểu "Failed to find any playable formats". Nếu vẫn lỗi, thử **Manual Deploy → Clear build cache & deploy** trên Render để chắc chắn lấy bản yt-dlp mới nhất.

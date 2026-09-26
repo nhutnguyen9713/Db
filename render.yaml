@@ -9,3 +9,21 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22
+      - key: POT_PROVIDER_URL
+        fromService:
+          type: web
+          name: bgutil-pot-server
+          property: hostport
+
+  # Server phu sinh PO Token cho yt-dlp (xem youtube-mp3-downloader/README.md
+  # muc "PO Token"). Neu Render khong ho tro fromService o tren, vao tab
+  # Environment cua service youtube-mp3-downloader va tu dan URL cong khai
+  # cua service ben duoi vao bien POT_PROVIDER_URL.
+  - type: web
+    name: bgutil-pot-server
+    runtime: docker
+    plan: free
+    rootDir: pot-server
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /ping

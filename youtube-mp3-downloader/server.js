@@ -63,14 +63,34 @@ const PLAYER_CLIENTS = (process.env.YTDLP_PLAYER_CLIENTS || 'tv,android,ios,web_
   .map((s) => s.trim())
   .filter(Boolean);
 
+// Plugin bgutil-ytdlp-pot-provider (vendor trong yt-dlp-plugins/) day yt-dlp
+// biet cach lay PO Token tu server phu "pot-server" (xem README muc "PO
+// Token"). PO_PROVIDER_URL tro toi server do, vd "http://host:4416" hoac
+// "https://bgutil-pot-server-xxxx.onrender.com".
+const PLUGIN_DIR = path.join(__dirname, 'yt-dlp-plugins');
+const rawPotUrl = process.env.POT_PROVIDER_URL;
+const potProviderUrl = rawPotUrl
+  ? rawPotUrl.startsWith('http')
+    ? rawPotUrl
+    : `http://${rawPotUrl}`
+  : undefined;
+if (potProviderUrl) {
+  console.log(`Da cau hinh PO Token provider tai ${potProviderUrl}`);
+}
+
 async function runYoutubeDl(url, extraFlags) {
   const attempts = [];
   for (const client of PLAYER_CLIENTS) {
     try {
+      const extractorArgs = [`youtube:player_client=${client}`];
+      if (potProviderUrl) {
+        extractorArgs.push(`youtubepot-bgutilhttp:base_url=${potProviderUrl}`);
+      }
       const result = await youtubedl(url, {
         ...baseFlags(),
         ...extraFlags,
-        extractorArgs: `youtube:player_client=${client}`,
+        pluginDirs: PLUGIN_DIR,
+        extractorArgs,
       });
       console.log(`[yt-dlp] client=${client} -> OK`);
       return result;
