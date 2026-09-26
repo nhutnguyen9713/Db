@@ -34,6 +34,22 @@ Sau đó mở trình duyệt tại `http://localhost:3000`.
    - Nếu Render không hỗ trợ Blueprint, tạo thủ công: **New +** → **Web Service** → chọn repo → **Root Directory**: `youtube-mp3-downloader` → **Build Command**: `npm install` → **Start Command**: `npm start`.
 3. Bấm **Deploy**. Sau vài phút sẽ có link dạng `https://youtube-mp3-downloader-xxxx.onrender.com`.
 
+> Nhược điểm: CPU Free tier của Render rất yếu (0.1 vCPU dùng chung) — mỗi lần tải nhạc có thể mất 60-70 giây. Nếu muốn nhanh hơn mà **không cần thẻ thanh toán**, xem mục Railway bên dưới.
+
+### Bước 1 (thay thế): Deploy lên Railway — nhanh hơn, không cần thẻ
+
+Railway cấp **1 vCPU** cho free tier (gấp 10 lần Render Free), không bị "ngủ"/cold-start, và **không yêu cầu thẻ** để đăng ký (có $5 credit dùng thử tháng đầu, sau đó $1 credit/tháng — đủ dùng cho nhu cầu tải nhạc cá nhân, thỉnh thoảng).
+
+1. Tạo tài khoản tại [railway.com](https://railway.com) (đăng nhập bằng GitHub).
+2. **New Project** → **Deploy from GitHub repo** → chọn repo `nhutnguyen9713/Db`.
+3. Trong phần cấu hình service vừa tạo:
+   - **Root Directory**: `youtube-mp3-downloader` (Railway sẽ tự nhận diện `Dockerfile` có sẵn trong thư mục này và build theo đó)
+   - **Branch**: `mp3`
+4. Vào tab **Variables** → thêm biến `YTDL_COOKIES` (xem hướng dẫn lấy cookie ở mục bên dưới).
+5. Vào tab **Settings** → **Networking** → bấm **Generate Domain** để có link public dạng `https://youtube-mp3-downloader-xxxx.up.railway.app`.
+
+> Theo dõi mục **Usage** trong Railway để biết credit còn lại mỗi tháng — nếu dùng nhiều (tải liên tục) có thể vượt $1 credit/tháng và cần nạp thêm hoặc thêm thẻ.
+
 > Lưu ý: gói free của Render sẽ "ngủ" sau ~15 phút không dùng, lần mở lại đầu tiên có thể chậm khoảng 30-60 giây để server thức dậy.
 
 ### Bước 1 (thay thế): Deploy lên Google Cloud Run — nhanh hơn Render Free
