@@ -93,19 +93,30 @@ Khi server chạy trên IP của dịch vụ cloud (Render, Railway...), YouTube
 
 > ⚠️ **Chỉ dán cookie vào ô Environment Variable trên Render, không dán/chia sẻ ở bất kỳ đâu khác** — chuỗi này chứa cookie đăng nhập toàn bộ tài khoản Google của bạn (SID, HSID, APISID...), ai có được có thể đăng nhập giả danh bạn mà không cần mật khẩu. Cookie cũng có hạn dùng, nếu lỗi quay lại thì lấy cookie mới và cập nhật lại biến `YTDL_COOKIES`.
 
-## Sửa lỗi "Requested format is not available" (PO Token / JS runtime)
+## Sửa lỗi "Requested format is not available" / "Only images are available" (PO Token / JS runtime)
 
-Lỗi này thường không phải do PO Token mà do `yt-dlp` không tìm thấy JS runtime (Node) để giải mã tín hiệu của YouTube — server.js đã tự trỏ thẳng `--js-runtimes` vào Node đang chạy app nên phần này không cần cấu hình gì thêm, kể cả trên Cloud Run.
+Có 2 nguyên nhân khác nhau gây cùng một loại lỗi này:
 
-`render.yaml` trong repo vẫn có khai báo 1 service phụ tên `bgutil-pot-server` (thư mục `pot-server/`, dùng [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider)) để sinh **PO Token** — cơ chế xác thực bổ sung mà YouTube áp dụng ngày càng nhiều. Trên Render, phần này chưa từng thực sự kết nối được (không bắt buộc phải deploy nó) — chỉ dùng đến nếu sau này lỗi format quay lại dù JS runtime đã đúng. Bỏ qua phần dưới đây nếu deploy lên Cloud Run.
+1. **Thiếu JS runtime**: `yt-dlp` không tìm thấy Node để giải mã tín hiệu của YouTube — server.js đã tự trỏ thẳng `--js-runtimes` vào Node đang chạy app nên phần này không cần cấu hình gì thêm ở bất kỳ nền tảng nào.
+2. **Thiếu PO Token**: một số dải IP (quan sát thực tế: cần trên Railway, không cần trên Render) bị YouTube yêu cầu thêm **PO Token** mới trả về format phát nhạc thật (nếu không có, chỉ trả về ảnh thumbnail — đúng thông báo "Only images are available"). Nếu đã chắc chắn JS runtime ổn (không còn cảnh báo "n challenge failed" trong log) mà vẫn lỗi dạng này, cần bật PO Token provider theo hướng dẫn dưới.
 
-### Nếu bạn deploy qua Blueprint (`render.yaml`)
+`render.yaml` trong repo khai báo sẵn 1 service phụ tên `bgutil-pot-server` (thư mục `pot-server/`, dùng [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider)) để sinh PO Token.
 
-Render sẽ tự tạo **cả 2 service** (`youtube-mp3-downloader` và `bgutil-pot-server`) và tự nối chúng qua biến `POT_PROVIDER_URL`. Không cần làm gì thêm — nếu Render đã hỗ trợ đồng bộ Blueprint tự động.
+### Trên Render (qua Blueprint)
 
-### Nếu Render không tự nối được (hoặc bạn deploy service thủ công)
+Render tự tạo **cả 2 service** (`youtube-mp3-downloader` và `bgutil-pot-server`) và tự nối chúng qua biến `POT_PROVIDER_URL`.
 
-1. Deploy `bgutil-pot-server` là 1 Web Service riêng: **New +** → **Web Service** → chọn repo → **Runtime: Docker** → **Root Directory**: `pot-server`. Deploy xong sẽ có link dạng `https://bgutil-pot-server-xxxx.onrender.com`.
+### Trên Railway / deploy thủ công service riêng
+
+1. Tạo **thêm 1 service mới** trong cùng project Railway: bấm **+ New** (hoặc **Add Service**) → **GitHub Repo** → chọn lại repo này.
+2. Cấu hình service mới: **Root Directory** = `pot-server`, **Branch** = `mp3` (Railway tự nhận Dockerfile trong `pot-server/`).
+3. Vào **Settings** → **Networking** → **Generate Domain** để có link public dạng `https://pot-server-xxxx.up.railway.app`.
+4. Quay lại service `youtube-mp3-downloader` → tab **Variables** → thêm biến `POT_PROVIDER_URL` = link ở bước 3.
+5. Đợi `youtube-mp3-downloader` deploy lại. Log lúc khởi động sẽ có dòng `Da cau hinh PO Token provider tai ...`.
+
+### Deploy thủ công trên nền tảng khác (Render không dùng Blueprint, v.v.)
+
+1. Deploy `bgutil-pot-server` là 1 Web Service riêng: **Runtime: Docker**, **Root Directory**: `pot-server`. Deploy xong sẽ có link dạng `https://bgutil-pot-server-xxxx.onrender.com`.
 2. Vào Web Service `youtube-mp3-downloader` → **Environment** → thêm biến:
    - **Key**: `POT_PROVIDER_URL`
    - **Value**: link ở bước 1 (vd `https://bgutil-pot-server-xxxx.onrender.com`)
