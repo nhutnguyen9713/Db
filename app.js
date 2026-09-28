@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.90';
+const APP_VERSION = 'v2.91';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6179,7 +6179,30 @@ function khoGridOpenSettings(khoLabel){
   document.getElementById('kho-grid-cols-input').value=layout.cols;
   const reset=document.getElementById('kho-grid-reset-all');
   if(reset) reset.textContent=`🗑 Xoá toàn bộ lưới tuỳ chỉnh ${khoLabel}`;
+  // Xoá trắng 2 ô Tìm/Thay bằng mỗi lần mở lại popup — tránh lỡ tay áp dụng nhầm giá trị cũ còn sót
+  // lại từ lần đổi tên trước (của kho khác hoặc lần trước đó).
+  const findEl=document.getElementById('kho-grid-rename-find'), replaceEl=document.getElementById('kho-grid-rename-replace');
+  if(findEl) findEl.value=''; if(replaceEl) replaceEl.value='';
   document.getElementById('kho-grid-settings-overlay').classList.add('show');
+}
+
+// Đổi tên hàng loạt: thay 1 đoạn text trong tên Locator của MỌI ô đang khớp (chỉ ô locator thật, bỏ
+// qua ô tiêu đề) — dùng split/join (không dùng RegExp) để thay đúng nguyên văn, không phải diễn giải
+// find như 1 mẫu regex (VD dấu "." trong tên locator không bị hiểu nhầm thành "match bất kỳ ký tự").
+function khoGridBulkRenameLocators(khoLabel, find, replace){
+  if(!find){ alert('Chưa nhập nội dung cần tìm.'); return; }
+  const layout=khoGridGetLayout(khoLabel);
+  const matched=layout.cells.filter(c => !c.isLabel && c.locator && c.locator.includes(find));
+  if(!matched.length){ alert(`Không có vị trí nào đang chứa "${find}" trong lưới tuỳ chỉnh ${khoLabel}.`); return; }
+  const sample=matched.slice(0,3).map(c => `${c.locator} → ${c.locator.split(find).join(replace)}`).join('\n');
+  if(!confirm(
+    `Đổi tên ${matched.length} vị trí trong lưới tuỳ chỉnh ${khoLabel}?\n\n${sample}${matched.length>3?'\n…':''}\n\n` +
+    `LƯU Ý: chỉ đổi tên hiển thị trên lưới — nếu tên mới không khớp locator thật trong dữ liệu tồn kho/WMS, ô đó sẽ hiện 0 pallet.`
+  )) return;
+  matched.forEach(c => { c.locator = c.locator.split(find).join(replace); });
+  khoGridSave();
+  khoGridRenderCustom(khoLabel);
+  if(typeof showAppToast === 'function') showAppToast(`✓ Đã đổi tên ${fmt(matched.length)} vị trí trong lưới tuỳ chỉnh ${khoLabel}.`);
 }
 
 function khoGridPointToCell(container, clientX, clientY, layout){
@@ -6643,6 +6666,12 @@ if(khoGridExpandLeftBtn) khoGridExpandLeftBtn.addEventListener('click', khoGridE
 const khoGridShrinkLeftBtn=document.getElementById('kho-grid-shrink-left');
 if(khoGridShrinkLeftBtn) khoGridShrinkLeftBtn.addEventListener('click', khoGridShrinkLeft);
 
+const khoGridRenameApplyBtn=document.getElementById('kho-grid-rename-apply');
+if(khoGridRenameApplyBtn) khoGridRenameApplyBtn.addEventListener('click',()=>{
+  const find=document.getElementById('kho-grid-rename-find').value;
+  const replace=document.getElementById('kho-grid-rename-replace').value;
+  khoGridBulkRenameLocators(_khoGridActiveKho, find, replace);
+});
 const khoGridResetAllBtn=document.getElementById('kho-grid-reset-all');
 if(khoGridResetAllBtn) khoGridResetAllBtn.addEventListener('click',()=>{
   const kho=_khoGridActiveKho;
