@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.01';
+const APP_VERSION = 'v3.02';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6265,14 +6265,23 @@ document.addEventListener('pointerdown',(e)=>{
   // tiếp theo nữa (vì node gốc đã biến mất khỏi DOM giữa chừng cú bấm) -> cờ _khoGridSuppressClick không
   // bao giờ được set lại về false -> lần bấm KẾ TIẾP bất kỳ đâu trong lưới bị nuốt oan. Hoãn render giúp
   // sự kiện click gốc kịp bắn ra và tự dọn cờ trước khi DOM bị thay.
+  // QUAN TRỌNG (bấm bằng CẢM ỨNG — máy tính bảng/màn hình cảm ứng): gọi preventDefault() ngay ở
+  // pointerdown khiến trình duyệt HUỶ LUÔN sự kiện "click" theo sau — đây là hành vi đặc thù của Pointer
+  // Events, CHỈ xảy ra khi pointerType khác 'mouse' (touch/pen). Trước đây gọi preventDefault() vô điều
+  // kiện nên bấm bằng cảm ứng KHÔNG BAO GIỜ mở được popup chi tiết pallet (bấm bao nhiêu lần cũng vậy),
+  // dù không hề kéo-thả gì cả — .wh3b-box đã có touch-action:none (CSS) lo việc chặn cuộn trang khi kéo
+  // rồi, nên bỏ preventDefault() cho cảm ứng vẫn an toàn, không ảnh hưởng gì tới kéo-thả.
+  const isTouchPointer = e.pointerType === 'touch';
   if(e.ctrlKey || e.metaKey){
-    e.preventDefault(); e.stopPropagation();
+    if(!isTouchPointer) e.preventDefault();
+    e.stopPropagation();
     khoGridToggleSelect(kho, cell.row, cell.col);
     _khoGridSuppressClick = true;
     setTimeout(()=>khoGridRenderCustom(kho), 0);
     return;
   }
-  e.preventDefault(); e.stopPropagation();
+  if(!isTouchPointer) e.preventDefault();
+  e.stopPropagation();
 
   // Nếu ô đang nắm để kéo NẰM TRONG vùng đang chọn (từ 2 ô trở lên) -> kéo CẢ NHÓM cùng lúc, giữ
   // nguyên vị trí tương đối giữa các ô trong nhóm. Ngược lại (kéo 1 ô không thuộc vùng chọn, hoặc
