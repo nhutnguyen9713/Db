@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.83';
+const APP_VERSION = 'v2.84';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13085,7 +13085,8 @@ function txGroupBySetId(records){
 
 // Phân loại 1 giao dịch (1 nhóm Set ID) thành Nhận / Chuyển / Pick cont — DÙNG CHUNG cho cả bảng chi
 // tiết lẫn các bảng tổng hợp, để 2 nơi không bao giờ phân loại lệch nhau. kind = null: không tính
-// (SHIP / dòng không có Menu Name).
+// (SHIP / dòng không có Menu Name / các Menu Name khác không thuộc 3 loại này — VD "Move Pallet",
+// "ITN Receiving" KHÔNG tính vào Chuyển — theo yêu cầu, Chuyển CHỈ tính đúng Menu Name "ITN Transfer").
 function txDescribeSet(group, locatorKhoMap){
   const first = group[0];
   const { transType, menuName, item, user } = first;
@@ -13100,9 +13101,9 @@ function txDescribeSet(group, locatorKhoMap){
   const reference = first.reference || (negRow && negRow.reference) || (posRow && posRow.reference) || '';
   let kind = null, kho = '—';
   if(transType === 'RECEIVE'){ kind = 'receive'; kho = resolveKhoForLocator(locatorDen || first.locator, locatorKhoMap); }
-  else if(!menuName){ kind = null; }
   else if(isPicking){ kind = 'picking'; kho = resolveKhoForLocator(locatorXuat, locatorKhoMap); }
-  else { kind = 'transfer'; kho = resolveKhoForLocator(locatorXuat, locatorKhoMap); }
+  else if(menuName === 'ITN Transfer'){ kind = 'transfer'; kho = resolveKhoForLocator(locatorXuat, locatorKhoMap); }
+  else { kind = null; }
   const crCodes = kind === 'picking' ? (reference.match(/CR\d+/gi) || []).map(c => c.toUpperCase()) : [];
   return { first, transType, menuName, item, user, locatorXuat, locatorDen, dt, qty, reference, kind, kho, crCodes };
 }
@@ -13528,16 +13529,15 @@ const TX_TABLE_DEFS = {
 };
 
 const TX_DEFAULT_KHO_FILTER = '3B';
-const TX_TRANSFER_DEFAULT_MENU = ['ITN Transfer'];
 function txDefaultColFilters(){
   return { khoXuat: new Set([TX_DEFAULT_KHO_FILTER]) };
 }
+// Chuyển (txDescribeSet) giờ CHỈ nhận Menu Name "ITN Transfer" nên bảng Transfer không còn dòng nào
+// khác để lọc theo cột Menu Name — không cần đặt sẵn bộ lọc riêng cho cột này nữa.
 function txApplyDefaultFilters(){
   txColFilters.receive = txDefaultColFilters();
+  txColFilters.transfer = txDefaultColFilters();
   txColFilters.picking = txDefaultColFilters();
-  const transferFilters = txDefaultColFilters();
-  transferFilters.menuName = new Set(TX_TRANSFER_DEFAULT_MENU);
-  txColFilters.transfer = transferFilters;
 }
 const txColFilters = { receive: txDefaultColFilters(), transfer: txDefaultColFilters(), picking: txDefaultColFilters() }; // { kind: { colKey: Set(labels) | undefined } }
 
