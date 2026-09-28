@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.97';
+const APP_VERSION = 'v2.98';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6054,7 +6054,7 @@ function khoGridSetCellTypeUI(isLabel){
   const input = document.getElementById('kho-grid-cell-locator');
   if(hint) hint.textContent = isLabel
     ? 'Nội dung ô tiêu đề (tự đặt tên, KHÔNG cần khớp dữ liệu tồn kho)'
-    : 'Mã Locator (phải gõ ĐÚNG tên có trong dữ liệu tồn kho/WMS)';
+    : 'Mã Locator (phải gõ ĐÚNG tên có trong dữ liệu tồn kho/WMS — phân biệt HOA/thường)';
   if(input) input.placeholder = isLabel
     ? 'VD: KHU RACK A'
     : (_khoGridActiveKho==='Kho 2B'?'D2B-FG-A01':_khoGridActiveKho==='Kho 3A'?'3A-A1-T1':_khoGridActiveKho==='Kho 3B'?'D3B-FG-A01':'DG1-FG-01');
@@ -6677,7 +6677,10 @@ if(khoGridCellSaveBtn) khoGridCellSaveBtn.addEventListener('click',()=>{
   const kho=_khoGridActiveKho,layout=khoGridGetLayout(kho);
   const isLabel=_khoGridCellIsLabel;
   const rawValue=document.getElementById('kho-grid-cell-locator').value.trim();
-  const locator=isLabel?'':rawValue.toUpperCase(); // Locator luôn IN HOA cho khớp dữ liệu; ô tiêu đề giữ nguyên chữ hoa/thường người dùng gõ.
+  // SỬA (yêu cầu — locator phải phân biệt hoa/thường): trước đây tự động IN HOA locator, khiến gõ chữ
+  // thường bị đổi thành hoa ngoài ý muốn. Giữ NGUYÊN VĂN người dùng gõ (giống ô tiêu đề) — nếu locator
+  // thật trong dữ liệu tồn kho/WMS có hoa/thường khác, phải gõ ĐÚNG y hệt mới khớp được.
+  const locator=isLabel?'':rawValue;
   const label=isLabel?rawValue:'';
   const row=Math.round(Number(document.getElementById('kho-grid-cell-row').value));
   const col=Math.round(Number(document.getElementById('kho-grid-cell-col').value));
