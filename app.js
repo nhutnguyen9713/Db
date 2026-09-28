@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.91';
+const APP_VERSION = 'v2.92';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6172,6 +6172,21 @@ function khoGridOpenCellPopover(cellId, prefillRow, prefillCol, khoLabel){
   if(overlay) overlay.classList.add('show');
 }
 
+// Danh sách các Ô ĐÃ ĐẶT (không phải ô "+" trống) đang nằm trong vùng chọn hiện tại (_khoGridSelection)
+// — CHỈ có ý nghĩa khi vùng chọn đó đúng của kho đang xét (_khoGridSelectionKho === khoLabel). Dùng
+// chung logic tra theo (row,col) với Copy/Cắt/Xoá bằng phím tắt (Ctrl+C/X/Delete) ở trên.
+function khoGridSelectedCells(khoLabel){
+  if(_khoGridSelectionKho !== khoLabel || !_khoGridSelection.size) return [];
+  const layout = khoGridGetLayout(khoLabel);
+  const found = [];
+  _khoGridSelection.forEach(posKey => {
+    const [r, c] = posKey.split(',').map(Number);
+    const cell = layout.cells.find(cc => cc.row === r && cc.col === c);
+    if(cell) found.push(cell);
+  });
+  return found;
+}
+
 function khoGridOpenSettings(khoLabel){
   _khoGridActiveKho = khoLabel;
   const layout=khoGridGetLayout(khoLabel);
@@ -6183,23 +6198,36 @@ function khoGridOpenSettings(khoLabel){
   // lại từ lần đổi tên trước (của kho khác hoặc lần trước đó).
   const findEl=document.getElementById('kho-grid-rename-find'), replaceEl=document.getElementById('kho-grid-rename-replace');
   if(findEl) findEl.value=''; if(replaceEl) replaceEl.value='';
+  // Báo ngay số ô đang chọn (phải chọn vùng TRÊN LƯỚI trước khi mở popup này — Ctrl+Click/kéo chuột)
+  // để người dùng biết chắc đang đổi tên đúng vùng nào, tránh đổi lan sang ô khác trùng tên ngoài ý
+  // muốn (VD: lưới có 2 khu vực khác nhau nhưng lỡ đặt trùng tiền tố "-E" ở cả 2 khu).
+  const selInfo=document.getElementById('kho-grid-rename-sel-info');
+  if(selInfo){
+    const n=khoGridSelectedCells(khoLabel).length;
+    selInfo.textContent = n ? `✓ Đang chọn ${n} ô trên lưới — đổi tên sẽ chỉ áp dụng cho đúng ${n} ô này.` : `⚠ Chưa chọn vùng nào — đóng popup này, chọn vùng trên lưới (Ctrl+Click hoặc kéo chuột) rồi mở lại.`;
+    selInfo.style.color = n ? 'var(--teal)' : 'var(--red)';
+  }
   document.getElementById('kho-grid-settings-overlay').classList.add('show');
 }
 
-// Đổi tên hàng loạt: thay 1 đoạn text trong tên Locator của MỌI ô đang khớp (chỉ ô locator thật, bỏ
-// qua ô tiêu đề) — dùng split/join (không dùng RegExp) để thay đúng nguyên văn, không phải diễn giải
-// find như 1 mẫu regex (VD dấu "." trong tên locator không bị hiểu nhầm thành "match bất kỳ ký tự").
+// Đổi tên hàng loạt: thay 1 đoạn text trong tên Locator của các ô ĐANG ĐƯỢC CHỌN trên lưới (chỉ ô
+// locator thật, bỏ qua ô tiêu đề) — BẮT BUỘC phải chọn vùng trước (không áp dụng tràn lan cho MỌI ô
+// khớp trong cả kho như bản đầu, vì lưới có thể có 2 khu vực khác nhau nhưng lỡ trùng 1 đoạn tên, đổi
+// tràn lan sẽ đổi nhầm cả khu không mong muốn). Dùng split/join (không dùng RegExp) để thay đúng
+// nguyên văn, không phải diễn giải find như 1 mẫu regex.
 function khoGridBulkRenameLocators(khoLabel, find, replace){
   if(!find){ alert('Chưa nhập nội dung cần tìm.'); return; }
-  const layout=khoGridGetLayout(khoLabel);
-  const matched=layout.cells.filter(c => !c.isLabel && c.locator && c.locator.includes(find));
-  if(!matched.length){ alert(`Không có vị trí nào đang chứa "${find}" trong lưới tuỳ chỉnh ${khoLabel}.`); return; }
+  const selected = khoGridSelectedCells(khoLabel);
+  if(!selected.length){ alert(`Chưa chọn vùng nào trên lưới ${khoLabel} — hãy đóng popup này, Ctrl+Click từng ô (hoặc kéo chuột vẽ vùng chọn) trên lưới, rồi mở lại "Cài đặt lưới".`); return; }
+  const matched=selected.filter(c => !c.isLabel && c.locator && c.locator.includes(find));
+  if(!matched.length){ alert(`Không có ô nào trong ${selected.length} ô đang chọn đang chứa "${find}".`); return; }
   const sample=matched.slice(0,3).map(c => `${c.locator} → ${c.locator.split(find).join(replace)}`).join('\n');
   if(!confirm(
-    `Đổi tên ${matched.length} vị trí trong lưới tuỳ chỉnh ${khoLabel}?\n\n${sample}${matched.length>3?'\n…':''}\n\n` +
+    `Đổi tên ${matched.length} vị trí ĐANG CHỌN trong lưới tuỳ chỉnh ${khoLabel}?\n\n${sample}${matched.length>3?'\n…':''}\n\n` +
     `LƯU Ý: chỉ đổi tên hiển thị trên lưới — nếu tên mới không khớp locator thật trong dữ liệu tồn kho/WMS, ô đó sẽ hiện 0 pallet.`
   )) return;
   matched.forEach(c => { c.locator = c.locator.split(find).join(replace); });
+  khoGridClearSelection();
   khoGridSave();
   khoGridRenderCustom(khoLabel);
   if(typeof showAppToast === 'function') showAppToast(`✓ Đã đổi tên ${fmt(matched.length)} vị trí trong lưới tuỳ chỉnh ${khoLabel}.`);

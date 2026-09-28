@@ -1860,7 +1860,8 @@ function gateBustedUrl(base){
         <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-shrink-left" style="flex:1;">⬅️ −1 cột trái</button>
       </div>
 
-      <div class="ps-note" style="margin:14px 0 8px;">Đổi tên hàng loạt — thay 1 đoạn text trong tên Locator của TẤT CẢ vị trí đang khớp (VD: đổi cả dãy "E" thành "F": Tìm "-E", Thay bằng "-F"). Không đụng tới ô tiêu đề.</div>
+      <div class="ps-note" style="margin:14px 0 8px;">Đổi tên hàng loạt — CHỌN VÙNG cần đổi trên lưới trước (Ctrl+Click từng ô hoặc kéo chuột vẽ vùng chọn), rồi mới mở popup này: chỉ đổi tên các ô trong đúng vùng đã chọn (VD: chọn cả dãy "E", Tìm "-E", Thay bằng "-F"). Không đụng tới ô tiêu đề hay ô ngoài vùng chọn.</div>
+      <div class="ps-note" id="kho-grid-rename-sel-info" style="margin-bottom:8px; font-weight:700;"></div>
       <div style="display:flex; gap:10px; margin-bottom:10px;">
         <label style="flex:1; font-size:12px; color:var(--muted-2);">Tìm
           <input type="text" id="kho-grid-rename-find" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px; font-family:var(--mono);" placeholder="-E">
