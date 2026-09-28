@@ -1495,16 +1495,17 @@ function gateBustedUrl(base){
           <div class="kho-modal-toolbar" style="padding:0 0 10px;">
             <input type="text" class="kho-search" id="tx-xtc-transfer-search" placeholder="Tìm theo Item, Locator, Chuyến…">
             <div class="kho-summary" id="tx-xtc-transfer-summary">—</div>
+            <button type="button" class="tx-filter-clear-link" id="tx-xtc-transfer-clear-filters">Xoá bộ lọc cột</button>
           </div>
           <div class="kho-modal-body" style="padding:0; max-height:420px; overflow:auto;">
             <table class="kho-detail-table" id="tx-xtc-transfer-table">
               <thead>
                 <tr>
-                  <th>Item</th>
-                  <th>Locator đến</th>
+                  <th data-key="item">Item</th>
+                  <th data-key="locator">Locator đến</th>
                   <th>Chuyến</th>
                   <th>Reference</th>
-                  <th>User Name</th>
+                  <th data-key="user">User Name</th>
                   <th style="text-align:right">SL</th>
                   <th class="tx-total-col" style="text-align:right">Total</th>
                 </tr>
@@ -1520,16 +1521,17 @@ function gateBustedUrl(base){
           <div class="kho-modal-toolbar" style="padding:0 0 10px;">
             <input type="text" class="kho-search" id="tx-xtc-receiving-search" placeholder="Tìm theo Item, Locator, Chuyến…">
             <div class="kho-summary" id="tx-xtc-receiving-summary">—</div>
+            <button type="button" class="tx-filter-clear-link" id="tx-xtc-receiving-clear-filters">Xoá bộ lọc cột</button>
           </div>
           <div class="kho-modal-body" style="padding:0; max-height:420px; overflow:auto;">
             <table class="kho-detail-table" id="tx-xtc-receiving-table">
               <thead>
                 <tr>
-                  <th>Item</th>
-                  <th>Locator đến</th>
+                  <th data-key="item">Item</th>
+                  <th data-key="locator">Locator đến</th>
                   <th>Chuyến</th>
                   <th>Reference</th>
-                  <th>User Name</th>
+                  <th data-key="user">User Name</th>
                   <th style="text-align:right">SL</th>
                   <th class="tx-total-col" style="text-align:right">Total</th>
                 </tr>

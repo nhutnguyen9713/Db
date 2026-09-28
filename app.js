@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.02';
+const APP_VERSION = 'v3.03';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13579,7 +13579,11 @@ function txFilterRows(rows, query){
 const TX_TABLE_DEFS = {
   receive: { cols: ['khoXuat','transType','item','locator','user'], tbody:'tx-receive-tbody', tfoot:'tx-receive-tfoot', empty:'tx-receive-empty', search:'tx-receive-search', summary:'tx-receive-summary', table:'tx-receive-table', label:'dòng Receive', clearBtn:'tx-receive-clear-filters' },
   transfer: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty','chuyen'], tbody:'tx-transfer-tbody', tfoot:'tx-transfer-tfoot', empty:'tx-transfer-empty', search:'tx-transfer-search', summary:'tx-transfer-summary', table:'tx-transfer-table', label:'nhóm Transfer', clearBtn:'tx-transfer-clear-filters' },
-  picking: { cols: ['khoXuat','locatorDen','item','user','reference','contCount'], tbody:'tx-picking-tbody', tfoot:'tx-picking-tfoot', empty:'tx-picking-empty', search:'tx-picking-search', summary:'tx-picking-summary', table:'tx-picking-table', label:'nhóm Picking', clearBtn:'tx-picking-clear-filters' }
+  picking: { cols: ['khoXuat','locatorDen','item','user','reference','contCount'], tbody:'tx-picking-tbody', tfoot:'tx-picking-tfoot', empty:'tx-picking-empty', search:'tx-picking-search', summary:'tx-picking-summary', table:'tx-picking-table', label:'nhóm Picking', clearBtn:'tx-picking-clear-filters' },
+  // 2 bảng "Xe Trung Chuyển" — chỉ cần đủ field mà txUpdateFilterIcons()/nút Xoá bộ lọc cần, phần vẽ
+  // bảng thật vẫn dùng riêng renderXeTrungChuyenTable() (khác cấu trúc renderTxTable ở 3 kind trên).
+  itnTransferGroups: { table:'tx-xtc-transfer-table', clearBtn:'tx-xtc-transfer-clear-filters' },
+  itnReceivingGroups: { table:'tx-xtc-receiving-table', clearBtn:'tx-xtc-receiving-clear-filters' }
 };
 
 // Không còn đặt sẵn bộ lọc mặc định nào cho bảng chi tiết (trước đây mặc định lọc sẵn Kho = 3B) —
@@ -13591,8 +13595,21 @@ function txApplyDefaultFilters(){
   txColFilters.receive = txDefaultColFilters();
   txColFilters.transfer = txDefaultColFilters();
   txColFilters.picking = txDefaultColFilters();
+  txColFilters.itnTransferGroups = txDefaultColFilters();
+  txColFilters.itnReceivingGroups = txDefaultColFilters();
 }
-const txColFilters = { receive: txDefaultColFilters(), transfer: txDefaultColFilters(), picking: txDefaultColFilters() }; // { kind: { colKey: Set(labels) | undefined } }
+const txColFilters = {
+  receive: txDefaultColFilters(), transfer: txDefaultColFilters(), picking: txDefaultColFilters(),
+  itnTransferGroups: txDefaultColFilters(), itnReceivingGroups: txDefaultColFilters()
+}; // { kind: { colKey: Set(labels) | undefined } }
+// Vẽ lại đúng bảng theo kind — renderTxTable() chỉ hiểu 3 kind gốc (receive/transfer/picking), 2 bảng
+// "Xe Trung Chuyển" dùng renderXeTrungChuyenTable() riêng — dropdown lọc cột (dùng chung cho cả 5 kind)
+// cần điểm gọi lại DUY NHẤT này sau khi Áp dụng/Xoá lọc, không quan tâm bảng nào đứng sau kind nào.
+function txRenderKind(kind){
+  if(kind === 'itnTransferGroups') renderXeTrungChuyenTable('itnTransferGroups', 'tx-xtc-transfer');
+  else if(kind === 'itnReceivingGroups') renderXeTrungChuyenTable('itnReceivingGroups', 'tx-xtc-receiving');
+  else renderTxTable(kind);
+}
 
 function txColValueLabel(v){
   return (v===undefined || v===null || v==='') ? '(trống)' : String(v);
@@ -13654,6 +13671,12 @@ function renderTxTable(kind){
   const grandContSet = new Set();
   rows.forEach(r => (r.contCodes || []).forEach(c => grandContSet.add(c)));
   const grandContCount = grandContSet.size;
+  // Số CHUYẾN khác nhau trên toàn bộ các dòng đang hiển thị — cùng lý do với grandContCount phía trên:
+  // 1 chuyến thường xuất hiện ở NHIỀU dòng (nhiều Item/Locator khác nhau trong cùng 1 chuyến), đếm số
+  // dòng không phản ánh đúng số chuyến thật.
+  const grandChuyenSet = new Set();
+  rows.forEach(r => { if(r.chuyen) grandChuyenSet.add(r.chuyen); });
+  const grandChuyenCount = grandChuyenSet.size;
   tbody.innerHTML = rows.map(r => {
     const tds = def.cols.map(c => {
       if(c === 'qty') return `<td class="num">${(r.qty===undefined||r.qty===null) ? '—' : fmt(r.qty)}</td>`;
@@ -13676,6 +13699,7 @@ function renderTxTable(kind){
     const footTds = def.cols.slice(1).map(c => {
       if(c === 'qty') return `<td class="num">${fmt(grandQty)}</td>`;
       if(c === 'contCount') return `<td class="num">${fmt(grandContCount)}</td>`;
+      if(c === 'chuyen') return `<td class="num">${fmt(grandChuyenCount)} chuyến</td>`;
       return '<td></td>';
     }).join('');
     const footCheckTd = kind === 'transfer' ? '<td></td>' : '';
@@ -13878,15 +13902,14 @@ function renderXeTrungChuyenTable(stateKey, prefix){
     return;
   }
   const query = searchEl ? searchEl.value : '';
-  let rows = allRows;
-  if(query){
-    const q = removeDiacritics(query.toLowerCase().trim());
-    rows = rows.filter(r => Object.values(r).some(v => removeDiacritics(String(v===null||v===undefined?'':v).toLowerCase()).includes(q)));
-  }
+  const rows = txApplyFilters(stateKey, allRows, query);
+  txUpdateFilterIcons(stateKey);
+  const clearBtn = document.getElementById(`${prefix}-clear-filters`);
+  if(clearBtn) clearBtn.style.display = txAnyColumnFilterActive(stateKey) ? 'inline' : 'none';
   if(!rows.length){
     tbody.innerHTML = '';
     if(emptyEl) emptyEl.style.display = 'block';
-    if(summaryEl) summaryEl.textContent = allRows.length ? 'Không có dòng nào khớp tìm kiếm' : 'Chưa có dữ liệu';
+    if(summaryEl) summaryEl.textContent = allRows.length ? 'Không có dòng nào khớp bộ lọc / tìm kiếm' : 'Chưa có dữ liệu';
     return;
   }
   if(emptyEl) emptyEl.style.display = 'none';
@@ -13915,8 +13938,11 @@ function renderXeTrungChuyenTable(stateKey, prefix){
   });
 });
 
-// Sắp xếp khi click vào tiêu đề cột + gắn nút lọc cột (filter theo giá trị, kiểu Excel)
-Object.keys(TX_TABLE_DEFS).forEach(kind => {
+// Sắp xếp khi click vào tiêu đề cột + gắn nút lọc cột (filter theo giá trị, kiểu Excel) — chỉ áp dụng
+// cho 3 kind có renderTxTable() thật (nhận diện qua field "cols"); itnTransferGroups/itnReceivingGroups
+// (2 bảng Xe Trung Chuyển) dùng renderXeTrungChuyenTable() khác cấu trúc, KHÔNG hỗ trợ sắp xếp — chỉ
+// gắn nút lọc riêng ở khối bên dưới, không lẫn vào khối này (tránh txSort[kind] undefined khi bấm).
+Object.keys(TX_TABLE_DEFS).filter(k => TX_TABLE_DEFS[k].cols).forEach(kind => {
   const def = TX_TABLE_DEFS[kind];
   const tableEl = document.getElementById(def.table);
   if(!tableEl) return;
@@ -13957,6 +13983,39 @@ Object.keys(TX_TABLE_DEFS).forEach(kind => {
     clearBtn.addEventListener('click', () => {
       txColFilters[kind] = {};
       renderTxTable(kind);
+    });
+  }
+});
+
+// Gắn nút lọc cột (kiểu Excel, dùng chung txToggleColumnFilterDropdown) cho 2 bảng "Xe Trung Chuyển" —
+// CHỈ nút lọc, không gắn sắp xếp theo cột (renderXeTrungChuyenTable() không hỗ trợ, xem giải thích ở
+// khối forEach ngay phía trên).
+['itnTransferGroups', 'itnReceivingGroups'].forEach(kind => {
+  const def = TX_TABLE_DEFS[kind];
+  const tableEl = document.getElementById(def.table);
+  if(!tableEl) return;
+  tableEl.querySelectorAll('thead th[data-key]').forEach(th => {
+    const key = th.dataset.key;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'th-filter-btn';
+    btn.dataset.kind = kind;
+    btn.dataset.col = key;
+    btn.title = 'Lọc theo giá trị';
+    btn.style.cssText = 'margin-left:6px; border:none; background:none; cursor:pointer; color:inherit; opacity:0.55; vertical-align:middle; padding:2px;';
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg>';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      txToggleColumnFilterDropdown(kind, key, btn);
+    });
+    th.appendChild(btn);
+  });
+  const clearBtn = document.getElementById(def.clearBtn);
+  if(clearBtn){
+    clearBtn.style.display = 'none';
+    clearBtn.addEventListener('click', () => {
+      txColFilters[kind] = {};
+      txRenderKind(kind);
     });
   }
 });
@@ -14053,12 +14112,12 @@ function txToggleColumnFilterDropdown(kind, col, btn){
       txColFilters[kind][col] = new Set(checked);
     }
     txCloseFilterDropdown();
-    renderTxTable(kind);
+    txRenderKind(kind);
   });
   panel.querySelector('.tx-filter-reset').addEventListener('click', () => {
     delete txColFilters[kind][col];
     txCloseFilterDropdown();
-    renderTxTable(kind);
+    txRenderKind(kind);
   });
 }
 
