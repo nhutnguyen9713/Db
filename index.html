@@ -1144,7 +1144,6 @@ function gateBustedUrl(base){
           <div class="sub">Số pallet hiện có tại từng vị trí (locator) của Kho 3B — mỗi dòng GI No. trong dữ liệu tồn kho tính là 1 pallet. Sức chứa chuẩn mỗi vị trí: 26 pallet — số hiển thị là số pallet thực tế, thanh fill và màu sắc tính theo mức tối đa 26 (vượt quá vẫn tô đỏ/đầy như mức 26).</div>
           <div class="wh3b-summary" id="wh3b-summary"></div>
           <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
-            <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-mode-toggle" title="Chuyển giữa sơ đồ mặc định và lưới tự sắp xếp theo đúng vị trí thật ngoài kho">🔲 Grid tuỳ chỉnh</button>
             <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
             <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-copy-btn" style="display:none;" title="Tự động thêm toàn bộ vị trí còn thiếu (theo đúng sơ đồ mặc định) vào các ô trống của grid tuỳ chỉnh">📋 Copy từ sơ đồ mặc định</button>
             <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-heatmap-toggle" title="Đổi cách tô màu vị trí: Tắt (4 mức mặc định) / Mật độ lấp đầy / Tỉ lệ PASS-NG">🌡️ Heatmap: Tắt</button>
@@ -1182,7 +1181,6 @@ function gateBustedUrl(base){
           <h1 style="font-size:19px;">Sơ đồ 3A</h1>
           <div class="wh3b-summary" id="rack3a-summary"></div>
           <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
-            <button type="button" class="wh3b-grid-mode-btn" id="rack3a-grid-mode-toggle" title="Chuyển giữa sơ đồ mặc định và grid tuỳ chỉnh">🔲 Grid tuỳ chỉnh</button>
             <button type="button" class="wh3b-grid-mode-btn" id="rack3a-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
             <button type="button" class="wh3b-grid-mode-btn" id="rack3a-grid-copy-btn" style="display:none;" title="Tự động thêm toàn bộ vị trí còn thiếu (theo đúng sơ đồ mặc định) vào các ô trống của grid tuỳ chỉnh">📋 Copy từ sơ đồ mặc định</button>
             <button type="button" class="wh3b-grid-mode-btn" id="rack3a-heatmap-toggle" title="Đổi cách tô màu vị trí: Tắt (4 mức mặc định) / Mật độ lấp đầy / Tỉ lệ PASS-NG">🌡️ Heatmap: Tắt</button>
@@ -1221,7 +1219,6 @@ function gateBustedUrl(base){
           <h1 style="font-size:19px;">Sơ đồ 2B</h1>
           <div class="wh3b-summary" id="sodo2b-summary"></div>
           <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
-            <button type="button" class="wh3b-grid-mode-btn" id="sodo2b-grid-mode-toggle" title="Chuyển giữa sơ đồ mặc định và grid tuỳ chỉnh">🔲 Grid tuỳ chỉnh</button>
             <button type="button" class="wh3b-grid-mode-btn" id="sodo2b-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
             <button type="button" class="wh3b-grid-mode-btn" id="sodo2b-grid-copy-btn" style="display:none;" title="Tự động thêm toàn bộ vị trí còn thiếu (theo đúng sơ đồ mặc định) vào các ô trống của grid tuỳ chỉnh">📋 Copy từ sơ đồ mặc định</button>
             <button type="button" class="wh3b-grid-mode-btn" id="sodo2b-heatmap-toggle" title="Đổi cách tô màu vị trí: Tắt (4 mức mặc định) / Mật độ lấp đầy / Tỉ lệ PASS-NG">🌡️ Heatmap: Tắt</button>
@@ -1250,6 +1247,44 @@ function gateBustedUrl(base){
         <div class="wh3b-drag-hint" id="sodo2b-drag-hint" style="display:none;">↔ Kéo locator để sắp xếp theo đúng vị trí thực tế. Khi di chuyển, ô sẽ tự tìm vị trí gần nhất và không cho chồng lên ô khác.</div>
         <div class="wh3b-custom-grid" id="sodo2b-custom-grid" style="display:none;"></div>
         <div id="sodo2b-detail"></div>
+      </div>
+    </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="dg1-panel" style="margin-top:16px;">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div style="width:100%;">
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--amber); box-shadow:0 0 8px var(--amber);"></span>SƠ ĐỒ KHO</div>
+          <h1 style="font-size:19px;">Sơ đồ DG1</h1>
+          <div class="sub">Kho DG1 chưa có sơ đồ mặc định — tự thêm từng vị trí (locator) vào lưới tuỳ chỉnh bằng nút "+".</div>
+          <div class="wh3b-summary" id="dg1-summary"></div>
+          <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
+            <button type="button" class="wh3b-grid-mode-btn" id="dg1-grid-settings-btn" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="dg1-heatmap-toggle" title="Đổi cách tô màu vị trí: Tắt (4 mức mặc định) / Mật độ lấp đầy / Tỉ lệ PASS-NG">🌡️ Heatmap: Tắt</button>
+          </div>
+        </div>
+        <span class="cc-collapse-chevron">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </span>
+      </div>
+      <div class="cc-collapse-body">
+        <div class="wh3b-search-row">
+          <textarea class="wh3b-search-input" id="dg1-search" rows="1" placeholder="Tìm theo Item No., Cust PO, Locator… (mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng — trong cùng 1 dòng, cách nhau bằng khoảng trắng để kết hợp nhiều điều kiện)"></textarea>
+          <div class="wh3b-oqc-toggle">
+            <label><input type="checkbox" id="dg1-oqc-pass" checked> PASS</label>
+            <label><input type="checkbox" id="dg1-oqc-ng" checked> NG</label>
+          </div>
+        </div>
+        <div class="wh3b-legend" id="dg1-legend">
+          <span><i style="background:var(--muted-2)"></i>Trống (0 pallet)</span>
+          <span><i style="background:var(--teal)"></i>Thấp (&lt; 50%)</span>
+          <span><i style="background:var(--amber-bright)"></i>Vừa (50–79%)</span>
+          <span><i style="background:var(--red)"></i>Đầy / gần đầy (≥ 80%)</span>
+        </div>
+        <div class="wh3b-grid" id="dg1-grid" style="display:none;"></div>
+        <div class="wh3b-custom-grid-note" id="dg1-custom-grid-note">Đang dùng grid tuỳ chỉnh — kéo trực tiếp locator để di chuyển, bấm ⚙ để sửa, bấm "+" để thêm vị trí.</div>
+        <div class="wh3b-drag-hint" id="dg1-drag-hint">↔ Kéo locator để sắp xếp theo đúng vị trí thực tế. Khi di chuyển, ô sẽ tự tìm vị trí gần nhất và không cho chồng lên ô khác.</div>
+        <div class="wh3b-custom-grid" id="dg1-custom-grid"></div>
+        <div id="dg1-detail"></div>
       </div>
     </div>
 

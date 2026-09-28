@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.88';
+const APP_VERSION = 'v2.89';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5875,7 +5875,7 @@ function txTransferRowKey(r){
   return [r.khoXuat, r.menuName, r.item, r.locatorXuat, r.locatorDen, r.user].map(v => String(v==null?'':v)).join('||');
 }
 let sodo3bGridMode = false;
-const khoCustomGridMode = { 'Kho 3B': false, 'Kho 3A': false, 'Kho 2B': false };
+const khoCustomGridMode = { 'Kho 3B': false, 'Kho 3A': false, 'Kho 2B': false, 'Kho DG1': false };
 let _localKhoGridDirty = false;
 let _khoGridEditingCellId = null;
 let _khoGridActiveKho = 'Kho 3B';
@@ -5920,7 +5920,7 @@ function khoGridSelectionAnchor(){
 const KHO_CUSTOM_GRID_CONFIG = {
   'Kho 3B': {
     defaultRows:5, defaultCols:5, defaultMax:WH3B_MAX_PALLET,
-    modeBtn:'sodo3b-grid-mode-toggle', settingsBtn:'sodo3b-grid-settings-btn', copyBtn:'sodo3b-grid-copy-btn',
+    settingsBtn:'sodo3b-grid-settings-btn', copyBtn:'sodo3b-grid-copy-btn',
     heatmapBtn:'sodo3b-heatmap-toggle', legend:'sodo3b-legend',
     defaultGrid:'sodo3b-grid', customGrid:'sodo3b-custom-grid', note:'sodo3b-custom-grid-note', hint:null,
     search:'sodo3b-search', pass:'sodo3b-oqc-pass', ng:'sodo3b-oqc-ng', detail:'sodo3b-detail',
@@ -5928,7 +5928,7 @@ const KHO_CUSTOM_GRID_CONFIG = {
   },
   'Kho 3A': {
     defaultRows:10, defaultCols:10, defaultMax:2,
-    modeBtn:'rack3a-grid-mode-toggle', settingsBtn:'rack3a-grid-settings-btn', copyBtn:'rack3a-grid-copy-btn',
+    settingsBtn:'rack3a-grid-settings-btn', copyBtn:'rack3a-grid-copy-btn',
     heatmapBtn:'rack3a-heatmap-toggle', legend:'rack3a-legend',
     defaultGrid:'rack3a-grid', customGrid:'rack3a-custom-grid', note:'rack3a-custom-grid-note', hint:'rack3a-drag-hint',
     search:'rack3a-search', pass:'rack3a-oqc-pass', ng:'rack3a-oqc-ng', detail:'rack3a-detail',
@@ -5936,11 +5936,22 @@ const KHO_CUSTOM_GRID_CONFIG = {
   },
   'Kho 2B': {
     defaultRows:10, defaultCols:10, defaultMax:24,
-    modeBtn:'sodo2b-grid-mode-toggle', settingsBtn:'sodo2b-grid-settings-btn', copyBtn:'sodo2b-grid-copy-btn',
+    settingsBtn:'sodo2b-grid-settings-btn', copyBtn:'sodo2b-grid-copy-btn',
     heatmapBtn:'sodo2b-heatmap-toggle', legend:'sodo2b-legend',
     defaultGrid:'sodo2b-grid', customGrid:'sodo2b-custom-grid', note:'sodo2b-custom-grid-note', hint:'sodo2b-drag-hint',
     search:'sodo2b-search', pass:'sodo2b-oqc-pass', ng:'sodo2b-oqc-ng', detail:'sodo2b-detail',
     compute:computeSodo2bByLocator
+  },
+  // Chưa có sơ đồ mặc định (chưa rõ bố cục thật ngoài kho) nên copyBtn trỏ tới 1 id KHÔNG tồn tại
+  // trong HTML (không có nút "Copy từ sơ đồ mặc định" cho DG1) — mọi chỗ dùng cfg.copyBtn đều tự
+  // kiểm tra null nên an toàn, chỉ đơn giản là nút đó sẽ không hiện ra.
+  'Kho DG1': {
+    defaultRows:6, defaultCols:6, defaultMax:24, // = DG1_MAX_PALLET (hằng số khai báo SAU nên phải ghi số trực tiếp ở đây, tránh lỗi TDZ)
+    settingsBtn:'dg1-grid-settings-btn', copyBtn:'dg1-grid-copy-btn',
+    heatmapBtn:'dg1-heatmap-toggle', legend:'dg1-legend',
+    defaultGrid:'dg1-grid', customGrid:'dg1-custom-grid', note:'dg1-custom-grid-note', hint:'dg1-drag-hint',
+    search:'dg1-search', pass:'dg1-oqc-pass', ng:'dg1-oqc-ng', detail:'dg1-detail',
+    compute:computeDG1ByLocator
   }
 };
 
@@ -6021,6 +6032,27 @@ function computeSodo2bByLocator(){
   return map;
 }
 
+// Kho DG1 chưa có sơ đồ mặc định (chưa rõ bố cục thật ngoài kho) nên KHÔNG có danh sách locator cố
+// định như B2_LOCATORS — chỉ liệt kê đúng những locator ĐANG có tồn kho thật (khớp Kho DG1 qua
+// classifyKho(), xem guessKhoFromLocatorPrefix()). Người dùng tự thêm từng vị trí vào Grid tuỳ chỉnh.
+const DG1_MAX_PALLET = 24;
+let _dg1ByLocatorCache = null, _dg1ByLocatorForData = null;
+function computeDG1ByLocator(){
+  if(_dg1ByLocatorForData === currentData && _dg1ByLocatorCache) return _dg1ByLocatorCache;
+  const map = {};
+  if(currentData){
+    for(const row of getRawRows(currentData)){
+      if(row[RAW_KEY_IDX.kho] !== 'Kho DG1') continue;
+      const locator = String(row[RAW_KEY_IDX.locator] || '').trim();
+      if(!locator) continue;
+      (map[locator] || (map[locator] = [])).push(row);
+    }
+  }
+  _dg1ByLocatorCache = map;
+  _dg1ByLocatorForData = currentData;
+  return map;
+}
+
 function khoGridGetLayout(khoLabel){
   const cfg = KHO_CUSTOM_GRID_CONFIG[khoLabel] || KHO_CUSTOM_GRID_CONFIG['Kho 3B'];
   if(!khoGridLayouts[khoLabel]) khoGridLayouts[khoLabel] = { rows:cfg.defaultRows, cols:cfg.defaultCols, cells:[] };
@@ -6050,6 +6082,7 @@ function khoGridRectOverlaps(occupied,row,col,rowSpan,colSpan){
 function khoGridBaseCapacity(khoLabel, loc){
   if(khoLabel === 'Kho 3B') return WH3B_MAX_PALLET;
   if(khoLabel === 'Kho 3A') return RACK3A_MAX_PALLET;
+  if(khoLabel === 'Kho DG1') return DG1_MAX_PALLET;
   return B2_CAPACITY_MAP[loc] || 24;
 }
 function khoGridConfigFor(khoLabel){ return KHO_CUSTOM_GRID_CONFIG[khoLabel] || KHO_CUSTOM_GRID_CONFIG['Kho 3B']; }
@@ -6124,19 +6157,19 @@ function khoGridRenderCustom(khoLabel){
   whApplySearchFilter(cfg.customGrid, cfg.compute, cfg.search, cfg.pass, cfg.ng, cfg.detail);
 }
 
+// enabled luôn được gọi với true (đã bỏ hẳn "Sơ đồ mặc định", chỉ còn duy nhất Grid tuỳ chỉnh) —
+// tham số vẫn giữ lại (không hardcode) để hàm còn dùng chung được logic ẩn/hiện DOM bên dưới.
 function khoGridSetMode(khoLabel, enabled){
   const cfg = khoGridConfigFor(khoLabel);
   if(khoLabel === 'Kho 3B') sodo3bGridMode = !!enabled;
   else khoCustomGridMode[khoLabel] = !!enabled;
   const mode = !!enabled;
-  const modeBtn = document.getElementById(cfg.modeBtn);
   const defaultGrid = document.getElementById(cfg.defaultGrid);
   const customGrid = document.getElementById(cfg.customGrid);
   const note = document.getElementById(cfg.note);
   const settings = document.getElementById(cfg.settingsBtn);
   const copyBtn = document.getElementById(cfg.copyBtn);
   const hint = cfg.hint ? document.getElementById(cfg.hint) : null;
-  if(modeBtn) modeBtn.textContent = mode ? '📋 Sơ đồ mặc định' : '🔲 Grid tuỳ chỉnh';
   if(defaultGrid) defaultGrid.style.display = mode ? 'none' : '';
   if(customGrid) customGrid.style.display = mode ? 'grid' : 'none';
   if(note) note.style.display = mode ? '' : 'none';
@@ -6164,7 +6197,7 @@ function khoGridSetCellTypeUI(isLabel){
     : 'Mã Locator (phải gõ ĐÚNG tên có trong dữ liệu tồn kho/WMS)';
   if(input) input.placeholder = isLabel
     ? 'VD: KHU RACK A'
-    : (_khoGridActiveKho==='Kho 2B'?'D2B-FG-A01':_khoGridActiveKho==='Kho 3A'?'3A-A1-T1':'D3B-FG-A01');
+    : (_khoGridActiveKho==='Kho 2B'?'D2B-FG-A01':_khoGridActiveKho==='Kho 3A'?'3A-A1-T1':_khoGridActiveKho==='Kho 3B'?'D3B-FG-A01':'DG1-FG-01');
 }
 const khoGridCellTypeLocatorBtn=document.getElementById('kho-grid-cell-type-locator');
 if(khoGridCellTypeLocatorBtn) khoGridCellTypeLocatorBtn.addEventListener('click',()=>khoGridSetCellTypeUI(false));
@@ -6458,11 +6491,9 @@ function khoGridEndMarquee(){
 document.addEventListener('pointerup',khoGridEndMarquee);
 document.addEventListener('pointercancel',khoGridEndMarquee);
 
-// Điều khiển chung cho 3B / 3A / 2B.
+// Điều khiển chung cho 3B / 3A / 2B / DG1.
 document.addEventListener('click',(e)=>{
   for(const [kho,cfg] of Object.entries(KHO_CUSTOM_GRID_CONFIG)){
-    const modeBtn=e.target.closest('#'+cfg.modeBtn);
-    if(modeBtn){e.stopImmediatePropagation();khoGridSetMode(kho,!khoGridIsCustomMode(kho));return;}
     const settingsBtn=e.target.closest('#'+cfg.settingsBtn);
     if(settingsBtn){e.stopImmediatePropagation();khoGridOpenSettings(kho);return;}
     const copyBtn=e.target.closest('#'+cfg.copyBtn);
@@ -6921,12 +6952,17 @@ function whApplySearchFilter(gridId, computeFn, searchInputId, passChkId, ngChkI
     </div>`;
 }
 
-['sodo3b', 'rack3a', 'sodo2b'].forEach(prefix => {
+const WH_PREFIX_TO_KHO = { sodo3b:'Kho 3B', rack3a:'Kho 3A', sodo2b:'Kho 2B', dg1:'Kho DG1' };
+['sodo3b', 'rack3a', 'sodo2b', 'dg1'].forEach(prefix => {
   const detailId = prefix + '-detail';
-  const computeFn = prefix === 'sodo3b' ? computeSodo3bByLocator : computeRack3AByLocator;
+  const khoForPrefix = WH_PREFIX_TO_KHO[prefix];
+  const cfgForPrefix = KHO_CUSTOM_GRID_CONFIG[khoForPrefix];
+  // SỬA: trước đây prefix "sodo2b" bị gán nhầm computeFn của Rack 3A (computeRack3AByLocator) thay vì
+  // computeSodo2bByLocator — khiến tìm kiếm/lọc trên Sơ đồ 2B tra sai dữ liệu locator (luôn không
+  // khớp, vì locator 2B không có trong map của 3A). Nay lấy đúng compute theo từng kho từ chính
+  // KHO_CUSTOM_GRID_CONFIG — cũng là nguồn dữ liệu DUY NHẤT, không lặp lại ternary dễ gõ sai như cũ.
+  const computeFn = cfgForPrefix.compute;
   const apply = () => {
-    const khoForPrefix = prefix === 'sodo3b' ? 'Kho 3B' : (prefix === 'rack3a' ? 'Kho 3A' : 'Kho 2B');
-    const cfgForPrefix = KHO_CUSTOM_GRID_CONFIG[khoForPrefix];
     const gridId = khoGridIsCustomMode(khoForPrefix) ? cfgForPrefix.customGrid : cfgForPrefix.defaultGrid;
     whApplySearchFilter(gridId, computeFn, prefix + '-search', prefix + '-oqc-pass', prefix + '-oqc-ng', detailId);
   };
@@ -6942,12 +6978,11 @@ function renderSodo3B(){
   renderSodo3bBlocks();
   renderWhGrid('rack3a-grid');
   renderWhGrid('sodo2b-grid');
-  if(khoGridIsCustomMode('Kho 3B')) khoGridRenderCustom('Kho 3B');
-  else whApplySearchFilter('sodo3b-grid', computeSodo3bByLocator, 'sodo3b-search', 'sodo3b-oqc-pass', 'sodo3b-oqc-ng', 'sodo3b-detail');
-  if(khoGridIsCustomMode('Kho 3A')) khoGridRenderCustom('Kho 3A');
-  else whApplySearchFilter('rack3a-grid', computeRack3AByLocator, 'rack3a-search', 'rack3a-oqc-pass', 'rack3a-oqc-ng', 'rack3a-detail');
-  if(khoGridIsCustomMode('Kho 2B')) khoGridRenderCustom('Kho 2B');
-  else whApplySearchFilter('sodo2b-grid', computeSodo2bByLocator, 'sodo2b-search', 'sodo2b-oqc-pass', 'sodo2b-oqc-ng', 'sodo2b-detail');
+  renderWhGrid('dg1-grid');
+  // Chỉ còn duy nhất chế độ Grid tuỳ chỉnh (đã bỏ hẳn "Sơ đồ mặc định") — khoGridSetMode() tự ẩn sơ đồ
+  // mặc định/hiện grid tuỳ chỉnh + vẽ lại từ khoGridLayouts, gọi lại mỗi lần render an toàn dù dữ liệu
+  // tải xong không theo thứ tự cố định (Cloud/localStorage).
+  Object.keys(KHO_CUSTOM_GRID_CONFIG).forEach(kho => khoGridSetMode(kho, true));
 }
 
 WH_GRID_CONFIGS['sodo3b-grid'] = {
@@ -6966,9 +7001,15 @@ WH_GRID_CONFIGS['sodo2b-grid'] = {
   computeFn:computeSodo2bByLocator, sortFn:(loc)=>[String(loc||'')], maxPallet:24,
   emptyMsg:'Không có dữ liệu tồn kho cho Kho 2B.', groupLabelFn:null
 };
+WH_GRID_CONFIGS['dg1-grid'] = {
+  detailId:'dg1-detail', summaryId:'dg1-summary',
+  computeFn:computeDG1ByLocator, sortFn:(loc)=>[String(loc||'')], maxPallet:DG1_MAX_PALLET,
+  emptyMsg:'Không có dữ liệu tồn kho cho Kho DG1.', groupLabelFn:null
+};
 WH_GRID_CONFIGS['sodo3b-custom-grid'] = {detailId:'sodo3b-detail',computeFn:computeSodo3bByLocator};
 WH_GRID_CONFIGS['rack3a-custom-grid'] = {detailId:'rack3a-detail',computeFn:computeRack3AByLocator};
 WH_GRID_CONFIGS['sodo2b-custom-grid'] = {detailId:'sodo2b-detail',computeFn:computeSodo2bByLocator};
+WH_GRID_CONFIGS['dg1-custom-grid'] = {detailId:'dg1-detail',computeFn:computeDG1ByLocator};
 
 document.addEventListener('click', (e) => {
   const outsideWarnBtn = e.target.closest('#wh3b-outside-warning');
