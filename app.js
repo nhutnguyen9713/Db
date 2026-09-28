@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.85';
+const APP_VERSION = 'v2.86';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13528,12 +13528,11 @@ const TX_TABLE_DEFS = {
   picking: { cols: ['khoXuat','locatorDen','item','user','reference','contCount'], tbody:'tx-picking-tbody', tfoot:'tx-picking-tfoot', empty:'tx-picking-empty', search:'tx-picking-search', summary:'tx-picking-summary', table:'tx-picking-table', label:'nhóm Picking', clearBtn:'tx-picking-clear-filters' }
 };
 
-const TX_DEFAULT_KHO_FILTER = '3B';
+// Không còn đặt sẵn bộ lọc mặc định nào cho bảng chi tiết (trước đây mặc định lọc sẵn Kho = 3B) —
+// mở trang/tải file mới lên là thấy TOÀN BỘ dữ liệu ngay, người dùng tự bấm lọc cột khi cần.
 function txDefaultColFilters(){
-  return { khoXuat: new Set([TX_DEFAULT_KHO_FILTER]) };
+  return {};
 }
-// Chuyển (txDescribeSet) giờ CHỈ nhận Menu Name "ITN Transfer" nên bảng Transfer không còn dòng nào
-// khác để lọc theo cột Menu Name — không cần đặt sẵn bộ lọc riêng cho cột này nữa.
 function txApplyDefaultFilters(){
   txColFilters.receive = txDefaultColFilters();
   txColFilters.transfer = txDefaultColFilters();
