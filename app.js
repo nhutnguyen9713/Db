@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.93';
+const APP_VERSION = 'v2.94';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6543,6 +6543,19 @@ document.addEventListener('click',(e)=>{
 document.addEventListener('keydown',(e)=>{
   const ae=document.activeElement;
   const isEditable=ae && (ae.tagName==='INPUT' || ae.tagName==='TEXTAREA' || ae.isContentEditable);
+
+  // F1 = mở nhanh "Cài đặt lưới" của kho đang chọn — ưu tiên đúng kho đang có vùng chọn (Ctrl+Click/
+  // kéo chuột) trên lưới, nếu chưa chọn gì thì mở kho vừa thao tác gần nhất (_khoGridActiveKho, mặc
+  // định Kho 3B). Chỉ bắt phím này khi đang ở trang Sơ đồ kho, tránh đụng chỗ khác trong app.
+  if(e.key==='F1' && !isEditable){
+    const pageEl=document.getElementById('page-sodo3b');
+    if(pageEl && pageEl.style.display!=='none'){
+      e.preventDefault();
+      const kho=(_khoGridSelectionKho && _khoGridSelection.size) ? _khoGridSelectionKho : _khoGridActiveKho;
+      khoGridOpenSettings(kho);
+      return;
+    }
+  }
 
   if(e.key==='Escape' && !isEditable && _khoGridSelection.size){
     const kho=_khoGridSelectionKho;
