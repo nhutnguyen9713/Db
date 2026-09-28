@@ -310,17 +310,13 @@ function gateBustedUrl(base){
         <div class="brand-eyebrow"><span class="dot"></span>SỨC CHỨA</div>
         <h1 style="font-size:16px; margin:2px 0 0;">Tổng quan sức chứa (3B / 3A / 2B)</h1>
       </div>
-      <button type="button" class="btn-update btn-ghost-outline" id="btn-ov-config" title="Chọn lại danh sách vị trí (locator) tính vào sức chứa mỗi kho — dùng khi số liệu tự động chưa đúng">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
-        Tuỳ chỉnh vị trí
-      </button>
     </div>
     <div class="panel search-panel" id="ov-block-3B" style="margin-bottom:16px;">
       <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
         <div>
           <div class="brand-eyebrow"><span class="dot"></span>KHO 3B</div>
           <h1 style="font-size:17px;">Tổng quan sức chứa — Kho 3B</h1>
-          <div class="cmp-head-summary" id="ov-head-summary-3B">Chưa có dữ liệu<span class="ov-config-tag" id="ov-config-tag-3B" style="display:none;">● Tuỳ chỉnh</span></div>
+          <div class="cmp-head-summary" id="ov-head-summary-3B">Chưa có dữ liệu<span class="ov-config-tag" id="ov-config-tag-3B" title="Vị trí + sức chứa lấy trực tiếp từ Grid tuỳ chỉnh ở trang Sơ đồ kho">● Theo Sơ đồ kho</span></div>
         </div>
       </div>
       <div>
@@ -390,7 +386,7 @@ function gateBustedUrl(base){
         <div>
           <div class="brand-eyebrow"><span class="dot"></span>KHO 3A</div>
           <h1 style="font-size:17px;">Tổng quan sức chứa — Kho 3A</h1>
-          <div class="cmp-head-summary" id="ov-head-summary-3A">Chưa có dữ liệu<span class="ov-config-tag" id="ov-config-tag-3A" style="display:none;">● Tuỳ chỉnh</span></div>
+          <div class="cmp-head-summary" id="ov-head-summary-3A">Chưa có dữ liệu<span class="ov-config-tag" id="ov-config-tag-3A" title="Vị trí + sức chứa lấy trực tiếp từ Grid tuỳ chỉnh ở trang Sơ đồ kho">● Theo Sơ đồ kho</span></div>
         </div>
       </div>
       <div>
@@ -460,7 +456,7 @@ function gateBustedUrl(base){
         <div>
           <div class="brand-eyebrow"><span class="dot"></span>KHO 2B</div>
           <h1 style="font-size:17px;">Tổng quan sức chứa — Kho 2B</h1>
-          <div class="cmp-head-summary" id="ov-head-summary-2B">Chưa có dữ liệu<span class="ov-config-tag" id="ov-config-tag-2B" style="display:none;">● Tuỳ chỉnh</span></div>
+          <div class="cmp-head-summary" id="ov-head-summary-2B">Chưa có dữ liệu<span class="ov-config-tag" id="ov-config-tag-2B" title="Vị trí + sức chứa lấy trực tiếp từ Grid tuỳ chỉnh ở trang Sơ đồ kho">● Theo Sơ đồ kho</span></div>
         </div>
       </div>
       <div>
@@ -528,44 +524,6 @@ function gateBustedUrl(base){
   </div>
 
   <!-- Modal tuỳ chỉnh danh sách locator tính Utilization -->
-  <div id="ov-config-modal" class="ov-config-modal" style="display:none;">
-    <div class="ov-config-backdrop" id="ov-config-backdrop"></div>
-    <div class="ov-config-panel">
-      <div class="ov-config-header">
-        <div>
-          <h2>Tuỳ chỉnh vị trí tính Utilization</h2>
-          <div class="sub" style="margin:2px 0 0;">Chọn đúng danh sách locator thuộc từng kho — số liệu Utilization/Capacity sẽ tính lại theo đúng các locator đã chọn (kèm sức chứa từng vị trí, có thể sửa tay).</div>
-        </div>
-        <button type="button" id="ov-config-close" class="ov-config-close-btn" title="Đóng">✕</button>
-      </div>
-      <div class="ov-config-tabs" id="ov-config-tabs">
-        <button type="button" class="ov-config-tab active" data-kho="3B">Kho 3B</button>
-        <button type="button" class="ov-config-tab" data-kho="3A">Kho 3A</button>
-        <button type="button" class="ov-config-tab" data-kho="2B">Kho 2B</button>
-      </div>
-      <div class="ov-config-toolbar">
-        <input type="text" id="ov-config-search" placeholder="Tìm locator…">
-        <span class="ov-config-count" id="ov-config-count">0 / 0 đã chọn</span>
-        <button type="button" class="ov-config-mini-btn" id="ov-config-selall">Chọn tất cả</button>
-        <button type="button" class="ov-config-mini-btn" id="ov-config-clrall">Bỏ chọn</button>
-        <button type="button" class="ov-config-mini-btn" id="ov-config-resetdefault" title="Về đúng danh sách + sức chứa mặc định do hệ thống tự tính">Về mặc định</button>
-      </div>
-      <div class="ov-config-total-row">
-        <span class="ov-config-total-label">Tổng sức chứa chuẩn của kho:</span>
-        <input type="number" id="ov-config-total-input" min="0" placeholder="Tự động (cộng các vị trí đã chọn)">
-        <span class="ov-config-total-auto" id="ov-config-total-auto">Tự động: 0</span>
-        <button type="button" class="ov-config-mini-btn" id="ov-config-total-clear" title="Xoá số ghi đè — dùng lại tổng tự động cộng từ các vị trí">Dùng tự động</button>
-      </div>
-      <div class="ov-config-list-head">
-        <span></span><span>Locator</span><span>SL tồn</span><span>Sức chứa</span>
-      </div>
-      <div class="ov-config-list" id="ov-config-list"></div>
-      <div class="ov-config-footer">
-        <button type="button" class="btn-update btn-ghost-outline" id="ov-config-cancel">Huỷ</button>
-        <button type="button" class="btn-update" id="ov-config-save">Lưu &amp; tính lại</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Panel theo dõi vị trí Kho 3B -->
   <div class="grid" id="watch-locator-row-3b" style="display:none;">

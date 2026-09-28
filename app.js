@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.94';
+const APP_VERSION = 'v2.95';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -1969,31 +1969,10 @@ let currentData = null;
    (mỗi dòng dữ liệu tồn kho / GI No.) tại locator đó — khớp quy ước đã dùng
    ở các phần khác của dashboard (VD: ccBuildInventoryRows). */
 
-// ---- Kho 3A: Racking (dãy A-E, bay 1-17, tier T1/T2/T3/T5 — không có T4) ----
-// Với dãy C/D/E, chỉ T1 và T5 tính vào capacity (T2, T3 bị loại — theo file tham chiếu).
-const OV_3A_RACK_LETTERS = ['A','B','C','D','E'];
-const OV_3A_RACK_TIERS = [1,2,3,5];
+// ---- Kho 3A: Rack (2 pallet/vị trí) — dùng làm sức chứa MẶC ĐỊNH khi 1 locator trong Sơ đồ kho khớp
+// đúng dạng tên "3A-{dãy}{bay}-T{tầng}" (VD: 3A-F1-T5), bất kể dãy nào (kể cả dãy mới tự đổi tên). ----
 const OV_3A_RACK_CAPACITY_PER_LOC = 2;
-function ov3ARackLocators(){
-  const arr = [];
-  OV_3A_RACK_LETTERS.forEach(l => {
-    for(let b=1;b<=17;b++){
-      OV_3A_RACK_TIERS.forEach(t => {
-        const excluded = (l === 'C' || l === 'D' || l === 'E') && (t === 2 || t === 3);
-        if(!excluded) arr.push(`3A-${l}${b}-T${t}`);
-      });
-    }
-  });
-  return arr;
-}
 // ---- Kho 3A: Floor (DG3-FG-A/B/C) ----
-function ov3AFloorLocators(){
-  const arr = [];
-  for(let n=1;n<=15;n++) arr.push('DG3-FG-A' + String(n).padStart(2,'0'));
-  for(let n=1;n<=15;n++) arr.push('DG3-FG-B' + String(n).padStart(2,'0'));
-  for(let n=1;n<=15;n++) arr.push('DG3-FG-C' + String(n).padStart(2,'0'));
-  return arr;
-}
 function ov3AFloorCapacity(loc){
   const m = String(loc||'').match(/^DG3-FG-([ABC])(\d+)$/i);
   if(!m) return 0;
@@ -2005,11 +1984,6 @@ function ov3AFloorCapacity(loc){
   return 0;
 }
 // ---- Kho 3A: Mezzanine M1 ----
-function ov3AM1Locators(){
-  const arr = [];
-  for(let n=1;n<=20;n++) arr.push('3AFG-M1-A' + String(n).padStart(2,'0'));
-  return arr;
-}
 const OV_3A_M1_CAPACITY_PER_LOC = 14;
 
 // Phân nhóm 1 danh sách locator theo % lấp đầy (4 nhóm: trống/thấp/vừa/gần đầy-đầy), đồng thời giữ
@@ -2026,105 +2000,18 @@ function ovClassifyBucket4(locs, capOf, counts){
   });
   return groups;
 }
-// Phân nhóm riêng cho Racking 3A (3 nhóm: trống/1 pallet/đầy 2 pallet — sức chứa cố định 2/vị trí,
-// có thể bị ghi đè riêng từng vị trí qua nút bánh răng ở trang "Sơ đồ kho").
-function ovClassifyBucket3(locs, counts){
-  const groups = [[], [], []];
-  locs.forEach(l => {
-    const q = counts.get(l) || 0;
-    const cap = whApplyCapOverride(l, OV_3A_RACK_CAPACITY_PER_LOC);
-    const entry = { locator: l, qty: q, capacity: cap };
-    if(q <= 0) groups[0].push(entry); else if(q < cap) groups[1].push(entry); else groups[2].push(entry);
-  });
-  return groups;
-}
-
-function ov3AOverview(counts){
-  const rackLocs = ov3ARackLocators();
-  const floorLocs = ov3AFloorLocators();
-  const m1Locs = ov3AM1Locators();
-  const rackPallets = rackLocs.reduce((s,l) => s + (counts.get(l)||0), 0);
-  const floorPallets = floorLocs.reduce((s,l) => s + (counts.get(l)||0), 0);
-  const m1Pallets = m1Locs.reduce((s,l) => s + (counts.get(l)||0), 0);
-  const rackCap = rackLocs.reduce((s,l) => s + whApplyCapOverride(l, OV_3A_RACK_CAPACITY_PER_LOC), 0);
-  const floorCap = floorLocs.reduce((s,l) => s + whApplyCapOverride(l, ov3AFloorCapacity(l)), 0);
-  const m1Cap = m1Locs.reduce((s,l) => s + whApplyCapOverride(l, OV_3A_M1_CAPACITY_PER_LOC), 0);
-  const groups = ovClassifyBucket3(rackLocs, counts);
-  return {
-    pallets: rackPallets + floorPallets + m1Pallets,
-    capacity: rackCap + floorCap + m1Cap,
-    positions: rackLocs.length + floorLocs.length + m1Locs.length,
-    bucketMode: 3,
-    buckets: groups.map(g => g.length),
-    bucketLocators: groups,
-    bucketTotal: rackLocs.length,
-    miniKpis: [
-      { v: rackPallets + floorPallets + m1Pallets, l: 'PALLET RACKING + FLOOR + M1' },
-      { v: rackCap + floorCap + m1Cap, l: 'TỔNG CAPACITY RACKING + FLOOR + M1' }
-    ]
-  };
-}
 
 // ---- Kho 3B: Floor D3B-FG-A01 → A33 (26 pallet/locator cho A01–A17, 24 cho A18–A33) ----
-function ovB3FloorLocators(){
-  const arr = [];
-  for(let n=1;n<=33;n++) arr.push('D3B-FG-A' + String(n).padStart(2,'0'));
-  return arr;
-}
 function ovB3Capacity(loc){
   const m = String(loc||'').match(/^D3B-FG-A(\d+)$/i);
   if(!m) return 0;
   return Number(m[1]) <= 17 ? 26 : 24;
 }
-const OV_B3_TOTAL_CAPACITY = 826; // chỉ dùng làm mô tả/ghi chú — số thật hiển thị luôn cộng từ từng vị trí (có áp override)
 
-function ovB3Overview(counts){
-  const locs = ovB3FloorLocators();
-  const pallets = locs.reduce((s,l) => s + (counts.get(l)||0), 0);
-  const capOf = l => whApplyCapOverride(l, ovB3Capacity(l));
-  const capacity = locs.reduce((s,l) => s + capOf(l), 0);
-  const groups = ovClassifyBucket4(locs, capOf, counts);
-  return {
-    pallets,
-    capacity,
-    positions: locs.length,
-    bucketMode: 4,
-    buckets: groups.map(g => g.length),
-    bucketLocators: groups,
-    bucketTotal: locs.length,
-    miniKpis: [
-      { v: pallets, l: 'PALLET FLOOR 3B' },
-      { v: capacity, l: 'TỔNG CAPACITY' }
-    ]
-  };
-}
-
-// ---- Kho 2B: toàn bộ locator D2B-FG-A→H (trừ D2B-FG-H01 khỏi capacity) ----
+// ---- Kho 2B: sức chứa riêng theo từng locator (đo thực tế ngoài kho) ----
+// B2_LOCATORS vẫn dùng chung với Sơ đồ kho 2B (computeSodo2bByLocator) để seed map rỗng ban đầu.
 const B2_LOCATORS = ["D2B-FG-F12", "D2B-FG-F11", "D2B-FG-F10", "D2B-FG-F09", "D2B-FG-F08", "D2B-FG-F07", "D2B-FG-F06", "D2B-FG-F05", "D2B-FG-F04", "D2B-FG-F03", "D2B-FG-F02", "D2B-FG-F01", "D2B-FG-E12", "D2B-FG-E11", "D2B-FG-E10", "D2B-FG-E09", "D2B-FG-E08", "D2B-FG-E07", "D2B-FG-E06", "D2B-FG-E05", "D2B-FG-E04", "D2B-FG-E03", "D2B-FG-E02", "D2B-FG-E01", "D2B-FG-D12", "D2B-FG-D11", "D2B-FG-D10", "D2B-FG-D09", "D2B-FG-D08", "D2B-FG-D07", "D2B-FG-D06", "D2B-FG-D05", "D2B-FG-D04", "D2B-FG-D03", "D2B-FG-D02", "D2B-FG-D01", "D2B-FG-C12", "D2B-FG-C11", "D2B-FG-C10", "D2B-FG-C09", "D2B-FG-C08", "D2B-FG-C07", "D2B-FG-C06", "D2B-FG-C05", "D2B-FG-C04", "D2B-FG-C03", "D2B-FG-C02", "D2B-FG-C01", "D2B-FG-G06", "D2B-FG-G05", "D2B-FG-G04", "D2B-FG-G03", "D2B-FG-G02", "D2B-FG-G01", "D2B-FG-B11", "D2B-FG-B10", "D2B-FG-B09", "D2B-FG-B08", "D2B-FG-B07", "D2B-FG-B06", "D2B-FG-B05", "D2B-FG-B04", "D2B-FG-B03", "D2B-FG-B02", "D2B-FG-B01", "D2B-FG-A12", "D2B-FG-A11", "D2B-FG-A10", "D2B-FG-A09", "D2B-FG-A08", "D2B-FG-A07", "D2B-FG-A06", "D2B-FG-A05", "D2B-FG-A04", "D2B-FG-A03", "D2B-FG-A02", "D2B-FG-A01", "D2B-FG-H01"];
 const B2_CAPACITY_MAP = {"D2B-FG-G06": 12, "D2B-FG-G03": 12, "D2B-FG-G05": 24, "D2B-FG-G02": 24, "D2B-FG-G04": 24, "D2B-FG-G01": 24, "D2B-FG-F12": 24, "D2B-FG-D12": 36, "D2B-FG-F11": 16, "D2B-FG-D11": 24, "D2B-FG-B11": 32, "D2B-FG-F10": 16, "D2B-FG-D10": 24, "D2B-FG-B10": 32, "D2B-FG-F09": 16, "D2B-FG-D09": 24, "D2B-FG-B09": 36, "D2B-FG-F08": 16, "D2B-FG-D08": 24, "D2B-FG-B08": 36, "D2B-FG-F07": 16, "D2B-FG-D07": 24, "D2B-FG-B07": 36, "D2B-FG-F06": 16, "D2B-FG-D06": 24, "D2B-FG-B06": 36, "D2B-FG-F05": 16, "D2B-FG-D05": 24, "D2B-FG-B05": 36, "D2B-FG-F04": 16, "D2B-FG-D04": 24, "D2B-FG-B04": 36, "D2B-FG-F03": 16, "D2B-FG-D03": 24, "D2B-FG-B03": 36, "D2B-FG-F02": 16, "D2B-FG-D02": 24, "D2B-FG-B02": 36, "D2B-FG-D01": 36, "D2B-FG-F01": 16, "D2B-FG-B01": 36, "D2B-FG-E12": 16, "D2B-FG-C12": 24, "D2B-FG-A12": 36, "D2B-FG-E11": 16, "D2B-FG-C11": 24, "D2B-FG-A11": 36, "D2B-FG-E10": 16, "D2B-FG-C10": 24, "D2B-FG-A10": 36, "D2B-FG-E09": 16, "D2B-FG-C09": 24, "D2B-FG-A09": 36, "D2B-FG-E08": 16, "D2B-FG-C08": 24, "D2B-FG-A08": 36, "D2B-FG-E07": 16, "D2B-FG-C07": 24, "D2B-FG-A07": 36, "D2B-FG-E06": 16, "D2B-FG-C06": 24, "D2B-FG-A06": 36, "D2B-FG-E05": 16, "D2B-FG-C05": 24, "D2B-FG-A05": 36, "D2B-FG-E04": 16, "D2B-FG-C04": 24, "D2B-FG-A04": 36, "D2B-FG-E03": 16, "D2B-FG-C03": 24, "D2B-FG-A03": 36, "D2B-FG-E02": 16, "D2B-FG-C02": 24, "D2B-FG-A02": 36, "D2B-FG-C01": 24, "D2B-FG-E01": 8, "D2B-FG-A01": 13, "D2B-FG-H01": 120};
-const OV_B2_TOTAL_CAPACITY = 1901; // chỉ dùng làm mô tả/ghi chú — số thật hiển thị luôn cộng từ từng vị trí (có áp override)
-const OV_B2_EXCLUDED = ['D2B-FG-H01'];
-
-function ov2BOverview(counts){
-  const locs = B2_LOCATORS.filter(l => !OV_B2_EXCLUDED.includes(l));
-  const pallets = locs.reduce((s,l) => s + (counts.get(l)||0), 0);
-  const capOf = l => whApplyCapOverride(l, B2_CAPACITY_MAP[l] || 0);
-  const capacity = locs.reduce((s,l) => s + capOf(l), 0);
-  const groups = ovClassifyBucket4(locs, capOf, counts);
-  return {
-    pallets,
-    capacity,
-    positions: locs.length,
-    bucketMode: 4,
-    buckets: groups.map(g => g.length),
-    bucketLocators: groups,
-    bucketTotal: locs.length,
-    miniKpis: [
-      { v: pallets, l: 'PALLET 2B-FLOOR (không tính H01)' },
-      { v: capacity, l: 'TỔNG CAPACITY (không tính H01)' }
-    ]
-  };
-}
 
 function ovBuildLocatorCounts(){
   const map = new Map();
@@ -2137,13 +2024,11 @@ function ovBuildLocatorCounts(){
   return map;
 }
 
-const OV_BUCKET_COLORS_3 = ['var(--muted-2)', 'var(--amber-bright)', 'var(--teal)'];
+const OV_KHO_LABELS = { '3B': 'Kho 3B', '3A': 'Kho 3A', '2B': 'Kho 2B' };
+
 const OV_BUCKET_COLORS_4 = ['var(--muted-2)', 'var(--blue)', 'var(--amber-bright)', 'var(--red)'];
-const OV_BUCKET_LABELS_3 = ['Trống', '1/2 pallet', 'Đầy 2/2'];
 const OV_BUCKET_LABELS_4 = ['Trống', 'Thấp (<50%)', 'Vừa (50–79%)', 'Gần đầy/đầy (≥80%)'];
-const OV_DIST_SUB_3 = 'Racking: trống, 1/2 pallet và đầy 2/2 (sức chứa 2 pallet/vị trí)';
 const OV_DIST_SUB_4 = 'Trống, thấp, vừa và gần đầy/đầy theo capacity từng locator';
-const OV_DIST_SUB_CUSTOM = 'Tuỳ chỉnh — trống, thấp, vừa và gần đầy/đầy theo capacity từng vị trí đã chọn';
 // Lưu chi tiết locator theo từng nhóm (trống/thấp/vừa/gần đầy...) của lần render gần nhất mỗi kho —
 // dùng để hiện popover khi hover vào cột màu / badge trong "Phân bố trạng thái vị trí".
 const ovBucketDetailCache = {}; // { code: { labels: [...], bucketLocators: [[{locator,qty,capacity}],...] } }
@@ -2162,7 +2047,7 @@ function buildOvBucketTooltipHtml(code, bucketIdx){
     <div class="cpt-total">Tổng ${fmt(items.length)} vị trí</div>`;
 }
 
-function ovRenderPanel(code, ov, isCustom, ngPallets){
+function ovRenderPanel(code, ov, ngPallets){
   const ringEl = document.getElementById('ov-ring-' + code);
   const utilEl = document.getElementById('ov-util-' + code);
   const palletsEl = document.getElementById('ov-pallets-' + code);
@@ -2173,8 +2058,11 @@ function ovRenderPanel(code, ov, isCustom, ngPallets){
   const noteEl = document.getElementById('ov-formula-note-' + code);
   if(!ringEl) return;
 
-  if(tagEl) tagEl.style.display = isCustom ? '' : 'none';
-  if(noteEl) noteEl.textContent = isCustom ? 'Đang dùng danh sách vị trí TUỲ CHỈNH — bấm "Tuỳ chỉnh vị trí" (bánh răng) ở đầu mục này để xem/sửa lại.' : '';
+  // Vị trí + sức chứa giờ LUÔN lấy thẳng từ Grid tuỳ chỉnh ở Sơ đồ kho (ovLocatorCapMapFromGrid) —
+  // không còn cấu hình riêng nào khác cho Overview, nên badge/ghi chú không còn ý nghĩa "tuỳ chỉnh
+  // hay không" nữa mà chỉ để nhắc rõ NGUỒN dữ liệu, luôn hiện.
+  if(tagEl) tagEl.style.display = '';
+  if(noteEl) noteEl.textContent = 'Vị trí + sức chứa lấy trực tiếp từ Grid tuỳ chỉnh ở trang Sơ đồ kho — vào đó để thêm/sửa vị trí hoặc capacity.';
 
   const util = ov.capacity ? (ov.pallets / ov.capacity) * 100 : 0;
   const utilClamped = Math.max(0, Math.min(100, util));
@@ -2208,8 +2096,8 @@ function ovRenderPanel(code, ov, isCustom, ngPallets){
   const barEl = document.getElementById('ov-dist-bar-' + code);
   const badgesEl = document.getElementById('ov-dist-badges-' + code);
   const subEl = document.getElementById('ov-dist-sub-' + code);
-  const colors = ov.bucketMode === 3 ? OV_BUCKET_COLORS_3 : OV_BUCKET_COLORS_4;
-  const labels = ov.bucketMode === 3 ? OV_BUCKET_LABELS_3 : OV_BUCKET_LABELS_4;
+  const colors = OV_BUCKET_COLORS_4;
+  const labels = OV_BUCKET_LABELS_4;
   ovBucketDetailCache[code] = { labels, bucketLocators: ov.bucketLocators || [] };
   if(barEl){
     const total = ov.bucketTotal || 1;
@@ -2218,7 +2106,7 @@ function ovRenderPanel(code, ov, isCustom, ngPallets){
   if(badgesEl){
     badgesEl.innerHTML = ov.buckets.map((v,i) => `<div class="ov-dist-badge" data-kho="${code}" data-bucket="${i}"><i style="background:${colors[i]};"></i><b>${fmt(v)}</b>${escHtml(labels[i])}</div>`).join('');
   }
-  if(subEl) subEl.textContent = isCustom ? OV_DIST_SUB_CUSTOM : (ov.bucketMode === 3 ? OV_DIST_SUB_3 : OV_DIST_SUB_4);
+  if(subEl) subEl.textContent = OV_DIST_SUB_4;
 
   const free = Math.max(0, ov.capacity - ov.pallets);
   const usedPct = ov.capacity ? Math.min(100, (ov.pallets / ov.capacity) * 100) : 0;
@@ -2233,61 +2121,76 @@ function ovRenderPanel(code, ov, isCustom, ngPallets){
   if(freeVal) freeVal.textContent = fmt(free);
 }
 
-// Danh sách locator + sức chứa MẶC ĐỊNH do hệ thống tự tính cho từng kho (dùng làm điểm khởi đầu
-// trong modal tuỳ chỉnh, và cho nút "Về mặc định").
-function ovDefaultCapMap(kho){
+// Sức chứa MẶC ĐỊNH (chưa áp ghi đè riêng) cho 1 locator — khớp đúng 1 trong các mẫu tên đã biết
+// (Rack 3A, Floor 3B/3A, Mezzanine M1, Floor 2B) thì dùng công thức nghiệp vụ cũ (VD: 3B có A01–A17
+// là 26 pallet/vị trí nhưng A18–A33 chỉ 24) — chính xác hơn hẳn 1 số phẳng chung cho cả kho. Locator
+// không khớp mẫu nào (VD: dãy mới tự đặt tên, không theo quy ước cũ, hoặc kho DG1) thì dùng sức chứa
+// mặc định PHẲNG của cả kho (khoGridBaseCapacity — giống hệt số hiện trên ô ở Sơ đồ kho khi chưa ghi
+// đè riêng qua bánh răng/đổi hàng loạt).
+function ovLocatorDefaultCapacity(khoLabel, loc){
+  if(khoLabel === 'Kho 3B'){
+    const c = ovB3Capacity(loc);
+    if(c) return c;
+  } else if(khoLabel === 'Kho 3A'){
+    if(/^3A-[A-Za-z]+\d+-T\d+$/i.test(loc)) return OV_3A_RACK_CAPACITY_PER_LOC;
+    const floorCap = ov3AFloorCapacity(loc);
+    if(floorCap) return floorCap;
+    if(/^3AFG-M1-A\d+$/i.test(loc)) return OV_3A_M1_CAPACITY_PER_LOC;
+  } else if(khoLabel === 'Kho 2B'){
+    if(B2_CAPACITY_MAP[loc]) return B2_CAPACITY_MAP[loc];
+  }
+  return khoGridBaseCapacity(khoLabel, loc);
+}
+
+// Danh sách vị trí + sức chứa (đã áp ghi đè riêng qua bánh răng/đổi hàng loạt) tính "Tổng quan sức
+// chứa" — lấy THẲNG từ Grid tuỳ chỉnh ở trang Sơ đồ kho (khoGridLayouts), KHÔNG còn cấu hình riêng
+// nào khác cho Overview nữa — sửa 1 chỗ (Sơ đồ kho) là 2 nơi luôn khớp nhau, không lo lệch/trùng lặp.
+function ovLocatorCapMapFromGrid(khoLabel){
+  const layout = khoGridLayouts[khoLabel];
   const map = {};
-  if(kho === '3B'){
-    ovB3FloorLocators().forEach(l => { map[l] = whApplyCapOverride(l, ovB3Capacity(l)); });
-  } else if(kho === '3A'){
-    ov3ARackLocators().forEach(l => { map[l] = whApplyCapOverride(l, OV_3A_RACK_CAPACITY_PER_LOC); });
-    ov3AFloorLocators().forEach(l => { const c = ov3AFloorCapacity(l); if(c) map[l] = whApplyCapOverride(l, c); });
-    ov3AM1Locators().forEach(l => { map[l] = whApplyCapOverride(l, OV_3A_M1_CAPACITY_PER_LOC); });
-  } else if(kho === '2B'){
-    B2_LOCATORS.filter(l => !OV_B2_EXCLUDED.includes(l)).forEach(l => { map[l] = whApplyCapOverride(l, B2_CAPACITY_MAP[l] || 0); });
+  if(layout && Array.isArray(layout.cells)){
+    layout.cells.forEach(c => {
+      if(c.isLabel || !c.locator) return;
+      const loc = c.locator;
+      if(map[loc] !== undefined) return; // trùng tên (2 ô khác chỗ cùng 1 locator) — giữ giá trị đầu, không cộng dồn capacity
+      map[loc] = whApplyCapOverride(loc, ovLocatorDefaultCapacity(khoLabel, loc));
+    });
   }
   return map;
 }
 
-// Tính Utilization/Capacity/phân bố từ 1 danh sách {locator: capacity} tuỳ chỉnh bất kỳ — dùng
-// chung 1 công thức 4-nhóm (%) cho cả 3 kho khi đã tuỳ chỉnh, để đơn giản và nhất quán. Vẫn áp số
-// ghi đè từ nút bánh răng (trang Sơ đồ kho) đè lên trên sức chứa đã lưu trong cấu hình tuỳ chỉnh,
-// để 2 nơi luôn khớp — miễn locator đó vẫn đang có trong danh sách tuỳ chỉnh này.
-function ovGenericOverview(cfg, counts){
-  const capMap = cfg.locators || {};
+function ovGridBackedOverview(khoLabel, counts){
+  const capMap = ovLocatorCapMapFromGrid(khoLabel);
   const locs = Object.keys(capMap);
-  const capOf = l => whApplyCapOverride(l, Number(capMap[l]) || 0);
+  const capOf = l => capMap[l];
   const pallets = locs.reduce((s,l) => s + (counts.get(l)||0), 0);
-  const autoCapacity = locs.reduce((s,l) => s + capOf(l), 0);
-  const capacity = (cfg.totalOverride !== null && cfg.totalOverride !== undefined && cfg.totalOverride !== '')
-    ? Number(cfg.totalOverride) : autoCapacity;
+  const capacity = locs.reduce((s,l) => s + capOf(l), 0);
   const groups = ovClassifyBucket4(locs, capOf, counts);
   return {
     pallets, capacity, positions: locs.length, bucketMode: 4,
     buckets: groups.map(g => g.length), bucketLocators: groups, bucketTotal: locs.length,
     miniKpis: [
-      { v: pallets, l: 'PALLET ĐANG CHỨA (TUỲ CHỈNH)' },
-      { v: capacity, l: 'TỔNG SỨC CHỨA CHUẨN (TUỲ CHỈNH)' }
+      { v: pallets, l: 'PALLET ĐANG CHỨA (THEO SƠ ĐỒ KHO)' },
+      { v: capacity, l: 'TỔNG SỨC CHỨA CHUẨN (THEO SƠ ĐỒ KHO)' }
     ]
   };
 }
 
+// Dọn cấu hình cũ "Tuỳ chỉnh vị trí" (modal riêng, đã bỏ hẳn — Overview giờ lấy thẳng từ Sơ đồ kho)
+// nếu máy này còn sót lại từ trước, tránh rác localStorage vô nghĩa. Chỉ xoá 1 lần khi script chạy.
+try{ LS.removeItem('tn5_ov_locator_config_v1'); }catch(e){}
+
 function renderCapacityOverviews(){
-  ovLoadConfigFromStorage();
   const counts = ovBuildLocatorCounts();
-  const cfg = ovLocatorConfig || {};
-  const cfg3B = ovMigrateCfgShape(cfg['3B']);
-  const cfg3A = ovMigrateCfgShape(cfg['3A']);
-  const cfg2B = ovMigrateCfgShape(cfg['2B']);
-  const ov3B = cfg3B ? ovGenericOverview(cfg3B, counts) : ovB3Overview(counts);
-  const ov3A = cfg3A ? ovGenericOverview(cfg3A, counts) : ov3AOverview(counts);
-  const ov2B = cfg2B ? ovGenericOverview(cfg2B, counts) : ov2BOverview(counts);
+  const ov3B = ovGridBackedOverview('Kho 3B', counts);
+  const ov3A = ovGridBackedOverview('Kho 3A', counts);
+  const ov2B = ovGridBackedOverview('Kho 2B', counts);
   const ngSum3B = ovGetNgSummaryForKho('3B');
   const ngSum3A = ovGetNgSummaryForKho('3A');
   const ngSum2B = ovGetNgSummaryForKho('2B');
-  ovRenderPanel('3B', ov3B, !!cfg3B, ngSum3B.totalNgPallets);
-  ovRenderPanel('3A', ov3A, !!cfg3A, ngSum3A.totalNgPallets);
-  ovRenderPanel('2B', ov2B, !!cfg2B, ngSum2B.totalNgPallets);
+  ovRenderPanel('3B', ov3B, ngSum3B.totalNgPallets);
+  ovRenderPanel('3A', ov3A, ngSum3A.totalNgPallets);
+  ovRenderPanel('2B', ov2B, ngSum2B.totalNgPallets);
   ovRenderNgSection('3B', ov3B.pallets, ngSum3B);
   ovRenderNgSection('3A', ov3A.pallets, ngSum3A);
   ovRenderNgSection('2B', ov2B.pallets, ngSum2B);
@@ -2366,218 +2269,6 @@ function ovRenderNgSection(code, usedPallets, ngSummary){
   }).join('');
 }
 
-/* ---------- Modal "Tuỳ chỉnh vị trí tính Utilization" ---------- */
-const OV_CONFIG_STORAGE_KEY = 'tn5_ov_locator_config_v1';
-let ovLocatorConfig = {}; // { '3B': {locator:capacity}, '3A': {...}, '2B': {...} } — có key = kho đó đang tuỳ chỉnh
-function ovLoadConfigFromStorage(){
-  try{
-    const raw = LS.getItem(OV_CONFIG_STORAGE_KEY);
-    ovLocatorConfig = raw ? JSON.parse(raw) : {};
-  }catch(e){ ovLocatorConfig = {}; }
-}
-// Tương thích ngược: bản lưu cũ (trước khi có "Tổng sức chứa ghi đè") chỉ là {locator:capacity}
-// phẳng, không có key "locators" bọc ngoài — tự bọc lại cho đúng cấu trúc mới.
-function ovMigrateCfgShape(saved){
-  if(!saved) return null;
-  if(saved.locators) return saved;
-  return { locators: saved, totalOverride: null };
-}
-
-const OV_KHO_LABELS = { '3B': 'Kho 3B', '3A': 'Kho 3A', '2B': 'Kho 2B' };
-let ovConfigDraft = null; // bản nháp đang sửa trong modal, chưa lưu — { '3B': {locators:{loc:cap}, totalOverride:null|number}, ... }
-let ovConfigActiveTab = '3B';
-
-function ovSumCapacities(locators){
-  return Object.keys(locators).reduce((s,l) => s + (Number(locators[l]) || 0), 0);
-}
-
-// Danh sách locator THẬT SỰ có trong dữ liệu tồn kho đang tải, thuộc 1 kho — giúp phát hiện các
-// locator mà công thức tự động chưa liệt kê (VD: sai tiền tố), để người dùng có thể tự thêm vào.
-function ovGetRealLocatorsForKho(khoLabel){
-  const set = new Set();
-  if(currentData && currentData.kho_detail && currentData.kho_detail[khoLabel]){
-    currentData.kho_detail[khoLabel].forEach(r => { if(r[2]) set.add(r[2]); });
-  }
-  return set;
-}
-
-function ovUpdateConfigCount(){
-  const countEl = document.getElementById('ov-config-count');
-  if(!countEl || !ovConfigDraft) return;
-  const selected = Object.keys(ovConfigDraft[ovConfigActiveTab].locators).length;
-  const total = document.querySelectorAll('#ov-config-list .ov-config-row').length;
-  countEl.textContent = `${fmt(selected)} / ${fmt(total)} đã chọn (đang lọc)`;
-}
-
-// Cập nhật dòng "Tổng sức chứa chuẩn" (ô ghi đè + số tự động tính) theo trạng thái draft hiện tại.
-function ovUpdateTotalRow(){
-  if(!ovConfigDraft) return;
-  const cfg = ovConfigDraft[ovConfigActiveTab];
-  const autoTotal = ovSumCapacities(cfg.locators);
-  const inputEl = document.getElementById('ov-config-total-input');
-  const autoEl = document.getElementById('ov-config-total-auto');
-  if(autoEl) autoEl.textContent = `Tự động (cộng các vị trí đã chọn): ${fmt(autoTotal)}`;
-  if(inputEl) inputEl.value = (cfg.totalOverride !== null && cfg.totalOverride !== undefined) ? cfg.totalOverride : '';
-}
-
-function ovRenderConfigList(){
-  const listEl = document.getElementById('ov-config-list');
-  if(!listEl || !ovConfigDraft) return;
-  const kho = ovConfigActiveTab;
-  const draft = ovConfigDraft[kho].locators;
-  const counts = ovBuildLocatorCounts();
-  const defaultMap = ovDefaultCapMap(kho);
-  const defaultCandidates = new Set(Object.keys(defaultMap));
-  const realLocs = ovGetRealLocatorsForKho(OV_KHO_LABELS[kho]);
-  const allLocs = new Set([...defaultCandidates, ...realLocs, ...Object.keys(draft)]);
-  const sorted = Array.from(allLocs).sort((a,b) => a.localeCompare(b, 'vi', { numeric: true }));
-
-  const searchEl = document.getElementById('ov-config-search');
-  const q = searchEl ? removeDiacritics(searchEl.value.toLowerCase().trim()) : '';
-  const filtered = q ? sorted.filter(l => removeDiacritics(l.toLowerCase()).includes(q)) : sorted;
-
-  listEl.innerHTML = filtered.map(loc => {
-    const checked = Object.prototype.hasOwnProperty.call(draft, loc);
-    const isExtra = !defaultCandidates.has(loc);
-    const qty = counts.get(loc) || 0;
-    const cap = checked ? draft[loc] : (defaultMap[loc] || 0);
-    return `<div class="ov-config-row${isExtra ? ' extra' : ''}" data-loc="${escAttr(loc)}">
-      <input type="checkbox" class="ov-cfg-chk" ${checked ? 'checked' : ''}>
-      <span class="loc-name" title="${escAttr(loc)}">${escHtml(loc)}${isExtra ? ' <span style="color:var(--amber-bright); font-size:10px;">(ngoài DS mặc định)</span>' : ''}</span>
-      <span class="loc-qty">${fmt(qty)}</span>
-      <input type="number" class="cap-input" value="${cap}" min="0">
-    </div>`;
-  }).join('') || '<div style="padding:16px; text-align:center; color:var(--muted-2); font-style:italic;">Không có locator nào khớp tìm kiếm</div>';
-
-  document.querySelectorAll('.ov-config-tab').forEach(t => t.classList.toggle('active', t.dataset.kho === kho));
-  ovUpdateConfigCount();
-  ovUpdateTotalRow();
-}
-
-function ovOpenConfigModal(){
-  ovLoadConfigFromStorage();
-  ovConfigDraft = {};
-  ['3B', '3A', '2B'].forEach(k => {
-    const saved = ovMigrateCfgShape(ovLocatorConfig[k]);
-    if(saved){
-      // Áp số ghi đè từ nút bánh răng (trang Sơ đồ kho) lên các locator đã lưu trong cấu hình
-      // tuỳ chỉnh này, để modal luôn hiện đúng giá trị MỚI NHẤT, dù được sửa ở đâu trước đó.
-      const locators = {};
-      Object.keys(saved.locators).forEach(l => { locators[l] = whApplyCapOverride(l, saved.locators[l]); });
-      ovConfigDraft[k] = { locators, totalOverride: (saved.totalOverride ?? null) };
-    } else {
-      ovConfigDraft[k] = { locators: ovDefaultCapMap(k), totalOverride: null };
-    }
-  });
-  ovConfigActiveTab = '3B';
-  const searchEl = document.getElementById('ov-config-search');
-  if(searchEl) searchEl.value = '';
-  const modal = document.getElementById('ov-config-modal');
-  if(modal) modal.style.display = 'flex';
-  ovRenderConfigList();
-}
-function ovCloseConfigModal(){
-  const modal = document.getElementById('ov-config-modal');
-  if(modal) modal.style.display = 'none';
-  ovConfigDraft = null;
-}
-
-const ovConfigBtn = document.getElementById('btn-ov-config');
-if(ovConfigBtn) ovConfigBtn.addEventListener('click', ovOpenConfigModal);
-const ovConfigCloseBtn = document.getElementById('ov-config-close');
-if(ovConfigCloseBtn) ovConfigCloseBtn.addEventListener('click', ovCloseConfigModal);
-const ovConfigCancelBtn = document.getElementById('ov-config-cancel');
-if(ovConfigCancelBtn) ovConfigCancelBtn.addEventListener('click', ovCloseConfigModal);
-const ovConfigBackdrop = document.getElementById('ov-config-backdrop');
-if(ovConfigBackdrop) ovConfigBackdrop.addEventListener('click', ovCloseConfigModal);
-
-document.addEventListener('click', (e) => {
-  const tab = e.target.closest('.ov-config-tab');
-  if(tab){
-    ovConfigActiveTab = tab.dataset.kho;
-    const searchEl = document.getElementById('ov-config-search');
-    if(searchEl) searchEl.value = '';
-    ovRenderConfigList();
-  }
-});
-const ovConfigSearchEl = document.getElementById('ov-config-search');
-if(ovConfigSearchEl) ovConfigSearchEl.addEventListener('input', debounce(() => ovRenderConfigList(), 150));
-
-document.addEventListener('change', (e) => {
-  const row = e.target.closest('.ov-config-row');
-  if(row && ovConfigDraft){
-    const loc = row.dataset.loc;
-    const draft = ovConfigDraft[ovConfigActiveTab].locators;
-    const capInput = row.querySelector('.cap-input');
-    if(e.target.classList.contains('ov-cfg-chk')){
-      if(e.target.checked) draft[loc] = Number(capInput ? capInput.value : 0) || 0;
-      else delete draft[loc];
-      ovUpdateConfigCount();
-      ovUpdateTotalRow();
-    } else if(e.target.classList.contains('cap-input')){
-      if(Object.prototype.hasOwnProperty.call(draft, loc)) draft[loc] = Number(e.target.value) || 0;
-      ovUpdateTotalRow();
-    }
-    return;
-  }
-  if(e.target.id === 'ov-config-total-input' && ovConfigDraft){
-    const v = e.target.value.trim();
-    ovConfigDraft[ovConfigActiveTab].totalOverride = v === '' ? null : Number(v);
-  }
-});
-
-const ovConfigSelAllBtn = document.getElementById('ov-config-selall');
-if(ovConfigSelAllBtn) ovConfigSelAllBtn.addEventListener('click', () => {
-  if(!ovConfigDraft) return;
-  document.querySelectorAll('#ov-config-list .ov-config-row').forEach(row => {
-    const chk = row.querySelector('.ov-cfg-chk');
-    const capInput = row.querySelector('.cap-input');
-    if(chk) chk.checked = true;
-    ovConfigDraft[ovConfigActiveTab].locators[row.dataset.loc] = Number(capInput ? capInput.value : 0) || 0;
-  });
-  ovUpdateConfigCount();
-  ovUpdateTotalRow();
-});
-const ovConfigClrAllBtn = document.getElementById('ov-config-clrall');
-if(ovConfigClrAllBtn) ovConfigClrAllBtn.addEventListener('click', () => {
-  if(!ovConfigDraft) return;
-  document.querySelectorAll('#ov-config-list .ov-config-row').forEach(row => {
-    const chk = row.querySelector('.ov-cfg-chk');
-    if(chk) chk.checked = false;
-    delete ovConfigDraft[ovConfigActiveTab].locators[row.dataset.loc];
-  });
-  ovUpdateConfigCount();
-  ovUpdateTotalRow();
-});
-const ovConfigResetBtn = document.getElementById('ov-config-resetdefault');
-if(ovConfigResetBtn) ovConfigResetBtn.addEventListener('click', () => {
-  if(!ovConfigDraft) return;
-  ovConfigDraft[ovConfigActiveTab] = { locators: ovDefaultCapMap(ovConfigActiveTab), totalOverride: null };
-  ovRenderConfigList();
-});
-const ovConfigTotalClearBtn = document.getElementById('ov-config-total-clear');
-if(ovConfigTotalClearBtn) ovConfigTotalClearBtn.addEventListener('click', () => {
-  if(!ovConfigDraft) return;
-  ovConfigDraft[ovConfigActiveTab].totalOverride = null;
-  ovUpdateTotalRow();
-});
-const ovConfigSaveBtn = document.getElementById('ov-config-save');
-if(ovConfigSaveBtn) ovConfigSaveBtn.addEventListener('click', () => {
-  if(!ovConfigDraft) return;
-  ovLocatorConfig = {};
-  // Ghi ngược sức chứa từng locator vừa sửa trong modal này vào kho lưu CHUNG (whCapOverrides) —
-  // để trang "Sơ đồ kho" (nút bánh răng) cũng thấy đúng số mới nhất, bất kể sửa ở đâu trước đó.
-  const whOverrides = (typeof whLoadCapOverrides === 'function') ? whLoadCapOverrides() : {};
-  ['3B', '3A', '2B'].forEach(k => {
-    ovLocatorConfig[k] = { locators: { ...ovConfigDraft[k].locators }, totalOverride: ovConfigDraft[k].totalOverride };
-    Object.keys(ovConfigDraft[k].locators).forEach(l => { whOverrides[l] = ovConfigDraft[k].locators[l]; });
-  });
-  LS.setItem(OV_CONFIG_STORAGE_KEY, JSON.stringify(ovLocatorConfig));
-  if(typeof whSaveCapOverrides === 'function') whSaveCapOverrides(whOverrides);
-  ovCloseConfigModal();
-  renderCapacityOverviews();
-  if(typeof renderSodo3B === 'function') renderSodo3B();
-});
 
 function renderDashboard(DATA){
   currentData = DATA;
@@ -9406,23 +9097,14 @@ function fmtShortDate(isoDate){
   return parts.length === 3 ? `${parts[2]}/${parts[1]}` : isoDate;
 }
 
-// Trả về [{date:'YYYY-MM-DD', pct}] cho 1 kho — cộng pallet mỗi ngày của đúng các locator đang
-// được TÍNH vào Utilization của kho đó (giống hệt danh sách dùng ở panel "Tổng quan sức chứa" —
-// mặc định hoặc đã tuỳ chỉnh riêng), chia cho sức chứa HIỆN TẠI của kho (giả định sức chứa ít
-// đổi qua thời gian nên dùng chung 1 mốc cho cả chuỗi lịch sử là hợp lý).
+// Trả về [{date:'YYYY-MM-DD', pct}] cho 1 kho — cộng pallet mỗi ngày của đúng các locator đang có
+// trong Grid tuỳ chỉnh ở Sơ đồ kho (giống hệt danh sách dùng ở panel "Tổng quan sức chứa" —
+// ovLocatorCapMapFromGrid), chia cho sức chứa HIỆN TẠI của kho (giả định sức chứa ít đổi qua thời
+// gian nên dùng chung 1 mốc cho cả chuỗi lịch sử là hợp lý).
 function computeUtilizationTrendSeries(khoCode){
   const khoLabel = OV_KHO_LABELS[khoCode];
-  const saved = ovMigrateCfgShape((ovLocatorConfig || {})[khoCode]);
-  let capMap, capacity;
-  if(saved){
-    capMap = saved.locators;
-    capacity = (saved.totalOverride !== null && saved.totalOverride !== undefined && saved.totalOverride !== '')
-      ? Number(saved.totalOverride)
-      : Object.keys(capMap).reduce((s,l) => s + (whApplyCapOverride(l, Number(capMap[l])||0)), 0);
-  } else {
-    capMap = ovDefaultCapMap(khoCode); // đã tự áp số ghi đè (bánh răng) bên trong
-    capacity = Object.values(capMap).reduce((s,c) => s + c, 0);
-  }
+  const capMap = ovLocatorCapMapFromGrid(khoLabel);
+  const capacity = Object.values(capMap).reduce((s,c) => s + c, 0);
   const localSet = new Set(Object.keys(capMap));
   if(!capacity || !localSet.size) return [];
 
@@ -9505,35 +9187,19 @@ function renderUtilizationTrendChart(){
 }
 
 
+// Danh sách vị trí đang VƯỢT sức chứa — lấy đúng danh sách vị trí + capacity từ Grid tuỳ chỉnh ở Sơ
+// đồ kho (ovLocatorCapMapFromGrid, dùng CHUNG với "Tổng quan sức chứa"), không còn dò theo công thức
+// tên riêng từng kho như trước — 1 nguồn duy nhất, không lo lệch nhau giữa 2 nơi.
 function computeOverCapacityLocators(){
   const counts = ovBuildLocatorCounts();
   const results = [];
-  ovB3FloorLocators().forEach(l => {
-    const cap = whApplyCapOverride(l, ovB3Capacity(l));
-    const q = counts.get(l) || 0;
-    if(cap && q > cap) results.push({ kho: '3B', locator: l, qty: q, cap });
-  });
-  B2_LOCATORS.filter(l => !OV_B2_EXCLUDED.includes(l)).forEach(l => {
-    const cap = whApplyCapOverride(l, B2_CAPACITY_MAP[l] || 0);
-    const q = counts.get(l) || 0;
-    if(cap && q > cap) results.push({ kho: '2B', locator: l, qty: q, cap });
-  });
-  ov3ARackLocators().forEach(l => {
-    const cap = whApplyCapOverride(l, OV_3A_RACK_CAPACITY_PER_LOC);
-    const q = counts.get(l) || 0;
-    if(q > cap) results.push({ kho: '3A', locator: l, qty: q, cap });
-  });
-  ov3AFloorLocators().forEach(l => {
-    const base = ov3AFloorCapacity(l);
-    if(!base) return;
-    const cap = whApplyCapOverride(l, base);
-    const q = counts.get(l) || 0;
-    if(q > cap) results.push({ kho: '3A', locator: l, qty: q, cap });
-  });
-  ov3AM1Locators().forEach(l => {
-    const cap = whApplyCapOverride(l, OV_3A_M1_CAPACITY_PER_LOC);
-    const q = counts.get(l) || 0;
-    if(q > cap) results.push({ kho: '3A', locator: l, qty: q, cap });
+  Object.entries(OV_KHO_LABELS).forEach(([code, khoLabel]) => {
+    const capMap = ovLocatorCapMapFromGrid(khoLabel);
+    Object.keys(capMap).forEach(l => {
+      const cap = capMap[l];
+      const q = counts.get(l) || 0;
+      if(cap && q > cap) results.push({ kho: code, locator: l, qty: q, cap });
+    });
   });
   return results;
 }
