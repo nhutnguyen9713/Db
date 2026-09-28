@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.81';
+const APP_VERSION = 'v2.82';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13632,23 +13632,14 @@ function renderTxTable(kind){
   renderTxChart();
 }
 
-function txGrandTotalFor(kind){
-  if(!txState) return { total: 0, rowsCount: 0 };
-  const def = TX_TABLE_DEFS[kind];
-  const searchEl = document.getElementById(def.search);
-  const query = searchEl ? searchEl.value : '';
-  const rows = txApplyFilters(kind, txState[kind] || [], query);
-  return { total: rows.reduce((s,r)=>s+r.total,0), rowsCount: rows.length };
-}
-
 const TX_CHART_ITEMS = [
   { key:'receive', label:'Receive', color:'var(--teal)' },
   { key:'transfer', label:'Transfer', color:'var(--blue)' },
   { key:'picking', label:'Picking', color:'var(--violet)' }
 ];
 // Thứ tự 4 kho hiển thị RIÊNG trong biểu đồ (giống CPT_KHO_ORDER/PICK_SLIP_KHO_ORDER dùng ở nơi khác
-// trong app) — luôn tính trên TOÀN BỘ dữ liệu của đúng kho đó, KHÔNG phụ thuộc bộ lọc cột/ô tìm kiếm
-// hiện tại (khác với nhóm "Theo bộ lọc hiện tại" ở đầu).
+// trong app) — mỗi kho 1 khung, luôn tính trên TOÀN BỘ dữ liệu của đúng kho đó, KHÔNG phụ thuộc bộ
+// lọc cột/ô tìm kiếm hiện tại của 3 bảng bên dưới.
 const TX_CHART_KHO_ORDER = ['2B', '3A', '3B', 'DG1'];
 
 function txKhoTotalFor(kind, khoShort){
@@ -13679,12 +13670,11 @@ function renderTxChart(){
     wrap.innerHTML = '<div class="kho-empty" style="padding:24px 0;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>';
     return;
   }
-  const filterItems = TX_CHART_ITEMS.map(it => ({ ...it, ...txGrandTotalFor(it.key) }));
   const khoGroupsHtml = TX_CHART_KHO_ORDER.map(kho => {
     const items = TX_CHART_ITEMS.map(it => ({ ...it, ...txKhoTotalFor(it.key, kho) }));
     return txChartGroupHtml(`Kho ${kho}`, items);
   }).join('');
-  wrap.innerHTML = txChartGroupHtml('Theo bộ lọc hiện tại', filterItems) + khoGroupsHtml;
+  wrap.innerHTML = `<div class="tx-chart-row">${khoGroupsHtml}</div>`;
 }
 
 function escHtml(s){
