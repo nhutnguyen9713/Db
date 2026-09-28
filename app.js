@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.87';
+const APP_VERSION = 'v2.88';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13057,9 +13057,15 @@ function guessKhoFromLocatorPrefix(locator){
   // DG2 (VD "DG2-Loading") — khu load hàng RIÊNG của Kho 2B, KHÁC với "Kho DG1" (1 kho hoàn toàn
   // riêng biệt, đã có trong kho_order) — đây là domain-knowledge do người dùng xác nhận trực tiếp
   // ("D2B và DG2 cùng là kho 2B"), không phải suy đoán từ quy ước đặt tên chung, nên chỉ khớp đúng
-  // "DG2", KHÔNG mở rộng sang DG1/DG3... (những tiền tố đó vẫn để "—" như cũ, tránh đoán bừa).
+  // "DG2", KHÔNG mở rộng sang DG3... (tiền tố đó vẫn để "—" như cũ, tránh đoán bừa).
   if(/^DG2/.test(s)) return 'Kho 2B';
-  return null; // các tiền tố khác (DG1/DG3...) không đủ rõ để đoán — để "—" thay vì đoán bừa
+  // SỬA (Kho DG1 bị hiện "—" dù locator rõ ràng thuộc DG1, VD "DG1-FG-03"): các locator "DG1-…" CHƯA
+  // có trong dữ liệu tồn kho thực tế (lookupMap ở resolveKhoForLocator() miss) thì rơi xuống hàm này,
+  // nhưng trước đây hàm không có case DG1 nên luôn trả "—" — dù cùng 1 user/kho, locator "DG1-…" KHÁC
+  // đã có trong tồn kho vẫn ra đúng "DG1" (qua lookupMap), gây lệch ngay trong cùng 1 bảng. Case dưới
+  // đây khớp y hệt classifyKho() (đã dùng "DG1" làm quy ước tên locator của Kho DG1 ở nơi khác).
+  if(/^DG1/.test(s)) return 'Kho DG1';
+  return null; // các tiền tố khác (DG3...) không đủ rõ để đoán — để "—" thay vì đoán bừa
 }
 function resolveKhoForLocator(locator, lookupMap){
   const norm = String(locator || '').trim().toUpperCase();
