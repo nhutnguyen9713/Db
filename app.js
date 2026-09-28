@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.98';
+const APP_VERSION = 'v2.99';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5970,12 +5970,20 @@ function khoGridRenderCustom(khoLabel){
       // Ô tiêu đề tự đặt tên — KHÔNG gán vị trí tồn kho thật, chỉ để ghi chú/chia khu trên sơ đồ. Xây
       // thẳng HTML cuối cùng (không qua buildLocatorBoxHtml/replace như ô locator bên dưới, vì không
       // có số liệu tồn kho/heatmap/nút chỉnh sức chứa để hiển thị).
+      // Cỡ chữ/màu chữ/màu nền tự chọn (nếu có) PHẢI gộp vào chung với style vị trí/kích thước ô ở trên
+      // thành ĐÚNG 1 thuộc tính style trên div ngoài (background) và 1 thuộc tính trên span chữ
+      // (color/font-size) — HTML chỉ áp dụng thuộc tính style ĐẦU TIÊN nếu viết 2 lần.
+      const boxStyle = `grid-row:${cell.row} / span ${cell.rowSpan}; grid-column:${cell.col} / span ${cell.colSpan};${cell.bgColor ? ` background:${escAttr(cell.bgColor)};` : ''}`;
+      const textStyleParts = [];
+      if(cell.textColor) textStyleParts.push(`color:${cell.textColor}`);
+      if(cell.fontSize) textStyleParts.push(`font-size:${cell.fontSize}px`);
+      const textStyle = textStyleParts.length ? ` style="${escAttr(textStyleParts.join(';'))}"` : '';
       htmlParts.push(`
-      <div draggable="false" data-kho-grid-drag="1" data-cell-id="${escAttr(cell.id)}" data-cell-row="${cell.row}" data-cell-col="${cell.col}" style="grid-row:${cell.row} / span ${cell.rowSpan}; grid-column:${cell.col} / span ${cell.colSpan};" class="wh3b-box wh3b-box-label${isSelectedCell ? ' wh3b-cell-selected' : ''}">
+      <div draggable="false" data-kho-grid-drag="1" data-cell-id="${escAttr(cell.id)}" data-cell-row="${cell.row}" data-cell-col="${cell.col}" style="${boxStyle}" class="wh3b-box wh3b-box-label${isSelectedCell ? ' wh3b-cell-selected' : ''}">
         <button type="button" class="wh3b-custom-gear" data-cell-id="${escAttr(cell.id)}" style="right:7px;" title="Sửa ô tiêu đề / kích thước / xoá ô này khỏi lưới">
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3l5 5-13 13H3v-5Z"/><path d="M14 5l5 5"/></svg>
         </button>
-        <div class="wh3b-box-label-text">${escHtml(cell.label || '')}</div>
+        <div class="wh3b-box-label-text"${textStyle}>${escHtml(cell.label || '')}</div>
         <div class="wh3b-resize-handle wh3b-resize-e" data-cell-id="${escAttr(cell.id)}" data-dir="e" title="Kéo để đổi độ rộng"></div>
         <div class="wh3b-resize-handle wh3b-resize-s" data-cell-id="${escAttr(cell.id)}" data-dir="s" title="Kéo để đổi độ cao"></div>
         <div class="wh3b-resize-handle wh3b-resize-se" data-cell-id="${escAttr(cell.id)}" data-dir="se" title="Kéo để đổi cả độ rộng lẫn độ cao"></div>
@@ -6058,11 +6066,35 @@ function khoGridSetCellTypeUI(isLabel){
   if(input) input.placeholder = isLabel
     ? 'VD: KHU RACK A'
     : (_khoGridActiveKho==='Kho 2B'?'D2B-FG-A01':_khoGridActiveKho==='Kho 3A'?'3A-A1-T1':_khoGridActiveKho==='Kho 3B'?'D3B-FG-A01':'DG1-FG-01');
+  // Cỡ chữ/màu chữ/màu nền CHỈ áp dụng cho ô tiêu đề (ô locator thật không có nội dung tự do để đổi
+  // kiểu chữ, luôn hiển thị số liệu tồn kho theo mẫu chuẩn chung).
+  const styleRow = document.getElementById('kho-grid-cell-label-style-row');
+  if(styleRow) styleRow.style.display = isLabel ? 'flex' : 'none';
 }
 const khoGridCellTypeLocatorBtn=document.getElementById('kho-grid-cell-type-locator');
 if(khoGridCellTypeLocatorBtn) khoGridCellTypeLocatorBtn.addEventListener('click',()=>khoGridSetCellTypeUI(false));
 const khoGridCellTypeLabelBtn=document.getElementById('kho-grid-cell-type-label');
 if(khoGridCellTypeLabelBtn) khoGridCellTypeLabelBtn.addEventListener('click',()=>khoGridSetCellTypeUI(true));
+
+// input[type=color] KHÔNG có "trạng thái rỗng" (luôn phải có 1 mã màu hợp lệ) — nên dùng riêng 2 cờ
+// "đã chạm vào" để phân biệt "người dùng THẬT SỰ chọn màu này" với "chỉ đang hiện màu mặc định để xem
+// trước, chưa ai đổi gì" — chỉ khi đã chạm mới lưu màu vào ô, không thì bỏ trống (dùng màu mặc định
+// của theme như trước giờ).
+let _khoGridCellTextColorTouched = false, _khoGridCellBgColorTouched = false;
+const KHO_GRID_LABEL_DEFAULT_TEXT_COLOR = '#1a2233', KHO_GRID_LABEL_DEFAULT_BG_COLOR = '#e7ecf7';
+const khoGridCellTextColorInput = document.getElementById('kho-grid-cell-textcolor');
+if(khoGridCellTextColorInput) khoGridCellTextColorInput.addEventListener('input', () => { _khoGridCellTextColorTouched = true; });
+const khoGridCellBgColorInput = document.getElementById('kho-grid-cell-bgcolor');
+if(khoGridCellBgColorInput) khoGridCellBgColorInput.addEventListener('input', () => { _khoGridCellBgColorTouched = true; });
+const khoGridCellStyleResetBtn = document.getElementById('kho-grid-cell-style-reset');
+if(khoGridCellStyleResetBtn) khoGridCellStyleResetBtn.addEventListener('click', () => {
+  const fontEl = document.getElementById('kho-grid-cell-fontsize');
+  if(fontEl) fontEl.value = '';
+  if(khoGridCellTextColorInput) khoGridCellTextColorInput.value = KHO_GRID_LABEL_DEFAULT_TEXT_COLOR;
+  if(khoGridCellBgColorInput) khoGridCellBgColorInput.value = KHO_GRID_LABEL_DEFAULT_BG_COLOR;
+  _khoGridCellTextColorTouched = false;
+  _khoGridCellBgColorTouched = false;
+});
 
 function khoGridOpenCellPopover(cellId, prefillRow, prefillCol, khoLabel){
   _khoGridActiveKho = khoLabel || _khoGridActiveKho || 'Kho 3B';
@@ -6086,6 +6118,14 @@ function khoGridOpenCellPopover(cellId, prefillRow, prefillCol, khoLabel){
   if(rowSpan) rowSpan.value = cell ? cell.rowSpan : 1;
   if(colSpan) colSpan.value = cell ? cell.colSpan : 1;
   if(del) del.style.display = cell ? '' : 'none';
+  // Nạp lại cỡ chữ/màu chữ/màu nền ĐÃ LƯU của ô tiêu đề (nếu có) — mở ô mới hoặc ô chưa từng đổi kiểu
+  // chữ thì để trống (bỏ cờ "đã chạm"), Lưu sẽ không ghi đè gì, giữ đúng mặc định của theme.
+  const fontEl = document.getElementById('kho-grid-cell-fontsize');
+  if(fontEl) fontEl.value = (cell && cell.fontSize) ? cell.fontSize : '';
+  if(khoGridCellTextColorInput) khoGridCellTextColorInput.value = (cell && cell.textColor) ? cell.textColor : KHO_GRID_LABEL_DEFAULT_TEXT_COLOR;
+  if(khoGridCellBgColorInput) khoGridCellBgColorInput.value = (cell && cell.bgColor) ? cell.bgColor : KHO_GRID_LABEL_DEFAULT_BG_COLOR;
+  _khoGridCellTextColorTouched = !!(cell && cell.textColor);
+  _khoGridCellBgColorTouched = !!(cell && cell.bgColor);
   const overlay=document.getElementById('kho-grid-cell-overlay');
   if(overlay) overlay.classList.add('show');
 }
@@ -6696,8 +6736,27 @@ if(khoGridCellSaveBtn) khoGridCellSaveBtn.addEventListener('click',()=>{
     return false;
   });
   if(conflict){alert(`Vị trí này đè lên ô "${conflict.isLabel?conflict.label:conflict.locator}" đã có sẵn trên lưới.`);return;}
-  if(_khoGridEditingCellId){const cell=layout.cells.find(c=>c.id===_khoGridEditingCellId);if(cell){cell.isLabel=isLabel;cell.locator=locator;cell.label=label;cell.row=row;cell.col=col;cell.rowSpan=rowSpan;cell.colSpan=colSpan;}}
-  else layout.cells.push({id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),isLabel,locator,label,row,col,rowSpan,colSpan});
+  // Cỡ chữ/màu chữ/màu nền chỉ áp dụng cho ô tiêu đề — chỉ lưu khi người dùng thực sự chỉnh (đã "touched")
+  // hoặc có nhập cỡ chữ, để nút "Mặc định" xoá hẳn override thay vì ghi đè bằng chính giá trị mặc định.
+  const fontSizeRaw=document.getElementById('kho-grid-cell-fontsize').value;
+  const fontSize=isLabel && fontSizeRaw!=='' ? Math.max(8,Math.min(72,Math.round(Number(fontSizeRaw)))) : null;
+  const textColor=isLabel && _khoGridCellTextColorTouched ? document.getElementById('kho-grid-cell-textcolor').value : null;
+  const bgColor=isLabel && _khoGridCellBgColorTouched ? document.getElementById('kho-grid-cell-bgcolor').value : null;
+  if(_khoGridEditingCellId){
+    const cell=layout.cells.find(c=>c.id===_khoGridEditingCellId);
+    if(cell){
+      cell.isLabel=isLabel;cell.locator=locator;cell.label=label;cell.row=row;cell.col=col;cell.rowSpan=rowSpan;cell.colSpan=colSpan;
+      if(fontSize)cell.fontSize=fontSize;else delete cell.fontSize;
+      if(textColor)cell.textColor=textColor;else delete cell.textColor;
+      if(bgColor)cell.bgColor=bgColor;else delete cell.bgColor;
+    }
+  } else {
+    const newCell={id:'g'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),isLabel,locator,label,row,col,rowSpan,colSpan};
+    if(fontSize)newCell.fontSize=fontSize;
+    if(textColor)newCell.textColor=textColor;
+    if(bgColor)newCell.bgColor=bgColor;
+    layout.cells.push(newCell);
+  }
   khoGridSave();khoGridRenderCustom(kho);document.getElementById('kho-grid-cell-overlay').classList.remove('show');
 });
 // Nhấn Enter ở BẤT KỲ ô nhập nào trong popup này = bấm "Lưu" luôn, khỏi phải với chuột — trừ khi
