@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.82';
+const APP_VERSION = 'v2.83';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13528,7 +13528,7 @@ const TX_TABLE_DEFS = {
 };
 
 const TX_DEFAULT_KHO_FILTER = '3B';
-const TX_TRANSFER_DEFAULT_MENU = ['ITN Receiving', 'ITN Transfer'];
+const TX_TRANSFER_DEFAULT_MENU = ['ITN Transfer'];
 function txDefaultColFilters(){
   return { khoXuat: new Set([TX_DEFAULT_KHO_FILTER]) };
 }
