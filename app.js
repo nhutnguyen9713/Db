@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.92';
+const APP_VERSION = 'v2.93';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6194,17 +6194,20 @@ function khoGridOpenSettings(khoLabel){
   document.getElementById('kho-grid-cols-input').value=layout.cols;
   const reset=document.getElementById('kho-grid-reset-all');
   if(reset) reset.textContent=`🗑 Xoá toàn bộ lưới tuỳ chỉnh ${khoLabel}`;
-  // Xoá trắng 2 ô Tìm/Thay bằng mỗi lần mở lại popup — tránh lỡ tay áp dụng nhầm giá trị cũ còn sót
-  // lại từ lần đổi tên trước (của kho khác hoặc lần trước đó).
+  // Xoá trắng các ô nhập của 2 thao tác hàng loạt (đổi tên + sức chứa) mỗi lần mở lại popup — tránh
+  // lỡ tay áp dụng nhầm giá trị cũ còn sót lại từ lần trước (của kho khác hoặc lần trước đó).
   const findEl=document.getElementById('kho-grid-rename-find'), replaceEl=document.getElementById('kho-grid-rename-replace');
   if(findEl) findEl.value=''; if(replaceEl) replaceEl.value='';
+  const capEl=document.getElementById('kho-grid-capacity-value');
+  if(capEl) capEl.value='';
   // Báo ngay số ô đang chọn (phải chọn vùng TRÊN LƯỚI trước khi mở popup này — Ctrl+Click/kéo chuột)
-  // để người dùng biết chắc đang đổi tên đúng vùng nào, tránh đổi lan sang ô khác trùng tên ngoài ý
-  // muốn (VD: lưới có 2 khu vực khác nhau nhưng lỡ đặt trùng tiền tố "-E" ở cả 2 khu).
+  // để người dùng biết chắc 2 thao tác hàng loạt bên dưới (đổi tên/sức chứa) áp dụng đúng vùng nào,
+  // tránh đổi lan sang ô khác ngoài ý muốn (VD: lưới có 2 khu vực khác nhau nhưng lỡ đặt trùng tiền
+  // tố "-E" ở cả 2 khu).
   const selInfo=document.getElementById('kho-grid-rename-sel-info');
   if(selInfo){
     const n=khoGridSelectedCells(khoLabel).length;
-    selInfo.textContent = n ? `✓ Đang chọn ${n} ô trên lưới — đổi tên sẽ chỉ áp dụng cho đúng ${n} ô này.` : `⚠ Chưa chọn vùng nào — đóng popup này, chọn vùng trên lưới (Ctrl+Click hoặc kéo chuột) rồi mở lại.`;
+    selInfo.textContent = n ? `✓ Đang chọn ${n} ô trên lưới — đổi tên/sức chứa hàng loạt bên dưới sẽ chỉ áp dụng cho đúng ${n} ô này.` : `⚠ Chưa chọn vùng nào — đóng popup này, chọn vùng trên lưới (Ctrl+Click hoặc kéo chuột) rồi mở lại.`;
     selInfo.style.color = n ? 'var(--teal)' : 'var(--red)';
   }
   document.getElementById('kho-grid-settings-overlay').classList.add('show');
@@ -6231,6 +6234,32 @@ function khoGridBulkRenameLocators(khoLabel, find, replace){
   khoGridSave();
   khoGridRenderCustom(khoLabel);
   if(typeof showAppToast === 'function') showAppToast(`✓ Đã đổi tên ${fmt(matched.length)} vị trí trong lưới tuỳ chỉnh ${khoLabel}.`);
+}
+
+// Sửa sức chứa (capacity) hàng loạt cho các ô ĐANG ĐƯỢC CHỌN trên lưới — dùng CHUNG kho lưu
+// whCapOverrides với nút bánh răng sửa từng ô riêng lẻ (whApplyCapOverride()), nên sửa hàng loạt ở
+// đây và Overview luôn khớp nhau ngay, không cần thêm chỗ lưu riêng. valueStr rỗng = xoá ghi đè
+// riêng của các ô đó (quay lại sức chứa mặc định của kho), giống hệt hành vi bỏ trống khi sửa từng ô.
+function khoGridBulkSetCapacity(khoLabel, valueStr){
+  const selected = khoGridSelectedCells(khoLabel);
+  if(!selected.length){ alert(`Chưa chọn vùng nào trên lưới ${khoLabel} — hãy đóng popup này, Ctrl+Click từng ô (hoặc kéo chuột vẽ vùng chọn) trên lưới, rồi mở lại "Cài đặt lưới".`); return; }
+  const matched = selected.filter(c => !c.isLabel && c.locator); // ô tiêu đề không có sức chứa để sửa
+  if(!matched.length){ alert(`Không có vị trí nào (chỉ có ô tiêu đề) trong ${selected.length} ô đang chọn.`); return; }
+  const trimmed = valueStr.trim();
+  let num = null;
+  if(trimmed !== ''){
+    num = Number(trimmed);
+    if(!Number.isFinite(num) || num <= 0){ alert('Giá trị không hợp lệ — hãy nhập 1 số lớn hơn 0, hoặc để trống để xoá sức chứa riêng.'); return; }
+  }
+  const actionText = num === null ? 'Xoá sức chứa riêng, quay lại mặc định' : `Đổi sức chứa tối đa thành ${fmt(num)} pallet`;
+  if(!confirm(`${actionText} cho ${matched.length} vị trí ĐANG CHỌN trong lưới ${khoLabel}?`)) return;
+  const overrides = whLoadCapOverrides();
+  matched.forEach(c => { if(num === null) delete overrides[c.locator]; else overrides[c.locator] = num; });
+  whSaveCapOverrides(overrides);
+  khoGridClearSelection();
+  renderSodo3B();
+  if(typeof renderCapacityOverviews === 'function') renderCapacityOverviews(); // đồng bộ sang trang Overview
+  if(typeof showAppToast === 'function') showAppToast(`✓ Đã ${num === null ? 'xoá sức chứa riêng' : `đổi sức chứa thành ${fmt(num)}`} cho ${fmt(matched.length)} vị trí.`);
 }
 
 function khoGridPointToCell(container, clientX, clientY, layout){
@@ -6699,6 +6728,10 @@ if(khoGridRenameApplyBtn) khoGridRenameApplyBtn.addEventListener('click',()=>{
   const find=document.getElementById('kho-grid-rename-find').value;
   const replace=document.getElementById('kho-grid-rename-replace').value;
   khoGridBulkRenameLocators(_khoGridActiveKho, find, replace);
+});
+const khoGridCapacityApplyBtn=document.getElementById('kho-grid-capacity-apply');
+if(khoGridCapacityApplyBtn) khoGridCapacityApplyBtn.addEventListener('click',()=>{
+  khoGridBulkSetCapacity(_khoGridActiveKho, document.getElementById('kho-grid-capacity-value').value);
 });
 const khoGridResetAllBtn=document.getElementById('kho-grid-reset-all');
 if(khoGridResetAllBtn) khoGridResetAllBtn.addEventListener('click',()=>{
