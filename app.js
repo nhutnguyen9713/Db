@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.96';
+const APP_VERSION = 'v2.97';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -2450,6 +2450,39 @@ if(ovConfigResetBtn) ovConfigResetBtn.addEventListener('click', () => {
   ovConfigDraft[ovConfigActiveTab] = 'DEFAULT';
   ovRenderConfigList();
 });
+
+// Xuất Excel bảng "Tuỳ chỉnh vị trí" — cả 3 kho, mỗi kho 1 sheet, đúng ĐANG CHỌN gì trên màn hình lúc
+// bấm (kể cả đang sửa dở, CHƯA bấm "Lưu & tính lại") — Locator/SL tồn/Sức chứa cùng cột dữ liệu hiển
+// thị trong modal, cộng thêm cột "Đã chọn" và "Ghi chú" (đánh dấu vị trí chưa có trong Sơ đồ kho).
+function exportOvConfigToExcel(){
+  if(!LIB_XLSX_OK){ alert('Không xuất được Excel: thư viện SheetJS chưa tải được (cần Internet). Hãy mở file này bằng Chrome có kết nối mạng rồi thử lại.'); return; }
+  if(!ovConfigDraft) return;
+  const counts = ovBuildLocatorCounts();
+  const wb = XLSX.utils.book_new();
+  const header = ['Locator', 'Đã chọn (tính Utilization)', 'SL tồn', 'Sức chứa', 'Ghi chú'];
+  ['3B', '3A', '2B'].forEach(code => {
+    const khoLabel = OV_KHO_LABELS[code];
+    const draft = ovConfigDraft[code];
+    const defaultSet = new Set(ovDefaultLocatorsForKho(khoLabel));
+    const rows = ovCandidateLocatorsForKho(code).map(loc => {
+      const checked = draft === 'DEFAULT' ? defaultSet.has(loc) : draft.has(loc);
+      return [
+        loc, checked ? 'Có' : 'Không', counts.get(loc) || 0, ovCapacityOfLocator(khoLabel, loc),
+        defaultSet.has(loc) ? '' : 'Chưa có trong Sơ đồ kho'
+      ];
+    });
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+    ws['!cols'] = [{ wch: 22 }, { wch: 24 }, { wch: 10 }, { wch: 10 }, { wch: 26 }];
+    XLSX.utils.book_append_sheet(wb, ws, `Kho ${code}`.slice(0, 31));
+  });
+  const pad = n => String(n).padStart(2, '0');
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+  XLSX.writeFile(wb, `Tuy_chinh_vi_tri_Utilization_${stamp}.xlsx`);
+}
+const ovConfigExportBtn = document.getElementById('ov-config-export-excel');
+if(ovConfigExportBtn) ovConfigExportBtn.addEventListener('click', exportOvConfigToExcel);
+
 const ovConfigSaveBtn = document.getElementById('ov-config-save');
 if(ovConfigSaveBtn) ovConfigSaveBtn.addEventListener('click', () => {
   if(!ovConfigDraft) return;
