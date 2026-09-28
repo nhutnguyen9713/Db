@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.89';
+const APP_VERSION = 'v2.90';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5920,7 +5920,7 @@ function khoGridSelectionAnchor(){
 const KHO_CUSTOM_GRID_CONFIG = {
   'Kho 3B': {
     defaultRows:5, defaultCols:5, defaultMax:WH3B_MAX_PALLET,
-    settingsBtn:'sodo3b-grid-settings-btn', copyBtn:'sodo3b-grid-copy-btn',
+    settingsBtn:'sodo3b-grid-settings-btn',
     heatmapBtn:'sodo3b-heatmap-toggle', legend:'sodo3b-legend',
     defaultGrid:'sodo3b-grid', customGrid:'sodo3b-custom-grid', note:'sodo3b-custom-grid-note', hint:null,
     search:'sodo3b-search', pass:'sodo3b-oqc-pass', ng:'sodo3b-oqc-ng', detail:'sodo3b-detail',
@@ -5928,7 +5928,7 @@ const KHO_CUSTOM_GRID_CONFIG = {
   },
   'Kho 3A': {
     defaultRows:10, defaultCols:10, defaultMax:2,
-    settingsBtn:'rack3a-grid-settings-btn', copyBtn:'rack3a-grid-copy-btn',
+    settingsBtn:'rack3a-grid-settings-btn',
     heatmapBtn:'rack3a-heatmap-toggle', legend:'rack3a-legend',
     defaultGrid:'rack3a-grid', customGrid:'rack3a-custom-grid', note:'rack3a-custom-grid-note', hint:'rack3a-drag-hint',
     search:'rack3a-search', pass:'rack3a-oqc-pass', ng:'rack3a-oqc-ng', detail:'rack3a-detail',
@@ -5936,18 +5936,15 @@ const KHO_CUSTOM_GRID_CONFIG = {
   },
   'Kho 2B': {
     defaultRows:10, defaultCols:10, defaultMax:24,
-    settingsBtn:'sodo2b-grid-settings-btn', copyBtn:'sodo2b-grid-copy-btn',
+    settingsBtn:'sodo2b-grid-settings-btn',
     heatmapBtn:'sodo2b-heatmap-toggle', legend:'sodo2b-legend',
     defaultGrid:'sodo2b-grid', customGrid:'sodo2b-custom-grid', note:'sodo2b-custom-grid-note', hint:'sodo2b-drag-hint',
     search:'sodo2b-search', pass:'sodo2b-oqc-pass', ng:'sodo2b-oqc-ng', detail:'sodo2b-detail',
     compute:computeSodo2bByLocator
   },
-  // Chưa có sơ đồ mặc định (chưa rõ bố cục thật ngoài kho) nên copyBtn trỏ tới 1 id KHÔNG tồn tại
-  // trong HTML (không có nút "Copy từ sơ đồ mặc định" cho DG1) — mọi chỗ dùng cfg.copyBtn đều tự
-  // kiểm tra null nên an toàn, chỉ đơn giản là nút đó sẽ không hiện ra.
   'Kho DG1': {
     defaultRows:6, defaultCols:6, defaultMax:24, // = DG1_MAX_PALLET (hằng số khai báo SAU nên phải ghi số trực tiếp ở đây, tránh lỗi TDZ)
-    settingsBtn:'dg1-grid-settings-btn', copyBtn:'dg1-grid-copy-btn',
+    settingsBtn:'dg1-grid-settings-btn',
     heatmapBtn:'dg1-heatmap-toggle', legend:'dg1-legend',
     defaultGrid:'dg1-grid', customGrid:'dg1-custom-grid', note:'dg1-custom-grid-note', hint:'dg1-drag-hint',
     search:'dg1-search', pass:'dg1-oqc-pass', ng:'dg1-oqc-ng', detail:'dg1-detail',
@@ -5958,59 +5955,6 @@ const KHO_CUSTOM_GRID_CONFIG = {
 // Vẽ nhãn nút + chú thích Heatmap NGAY khi script chạy (nút đã có sẵn trong index.html lúc này —
 // app.js nằm cuối <body>) — để đúng luôn trạng thái đã lưu (localStorage) từ trước khi cần bấm gì.
 khoRenderHeatmapControls();
-
-// Danh sách ĐẦY ĐỦ vị trí (locator) của sơ đồ MẶC ĐỊNH từng kho — cố định theo đúng bố cục layout
-// gốc (KHÁC với compute...ByLocator() ở trên, vốn chỉ liệt kê vị trí đang CÓ tồn kho thật) — dùng cho
-// nút "📋 Copy từ sơ đồ mặc định" ở grid tuỳ chỉnh.
-function khoGridDefaultLocatorsFor(khoLabel){
-  if(khoLabel === 'Kho 3B'){
-    const left = []; for(let n=1;n<=15;n++) left.push('D3B-FG-A' + String(n).padStart(2,'0'));
-    const right = []; for(let n=33;n>=16;n--) right.push('D3B-FG-A' + String(n).padStart(2,'0'));
-    const pick = []; for(let n=1;n<=5;n++) pick.push('3B-PICK-' + String(n).padStart(2,'0'));
-    return ['D3B-FG-PROD', 'D3B-Loading', ...pick, ...left, ...right];
-  }
-  if(khoLabel === 'Kho 3A') return RACK3A_ALL_LOCATORS.slice();
-  if(khoLabel === 'Kho 2B') return B2_LOCATORS.slice();
-  return [];
-}
-
-// Tự động thêm mọi vị trí CÒN THIẾU (so với sơ đồ mặc định) vào các Ô TRỐNG hiện có của grid tuỳ
-// chỉnh, theo đúng thứ tự đọc trái->phải/trên->dưới — không đụng tới các ô đã tự sắp xếp sẵn, tự
-// thêm hàng mới nếu không đủ chỗ chứa hết.
-function khoGridCopyFromDefault(khoLabel){
-  const defaultLocs = khoGridDefaultLocatorsFor(khoLabel);
-  if(!defaultLocs.length){ alert('Không có danh sách vị trí mặc định cho ' + khoLabel + '.'); return; }
-  const layout = khoGridGetLayout(khoLabel);
-  const existing = new Set(layout.cells.map(c => String(c.locator || '').trim().toUpperCase()));
-  const missing = defaultLocs.filter(loc => !existing.has(String(loc).toUpperCase()));
-  if(!missing.length){ alert('Grid tuỳ chỉnh đã có đủ toàn bộ vị trí từ sơ đồ mặc định — không có gì để thêm.'); return; }
-  if(!confirm(
-    `Thêm ${missing.length} vị trí còn thiếu (theo đúng thứ tự sơ đồ mặc định) vào các ô trống của grid tuỳ chỉnh ${khoLabel}?\n\n` +
-    `Các vị trí đã sắp xếp sẵn trong grid được giữ nguyên, không bị đụng tới. Nếu không đủ ô trống, grid sẽ tự thêm hàng mới.`
-  )) return;
-
-  const occupied = khoGridBuildOccupied(layout, null);
-  let r = 1, c = 1;
-  missing.forEach(loc => {
-    while(occupied.has(r + ',' + c)){
-      c++;
-      if(c > layout.cols){ c = 1; r++; }
-    }
-    if(r > layout.rows) layout.rows = r;
-    layout.cells.push({
-      id: 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-      locator: loc, row: r, col: c, rowSpan: 1, colSpan: 1
-    });
-    occupied.add(r + ',' + c);
-    c++;
-    if(c > layout.cols){ c = 1; r++; }
-  });
-  if(r > layout.rows) layout.rows = r;
-
-  khoGridSave();
-  khoGridRenderCustom(khoLabel);
-  if(typeof showAppToast === 'function') showAppToast(`✓ Đã thêm ${fmt(missing.length)} vị trí từ sơ đồ mặc định vào grid tuỳ chỉnh ${khoLabel}.`);
-}
 
 // CACHE theo tham chiếu currentData — cùng lý do với computeSodo3bByLocator() ở trên (gọi lại mỗi ký
 // tự gõ tìm kiếm sơ đồ kho 2B).
@@ -6168,13 +6112,11 @@ function khoGridSetMode(khoLabel, enabled){
   const customGrid = document.getElementById(cfg.customGrid);
   const note = document.getElementById(cfg.note);
   const settings = document.getElementById(cfg.settingsBtn);
-  const copyBtn = document.getElementById(cfg.copyBtn);
   const hint = cfg.hint ? document.getElementById(cfg.hint) : null;
   if(defaultGrid) defaultGrid.style.display = mode ? 'none' : '';
   if(customGrid) customGrid.style.display = mode ? 'grid' : 'none';
   if(note) note.style.display = mode ? '' : 'none';
   if(settings) settings.style.display = mode ? '' : 'none';
-  if(copyBtn) copyBtn.style.display = mode ? '' : 'none';
   if(hint) hint.style.display = mode ? '' : 'none';
   if(mode) khoGridRenderCustom(khoLabel);
   else whApplySearchFilter(cfg.defaultGrid, cfg.compute, cfg.search, cfg.pass, cfg.ng, cfg.detail);
@@ -6496,8 +6438,6 @@ document.addEventListener('click',(e)=>{
   for(const [kho,cfg] of Object.entries(KHO_CUSTOM_GRID_CONFIG)){
     const settingsBtn=e.target.closest('#'+cfg.settingsBtn);
     if(settingsBtn){e.stopImmediatePropagation();khoGridOpenSettings(kho);return;}
-    const copyBtn=e.target.closest('#'+cfg.copyBtn);
-    if(copyBtn){e.stopImmediatePropagation();khoGridCopyFromDefault(kho);return;}
     const heatmapBtn=e.target.closest('#'+cfg.heatmapBtn);
     if(heatmapBtn){e.stopImmediatePropagation();khoHeatmapCycle();return;}
   }
