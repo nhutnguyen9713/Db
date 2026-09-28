@@ -1473,6 +1473,35 @@
   }
   .ov-ng-plan-badge:hover{background:rgba(245,166,35,0.22);}
 
+  /* ---- Modal tuỳ chỉnh locator (chỉ chọn vị trí — capacity đọc từ Sơ đồ kho) ---- */
+  .ov-config-modal{position:fixed; inset:0; z-index:10000; display:flex; align-items:center; justify-content:center; padding:20px;}
+  .ov-config-backdrop{position:absolute; inset:0; background:rgba(10,14,22,0.55);}
+  .ov-config-panel{
+    position:relative; width:min(640px, 100%); max-height:85vh; display:flex; flex-direction:column;
+    background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,0.3);
+    overflow:hidden;
+  }
+  .ov-config-header{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:18px 20px 12px;}
+  .ov-config-header h2{font-family:var(--disp); font-size:17px; margin:0; color:var(--text);}
+  .ov-config-close-btn{border:none; background:var(--panel-2); color:var(--muted); width:28px; height:28px; border-radius:50%; cursor:pointer; font-size:14px; flex:0 0 auto;}
+  .ov-config-close-btn:hover{background:var(--line-soft); color:var(--text);}
+  .ov-config-tabs{display:flex; gap:6px; padding:0 20px; border-bottom:1px solid var(--line);}
+  .ov-config-tab{border:none; background:none; padding:9px 14px; font-family:var(--mono); font-weight:700; font-size:12.5px; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px;}
+  .ov-config-tab.active{color:var(--violet); border-bottom-color:var(--violet);}
+  .ov-config-toolbar{display:flex; align-items:center; gap:10px; padding:12px 20px; flex-wrap:wrap;}
+  .ov-config-toolbar input{flex:1; min-width:140px; background:var(--bg); border:1px solid var(--line); border-radius:7px; padding:7px 10px; font-family:var(--mono); font-size:12px; color:var(--text); outline:none;}
+  .ov-config-count{font-family:var(--mono); font-size:11px; color:var(--muted-2); white-space:nowrap;}
+  .ov-config-mini-btn{font-family:var(--mono); font-size:11px; border:1px solid var(--line); background:var(--panel-2); color:var(--blue); border-radius:6px; padding:6px 9px; cursor:pointer; white-space:nowrap;}
+  .ov-config-mini-btn:hover{background:var(--line-soft);}
+  .ov-config-list-head{display:grid; grid-template-columns:26px 1fr 70px 70px; gap:8px; padding:0 20px 6px; font-family:var(--mono); font-size:10px; color:var(--muted-2); text-transform:uppercase;}
+  .ov-config-list{flex:1; overflow-y:auto; padding:0 20px 8px; border-top:1px solid var(--line-soft);}
+  .ov-config-row{display:grid; grid-template-columns:26px 1fr 70px 70px; gap:8px; align-items:center; padding:5px 0; border-bottom:1px solid var(--line-soft); font-family:var(--mono); font-size:12px;}
+  .ov-config-row input[type="checkbox"]{width:15px; height:15px; cursor:pointer;}
+  .ov-config-row .loc-name{color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .ov-config-row .loc-qty,.ov-config-row .loc-cap{color:var(--muted-2); text-align:right;}
+  .ov-config-row.extra .loc-name{color:var(--amber-bright);}
+  .ov-config-footer{display:flex; justify-content:flex-end; gap:8px; padding:14px 20px; border-top:1px solid var(--line);}
+
   /* ---- Ô "Kiểm thực tế" (phép tính nhập) — mặc định giữ nguyên 1 dòng như trước ---- */
   .kt-calc-cell{min-width:380px;}
   .kt-calc-row{display:flex; align-items:center; gap:2px; flex-wrap:nowrap; font-family:var(--mono); font-size:11px; color:var(--text);}

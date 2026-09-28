@@ -310,6 +310,10 @@ function gateBustedUrl(base){
         <div class="brand-eyebrow"><span class="dot"></span>SỨC CHỨA</div>
         <h1 style="font-size:16px; margin:2px 0 0;">Tổng quan sức chứa (3B / 3A / 2B)</h1>
       </div>
+      <button type="button" class="btn-update btn-ghost-outline" id="btn-ov-config" title="Tự chọn vị trí nào tính vào Utilization mỗi kho — sức chứa từng vị trí vẫn tự lấy theo Sơ đồ kho">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+        Tuỳ chỉnh vị trí
+      </button>
     </div>
     <div class="panel search-panel" id="ov-block-3B" style="margin-bottom:16px;">
       <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
@@ -523,7 +527,40 @@ function gateBustedUrl(base){
     </div>
   </div>
 
-  <!-- Modal tuỳ chỉnh danh sách locator tính Utilization -->
+  <!-- Modal tuỳ chỉnh danh sách locator tính Utilization — CHỈ chọn vị trí nào tính, KHÔNG còn sửa
+       capacity ở đây nữa (capacity luôn tự lấy theo Sơ đồ kho). -->
+  <div id="ov-config-modal" class="ov-config-modal" style="display:none;">
+    <div class="ov-config-backdrop" id="ov-config-backdrop"></div>
+    <div class="ov-config-panel">
+      <div class="ov-config-header">
+        <div>
+          <h2>Tuỳ chỉnh vị trí tính Utilization</h2>
+          <div class="sub" style="margin:2px 0 0;">Chọn đúng danh sách locator thuộc từng kho được TÍNH vào Utilization/Capacity. Sức chứa mỗi vị trí luôn tự lấy theo Sơ đồ kho (Grid tuỳ chỉnh), không sửa được ở đây.</div>
+        </div>
+        <button type="button" id="ov-config-close" class="ov-config-close-btn" title="Đóng">✕</button>
+      </div>
+      <div class="ov-config-tabs" id="ov-config-tabs">
+        <button type="button" class="ov-config-tab active" data-kho="3B">Kho 3B</button>
+        <button type="button" class="ov-config-tab" data-kho="3A">Kho 3A</button>
+        <button type="button" class="ov-config-tab" data-kho="2B">Kho 2B</button>
+      </div>
+      <div class="ov-config-toolbar">
+        <input type="text" id="ov-config-search" placeholder="Tìm locator…">
+        <span class="ov-config-count" id="ov-config-count">0 vị trí</span>
+        <button type="button" class="ov-config-mini-btn" id="ov-config-selall">Chọn tất cả</button>
+        <button type="button" class="ov-config-mini-btn" id="ov-config-clrall">Bỏ chọn</button>
+        <button type="button" class="ov-config-mini-btn" id="ov-config-resetdefault" title="Bỏ tuỳ chỉnh — quay lại tính TOÀN BỘ vị trí theo đúng Sơ đồ kho, tự cập nhật khi sơ đồ đổi">Về mặc định</button>
+      </div>
+      <div class="ov-config-list-head">
+        <span></span><span>Locator</span><span>SL tồn</span><span>Sức chứa</span>
+      </div>
+      <div class="ov-config-list" id="ov-config-list"></div>
+      <div class="ov-config-footer">
+        <button type="button" class="btn-update btn-ghost-outline" id="ov-config-cancel">Huỷ</button>
+        <button type="button" class="btn-update" id="ov-config-save">Lưu &amp; tính lại</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Panel theo dõi vị trí Kho 3B -->
   <div class="grid" id="watch-locator-row-3b" style="display:none;">
