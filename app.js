@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.86';
+const APP_VERSION = 'v2.87';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13842,13 +13842,14 @@ function renderXeTrungChuyenTable(stateKey, prefix){
       <td>${escHtml(r.item)}</td>
       <td>${escHtml(r.locator)}</td>
       <td>${escHtml(r.chuyen)}</td>
+      <td>${escHtml(r.reference || '—')}</td>
       <td>${escHtml(r.user)}</td>
       <td class="num">${fmt(r.qty)}</td>
       <td class="num tx-total-col">${fmt(r.total)}</td>
     </tr>`).join('');
   const tfoot = document.getElementById(`${prefix}-tfoot`);
   if(tfoot){
-    tfoot.innerHTML = `<tr style="font-weight:700; border-top:2px solid var(--line);"><td>Grand Total</td><td></td><td></td><td></td><td class="num">${fmt(grandQty)}</td><td class="num tx-total-col">${fmt(grandTotal)}</td></tr>`;
+    tfoot.innerHTML = `<tr style="font-weight:700; border-top:2px solid var(--line);"><td>Grand Total</td><td></td><td></td><td></td><td></td><td class="num">${fmt(grandQty)}</td><td class="num tx-total-col">${fmt(grandTotal)}</td></tr>`;
   }
   if(summaryEl) summaryEl.textContent = `${fmt(rows.length)} dòng · ${fmt(new Set(rows.map(r=>r.reference)).size)} Chuyến · Tổng: ${fmt(grandTotal)}`;
 }
