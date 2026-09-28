@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.99';
+const APP_VERSION = 'v3.00';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5752,20 +5752,6 @@ function renderSodo3bBlocks(){
 
   grid.innerHTML = prodHtml + mainHtml + pickHtml + loadingHtml + othersHtml;
 
-  // Lưu lại danh sách + dữ liệu "ngoài sơ đồ" để nút cảnh báo góc panel dùng khi bấm vào.
-  const outsideRows = [];
-  others.forEach(loc => (map[loc] || []).forEach(r => outsideRows.push(r)));
-  sodo3bOutsideData = { locators: others, rows: outsideRows };
-  const warnEl = document.getElementById('wh3b-outside-warning');
-  if(warnEl){
-    if(others.length){
-      warnEl.style.display = 'flex';
-      warnEl.innerHTML = `⚠ ${fmt(others.length)} vị trí ngoài sơ đồ · ${fmt(outsideRows.length)} pallet`;
-    } else {
-      warnEl.style.display = 'none';
-    }
-  }
-
   if(summaryEl){
     summaryEl.innerHTML = `
       <div><b>${realLocatorCount}</b><span>Vị trí (locator)</span></div>
@@ -5774,7 +5760,6 @@ function renderSodo3bBlocks(){
     `;
   }
 }
-let sodo3bOutsideData = { locators: [], rows: [] };
 
 /* ============ GRID TUỲ CHỈNH CHUNG cho 3B / 3A / 2B ============
    Dữ liệu locator vẫn lấy trực tiếp từ currentData. Grid chỉ lưu cách bố trí hiển thị.
@@ -7035,37 +7020,6 @@ WH_GRID_CONFIGS['sodo2b-custom-grid'] = {detailId:'sodo2b-detail',computeFn:comp
 WH_GRID_CONFIGS['dg1-custom-grid'] = {detailId:'dg1-detail',computeFn:computeDG1ByLocator};
 
 document.addEventListener('click', (e) => {
-  const outsideWarnBtn = e.target.closest('#wh3b-outside-warning');
-  if(outsideWarnBtn){
-    const detailWrap = document.getElementById('sodo3b-detail');
-    if(!detailWrap) return;
-    document.querySelectorAll('#sodo3b-grid .wh3b-box.active').forEach(b => b.classList.remove('active'));
-    const rows = sodo3bOutsideData.rows.slice().sort((a, b) =>
-      String(a[RAW_KEY_IDX.locator] || '').localeCompare(String(b[RAW_KEY_IDX.locator] || '')) ||
-      String(a[RAW_KEY_IDX.item] || '').localeCompare(String(b[RAW_KEY_IDX.item] || '')));
-    const body = rows.map((r, idx) => `
-      <tr>
-        <td>${idx + 1}</td>
-        <td>${r[RAW_KEY_IDX.locator] || ''}</td>
-        <td>${r[RAW_KEY_IDX.item] || ''}</td>
-        <td>${r[RAW_KEY_IDX.custpo] || ''}</td>
-        <td>${oqcBadge(r[RAW_KEY_IDX.oqc])}</td>
-        <td class="num">${fmt(r[RAW_KEY_IDX.qty] || 0)}</td>
-        <td>${giCellHtml(r[RAW_KEY_IDX.gi])}</td>
-        <td>${r[RAW_KEY_IDX.lot] || '—'}</td>
-      </tr>`).join('');
-    detailWrap.innerHTML = `
-      <div class="wh3b-detail-title">⚠ ${fmt(sodo3bOutsideData.locators.length)} vị trí NGOÀI sơ đồ (<b>${sodo3bOutsideData.locators.join(', ')}</b>) — ${fmt(rows.length)} pallet (dòng GI No.)</div>
-      <div class="plan-table-wrap">
-        <table class="plan-detail-table">
-          <thead><tr><th>#</th><th>Locator</th><th>Item No.</th><th>Cust PO</th><th>OQC</th><th style="text-align:right">SL tồn</th><th>GI No.</th><th>Lot No.</th></tr></thead>
-          <tbody>${body}</tbody>
-        </table>
-      </div>`;
-    detailWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    return;
-  }
-
   const gearBtn = e.target.closest('.wh3b-box-gear');
   if(gearBtn){
     const loc = gearBtn.dataset.locator;
@@ -7094,38 +7048,71 @@ document.addEventListener('click', (e) => {
   const gridEl = box.closest('.wh3b-grid');
   const cfg = gridEl ? WH_GRID_CONFIGS[gridEl.id] : null;
   if(!cfg || !boxEl) return;
-  const detailWrap = document.getElementById(cfg.detailId);
   const wasActive = boxEl.classList.contains('active');
   gridEl.querySelectorAll('.wh3b-box.active').forEach(b => b.classList.remove('active'));
   if(wasActive){
-    if(detailWrap) detailWrap.innerHTML = '';
+    khoLocatorPopupClose();
     return;
   }
   boxEl.classList.add('active');
-  if(!detailWrap) return;
   const loc = box.dataset.locator;
   const map = cfg.computeFn();
-  const rows = (map[loc] || []).slice().sort((a, b) =>
-    String(a[RAW_KEY_IDX.item] || '').localeCompare(String(b[RAW_KEY_IDX.item] || '')));
-  const body = rows.map((r, idx) => `
+  khoLocatorPopupShow(box, loc, map[loc] || []);
+});
+
+// Popup nổi hiển thị chi tiết pallet (GI No./Item No./OQC/SL tồn) ngay cạnh vị trí vừa bấm trên sơ
+// đồ kho — tránh phải cuộn xuống bảng chi tiết ở cuối mỗi khối. Chỉ 1 popup tồn tại tại 1 thời điểm.
+let _khoLocatorPopupEl = null;
+function khoLocatorPopupClose(){
+  if(_khoLocatorPopupEl){ _khoLocatorPopupEl.remove(); _khoLocatorPopupEl = null; }
+  document.removeEventListener('mousedown', khoLocatorPopupOutsideHandler, true);
+  document.removeEventListener('keydown', khoLocatorPopupEscHandler, true);
+}
+function khoLocatorPopupOutsideHandler(e){
+  if(_khoLocatorPopupEl && !_khoLocatorPopupEl.contains(e.target) && !e.target.closest('.wh3b-box-main')) khoLocatorPopupClose();
+}
+function khoLocatorPopupEscHandler(e){
+  if(e.key === 'Escape') khoLocatorPopupClose();
+}
+function khoLocatorPopupShow(anchorEl, loc, rows){
+  khoLocatorPopupClose();
+  const sorted = rows.slice().sort((a, b) => String(a[RAW_KEY_IDX.item] || '').localeCompare(String(b[RAW_KEY_IDX.item] || '')));
+  const body = sorted.map(r => `
     <tr>
-      <td>${idx + 1}</td>
-      <td>${r[RAW_KEY_IDX.item] || ''}</td>
-      <td>${r[RAW_KEY_IDX.custpo] || ''}</td>
+      <td>${giCellHtml(r[RAW_KEY_IDX.gi])}</td>
+      <td>${escHtml(String(r[RAW_KEY_IDX.item] || ''))}</td>
       <td>${oqcBadge(r[RAW_KEY_IDX.oqc])}</td>
       <td class="num">${fmt(r[RAW_KEY_IDX.qty] || 0)}</td>
-      <td>${giCellHtml(r[RAW_KEY_IDX.gi])}</td>
-      <td>${r[RAW_KEY_IDX.lot] || '—'}</td>
-    </tr>`).join('');
-  detailWrap.innerHTML = `
-    <div class="wh3b-detail-title">Chi tiết vị trí <b>${loc}</b> — ${fmt(rows.length)} pallet (dòng GI No.)</div>
-    <div class="plan-table-wrap">
+    </tr>`).join('') || `<tr><td colspan="4" style="text-align:center; color:var(--muted);">Không có pallet nào.</td></tr>`;
+  const panel = document.createElement('div');
+  panel.className = 'wh3b-locator-popup';
+  panel.innerHTML = `
+    <div class="wh3b-locator-popup-head">
+      <b>${escHtml(loc)}</b><span>${fmt(sorted.length)} pallet</span>
+      <button type="button" class="wh3b-locator-popup-close" title="Đóng">&times;</button>
+    </div>
+    <div class="wh3b-locator-popup-body">
       <table class="plan-detail-table">
-        <thead><tr><th>#</th><th>Item No.</th><th>Cust PO</th><th>OQC</th><th style="text-align:right">SL tồn</th><th>GI No.</th><th>Lot No.</th></tr></thead>
+        <thead><tr><th>GI No.</th><th>Item No.</th><th>OQC</th><th style="text-align:right">SL tồn</th></tr></thead>
         <tbody>${body}</tbody>
       </table>
     </div>`;
-});
+  document.body.appendChild(panel);
+  const rect = anchorEl.getBoundingClientRect();
+  const panelWidth = 300; // khớp width trong CSS, dùng để canh không tràn mép phải màn hình
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
+  const maxHeight = 320;
+  let top = rect.bottom + 6;
+  if(top + maxHeight > window.innerHeight && rect.top - maxHeight - 6 > 0) top = Math.max(8, rect.top - maxHeight - 6);
+  panel.style.left = left + 'px';
+  panel.style.top = top + 'px';
+  _khoLocatorPopupEl = panel;
+  panel.querySelector('.wh3b-locator-popup-close').addEventListener('click', khoLocatorPopupClose);
+  setTimeout(() => {
+    document.addEventListener('mousedown', khoLocatorPopupOutsideHandler, true);
+    document.addEventListener('keydown', khoLocatorPopupEscHandler, true);
+  }, 0);
+}
 
 /* Tạo 1 bộ điều khiển tìm kiếm độc lập (tab, ô search, ô multi, bảng gộp, bảng dữ liệu gốc).
    Dùng để nhân bản y hệt chức năng "Tìm mã hàng" cho nhiều mục sidebar khác nhau
@@ -9596,17 +9583,6 @@ function renderAlertsPanel(){
       title: 'Container thiếu hàng để pick',
       desc: `${fmt(shortContainers.length)} container · ${fmt(totalShortItems)} lượt mã thiếu`,
       onClick: () => alertsJumpTo('picking', () => alertsHighlightScroll(document.getElementById('cont-picking-overview')))
-    });
-  }
-
-  // 5) Locator ngoài sơ đồ (Kho 3B)
-  if(typeof renderSodo3bBlocks === 'function') renderSodo3bBlocks();
-  if(sodo3bOutsideData && sodo3bOutsideData.locators && sodo3bOutsideData.locators.length){
-    cards.push({
-      count: sodo3bOutsideData.locators.length,
-      title: 'Locator ngoài sơ đồ kho 3B',
-      desc: `${fmt(sodo3bOutsideData.locators.length)} vị trí · ${fmt(sodo3bOutsideData.rows.length)} pallet chưa có trong sơ đồ`,
-      onClick: () => alertsJumpTo('sodo3b', () => alertsHighlightScroll(document.getElementById('wh3b-outside-warning')))
     });
   }
 
