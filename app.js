@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.79';
+const APP_VERSION = 'v2.80';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -2994,7 +2994,13 @@ function aggregatePlanRows(rows, planType){
     const cellFilled = v => v !== null && v !== undefined && String(v).trim() !== '';
     const differsFromLast = c => c !== -1 && cellFilled(r[c]) && lastValues[c] !== undefined && String(r[c]).trim() !== String(lastValues[c]).trim();
     const startsNewSlot = contBlank && (differsFromLast(colLoadDate) || differsFromLast(colPlanTime));
-    if(startsNewSlot) Object.keys(lastValues).forEach(k => delete lastValues[k]);
+    // SỬA TIẾP (CR bị lem qua cont sau): mỗi khi gặp dòng có SỐ CONT RIÊNG (không trống, VD: dòng đầu
+    // của 1 cặp 2 dòng chung 1 cont/invoice như cont 5, 6 ở Plan HCP) là bắt đầu 1 nhóm cont MỚI —
+    // PHẢI xoá hết giá trị kế thừa của nhóm cont TRƯỚC (kể cả cột CSR/CR) trước khi xét dòng này, nếu
+    // không cột nào bị bỏ trống ở dòng đầu nhóm mới (VD: CSR chưa gán) vẫn ngầm giữ nguyên giá trị CR
+    // của cont TRƯỚC đó trong lastValues (do dòng đầu nhóm không phải continuation nên không tự xoá) —
+    // rồi dòng thứ 2 (continuation thật) trong CHÍNH nhóm mới lại kế thừa nhầm CR cũ đó.
+    if(!contBlank || startsNewSlot) Object.keys(lastValues).forEach(k => delete lastValues[k]);
     const isContinuationRow = contBlank && !startsNewSlot;
     if(isContinuationRow){
       for(let c=0;c<headers.length;c++){
