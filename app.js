@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.00';
+const APP_VERSION = 'v3.01';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6343,8 +6343,13 @@ function khoGridEndDrag(){
   _khoGridDragState=null;
   if(st.group){
     st.group.forEach(g=>g.boxEl.classList.remove('wh3b-dragging'));
-    if(st.moved) _khoGridSuppressClick = true;
-    if(st.moved && (st.curDRow || st.curDCol)){
+    // CHỈ chặn click (mở popup chi tiết) khi THẬT SỰ đổi vị trí — tay người dùng luôn rung nhẹ vài px
+    // lúc bấm (nhất là trên touchpad), đủ vượt ngưỡng 6px ở pointermove để bật cờ "moved" dù cuối cùng
+    // thả xuống ĐÚNG Y chỗ cũ; trước đây hễ "moved"=true là chặn click, khiến gần như MỌI lần bấm vào
+    // vị trí đều bị coi nhầm là đang kéo-thả, không bao giờ mở được popup.
+    const actuallyMoved = st.moved && (st.curDRow || st.curDCol);
+    if(actuallyMoved){
+      _khoGridSuppressClick = true;
       st.group.forEach(g => { g.cell.row+=st.curDRow; g.cell.col+=st.curDCol; });
       // Cập nhật lại vùng chọn theo vị trí MỚI — giữ nguyên đang chọn đúng các ô đó sau khi thả.
       if(_khoGridSelectionKho===st.kho) _khoGridSelection=new Set(st.group.map(g=>khoGridSelectionKey(g.cell.row,g.cell.col)));
@@ -6353,8 +6358,10 @@ function khoGridEndDrag(){
     return;
   }
   st.boxEl.classList.remove('wh3b-dragging');
-  if(st.moved) _khoGridSuppressClick = true;
-  if(st.moved && (st.curRow!==st.cell.row || st.curCol!==st.cell.col)){
+  // Xem giải thích ở nhánh "group" phía trên — cùng lý do, cùng cách sửa.
+  const actuallyMoved = st.moved && (st.curRow!==st.cell.row || st.curCol!==st.cell.col);
+  if(actuallyMoved){
+    _khoGridSuppressClick = true;
     st.cell.row=st.curRow; st.cell.col=st.curCol; khoGridSave(); khoGridRenderCustom(st.kho);
   }
 }
