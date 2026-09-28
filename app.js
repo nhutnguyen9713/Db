@@ -1391,8 +1391,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.78';
-const APP_VERSION_DATE = '24/09/2026';
+const APP_VERSION = 'v2.79';
+const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -2986,7 +2986,16 @@ function aggregatePlanRows(rows, planType){
     const r = rows[i];
     if(!r || r[colItem] === null || r[colItem] === undefined || String(r[colItem]).trim() === '') continue;
     const contVal = colContainer !== -1 ? r[colContainer] : undefined;
-    const isContinuationRow = colContainer !== -1 && (contVal === null || contVal === undefined || String(contVal).trim() === '');
+    const contBlank = colContainer !== -1 && (contVal === null || contVal === undefined || String(contVal).trim() === '');
+    // SỬA (Plan HCP bị lệch): dòng trống cột Cont/SEQ nhưng có NGÀY LOAD hoặc GIỜ PLAN KHÁC dòng trước
+    // là dòng CHƯA XẾP CONT (VD: các dòng 1-Oct sau cont 4 ngày 29-Sep), KHÔNG phải dòng nối tiếp của ô
+    // gộp (merged) — trước đây vẫn bị điền kế thừa số cont + CR của cont phía trên nên bị gộp nhầm vào
+    // cont đó. Dòng như vậy bắt đầu nhóm mới: xoá giá trị kế thừa để các dòng sau cũng không lấy nhầm.
+    const cellFilled = v => v !== null && v !== undefined && String(v).trim() !== '';
+    const differsFromLast = c => c !== -1 && cellFilled(r[c]) && lastValues[c] !== undefined && String(r[c]).trim() !== String(lastValues[c]).trim();
+    const startsNewSlot = contBlank && (differsFromLast(colLoadDate) || differsFromLast(colPlanTime));
+    if(startsNewSlot) Object.keys(lastValues).forEach(k => delete lastValues[k]);
+    const isContinuationRow = contBlank && !startsNewSlot;
     if(isContinuationRow){
       for(let c=0;c<headers.length;c++){
         if(c === colItem || c === colQty) continue;
