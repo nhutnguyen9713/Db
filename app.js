@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v2.80';
+const APP_VERSION = 'v2.81';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13646,6 +13646,31 @@ const TX_CHART_ITEMS = [
   { key:'transfer', label:'Transfer', color:'var(--blue)' },
   { key:'picking', label:'Picking', color:'var(--violet)' }
 ];
+// Thứ tự 4 kho hiển thị RIÊNG trong biểu đồ (giống CPT_KHO_ORDER/PICK_SLIP_KHO_ORDER dùng ở nơi khác
+// trong app) — luôn tính trên TOÀN BỘ dữ liệu của đúng kho đó, KHÔNG phụ thuộc bộ lọc cột/ô tìm kiếm
+// hiện tại (khác với nhóm "Theo bộ lọc hiện tại" ở đầu).
+const TX_CHART_KHO_ORDER = ['2B', '3A', '3B', 'DG1'];
+
+function txKhoTotalFor(kind, khoShort){
+  if(!txState) return { total: 0, rowsCount: 0 };
+  const rows = (txState[kind] || []).filter(r => r.khoXuat === khoShort);
+  return { total: rows.reduce((s,r)=>s+r.total,0), rowsCount: rows.length };
+}
+
+function txChartGroupHtml(label, items){
+  const maxVal = Math.max(1, ...items.map(i => i.total));
+  return `<div class="tx-chart-group">
+    <div class="tx-chart-group-label">${escHtml(label)}</div>
+    <div class="tx-chart-wrap">${items.map(it => {
+      const pct = it.total > 0 ? Math.max(3, Math.round((it.total / maxVal) * 100)) : 1;
+      return `<div class="tx-chart-bar-col">
+        <div class="tx-chart-bar-value" style="color:${it.color}">${fmt(it.total)}</div>
+        <div class="tx-chart-bar" style="height:${pct}%; background:${it.color};"></div>
+        <div class="tx-chart-bar-label">${it.label}<div class="tx-chart-bar-sub">${fmt(it.rowsCount)} dòng đang hiển thị</div></div>
+      </div>`;
+    }).join('')}</div>
+  </div>`;
+}
 
 function renderTxChart(){
   const wrap = document.getElementById('tx-chart-body');
@@ -13654,16 +13679,12 @@ function renderTxChart(){
     wrap.innerHTML = '<div class="kho-empty" style="padding:24px 0;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>';
     return;
   }
-  const items = TX_CHART_ITEMS.map(it => ({ ...it, ...txGrandTotalFor(it.key) }));
-  const maxVal = Math.max(1, ...items.map(i => i.total));
-  wrap.innerHTML = `<div class="tx-chart-wrap">${items.map(it => {
-    const pct = it.total > 0 ? Math.max(3, Math.round((it.total / maxVal) * 100)) : 1;
-    return `<div class="tx-chart-bar-col">
-      <div class="tx-chart-bar-value" style="color:${it.color}">${fmt(it.total)}</div>
-      <div class="tx-chart-bar" style="height:${pct}%; background:${it.color};"></div>
-      <div class="tx-chart-bar-label">${it.label}<div class="tx-chart-bar-sub">${fmt(it.rowsCount)} dòng đang hiển thị</div></div>
-    </div>`;
-  }).join('')}</div>`;
+  const filterItems = TX_CHART_ITEMS.map(it => ({ ...it, ...txGrandTotalFor(it.key) }));
+  const khoGroupsHtml = TX_CHART_KHO_ORDER.map(kho => {
+    const items = TX_CHART_ITEMS.map(it => ({ ...it, ...txKhoTotalFor(it.key, kho) }));
+    return txChartGroupHtml(`Kho ${kho}`, items);
+  }).join('');
+  wrap.innerHTML = txChartGroupHtml('Theo bộ lọc hiện tại', filterItems) + khoGroupsHtml;
 }
 
 function escHtml(s){

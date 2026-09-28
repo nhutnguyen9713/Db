@@ -1662,6 +1662,9 @@
   .simple-bar-fill{height:100%; border-radius:4px; transition:width .3s ease;}
   .simple-bar-value{font-family:var(--mono); font-size:11px; text-align:right; color:var(--amber); font-weight:600;}
 
+  .tx-chart-group{border-top:1px solid var(--line-soft); padding-top:6px;}
+  .tx-chart-group:first-child{border-top:none; padding-top:0;}
+  .tx-chart-group-label{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--muted); text-align:center; text-transform:uppercase; letter-spacing:.03em;}
   .tx-chart-wrap{display:flex; align-items:flex-end; gap:28px; height:190px; padding:16px 24px 0; justify-content:center;}
   .tx-chart-bar-col{flex:0 1 140px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%;}
   .tx-chart-bar-value{font-family:var(--mono); font-weight:800; font-size:16px; margin-bottom:8px; white-space:nowrap;}
