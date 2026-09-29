@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.03';
+const APP_VERSION = 'v3.04';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13113,7 +13113,14 @@ function guessKhoFromLocatorPrefix(locator){
   // đã có trong tồn kho vẫn ra đúng "DG1" (qua lookupMap), gây lệch ngay trong cùng 1 bảng. Case dưới
   // đây khớp y hệt classifyKho() (đã dùng "DG1" làm quy ước tên locator của Kho DG1 ở nơi khác).
   if(/^DG1/.test(s)) return 'Kho DG1';
-  return null; // các tiền tố khác (DG3...) không đủ rõ để đoán — để "—" thay vì đoán bừa
+  // SỬA (2 dòng Pick cont ở Kho 3A bị hiện "—" dù Locator Đến rõ ràng cùng 1 khu "DG3-Loading" với các
+  // dòng đã nhận đúng "3A"): locator xuất "DG3-…" hiện KHÔNG còn trong dữ liệu tồn kho (vừa pick xong
+  // nên trống, lookupMap miss) nên rơi xuống đây, nhưng hàm này trước đó KHÔNG có case DG3 — trong khi
+  // classifyKho() (nơi khác trong app) đã coi "DG3" là quy ước tên locator của Kho 3A từ lâu
+  // (`l.includes('3A') || l.includes('DG3')`), giờ khớp lại cho đúng, cùng 1 kho không còn bị tách "3A"
+  // và "—" như trước.
+  if(/^DG3/.test(s)) return 'Kho 3A';
+  return null; // các tiền tố khác không đủ rõ để đoán — để "—" thay vì đoán bừa
 }
 function resolveKhoForLocator(locator, lookupMap){
   const norm = String(locator || '').trim().toUpperCase();
