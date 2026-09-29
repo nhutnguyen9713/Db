@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.04';
+const APP_VERSION = 'v3.05';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6081,7 +6081,55 @@ if(khoGridCellStyleResetBtn) khoGridCellStyleResetBtn.addEventListener('click', 
   _khoGridCellBgColorTouched = false;
 });
 
+// Khoá sửa Sơ đồ kho — DÙNG CHUNG 1 khoá cho cả 4 kho (3B/3A/2B/DG1), theo yêu cầu: xem/tìm kiếm/bấm
+// xem chi tiết pallet vẫn dùng bình thường, chỉ chặn MỌI thao tác SỬA (thêm/sửa/xoá/di chuyển/đổi kích
+// thước/đổi sức chứa/dán...) cho tới khi nhập đúng mật khẩu. Mở khoá 1 lần thì hết luôn nhu cầu hỏi lại
+// trong suốt phiên làm việc này (lưu ở sessionStorage — KHÔNG đồng bộ qua Cloud/thiết bị khác, đóng tab
+// hoặc tải lại trang là khoá lại, đúng tinh thần 1 khoá cục bộ cho người đang ngồi máy đó).
+const KHO_GRID_EDIT_LOCK_PASSWORD = '123465';
+const KHO_GRID_EDIT_UNLOCK_KEY = 'tn5_khogrid_edit_unlocked';
+function khoGridEditIsUnlocked(){
+  try{ return sessionStorage.getItem(KHO_GRID_EDIT_UNLOCK_KEY) === '1'; }catch(err){ return false; }
+}
+function khoGridEditSetUnlocked(v){
+  try{ if(v) sessionStorage.setItem(KHO_GRID_EDIT_UNLOCK_KEY,'1'); else sessionStorage.removeItem(KHO_GRID_EDIT_UNLOCK_KEY); }catch(err){}
+}
+function khoGridUpdateLockUI(){
+  const btn = document.getElementById('khogrid-lock-toggle');
+  if(!btn) return;
+  const unlocked = khoGridEditIsUnlocked();
+  btn.textContent = unlocked ? '🔓 Đã mở khoá — bấm để khoá lại' : '🔒 Sơ đồ kho đang KHOÁ — bấm để mở khoá sửa';
+  btn.classList.toggle('khogrid-lock-unlocked', unlocked);
+  btn.classList.toggle('khogrid-lock-locked', !unlocked);
+}
+// Gọi ở ĐẦU mọi hành động sửa Sơ đồ kho (thêm/sửa/xoá ô, kéo-thả, đổi kích thước, đổi sức chứa, dán…) —
+// đã mở khoá thì cho qua ngay; chưa thì hỏi mật khẩu ngay lúc đó, đúng thì mở khoá luôn cho hết phiên
+// rồi cho qua, sai/huỷ thì chặn lại.
+function khoGridRequireUnlock(){
+  if(khoGridEditIsUnlocked()) return true;
+  const val = prompt('Sơ đồ kho đang KHOÁ — nhập mật khẩu để mở khoá sửa:');
+  if(val === null) return false;
+  if(val !== KHO_GRID_EDIT_LOCK_PASSWORD){ alert('Sai mật khẩu.'); return false; }
+  khoGridEditSetUnlocked(true);
+  khoGridUpdateLockUI();
+  if(typeof showAppToast==='function') showAppToast('🔓 Đã mở khoá sửa Sơ đồ kho cho hết phiên làm việc.');
+  return true;
+}
+const khoGridLockToggleBtn = document.getElementById('khogrid-lock-toggle');
+if(khoGridLockToggleBtn) khoGridLockToggleBtn.addEventListener('click', () => {
+  if(khoGridEditIsUnlocked()){
+    if(!confirm('Khoá lại Sơ đồ kho? (phải nhập lại mật khẩu mới sửa được tiếp)')) return;
+    khoGridEditSetUnlocked(false);
+    khoGridUpdateLockUI();
+    if(typeof showAppToast==='function') showAppToast('🔒 Đã khoá lại Sơ đồ kho.');
+    return;
+  }
+  khoGridRequireUnlock();
+});
+khoGridUpdateLockUI();
+
 function khoGridOpenCellPopover(cellId, prefillRow, prefillCol, khoLabel){
+  if(!khoGridRequireUnlock()) return;
   _khoGridActiveKho = khoLabel || _khoGridActiveKho || 'Kho 3B';
   _khoGridEditingCellId = cellId || null;
   const layout = khoGridGetLayout(_khoGridActiveKho);
@@ -6131,6 +6179,7 @@ function khoGridSelectedCells(khoLabel){
 }
 
 function khoGridOpenSettings(khoLabel){
+  if(!khoGridRequireUnlock()) return;
   _khoGridActiveKho = khoLabel;
   const layout=khoGridGetLayout(khoLabel);
   document.getElementById('kho-grid-rows-input').value=layout.rows;
@@ -6256,6 +6305,10 @@ document.addEventListener('pointerdown',(e)=>{
   const layout=khoGridGetLayout(kho);
   const cell=layout.cells.find(c=>c.id===box.dataset.cellId || c.locator===box.dataset.locator);
   if(!cell) return;
+  // Đang KHOÁ sửa Sơ đồ kho -> không cho bắt đầu kéo-thả/chọn vùng gì cả (return NGAY, KHÔNG
+  // preventDefault/stopPropagation) — để sự kiện "click" phía sau vẫn bắn ra bình thường, giữ nguyên
+  // việc XEM chi tiết pallet (bấm vào ô mở popup) dù đang khoá.
+  if(!khoGridEditIsUnlocked()) return;
   // Giữ Ctrl (hoặc Cmd trên Mac) = chọn/bỏ chọn ô này (không kéo di chuyển) — xử lý ngay ở pointerdown
   // để KHÔNG kích hoạt kéo-thả, và chặn luôn sự kiện click phía sau (mở chi tiết pallet) bằng
   // _khoGridSuppressClick, giống hệt cách đang chặn click sau khi kéo-thả xong.
@@ -6386,6 +6439,7 @@ document.addEventListener('pointerdown',(e)=>{
   const layout=khoGridGetLayout(kho);
   const cell=layout.cells.find(c=>c.id===handle.dataset.cellId);
   const boxEl=handle.closest('.wh3b-box'); if(!cell||!container||!boxEl) return;
+  if(!khoGridEditIsUnlocked()) return; // đang khoá sửa Sơ đồ kho -> không cho đổi kích thước ô
   e.preventDefault();e.stopPropagation();
   const cs=getComputedStyle(container);
   const cols=cs.gridTemplateColumns.trim().split(/\s+/).map(parseFloat).filter(Number.isFinite);
@@ -6525,6 +6579,7 @@ document.addEventListener('keydown',(e)=>{
   // Delete/Backspace = xoá thẳng toàn bộ ô đang chọn (nhiều ô cùng lúc) khỏi lưới tuỳ chỉnh — không
   // cần Ctrl, chỉ cần đang có vùng chọn (giống hành vi xoá ô đơn lẻ ở popover ⚙️, nhưng làm hàng loạt).
   if((e.key==='Delete' || e.key==='Backspace') && !isEditable && _khoGridSelectionKho && _khoGridSelection.size){
+    if(!khoGridRequireUnlock()) return;
     const kho=_khoGridSelectionKho;
     const layout=khoGridGetLayout(kho);
     const ids=[];
@@ -6585,6 +6640,7 @@ document.addEventListener('keydown',(e)=>{
   // Dán (Ctrl+V) — vị trí đích = góc trên-trái của vùng ĐANG CHỌN lúc bấm dán (Ctrl+Click 1 ô đích,
   // hoặc kéo chuột chọn vùng đích, trước khi dán).
   if(!_khoGridClipboard) return;
+  if(!khoGridRequireUnlock()) return;
   e.preventDefault();
   const anchor=khoGridSelectionAnchor();
   if(!anchor){
@@ -7038,6 +7094,7 @@ WH_GRID_CONFIGS['dg1-custom-grid'] = {detailId:'dg1-detail',computeFn:computeDG1
 document.addEventListener('click', (e) => {
   const gearBtn = e.target.closest('.wh3b-box-gear');
   if(gearBtn){
+    if(!khoGridRequireUnlock()) return;
     const loc = gearBtn.dataset.locator;
     const defaultMax = Number(gearBtn.dataset.defaultMax) || 1;
     const overrides = whLoadCapOverrides();
