@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.06';
+const APP_VERSION = 'v3.07';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13274,6 +13274,10 @@ function txBuildStatsFromRecords(records, masterMap){
     if(!d.kind) continue; // SHIP / dòng không có Menu Name — không tính vào Transfer hay Picking
 
     if(d.kind === 'picking'){
+      // Nhân sự SHIP (đánh dấu "SHIP" thay vì 1 kho thật trong bảng Master) không tính vào Pick cont —
+      // các dòng Pick(...) của họ không phải pick hàng thật từ kho để đóng container, loại khỏi MỌI
+      // bảng/tổng của Pick cont (Theo kho/Theo người/Theo container/chi tiết từng dòng).
+      if(masterMap && masterMap[user] === 'SHIP') continue;
       countPicking++;
       const khoXuat = d.kho;
       // Bỏ Locator xuất khỏi tiêu chí nhóm — chỉ còn Kho xuất / Locator đến / Item / User.
@@ -13843,7 +13847,7 @@ function renderTxKpiStrip(){
 
 // Bảng TỔNG HỢP cho 3 loại Nhận / Chuyển / Pick cont — tính thẳng từ records gốc (không phụ thuộc bộ
 // lọc cột của bảng chi tiết, luôn là toàn bộ file). Dùng chung txDescribeSet() với bảng chi tiết.
-function txBuildSummaries(records){
+function txBuildSummaries(records, masterMap){
   const locatorKhoMap = buildLocatorKhoMap();
   const mk = () => ({ byKho: new Map(), byUser: new Map() });
   const out = { receive: mk(), transfer: mk(), picking: mk(), pickByCont: new Map() };
@@ -13858,6 +13862,8 @@ function txBuildSummaries(records){
   for(const group of txGroupBySetId(records || [])){
     const d = txDescribeSet(group, locatorKhoMap);
     if(!d.kind) continue;
+    // Nhân sự SHIP không tính vào Pick cont — xem giải thích ở txBuildStatsFromRecords().
+    if(d.kind === 'picking' && masterMap && masterMap[d.user] === 'SHIP') continue;
     const s = out[d.kind];
     bump(s.byKho, d.kho || '—', d.qty, d.user, null);
     bump(s.byUser, d.user || '—', d.qty, null, d.kho);
@@ -13887,7 +13893,7 @@ function renderTxSummaries(){
     kinds.forEach(k => { if(grids[k]) grids[k].innerHTML = '<div class="tx-sum-empty">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>'; });
     return;
   }
-  const sum = txBuildSummaries(txState.records);
+  const sum = txBuildSummaries(txState.records, txMasterMap);
   const byCountDesc = (a, b) => (b.count - a.count) || String(a.key).localeCompare(String(b.key), 'vi', { numeric: true });
   const joinSet = s => [...s].sort().join(', ') || '—';
 
