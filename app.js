@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.05';
+const APP_VERSION = 'v3.06';
 const APP_VERSION_DATE = '28/09/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -7172,11 +7172,17 @@ function khoLocatorPopupShow(anchorEl, loc, rows){
     </div>`;
   document.body.appendChild(panel);
   const rect = anchorEl.getBoundingClientRect();
-  const panelWidth = 300; // khớp width trong CSS, dùng để canh không tràn mép phải màn hình
-  const left = Math.max(8, Math.min(rect.left, window.innerWidth - panelWidth - 8));
-  const maxHeight = 320;
+  // Rộng/cao hết mức có thể trong màn hình đang có — để hiện được CÀNG NHIỀU dòng/cột càng tốt mà
+  // không cần cuộn (chỉ những vị trí có QUÁ NHIỀU pallet mới còn phải cuộn dọc, không tránh được).
+  const viewportW = window.innerWidth, viewportH = window.innerHeight;
+  const panelWidth = Math.min(440, viewportW - 16);
+  const maxHeight = Math.min(600, Math.round(viewportH * 0.82));
+  panel.style.width = panelWidth + 'px';
+  panel.style.maxHeight = maxHeight + 'px';
+  const left = Math.max(8, Math.min(rect.left, viewportW - panelWidth - 8));
   let top = rect.bottom + 6;
-  if(top + maxHeight > window.innerHeight && rect.top - maxHeight - 6 > 0) top = Math.max(8, rect.top - maxHeight - 6);
+  if(top + maxHeight > viewportH && rect.top - maxHeight - 6 > 0) top = Math.max(8, rect.top - maxHeight - 6);
+  top = Math.max(8, Math.min(top, viewportH - maxHeight - 8));
   panel.style.left = left + 'px';
   panel.style.top = top + 'px';
   _khoLocatorPopupEl = panel;
