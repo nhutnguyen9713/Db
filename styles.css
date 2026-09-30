@@ -427,16 +427,6 @@
   .cpt-kho-group{margin-bottom:9px;}
   .cpt-kho-title{color:var(--violet); font-weight:700; margin-bottom:3px;}
   .cpt-kho-total{color:var(--muted-2); font-weight:600;}
-  #btn-fixed-back-to-pick{
-    position:fixed; right:26px; bottom:88px; z-index:590;
-    width:46px; height:46px; border-radius:50%;
-    background:var(--violet); color:#fff; border:none;
-    box-shadow:0 6px 18px rgba(110,79,224,0.35);
-    align-items:center; justify-content:center; cursor:pointer;
-    transition:transform .15s ease, box-shadow .15s ease;
-  }
-  #btn-fixed-back-to-pick:hover{transform:translateY(-3px); box-shadow:0 10px 24px rgba(110,79,224,0.45);}
-  #btn-fixed-back-to-pick svg{width:22px; height:22px;}
   .plan-detail-table tbody tr.cont-group-first td{border-top:3px solid var(--cont-line, rgba(22,32,46,0.14));}
   .plan-detail-table .cont-no-cell{color:var(--violet); font-weight:700; border-left:4px solid transparent;}
   .cont-badge{
@@ -646,7 +636,6 @@
   .search-fab svg{flex-shrink:0;}
   @media (max-width:640px){
     .search-fab{right:16px; bottom:16px; padding:11px 16px 11px 12px; font-size:12.5px;}
-    #btn-fixed-back-to-pick{right:16px; bottom:78px;}
     .tx-xtc-grid{grid-template-columns:1fr !important;}
   }
 

@@ -4482,11 +4482,6 @@ document.addEventListener('click', (e) => {
 });
 
 document.addEventListener('click', (e) => {
-  if(e.target.closest('#btn-fixed-back-to-pick')){
-    const panel = document.getElementById('cont-picking-overview');
-    if(panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    return;
-  }
   const shortBadge = e.target.closest('[data-jump-combined]');
   if(shortBadge){
     const pickingNavBtn = document.querySelector('.sidebar-nav-btn[data-page="picking"]');
@@ -4597,20 +4592,6 @@ document.addEventListener('change', (e) => {
   if(!input) return;
   saveContPickComment(input.dataset.instance, input.value);
 });
-
-(function setupFixedBackToPickBtn(){
-  const btn = document.getElementById('btn-fixed-back-to-pick');
-  const panel = document.getElementById('cont-picking-overview');
-  if(!btn || !panel) return;
-  if('IntersectionObserver' in window){
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        btn.style.display = (entry.isIntersecting || panel.style.display === 'none') ? 'none' : 'flex';
-      });
-    }, { threshold: 0.05 });
-    io.observe(panel);
-  }
-})();
 
 /* ============ Popover chi tiết mã hàng/locator khi hover 1 dòng trong bảng thống kê container ============ */
 let contPickRowsCache = [];
