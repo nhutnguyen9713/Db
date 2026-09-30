@@ -432,10 +432,13 @@ function parseReceiveRows(rows){
   const colDate = findCol(headers, ['transaction date']);
   const colLocator = findCol(headers, ['locator name']);
   const colUser = findCol(headers, ['user name']);
-  // GI No. / Lot No. — KHÔNG bắt buộc (không phải file Transaction nào cũng có sẵn 2 cột này), cùng
-  // nhóm alias tên cột đang dùng bên app.js để nhận diện nhất quán dù tiêu đề cột ghi khác nhau chút ít.
+  // GI No. / Lot No. / Pallet No. — KHÔNG bắt buộc (không phải file Transaction nào cũng có sẵn các cột
+  // này), cùng nhóm alias tên cột đang dùng bên app.js để nhận diện nhất quán dù tiêu đề cột ghi khác
+  // nhau chút ít. "Pallet No." trong file Transaction là số pallet THẬT do WMS gán khi nhận hàng —
+  // khác với "SL Pallet hệ thống" ở bảng đối chiếu (vẫn tính = số dòng Receive, quy ước đã dùng).
   const colGi = findCol(headers, ['gi no', 'gi no.', 'gi number', 'gi']);
   const colLot = findCol(headers, ['lot no', 'lot no.', 'lot number', 'lot']);
+  const colPalletNo = findCol(headers, ['pallet no', 'pallet no.', 'pallet number']);
   if(colType === -1 || colItem === -1 || colQty === -1 || colDate === -1){
     throw new Error('File thiếu cột bắt buộc (Transaction Type / Item No / Transaction Qty / Transaction Date).');
   }
@@ -459,6 +462,7 @@ function parseReceiveRows(rows){
       user: colUser !== -1 ? txNorm(r[colUser]) : '',
       gi: colGi !== -1 ? txNorm(r[colGi]) : '',
       lot: colLot !== -1 ? txNorm(r[colLot]) : '',
+      palletNo: colPalletNo !== -1 ? txNorm(r[colPalletNo]) : '',
     });
   }
   return out;
@@ -1024,9 +1028,9 @@ function showSysPopover(date, item, itemRaw){
       </div>
       ${sysRows.length ? `
         <table class="dt">
-          <thead><tr><th>Giờ</th><th>Locator</th><th>GI No</th><th>Lot No</th><th>Người quét</th><th style="text-align:right">Pallet</th><th style="text-align:right">SL</th></tr></thead>
+          <thead><tr><th>Giờ</th><th>Locator</th><th>GI No</th><th>Lot No</th><th>Pallet No</th><th>Người quét</th><th style="text-align:right">SL</th></tr></thead>
           <tbody>
-            ${sysRows.map(row => `<tr><td>${escHtml(row.time)}</td><td>${escHtml(row.locator)}</td><td>${escHtml(row.gi || '—')}</td><td>${escHtml(row.lot || '—')}</td><td>${escHtml(row.user || '—')}</td><td class="num">1</td><td class="num">${fmt(row.qty)}</td></tr>`).join('')}
+            ${sysRows.map(row => `<tr><td>${escHtml(row.time)}</td><td>${escHtml(row.locator)}</td><td>${escHtml(row.gi || '—')}</td><td>${escHtml(row.lot || '—')}</td><td>${escHtml(row.palletNo || '—')}</td><td>${escHtml(row.user || '—')}</td><td class="num">${fmt(row.qty)}</td></tr>`).join('')}
           </tbody>
         </table>
         <div class="sys-popover-total"><span><b>${fmt(sysRows.length)}</b> dòng (= Pallet hệ thống)</span><span><b>${fmt(totalQty)}</b> tổng SL (= Pcs hệ thống)</span></div>
