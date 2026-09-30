@@ -22,6 +22,12 @@
   h1{font-size:20px; margin:4px 0 4px;}
   .sub{font-size:13px; color:var(--muted); line-height:1.5; max-width:760px;}
 
+  /* ===== Tab chọn kho ===== */
+  .kho-tabs{display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;}
+  .kho-tab-btn{padding:9px 18px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--muted); font-size:13.5px; font-weight:700; cursor:pointer; font-family:var(--sans);}
+  .kho-tab-btn:hover{border-color:var(--violet); color:var(--violet);}
+  .kho-tab-btn.active{background:var(--violet); border-color:var(--violet); color:#fff;}
+
   .panel{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:18px;}
   .panel h2{font-size:15px; margin:0 0 4px; display:flex; align-items:center; gap:8px;}
   .panel h2 .step{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--violet); color:#fff; font-size:11px; font-weight:700; font-family:var(--mono);}
@@ -40,6 +46,9 @@
   .tx-summary b{font-family:var(--mono); font-size:18px;}
   .tx-summary span{font-family:var(--mono); font-size:9.5px; color:var(--muted-2); text-transform:uppercase; letter-spacing:.04em;}
   .clear-link{margin-left:auto; background:none; border:none; color:var(--muted); font-size:12px; text-decoration:underline; cursor:pointer; padding:4px;}
+  .tx-kho-breakdown{display:flex; gap:16px; flex-wrap:wrap; margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); font-size:12px; color:var(--muted);}
+  .tx-kho-breakdown b{font-family:var(--mono); color:var(--text);}
+  .tx-kho-breakdown .unassigned{color:var(--red);}
 
   /* ===== Manual entry form ===== */
   .entry-form{display:grid; grid-template-columns:150px 110px 1fr 110px 110px 110px auto; gap:10px; align-items:end;}
@@ -89,12 +98,14 @@
   <header>
     <div class="eyebrow"><span class="dot"></span>ĐỐI CHIẾU SỔ TAY</div>
     <h1>Đối chiếu Receive</h1>
-    <div class="sub">So sánh sổ nhận hàng viết tay với dữ liệu Receive thật trong file Transaction — phát hiện chênh lệch giữa số ghi tay và số hệ thống. (Phần Transfer/Picking sẽ làm sau.)</div>
+    <div class="sub">So sánh sổ nhận hàng viết tay với dữ liệu Receive thật trong file Transaction — phát hiện chênh lệch giữa số ghi tay và số hệ thống. Phân riêng theo từng kho (không có Kho 2B vì kho này không nhận hàng từ sản xuất, chỉ là kho chứa hàng). (Phần Transfer/Picking sẽ làm sau.)</div>
   </header>
+
+  <div class="kho-tabs" id="kho-tabs"></div>
 
   <div class="panel" id="upload-panel">
     <h2><span class="step">1</span>Tải file Transaction</h2>
-    <div class="hint">Dùng đúng file Transaction xuất từ WMS (.xlsx/.xls/.csv/.tsv) — giống hệt file tải lên ở tab Transaction của TN5 Dashboard. Trang này chỉ lấy các dòng <b>Transaction Type = RECEIVE</b>. Giờ ghi trên file đã tự trừ 1 tiếng trước khi tính Ca/Ngày (đồng hồ hệ thống WMS đang chạy nhanh hơn giờ thực tế đúng 1 tiếng).</div>
+    <div class="hint">Dùng đúng file Transaction xuất từ WMS (.xlsx/.xls/.csv/.tsv) — giống hệt file tải lên ở tab Transaction của TN5 Dashboard. Trang này chỉ lấy các dòng <b>Transaction Type = RECEIVE</b>, tự phân theo kho dựa vào Locator Name: <b>D3B-FG-TG</b> → Kho 3B, <b>DG3-FG-TG</b> → Kho 3A, <b>DG1-FG-TG</b> → Kho DG1 (locator khác 3 vị trí này sẽ không xác định được kho). Chỉ cần tải file 1 lần, dùng chung cho cả 3 tab kho. Giờ ghi trên file đã tự trừ 1 tiếng trước khi tính Ca/Ngày (đồng hồ hệ thống WMS đang chạy nhanh hơn giờ thực tế đúng 1 tiếng).</div>
     <div class="upload-row">
       <label class="file-btn">📂 Chọn file Transaction<input type="file" id="tx-file-input" accept=".xlsx,.xls,.csv,.tsv,.txt"></label>
       <span id="upload-status"></span>
@@ -104,8 +115,8 @@
   </div>
 
   <div class="panel" id="entry-panel">
-    <h2><span class="step">2</span>Nhập sổ nhận hàng (thủ công)</h2>
-    <div class="hint">Ghi lại đúng như sổ tay tại kho — mỗi dòng là 1 lượt nhận hàng của 1 mã hàng trong 1 ca. Ca Ngày: 7h sáng – 7h tối; Ca Đêm: 7h tối – 7h sáng hôm sau (0h–7h sáng vẫn tính là ca đêm của <b>ngày hôm trước</b>, không phải ngày mới) — Ngày/Ca mặc định tự chọn theo giờ hiện tại, có thể đổi lại tay.</div>
+    <h2><span class="step">2</span>Nhập sổ nhận hàng (thủ công) — <span id="entry-panel-kho"></span></h2>
+    <div class="hint">Ghi lại đúng như sổ tay tại kho — mỗi dòng là 1 lượt nhận hàng của 1 mã hàng trong 1 ca. Dòng vừa thêm sẽ thuộc đúng kho đang chọn ở tab phía trên. Ca Ngày: 7h sáng – 7h tối; Ca Đêm: 7h tối – 7h sáng hôm sau (0h–7h sáng vẫn tính là ca đêm của <b>ngày hôm trước</b>, không phải ngày mới) — Ngày/Ca mặc định tự chọn theo giờ hiện tại, có thể đổi lại tay.</div>
     <div class="entry-form">
       <div><label>Ngày</label><input type="date" id="f-date"></div>
       <div><label>Ca</label><select id="f-shift"><option value="ngay">Ngày</option><option value="dem">Đêm</option></select></div>
@@ -132,7 +143,7 @@
   </div>
 
   <div class="panel" id="reconcile-panel">
-    <h2><span class="step">3</span>Bảng đối chiếu (theo Ngày + Item)</h2>
+    <h2><span class="step">3</span>Bảng đối chiếu (theo Ngày + Item) — <span id="recon-panel-kho"></span></h2>
     <div class="hint">Gộp tất cả ca trong ngày của sổ tay rồi so với tổng số dòng Receive hệ thống cùng ngày/mã hàng — hệ thống không có khái niệm "ca" nên chỉ đối chiếu được theo ngày (dòng Receive quét lúc 0h–7h sáng được tính về <b>ngày hôm trước</b>, đúng ngày ca đêm bắt đầu, khớp với cách ghi sổ tay). <b>SL Pallet hệ thống</b> = số dòng Receive (mỗi dòng tính 1 pallet); <b>SL Pcs hệ thống</b> = tổng Transaction Qty. SL Ctn không có bên hệ thống nên chỉ hiển thị tham khảo.</div>
     <div class="reconcile-toolbar">
       <input type="text" id="recon-search" placeholder="Tìm theo mã hàng…">
@@ -162,6 +173,20 @@
    của TN5 Dashboard (app.js) để đảm bảo đọc đúng cùng 1 định dạng file, không lệch quy ước.
    ============================================================ */
 const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+
+// 3 kho có nhận hàng từ sản xuất — MỖI kho có đúng 1 locator trung gian (TG) cố định dùng cho MỌI
+// dòng Receive của kho đó, dùng để phân biệt dòng Receive nào thuộc kho nào. KHÔNG có Kho 2B vì kho
+// này không nhận hàng từ sản xuất (chỉ là kho chứa hàng, nhận điều chuyển từ kho khác).
+const KHO_LIST = [
+  { key:'3B', label:'Kho 3B', locator:'D3B-FG-TG' },
+  { key:'3A', label:'Kho 3A', locator:'DG3-FG-TG' },
+  { key:'DG1', label:'Kho DG1', locator:'DG1-FG-TG' },
+];
+const KHO_LOCATOR_MAP = {}; // { "D3B-FG-TG": "3B", ... } — so khớp NGUYÊN VĂN (đã chuẩn hoá hoa/thường)
+KHO_LIST.forEach(k => { KHO_LOCATOR_MAP[k.locator.toUpperCase()] = k.key; });
+function khoFromLocator(locator){
+  return KHO_LOCATOR_MAP[String(locator||'').trim().toUpperCase()] || null;
+}
 
 function removeDiacritics(str){
   return (str||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D');
@@ -316,12 +341,14 @@ function parseReceiveRows(rows){
     if(transType.toUpperCase() !== 'RECEIVE') continue;
     const dt = txParseTxDateTime(r[colDate]);
     if(!dt) continue;
+    const locator = colLocator !== -1 ? txNorm(r[colLocator]) : '';
     out.push({
       item: txItemText(r[colItem]),
       itemRaw: txNorm(r[colItem]),
       qty: Number(r[colQty]) || 0,
       dateKey: shiftInfo(dt).dateKey, // theo NGÀY CA BẮT ĐẦU (0h-6h59 tính về hôm trước), không phải ngày lịch
-      locator: colLocator !== -1 ? txNorm(r[colLocator]) : '',
+      locator,
+      kho: khoFromLocator(locator), // null nếu locator không khớp đúng 1 trong 3 vị trí trung gian
       user: colUser !== -1 ? txNorm(r[colUser]) : '',
     });
   }
@@ -347,8 +374,41 @@ function saveTx(data){
   try{ localStorage.setItem(LS_TX_KEY, JSON.stringify(data)); }catch(err){}
 }
 
-let logEntries = loadLog(); // [{id, date, shift, item, pallet, ctn, pcs}]
-let txReceiveData = loadTx(); // {fileName, uploadedAt, rows:[{item, itemRaw, qty, dateKey, locator, user}]}
+let logEntries = loadLog(); // [{id, date, shift, item, pallet, ctn, pcs, kho}]
+let txReceiveData = loadTx(); // {fileName, uploadedAt, rows:[{item, itemRaw, qty, dateKey, locator, user, kho}]}
+
+/* ============================================================
+   ⓪ Tab chọn kho — 1 khoá chung cho form nhập tay + bảng đối chiếu, file Transaction tải 1 lần dùng
+   chung cho cả 3 tab (tự lọc theo locator).
+   ============================================================ */
+const LS_KHO_KEY = 'tn5_doichieu_active_kho_v1';
+let activeKho = (() => {
+  try{ const v = localStorage.getItem(LS_KHO_KEY); return KHO_LIST.some(k => k.key === v) ? v : KHO_LIST[0].key; }
+  catch(err){ return KHO_LIST[0].key; }
+})();
+const khoTabsEl = document.getElementById('kho-tabs');
+const entryPanelKhoEl = document.getElementById('entry-panel-kho');
+const reconPanelKhoEl = document.getElementById('recon-panel-kho');
+
+function khoLabel(key){ return (KHO_LIST.find(k => k.key === key) || {}).label || key; }
+
+function renderKhoTabs(){
+  khoTabsEl.innerHTML = KHO_LIST.map(k =>
+    `<button type="button" class="kho-tab-btn${k.key === activeKho ? ' active' : ''}" data-kho="${k.key}">${escHtml(k.label)}</button>`
+  ).join('');
+  entryPanelKhoEl.textContent = khoLabel(activeKho);
+  reconPanelKhoEl.textContent = khoLabel(activeKho);
+}
+khoTabsEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.kho-tab-btn');
+  if(!btn) return;
+  activeKho = btn.dataset.kho;
+  try{ localStorage.setItem(LS_KHO_KEY, activeKho); }catch(err){}
+  renderKhoTabs();
+  renderTxSummary();
+  renderLog();
+  renderReconcile();
+});
 
 /* ============================================================
    ① Tải file Transaction
@@ -366,17 +426,28 @@ function renderTxSummary(){
     uploadStatus.className = '';
     return;
   }
-  const rows = txReceiveData.rows;
+  const rows = txReceiveData.rows.filter(r => r.kho === activeKho);
   const dates = rows.map(r => r.dateKey).filter(Boolean).sort();
   const items = new Set(rows.map(r => r.item));
   const totalQty = rows.reduce((s,r) => s + r.qty, 0);
   txSummaryEl.innerHTML = `
-    <div><b>${fmt(rows.length)}</b><span>Dòng Receive</span></div>
+    <div><b>${fmt(rows.length)}</b><span>Dòng Receive (${escHtml(khoLabel(activeKho))})</span></div>
     <div><b>${items.size}</b><span>Mã hàng</span></div>
     <div><b>${fmt(totalQty)}</b><span>Tổng SL (Pcs)</span></div>
     <div><b>${dates[0] || '—'} → ${dates[dates.length-1] || '—'}</b><span>Khoảng ngày</span></div>
   `;
+  // Tách theo TỪNG kho + số dòng không xác định được kho (locator khác 3 vị trí trung gian đã biết)
+  // để dễ phát hiện file có locator sai/thiếu ngay từ lúc tải lên, không đợi tới lúc đối chiếu mới thấy thiếu.
+  const allRows = txReceiveData.rows;
+  const breakdownParts = KHO_LIST.map(k => {
+    const n = allRows.filter(r => r.kho === k.key).length;
+    return `<span>${escHtml(k.label)}: <b>${fmt(n)}</b> dòng</span>`;
+  });
+  const unassigned = allRows.filter(r => !r.kho).length;
+  if(unassigned) breakdownParts.push(`<span class="unassigned">⚠ Không xác định kho: <b>${fmt(unassigned)}</b> dòng (locator khác 3 vị trí trung gian)</span>`);
+  txSummaryEl.insertAdjacentHTML('beforeend', `<div class="tx-kho-breakdown" style="width:100%;">${breakdownParts.join('')}</div>`);
   txSummaryEl.style.display = 'flex';
+  txSummaryEl.style.flexWrap = 'wrap';
   btnClearTx.style.display = 'inline';
   uploadStatus.textContent = `✓ Đã tải "${txReceiveData.fileName}"`;
   uploadStatus.className = 'ok';
@@ -448,7 +519,7 @@ document.getElementById('btn-add-entry').addEventListener('click', () => {
   if(pallet <= 0 && ctn <= 0 && pcs <= 0){ formError.textContent = 'Phải nhập ít nhất 1 trong 3 số lượng (Pallet/Ctn/Pcs) lớn hơn 0.'; return; }
   logEntries.push({
     id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
-    date, shift, item: txItemText(itemRaw), itemRaw, pallet, ctn, pcs,
+    date, shift, item: txItemText(itemRaw), itemRaw, pallet, ctn, pcs, kho: activeKho,
   });
   saveLog(logEntries);
   // Chừa lại Ngày/Ca (thường nhập liên tiếp nhiều dòng cùng ngày/ca) — chỉ xoá phần Item/số lượng.
@@ -459,13 +530,14 @@ document.getElementById('btn-add-entry').addEventListener('click', () => {
 });
 
 function renderLog(){
-  if(!logEntries.length){
+  const khoEntries = logEntries.filter(e => e.kho === activeKho);
+  if(!khoEntries.length){
     logTbody.innerHTML = ''; logTfoot.innerHTML = '';
     logEmpty.style.display = 'block';
     return;
   }
   logEmpty.style.display = 'none';
-  const sorted = [...logEntries].sort((a,b) => b.date.localeCompare(a.date) || a.item.localeCompare(b.item));
+  const sorted = [...khoEntries].sort((a,b) => b.date.localeCompare(a.date) || a.item.localeCompare(b.item));
   logTbody.innerHTML = sorted.map(e => `
     <tr>
       <td>${escHtml(e.date)}</td>
@@ -476,10 +548,10 @@ function renderLog(){
       <td class="num">${fmt(e.pcs)}</td>
       <td><button type="button" class="del-btn" data-id="${escHtml(e.id)}" title="Xoá dòng này">✕</button></td>
     </tr>`).join('');
-  const totalPallet = logEntries.reduce((s,e)=>s+e.pallet,0);
-  const totalCtn = logEntries.reduce((s,e)=>s+e.ctn,0);
-  const totalPcs = logEntries.reduce((s,e)=>s+e.pcs,0);
-  logTfoot.innerHTML = `<tr><td colspan="3">Tổng (${fmt(logEntries.length)} dòng)</td><td class="num">${fmt(totalPallet)}</td><td class="num">${fmt(totalCtn)}</td><td class="num">${fmt(totalPcs)}</td><td></td></tr>`;
+  const totalPallet = khoEntries.reduce((s,e)=>s+e.pallet,0);
+  const totalCtn = khoEntries.reduce((s,e)=>s+e.ctn,0);
+  const totalPcs = khoEntries.reduce((s,e)=>s+e.pcs,0);
+  logTfoot.innerHTML = `<tr><td colspan="3">Tổng (${fmt(khoEntries.length)} dòng)</td><td class="num">${fmt(totalPallet)}</td><td class="num">${fmt(totalCtn)}</td><td class="num">${fmt(totalPcs)}</td><td></td></tr>`;
 }
 logTbody.addEventListener('click', (e) => {
   const btn = e.target.closest('.del-btn');
@@ -509,13 +581,13 @@ function buildReconcileRows(){
     if(!r){ r = { date, item, itemRaw: itemRaw || item, logPallet:0, logCtn:0, logPcs:0, sysPallet:0, sysPcs:0, inLog:false, inSys:false }; byKey.set(key, r); }
     return r;
   };
-  logEntries.forEach(e => {
+  logEntries.filter(e => e.kho === activeKho).forEach(e => {
     const r = getRow(e.date, e.item, e.itemRaw);
     r.inLog = true;
     r.logPallet += e.pallet; r.logCtn += e.ctn; r.logPcs += e.pcs;
   });
   if(txReceiveData && txReceiveData.rows){
-    txReceiveData.rows.forEach(row => {
+    txReceiveData.rows.filter(row => row.kho === activeKho).forEach(row => {
       if(!row.dateKey) return;
       const r = getRow(row.dateKey, row.item, row.itemRaw);
       r.inSys = true;
@@ -591,6 +663,7 @@ reconOnlyMismatch.addEventListener('change', renderReconcile);
 /* ============================================================
    Khởi động
    ============================================================ */
+renderKhoTabs();
 renderTxSummary();
 renderLog();
 renderReconcile();
