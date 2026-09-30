@@ -79,6 +79,9 @@
     padding:28px 32px 60px;
     min-height:100vh;
     font-variant-numeric: tabular-nums;
+    /* Icon chuột hình con mèo cho vui khi dùng Dashboard — SVG vẽ trực tiếp emoji 🐱 làm con trỏ,
+       "auto" dự phòng cho trình duyệt nào không hỗ trợ cursor ảnh tuỳ chỉnh. */
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><text x="16" y="24" font-size="26" text-anchor="middle">🐱</text></svg>') 12 12, auto;
   }
   .wrap{width:100%;}
 
