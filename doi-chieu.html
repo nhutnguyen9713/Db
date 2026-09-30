@@ -128,6 +128,19 @@
      mà không cần đọc từng ô. !important để thắng nền xanh/tím riêng của cột Sổ tay/Hệ thống. */
   table.dt tr.row-mismatch td{background:rgba(214,57,75,0.10) !important;}
   table.dt tr.row-mismatch:hover td{background:rgba(214,57,75,0.16) !important;}
+  table.dt tbody tr.recon-row{cursor:pointer;}
+
+  /* ===== Popover xem chi tiết dòng hệ thống (khi bấm vào 1 dòng đối chiếu) ===== */
+  .sys-popover-backdrop{position:fixed; inset:0; background:rgba(22,32,46,0.45); z-index:300; display:flex; align-items:center; justify-content:center; padding:16px;}
+  .sys-popover-panel{background:var(--panel); border-radius:12px; max-width:540px; width:100%; max-height:82vh; overflow:auto; padding:18px 20px 20px; box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+  .sys-popover-head{display:flex; align-items:flex-start; justify-content:space-between; gap:12px;}
+  .sys-popover-head h3{font-size:14.5px; margin:0 0 4px; font-family:var(--mono); word-break:break-word;}
+  .sys-popover-sub{font-size:12px; color:var(--muted);}
+  .sys-popover-close{border:none; background:var(--panel-2); color:var(--muted); width:28px; height:28px; border-radius:8px; cursor:pointer; font-size:14px; flex-shrink:0;}
+  .sys-popover-close:hover{background:rgba(214,57,75,0.12); color:var(--red);}
+  .sys-popover-panel table.dt{margin-top:12px; min-width:0;}
+  .sys-popover-total{margin-top:12px; font-size:12px; color:var(--muted); display:flex; gap:16px; flex-wrap:wrap;}
+  .sys-popover-total b{font-family:var(--mono); color:var(--text);}
 
   /* ===== Lịch sử đối chiếu đã lưu ===== */
   #history-panel .reconcile-toolbar select, #history-panel .reconcile-toolbar input[type=date]{padding:8px 10px; border-radius:8px; border:1px solid var(--line); font-size:12.5px; font-family:var(--sans); color:var(--text); background:var(--panel-2);}
@@ -430,11 +443,13 @@ function parseReceiveRows(rows){
     const dt = txParseTxDateTime(r[colDate]);
     if(!dt) continue;
     const locator = colLocator !== -1 ? txNorm(r[colLocator]) : '';
+    const p = n => String(n).padStart(2,'0');
     out.push({
       item: txItemText(r[colItem]),
       itemRaw: txNorm(r[colItem]),
       qty: Number(r[colQty]) || 0,
       dateKey: shiftInfo(dt).dateKey, // theo NGÀY CA BẮT ĐẦU (0h-6h59 tính về hôm trước), không phải ngày lịch
+      time: `${p(dt.getHours())}:${p(dt.getMinutes())}`, // giờ thực tế (đã trừ 1h) — hiện trong popover xem chi tiết dòng hệ thống
       locator,
       kho: khoFromLocator(locator), // null nếu locator không khớp đúng 1 trong 3 vị trí trung gian
       user: colUser !== -1 ? txNorm(r[colUser]) : '',
@@ -942,7 +957,7 @@ function renderReconcile(){
       const diffPcs = r.logPcs - r.sysPcs;
       const diffCls = v => v === 0 ? 'diff-ok' : 'diff-bad';
       const diffText = v => (v > 0 ? '+' : '') + fmt(v);
-      return `<tr class="${status === 'mismatch' ? 'row-mismatch' : ''}">
+      return `<tr class="recon-row${status === 'mismatch' ? ' row-mismatch' : ''}" data-date="${escHtml(r.date)}" data-item="${escHtml(r.item)}" data-item-raw="${escHtml(r.itemRaw)}" title="Bấm để xem chi tiết dòng hệ thống">
         <td>${escHtml(r.date)}</td>
         <td>${escHtml(r.itemRaw)}</td>
         <td class="num col-sotay">${r.inLog ? fmt(r.logPallet) : '—'}</td>
@@ -970,6 +985,56 @@ function renderReconcile(){
 }
 reconSearch.addEventListener('input', renderReconcile);
 reconOnlyMismatch.addEventListener('change', renderReconcile);
+
+// Bấm vào 1 dòng đối chiếu -> xem chi tiết từng dòng Receive GỐC trong file Transaction đã gộp thành
+// con số "Pallet/Pcs (Hệ thống)" của dòng đó (vì hệ thống không lưu theo dòng Ngày+Item gộp sẵn — số
+// hiện trên bảng là TÍNH TOÁN từ nhiều dòng Receive riêng lẻ), giúp đối chiếu thủ công khi nghi ngờ.
+let sysPopoverEl = null;
+function closeSysPopover(){
+  if(!sysPopoverEl) return;
+  sysPopoverEl.remove();
+  sysPopoverEl = null;
+  document.removeEventListener('keydown', sysPopoverKeydown);
+}
+function sysPopoverKeydown(e){ if(e.key === 'Escape') closeSysPopover(); }
+function showSysPopover(date, item, itemRaw){
+  closeSysPopover();
+  const sysRows = (txReceiveData && txReceiveData.rows ? txReceiveData.rows : [])
+    .filter(row => row.kho === activeKho && row.dateKey === date && row.item === item)
+    .sort((a,b) => a.time.localeCompare(b.time));
+  const totalQty = sysRows.reduce((s,row) => s + row.qty, 0);
+  const backdrop = document.createElement('div');
+  backdrop.className = 'sys-popover-backdrop';
+  backdrop.innerHTML = `
+    <div class="sys-popover-panel">
+      <div class="sys-popover-head">
+        <div>
+          <h3>${escHtml(itemRaw)}</h3>
+          <div class="sys-popover-sub">${escHtml(date)} · ${escHtml(khoLabel(activeKho))} · Dòng Receive trong file Transaction</div>
+        </div>
+        <button type="button" class="sys-popover-close" title="Đóng">✕</button>
+      </div>
+      ${sysRows.length ? `
+        <table class="dt">
+          <thead><tr><th>Giờ</th><th>Locator</th><th>Người quét</th><th style="text-align:right">SL</th></tr></thead>
+          <tbody>
+            ${sysRows.map(row => `<tr><td>${escHtml(row.time)}</td><td>${escHtml(row.locator)}</td><td>${escHtml(row.user || '—')}</td><td class="num">${fmt(row.qty)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="sys-popover-total"><span><b>${fmt(sysRows.length)}</b> dòng (= Pallet hệ thống)</span><span><b>${fmt(totalQty)}</b> tổng SL (= Pcs hệ thống)</span></div>
+      ` : `<div class="empty-note">Không có dòng Receive nào trong file Transaction đang tải khớp Ngày/Item/Kho này.</div>`}
+    </div>`;
+  backdrop.addEventListener('click', (e) => { if(e.target === backdrop) closeSysPopover(); });
+  backdrop.querySelector('.sys-popover-close').addEventListener('click', closeSysPopover);
+  document.body.appendChild(backdrop);
+  sysPopoverEl = backdrop;
+  document.addEventListener('keydown', sysPopoverKeydown);
+}
+reconTbody.addEventListener('click', (e) => {
+  const tr = e.target.closest('tr.recon-row');
+  if(!tr) return;
+  showSysPopover(tr.dataset.date, tr.dataset.item, tr.dataset.itemRaw);
+});
 
 /* ============================================================
    ④ Lịch sử đối chiếu đã lưu — bấm "Lưu tất cả" ở bảng đối chiếu sẽ CHỤP LẠI (snapshot) toàn bộ các
