@@ -4298,6 +4298,85 @@ function triggerTn5Easteregg(){
   setTimeout(() => toast.remove(), 3600);
 }
 
+/* ============================================================
+   💬 Bong bóng thoại của mèo — dùng chung cho "bói vui" lúc vào trang và phản ứng khi bị bấm nhiều.
+   ============================================================ */
+let _tn5BubbleHideTimer = null;
+function showTn5Bubble(text, durationMs){
+  const bubble = document.getElementById('tn5-fortune-bubble');
+  if(!bubble) return;
+  bubble.textContent = text;
+  bubble.classList.add('show');
+  clearTimeout(_tn5BubbleHideTimer);
+  _tn5BubbleHideTimer = setTimeout(() => { bubble.classList.remove('show'); }, durationMs || 5000);
+}
+(() => {
+  const bubbleEl = document.getElementById('tn5-fortune-bubble');
+  if(bubbleEl) bubbleEl.addEventListener('click', () => { bubbleEl.classList.remove('show'); clearTimeout(_tn5BubbleHideTimer); });
+})();
+
+/* ============================================================
+   🔮 "Bói vui" kho vận — mỗi lần vào trang, mèo thì thầm 1 câu ngẫu nhiên (chỉ để vui, không có ý
+   nghĩa gì về số liệu thật).
+   ============================================================ */
+const TN5_FORTUNES = [
+  'Hôm nay hàng về đều, kho đều tay pick 💪',
+  'Container nào cũng đầy may mắn, chúc ngày xuất hàng suôn sẻ!',
+  'Nhớ uống nước, đừng để khát như pallet thiếu hàng.',
+  'Một ngày không lệch số là một ngày tốt lành.',
+  'Mèo kho chúc bạn tay nhanh mắt tinh, pick đâu trúng đó.',
+  'SL tồn dồi dào, tinh thần cũng dồi dào theo.',
+  'Đừng lo lệch số nhỏ — sửa xong vẫn là anh hùng.',
+  'Container đầy ắp, túi cũng đầy ắp (hy vọng vậy).',
+  'Hôm nay không có container nào dám trễ giờ Load.',
+  'Kho vui thì việc cũng vui, đừng để hàng NG làm phiền lòng.',
+  'Một lời khuyên từ mèo: nghỉ tay uống miếng nước rồi pick tiếp.',
+  'Chúc bạn tìm mã hàng nhanh như mèo tìm chuột.',
+  'Ngày hôm nay: ít lệch, nhiều năng lượng.',
+  'Sổ tay ghi đúng, hệ thống khớp liền — mơ ước có thật.',
+  'Container nào cũng lên tàu đúng hẹn, không trễ chuyến nào.',
+  'Chúc ca làm việc của bạn êm như mặt biển không sóng.',
+];
+setTimeout(() => {
+  const q = TN5_FORTUNES[Math.floor(Math.random() * TN5_FORTUNES.length)];
+  showTn5Bubble(q, 6000);
+}, 1200);
+
+/* ============================================================
+   😾 Bấm liên tục vào mèo (5 lần trong ~2.5s) -> mèo "giận", rung nhẹ, than phiền một câu — dịu lại
+   sau vài giây. Chỉ là easter egg vui, không ảnh hưởng gì tới trạng thái pick hàng thật.
+   ============================================================ */
+let _tn5MascotClickTimes = [];
+(() => {
+  const mascotEl = document.getElementById('tn5-mascot');
+  if(!mascotEl) return;
+  mascotEl.addEventListener('click', () => {
+    const now = Date.now();
+    _tn5MascotClickTimes = _tn5MascotClickTimes.filter(t => now - t < 2500).concat(now);
+    if(_tn5MascotClickTimes.length >= 5){
+      _tn5MascotClickTimes = [];
+      triggerTn5MascotAnnoyed();
+    }
+  });
+})();
+const TN5_ANNOYED_LINES = [
+  'Đừng chọc mèo nữa mà! 😾',
+  'Mèo mệt rồi, để mèo nghỉ chút!',
+  'Ứ thèm chơi với bạn nữa đâu!',
+  'Meo méo meo (dịch: thôi đi mà)!',
+];
+function triggerTn5MascotAnnoyed(){
+  const el = document.getElementById('tn5-mascot');
+  if(!el) return;
+  el.textContent = '😾';
+  el.classList.add('tn5-mascot-shake');
+  showTn5Bubble(TN5_ANNOYED_LINES[Math.floor(Math.random() * TN5_ANNOYED_LINES.length)], 2600);
+  setTimeout(() => {
+    el.classList.remove('tn5-mascot-shake');
+    if(typeof updateMascotMood === 'function') updateMascotMood();
+  }, 2600);
+}
+
 let cptActiveFilterDropdown = null; // {col, el}
 function cptCloseFilterDropdown(){
   if(cptActiveFilterDropdown){ cptActiveFilterDropdown.el.remove(); cptActiveFilterDropdown = null; }
