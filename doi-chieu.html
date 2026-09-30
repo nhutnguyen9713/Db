@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Đối chiếu Receive — TN5</title>
+<meta name="description" content="Đối chiếu sổ nhận hàng viết tay với file Transaction (Receive) của kho.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#F3F5F9; --panel:#FFFFFF; --panel-2:#F8FAFD; --line:#E1E7F0; --line-soft:#EDF1F7;
+    --text:#16202E; --muted:#55637C; --muted-2:#7E8CA3;
+    --amber:#B76E00; --amber-bright:#F5A623; --teal:#0E8F76; --red:#D6394B; --blue:#2C6FCB; --violet:#6E4FE0;
+    --mono:'JetBrains Mono', ui-monospace, monospace; --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; padding:20px 20px 60px; background:var(--bg); color:var(--text); font-family:var(--sans);}
+  .wrap{max-width:1200px; margin:0 auto;}
+  header{margin-bottom:20px;}
+  .eyebrow{font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--violet); text-transform:uppercase; display:flex; align-items:center; gap:6px;}
+  .eyebrow .dot{width:6px; height:6px; border-radius:50%; background:var(--violet); box-shadow:0 0 6px var(--violet);}
+  h1{font-size:20px; margin:4px 0 4px;}
+  .sub{font-size:13px; color:var(--muted); line-height:1.5; max-width:760px;}
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:18px;}
+  .panel h2{font-size:15px; margin:0 0 4px; display:flex; align-items:center; gap:8px;}
+  .panel h2 .step{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--violet); color:#fff; font-size:11px; font-weight:700; font-family:var(--mono);}
+  .panel .hint{font-size:12px; color:var(--muted); margin:0 0 14px; line-height:1.5;}
+
+  /* ===== Upload ===== */
+  .upload-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .file-btn{position:relative; overflow:hidden; display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:8px; border:1px solid var(--violet); background:var(--violet); color:#fff; font-size:13px; font-weight:700; cursor:pointer;}
+  .file-btn input[type=file]{position:absolute; inset:0; opacity:0; cursor:pointer;}
+  .file-btn:hover{filter:brightness(1.06);}
+  #upload-status{font-size:12.5px; color:var(--muted);}
+  #upload-status.ok{color:var(--teal); font-weight:600;}
+  #upload-status.err{color:var(--red); font-weight:600;}
+  .tx-summary{display:flex; gap:22px; flex-wrap:wrap; margin-top:14px;}
+  .tx-summary div{display:flex; flex-direction:column; gap:2px;}
+  .tx-summary b{font-family:var(--mono); font-size:18px;}
+  .tx-summary span{font-family:var(--mono); font-size:9.5px; color:var(--muted-2); text-transform:uppercase; letter-spacing:.04em;}
+  .clear-link{margin-left:auto; background:none; border:none; color:var(--muted); font-size:12px; text-decoration:underline; cursor:pointer; padding:4px;}
+
+  /* ===== Manual entry form ===== */
+  .entry-form{display:grid; grid-template-columns:150px 110px 1fr 110px 110px 110px auto; gap:10px; align-items:end;}
+  .entry-form label{display:block; font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:5px;}
+  .entry-form input, .entry-form select{width:100%; padding:8px 10px; border-radius:7px; border:1px solid var(--line); background:var(--panel-2); font-size:13.5px; font-family:var(--sans); color:var(--text);}
+  .entry-form input:focus, .entry-form select:focus{outline:none; border-color:var(--violet);}
+  .entry-form input[type=number]{font-family:var(--mono);}
+  #btn-add-entry{padding:9px 18px; border-radius:8px; border:none; background:var(--teal); color:#fff; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap;}
+  #btn-add-entry:hover{filter:brightness(1.06);}
+  #entry-form-error{color:var(--red); font-size:12px; margin-top:8px; min-height:1em;}
+  @media (max-width:900px){ .entry-form{grid-template-columns:1fr 1fr;} #btn-add-entry{grid-column:1/-1;} }
+
+  /* ===== Tables ===== */
+  .table-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:10px; margin-top:14px;}
+  table.dt{width:100%; border-collapse:collapse; font-size:12.5px; min-width:560px;}
+  table.dt thead th{padding:8px 10px; background:var(--panel-2); color:var(--muted); font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; text-align:left; white-space:nowrap; border-bottom:1px solid var(--line);}
+  table.dt tbody td{padding:7px 10px; border-top:1px solid var(--line-soft); font-family:var(--mono); white-space:nowrap;}
+  table.dt tbody tr:hover{background:var(--panel-2);}
+  table.dt td.num{text-align:right;}
+  table.dt tfoot td{padding:8px 10px; font-weight:700; border-top:2px solid var(--line); font-family:var(--mono);}
+  .del-btn{border:none; background:none; color:var(--muted); cursor:pointer; font-size:15px; padding:2px 6px; border-radius:5px;}
+  .del-btn:hover{color:var(--red); background:rgba(214,57,75,0.1);}
+  .empty-note{font-size:12.5px; color:var(--muted-2); padding:16px 4px; text-align:center;}
+
+  .shift-badge{display:inline-block; padding:1px 7px; border-radius:5px; font-size:10.5px; font-weight:700;}
+  .shift-badge.ngay{background:rgba(245,166,35,0.15); color:var(--amber);}
+  .shift-badge.dem{background:rgba(110,79,224,0.12); color:var(--violet);}
+
+  /* ===== Reconcile ===== */
+  .reconcile-toolbar{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:4px;}
+  .reconcile-toolbar input[type=text]{flex:1; min-width:200px; padding:8px 12px; border-radius:8px; border:1px solid var(--line); font-size:13px;}
+  .reconcile-toolbar label{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted); white-space:nowrap;}
+  .status-badge{display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; white-space:nowrap;}
+  .status-badge.match{background:rgba(14,143,118,0.12); color:var(--teal);}
+  .status-badge.mismatch{background:rgba(214,57,75,0.12); color:var(--red);}
+  .status-badge.missing-sys{background:rgba(245,166,35,0.15); color:var(--amber);}
+  .status-badge.missing-log{background:rgba(110,79,224,0.12); color:var(--violet);}
+  td.diff-bad{color:var(--red); font-weight:700;}
+  td.diff-ok{color:var(--teal);}
+  .recon-summary{display:flex; gap:20px; flex-wrap:wrap; margin-top:14px; font-size:12.5px;}
+  .recon-summary b{font-family:var(--mono);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow"><span class="dot"></span>ĐỐI CHIẾU SỔ TAY</div>
+    <h1>Đối chiếu Receive</h1>
+    <div class="sub">So sánh sổ nhận hàng viết tay với dữ liệu Receive thật trong file Transaction — phát hiện chênh lệch giữa số ghi tay và số hệ thống. (Phần Transfer/Picking sẽ làm sau.)</div>
+  </header>
+
+  <div class="panel" id="upload-panel">
+    <h2><span class="step">1</span>Tải file Transaction</h2>
+    <div class="hint">Dùng đúng file Transaction xuất từ WMS (.xlsx/.xls/.csv/.tsv) — giống hệt file tải lên ở tab Transaction của TN5 Dashboard. Trang này chỉ lấy các dòng <b>Transaction Type = RECEIVE</b>.</div>
+    <div class="upload-row">
+      <label class="file-btn">📂 Chọn file Transaction<input type="file" id="tx-file-input" accept=".xlsx,.xls,.csv,.tsv,.txt"></label>
+      <span id="upload-status"></span>
+      <button type="button" class="clear-link" id="btn-clear-tx" style="display:none;">Xoá dữ liệu file đã tải</button>
+    </div>
+    <div class="tx-summary" id="tx-summary" style="display:none;"></div>
+  </div>
+
+  <div class="panel" id="entry-panel">
+    <h2><span class="step">2</span>Nhập sổ nhận hàng (thủ công)</h2>
+    <div class="hint">Ghi lại đúng như sổ tay tại kho — mỗi dòng là 1 lượt nhận hàng của 1 mã hàng trong 1 ca.</div>
+    <div class="entry-form">
+      <div><label>Ngày</label><input type="date" id="f-date"></div>
+      <div><label>Ca</label><select id="f-shift"><option value="ngay">Ngày</option><option value="dem">Đêm</option></select></div>
+      <div><label>Item</label><input type="text" id="f-item" placeholder="VD: 020353007"></div>
+      <div><label>SL Pallet</label><input type="number" id="f-pallet" min="0" step="1" placeholder="0"></div>
+      <div><label>SL Ctn</label><input type="number" id="f-ctn" min="0" step="1" placeholder="0"></div>
+      <div><label>SL Pcs</label><input type="number" id="f-pcs" min="0" step="1" placeholder="0"></div>
+      <button type="button" id="btn-add-entry">+ Thêm dòng</button>
+    </div>
+    <div id="entry-form-error"></div>
+
+    <div class="table-scroll">
+      <table class="dt" id="log-table">
+        <thead><tr>
+          <th>Ngày</th><th>Ca</th><th>Item</th>
+          <th style="text-align:right">SL Pallet</th><th style="text-align:right">SL Ctn</th><th style="text-align:right">SL Pcs</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="log-tbody"></tbody>
+        <tfoot id="log-tfoot"></tfoot>
+      </table>
+      <div class="empty-note" id="log-empty">Chưa có dòng nào — nhập ở form phía trên.</div>
+    </div>
+  </div>
+
+  <div class="panel" id="reconcile-panel">
+    <h2><span class="step">3</span>Bảng đối chiếu (theo Ngày + Item)</h2>
+    <div class="hint">Gộp tất cả ca trong ngày của sổ tay rồi so với tổng số dòng Receive hệ thống cùng ngày/mã hàng — hệ thống không có khái niệm "ca" nên chỉ đối chiếu được theo ngày. <b>SL Pallet hệ thống</b> = số dòng Receive (mỗi dòng tính 1 pallet); <b>SL Pcs hệ thống</b> = tổng Transaction Qty. SL Ctn không có bên hệ thống nên chỉ hiển thị tham khảo.</div>
+    <div class="reconcile-toolbar">
+      <input type="text" id="recon-search" placeholder="Tìm theo mã hàng…">
+      <label><input type="checkbox" id="recon-only-mismatch"> Chỉ hiện dòng lệch/thiếu</label>
+    </div>
+    <div class="table-scroll">
+      <table class="dt" id="recon-table">
+        <thead><tr>
+          <th>Ngày</th><th>Item</th>
+          <th style="text-align:right">Pallet (Sổ tay)</th><th style="text-align:right">Pallet (Hệ thống)</th><th style="text-align:right">Lệch Pallet</th>
+          <th style="text-align:right">Pcs (Sổ tay)</th><th style="text-align:right">Pcs (Hệ thống)</th><th style="text-align:right">Lệch Pcs</th>
+          <th style="text-align:right">Ctn (Sổ tay)</th>
+          <th>Trạng thái</th>
+        </tr></thead>
+        <tbody id="recon-tbody"></tbody>
+      </table>
+      <div class="empty-note" id="recon-empty">Chưa đủ dữ liệu để đối chiếu — cần cả file Transaction lẫn sổ nhận hàng.</div>
+    </div>
+    <div class="recon-summary" id="recon-summary"></div>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   Tiện ích dùng chung (đọc file, parse ngày/số...) — PHẢI khớp y hệt logic đang dùng ở tab Transaction
+   của TN5 Dashboard (app.js) để đảm bảo đọc đúng cùng 1 định dạng file, không lệch quy ước.
+   ============================================================ */
+const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+
+function removeDiacritics(str){
+  return (str||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D');
+}
+function findCol(headers, candidates){
+  const norm = h => removeDiacritics((h||'').toString().toLowerCase().trim()).replace(/\s+/g, ' ');
+  const lower = headers.map(norm);
+  for(const cand of candidates){ const idx = lower.findIndex(h => h === norm(cand)); if(idx !== -1) return idx; }
+  for(const cand of candidates){ const idx = lower.findIndex(h => h.includes(norm(cand))); if(idx !== -1) return idx; }
+  return -1;
+}
+function txNorm(s){ return (s === null || s === undefined) ? '' : String(s).trim(); }
+function txItemText(raw){
+  const s = (raw === null || raw === undefined) ? '' : String(raw).trim();
+  if(!s) return '';
+  return /^\d+$/.test(s) ? s.padStart(9, '0') : s;
+}
+function txParseTxDateTime(s){
+  if(!s) return null;
+  const str = String(s).trim();
+  const m = str.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if(!m){
+    // Dự phòng: một số file xuất kiểu "YYYY-MM-DD HH:mm" hoặc "DD/MM/YYYY HH:mm".
+    const m2 = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m2){ const d = new Date(Number(m2[1]), Number(m2[2])-1, Number(m2[3])); return isNaN(d.getTime()) ? null : d; }
+    const m3 = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(m3){ const d = new Date(Number(m3[3]), Number(m3[2])-1, Number(m3[1])); return isNaN(d.getTime()) ? null : d; }
+    return null;
+  }
+  const mon = MONTHS[m[2].toLowerCase()];
+  if(mon === undefined) return null;
+  const d = new Date(Number(m[3]), mon, Number(m[1]), Number(m[4]), Number(m[5]), m[6] ? Number(m[6]) : 0);
+  return isNaN(d.getTime()) ? null : d;
+}
+function dateKey(d){
+  if(!d) return null;
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+function fmt(n){ return Math.round(n||0).toLocaleString('en-US'); }
+function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function decodeTextBuffer(buffer){
+  const bytes = new Uint8Array(buffer);
+  if(bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) return new TextDecoder('utf-8').decode(buffer);
+  if(bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(buffer);
+  if(bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(buffer);
+  return new TextDecoder('utf-8').decode(buffer);
+}
+function guessDelimiter(text){
+  const firstLine = text.split(/\r?\n/, 1)[0] || '';
+  const counts = { ',': (firstLine.match(/,/g)||[]).length, '\t': (firstLine.match(/\t/g)||[]).length, ';': (firstLine.match(/;/g)||[]).length };
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
+}
+function parseDelimitedText(text, delim){
+  const rows = []; let row = []; let field = ''; let inQuotes = false; let fieldStart = true;
+  if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){ if(text[i+1] === '"'){ field += '"'; i++; } else inQuotes = false; }
+      else field += c;
+    } else {
+      if(c === '"' && fieldStart){ inQuotes = true; }
+      else if(c === delim){ row.push(field); field = ''; fieldStart = true; continue; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; fieldStart = true; continue; }
+      else if(c === '\r'){ continue; }
+      else field += c;
+      fieldStart = false;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => !(r.length === 1 && r[0] === ''));
+}
+function txExtractSheetRows(workbook){
+  const headerCands = ['transaction type'], menuCands = ['menu name'];
+  let best = null;
+  for(const name of workbook.SheetNames){
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], {header:1, raw:true, defval:null});
+    if(!rows.length) continue;
+    const maxScan = Math.min(rows.length, 10);
+    for(let i=0;i<maxScan;i++){
+      const row = rows[i]; if(!row) continue;
+      if(findCol(row, headerCands) !== -1 && findCol(row, menuCands) !== -1){
+        if(!best || rows.length - i > best.rows.length - best.hIdx){ best = {name, rows, hIdx:i}; }
+        break;
+      }
+    }
+  }
+  if(!best) throw new Error('Không tìm thấy cột "Transaction Type" / "Menu Name" trong file.');
+  return { name: best.name, rows: best.hIdx > 0 ? best.rows.slice(best.hIdx) : best.rows };
+}
+function txReadFileAsRows(file){
+  return new Promise((resolve, reject) => {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const isDelimited = ['csv','tsv','txt'].includes(ext);
+    const r = new FileReader();
+    r.onload = (ev) => {
+      try{
+        if(isDelimited){
+          const text = decodeTextBuffer(ev.target.result);
+          const delim = ext === 'tsv' ? '\t' : (ext === 'csv' ? ',' : guessDelimiter(text));
+          resolve(parseDelimitedText(text, delim));
+        } else {
+          if(typeof XLSX === 'undefined') throw new Error('Thư viện đọc Excel (SheetJS) chưa tải được — cần Internet. Hãy lưu file dạng .csv/.tsv rồi tải lên.');
+          const wb = XLSX.read(ev.target.result, {type:'array', cellDates:false});
+          resolve(txExtractSheetRows(wb).rows);
+        }
+      }catch(err){ reject(err); }
+    };
+    r.onerror = () => reject(new Error('Không đọc được file.'));
+    r.readAsArrayBuffer(file);
+  });
+}
+// Parse rows -> chỉ giữ các dòng Transaction Type = RECEIVE, gọn đủ field cần cho đối chiếu.
+function parseReceiveRows(rows){
+  if(!rows.length) throw new Error('File không có dữ liệu.');
+  const headers = rows[0];
+  const colType = findCol(headers, ['transaction type']);
+  const colItem = findCol(headers, ['item no', 'item no.', 'item number']);
+  const colQty = findCol(headers, ['transaction qty']);
+  const colDate = findCol(headers, ['transaction date']);
+  const colLocator = findCol(headers, ['locator name']);
+  const colUser = findCol(headers, ['user name']);
+  if(colType === -1 || colItem === -1 || colQty === -1 || colDate === -1){
+    throw new Error('File thiếu cột bắt buộc (Transaction Type / Item No / Transaction Qty / Transaction Date).');
+  }
+  const out = [];
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i]; if(!r) continue;
+    const transType = txNorm(r[colType]);
+    if(transType.toUpperCase() !== 'RECEIVE') continue;
+    const dt = txParseTxDateTime(r[colDate]);
+    if(!dt) continue;
+    out.push({
+      item: txItemText(r[colItem]),
+      itemRaw: txNorm(r[colItem]),
+      qty: Number(r[colQty]) || 0,
+      dateKey: dateKey(dt),
+      locator: colLocator !== -1 ? txNorm(r[colLocator]) : '',
+      user: colUser !== -1 ? txNorm(r[colUser]) : '',
+    });
+  }
+  return out;
+}
+
+/* ============================================================
+   Lưu trữ cục bộ (localStorage) — sổ nhận hàng viết tay + dữ liệu Receive từ file vừa tải.
+   ============================================================ */
+const LS_LOG_KEY = 'tn5_doichieu_receive_log_v1';
+const LS_TX_KEY = 'tn5_doichieu_receive_tx_v1';
+
+function loadLog(){
+  try{ return JSON.parse(localStorage.getItem(LS_LOG_KEY) || '[]'); }catch(err){ return []; }
+}
+function saveLog(entries){
+  try{ localStorage.setItem(LS_LOG_KEY, JSON.stringify(entries)); }catch(err){}
+}
+function loadTx(){
+  try{ return JSON.parse(localStorage.getItem(LS_TX_KEY) || 'null'); }catch(err){ return null; }
+}
+function saveTx(data){
+  try{ localStorage.setItem(LS_TX_KEY, JSON.stringify(data)); }catch(err){}
+}
+
+let logEntries = loadLog(); // [{id, date, shift, item, pallet, ctn, pcs}]
+let txReceiveData = loadTx(); // {fileName, uploadedAt, rows:[{item, itemRaw, qty, dateKey, locator, user}]}
+
+/* ============================================================
+   ① Tải file Transaction
+   ============================================================ */
+const txFileInput = document.getElementById('tx-file-input');
+const uploadStatus = document.getElementById('upload-status');
+const txSummaryEl = document.getElementById('tx-summary');
+const btnClearTx = document.getElementById('btn-clear-tx');
+
+function renderTxSummary(){
+  if(!txReceiveData || !txReceiveData.rows || !txReceiveData.rows.length){
+    txSummaryEl.style.display = 'none';
+    btnClearTx.style.display = 'none';
+    uploadStatus.textContent = '';
+    uploadStatus.className = '';
+    return;
+  }
+  const rows = txReceiveData.rows;
+  const dates = rows.map(r => r.dateKey).filter(Boolean).sort();
+  const items = new Set(rows.map(r => r.item));
+  const totalQty = rows.reduce((s,r) => s + r.qty, 0);
+  txSummaryEl.innerHTML = `
+    <div><b>${fmt(rows.length)}</b><span>Dòng Receive</span></div>
+    <div><b>${items.size}</b><span>Mã hàng</span></div>
+    <div><b>${fmt(totalQty)}</b><span>Tổng SL (Pcs)</span></div>
+    <div><b>${dates[0] || '—'} → ${dates[dates.length-1] || '—'}</b><span>Khoảng ngày</span></div>
+  `;
+  txSummaryEl.style.display = 'flex';
+  btnClearTx.style.display = 'inline';
+  uploadStatus.textContent = `✓ Đã tải "${txReceiveData.fileName}"`;
+  uploadStatus.className = 'ok';
+}
+
+txFileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  uploadStatus.textContent = 'Đang đọc file…';
+  uploadStatus.className = '';
+  try{
+    const rows = await txReadFileAsRows(file);
+    const receiveRows = parseReceiveRows(rows);
+    if(!receiveRows.length){
+      uploadStatus.textContent = '⚠ File đọc được nhưng không có dòng Transaction Type = RECEIVE nào.';
+      uploadStatus.className = 'err';
+      return;
+    }
+    txReceiveData = { fileName: file.name, uploadedAt: new Date().toISOString(), rows: receiveRows };
+    saveTx(txReceiveData);
+    renderTxSummary();
+    renderReconcile();
+  }catch(err){
+    uploadStatus.textContent = '✗ Lỗi: ' + err.message;
+    uploadStatus.className = 'err';
+  }finally{
+    txFileInput.value = '';
+  }
+});
+btnClearTx.addEventListener('click', () => {
+  if(!confirm('Xoá dữ liệu Receive vừa tải khỏi trang này? (không ảnh hưởng file gốc)')) return;
+  txReceiveData = null;
+  saveTx(null);
+  renderTxSummary();
+  renderReconcile();
+});
+
+/* ============================================================
+   ② Nhập sổ nhận hàng (thủ công)
+   ============================================================ */
+const fDate = document.getElementById('f-date');
+const fShift = document.getElementById('f-shift');
+const fItem = document.getElementById('f-item');
+const fPallet = document.getElementById('f-pallet');
+const fCtn = document.getElementById('f-ctn');
+const fPcs = document.getElementById('f-pcs');
+const formError = document.getElementById('entry-form-error');
+const logTbody = document.getElementById('log-tbody');
+const logTfoot = document.getElementById('log-tfoot');
+const logEmpty = document.getElementById('log-empty');
+
+function todayStr(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+fDate.value = todayStr();
+
+document.getElementById('btn-add-entry').addEventListener('click', () => {
+  formError.textContent = '';
+  const date = fDate.value;
+  const shift = fShift.value;
+  const itemRaw = fItem.value.trim();
+  const pallet = Number(fPallet.value) || 0;
+  const ctn = Number(fCtn.value) || 0;
+  const pcs = Number(fPcs.value) || 0;
+  if(!date){ formError.textContent = 'Chưa chọn ngày.'; return; }
+  if(!itemRaw){ formError.textContent = 'Chưa nhập Item.'; return; }
+  if(pallet <= 0 && ctn <= 0 && pcs <= 0){ formError.textContent = 'Phải nhập ít nhất 1 trong 3 số lượng (Pallet/Ctn/Pcs) lớn hơn 0.'; return; }
+  logEntries.push({
+    id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    date, shift, item: txItemText(itemRaw), itemRaw, pallet, ctn, pcs,
+  });
+  saveLog(logEntries);
+  // Chừa lại Ngày/Ca (thường nhập liên tiếp nhiều dòng cùng ngày/ca) — chỉ xoá phần Item/số lượng.
+  fItem.value = ''; fPallet.value = ''; fCtn.value = ''; fPcs.value = '';
+  fItem.focus();
+  renderLog();
+  renderReconcile();
+});
+
+function renderLog(){
+  if(!logEntries.length){
+    logTbody.innerHTML = ''; logTfoot.innerHTML = '';
+    logEmpty.style.display = 'block';
+    return;
+  }
+  logEmpty.style.display = 'none';
+  const sorted = [...logEntries].sort((a,b) => b.date.localeCompare(a.date) || a.item.localeCompare(b.item));
+  logTbody.innerHTML = sorted.map(e => `
+    <tr>
+      <td>${escHtml(e.date)}</td>
+      <td><span class="shift-badge ${e.shift}">${e.shift === 'ngay' ? 'Ngày' : 'Đêm'}</span></td>
+      <td>${escHtml(e.itemRaw || e.item)}</td>
+      <td class="num">${fmt(e.pallet)}</td>
+      <td class="num">${fmt(e.ctn)}</td>
+      <td class="num">${fmt(e.pcs)}</td>
+      <td><button type="button" class="del-btn" data-id="${escHtml(e.id)}" title="Xoá dòng này">✕</button></td>
+    </tr>`).join('');
+  const totalPallet = logEntries.reduce((s,e)=>s+e.pallet,0);
+  const totalCtn = logEntries.reduce((s,e)=>s+e.ctn,0);
+  const totalPcs = logEntries.reduce((s,e)=>s+e.pcs,0);
+  logTfoot.innerHTML = `<tr><td colspan="3">Tổng (${fmt(logEntries.length)} dòng)</td><td class="num">${fmt(totalPallet)}</td><td class="num">${fmt(totalCtn)}</td><td class="num">${fmt(totalPcs)}</td><td></td></tr>`;
+}
+logTbody.addEventListener('click', (e) => {
+  const btn = e.target.closest('.del-btn');
+  if(!btn) return;
+  const id = btn.dataset.id;
+  if(!confirm('Xoá dòng sổ nhận hàng này?')) return;
+  logEntries = logEntries.filter(x => x.id !== id);
+  saveLog(logEntries);
+  renderLog();
+  renderReconcile();
+});
+
+/* ============================================================
+   ③ Bảng đối chiếu (theo Ngày + Item)
+   ============================================================ */
+const reconTbody = document.getElementById('recon-tbody');
+const reconEmpty = document.getElementById('recon-empty');
+const reconSummary = document.getElementById('recon-summary');
+const reconSearch = document.getElementById('recon-search');
+const reconOnlyMismatch = document.getElementById('recon-only-mismatch');
+
+function buildReconcileRows(){
+  const byKey = new Map(); // "date||item" -> { date, item, itemRaw, logPallet, logCtn, logPcs, sysPallet, sysPcs, inLog, inSys }
+  const getRow = (date, item, itemRaw) => {
+    const key = date + '||' + item;
+    let r = byKey.get(key);
+    if(!r){ r = { date, item, itemRaw: itemRaw || item, logPallet:0, logCtn:0, logPcs:0, sysPallet:0, sysPcs:0, inLog:false, inSys:false }; byKey.set(key, r); }
+    return r;
+  };
+  logEntries.forEach(e => {
+    const r = getRow(e.date, e.item, e.itemRaw);
+    r.inLog = true;
+    r.logPallet += e.pallet; r.logCtn += e.ctn; r.logPcs += e.pcs;
+  });
+  if(txReceiveData && txReceiveData.rows){
+    txReceiveData.rows.forEach(row => {
+      if(!row.dateKey) return;
+      const r = getRow(row.dateKey, row.item, row.itemRaw);
+      r.inSys = true;
+      r.sysPallet += 1; // mỗi dòng Receive = 1 pallet
+      r.sysPcs += row.qty;
+    });
+  }
+  return [...byKey.values()].sort((a,b) => b.date.localeCompare(a.date) || a.itemRaw.localeCompare(b.itemRaw));
+}
+
+function reconcileStatus(r){
+  if(r.inLog && !r.inSys) return 'missing-sys'; // sổ tay có, hệ thống chưa thấy
+  if(!r.inLog && r.inSys) return 'missing-log'; // hệ thống có, sổ tay chưa ghi
+  if(r.logPallet === r.sysPallet && r.logPcs === r.sysPcs) return 'match';
+  return 'mismatch';
+}
+const STATUS_LABEL = { match: '✓ Khớp', mismatch: '⚠ Lệch số', 'missing-sys': '⚠ Chưa thấy trên hệ thống', 'missing-log': '⚠ Chưa ghi sổ tay' };
+
+function renderReconcile(){
+  const rows = buildReconcileRows();
+  if(!rows.length){
+    reconTbody.innerHTML = '';
+    reconEmpty.style.display = 'block';
+    reconSummary.innerHTML = '';
+    return;
+  }
+  reconEmpty.style.display = 'none';
+  const q = removeDiacritics(reconSearch.value.trim().toLowerCase());
+  const onlyMismatch = reconOnlyMismatch.checked;
+  const filtered = rows.filter(r => {
+    if(q && !removeDiacritics(r.itemRaw.toLowerCase()).includes(q)) return false;
+    if(onlyMismatch && reconcileStatus(r) === 'match') return false;
+    return true;
+  });
+  if(!filtered.length){
+    reconTbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:var(--muted-2); font-family:var(--sans);">Không có dòng nào khớp bộ lọc.</td></tr>`;
+  } else {
+    reconTbody.innerHTML = filtered.map(r => {
+      const status = reconcileStatus(r);
+      const diffPallet = r.logPallet - r.sysPallet;
+      const diffPcs = r.logPcs - r.sysPcs;
+      const diffCls = v => v === 0 ? 'diff-ok' : 'diff-bad';
+      const diffText = v => (v > 0 ? '+' : '') + fmt(v);
+      return `<tr>
+        <td>${escHtml(r.date)}</td>
+        <td>${escHtml(r.itemRaw)}</td>
+        <td class="num">${r.inLog ? fmt(r.logPallet) : '—'}</td>
+        <td class="num">${r.inSys ? fmt(r.sysPallet) : '—'}</td>
+        <td class="num ${r.inLog && r.inSys ? diffCls(diffPallet) : ''}">${r.inLog && r.inSys ? diffText(diffPallet) : '—'}</td>
+        <td class="num">${r.inLog ? fmt(r.logPcs) : '—'}</td>
+        <td class="num">${r.inSys ? fmt(r.sysPcs) : '—'}</td>
+        <td class="num ${r.inLog && r.inSys ? diffCls(diffPcs) : ''}">${r.inLog && r.inSys ? diffText(diffPcs) : '—'}</td>
+        <td class="num">${r.inLog ? fmt(r.logCtn) : '—'}</td>
+        <td><span class="status-badge ${status}">${STATUS_LABEL[status]}</span></td>
+      </tr>`;
+    }).join('');
+  }
+  const nMatch = rows.filter(r => reconcileStatus(r) === 'match').length;
+  const nMismatch = rows.filter(r => reconcileStatus(r) === 'mismatch').length;
+  const nMissingSys = rows.filter(r => reconcileStatus(r) === 'missing-sys').length;
+  const nMissingLog = rows.filter(r => reconcileStatus(r) === 'missing-log').length;
+  reconSummary.innerHTML = `
+    <span><b>${fmt(rows.length)}</b> dòng đối chiếu</span>
+    <span style="color:var(--teal);"><b>${fmt(nMatch)}</b> khớp</span>
+    <span style="color:var(--red);"><b>${fmt(nMismatch)}</b> lệch số</span>
+    <span style="color:var(--amber);"><b>${fmt(nMissingSys)}</b> chưa thấy trên hệ thống</span>
+    <span style="color:var(--violet);"><b>${fmt(nMissingLog)}</b> chưa ghi sổ tay</span>
+  `;
+}
+reconSearch.addEventListener('input', renderReconcile);
+reconOnlyMismatch.addEventListener('change', renderReconcile);
+
+/* ============================================================
+   Khởi động
+   ============================================================ */
+renderTxSummary();
+renderLog();
+renderReconcile();
+</script>
+</body>
+</html>
