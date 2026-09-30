@@ -111,7 +111,76 @@
   .sidebar-nav-btn svg{width:21px; height:21px;}
   .sidebar-nav-btn:hover:not(.active){background:rgba(255,255,255,0.08); color:#fff;}
   .sidebar-nav-btn.active{background:#fff; color:#12161F;}
-  .sidebar-spacer{flex:1;}
+  .sidebar-spacer{flex:1; position:relative; height:44px;}
+
+  /* ============ Cảnh xe container -> tàu (lấp khoảng trống giữa thanh điều hướng) ============
+     Toàn bộ vị trí ngang dùng % (left/right) — luôn tính theo chiều rộng thật của .sidebar-spacer,
+     nên co giãn đúng ở mọi kích thước màn hình, khác với transform:translateX(%) (tính theo chiều
+     rộng của CHÍNH phần tử đó, không phải phần tử cha) — không dùng được cho việc này. */
+  .dock-scene{position:absolute; inset:0; overflow:hidden; border-radius:10px; pointer-events:none;}
+  .dock-ground{position:absolute; left:0; width:46%; bottom:3px; height:2px; background:rgba(255,255,255,0.14);}
+  .dock-pier{position:absolute; left:44%; bottom:0; width:3px; height:15px; background:rgba(255,255,255,0.18); border-radius:1px;}
+  .dock-sea{
+    position:absolute; left:44%; right:0; bottom:3px; height:6px; border-radius:3px;
+    background-image:repeating-linear-gradient(90deg, rgba(91,154,232,0.4) 0 6px, transparent 6px 14px);
+    background-size:28px 6px;
+    animation:dockWaveScroll 2.4s linear infinite;
+  }
+  @keyframes dockWaveScroll{ from{background-position-x:0;} to{background-position-x:28px;} }
+
+  /* Xe container: cabin (đầu xe, dẫn đầu vì xe chạy sang phải) + container chở theo + 2 bánh xe. */
+  .dock-truck{position:absolute; bottom:7px; width:48px; height:22px; left:-10%; opacity:1; animation:dockTruckDrive 15s ease-in-out infinite;}
+  .dock-truck-container{position:absolute; left:0; bottom:6px; width:26px; height:14px; background:#3a4356; border:1px solid rgba(255,255,255,0.15); border-top:2px solid var(--teal); border-radius:2px;}
+  .dock-truck-cab{position:absolute; right:0; bottom:2px; width:14px; height:16px; background:var(--amber-bright); border-radius:3px 5px 2px 2px;}
+  .dock-truck-wheel{position:absolute; bottom:-2px; width:7px; height:7px; border-radius:50%; background:#1a1f2b; border:1.5px solid rgba(255,255,255,0.25);}
+  .dock-truck-wheel-1{left:4px;}
+  .dock-truck-wheel-2{left:34px;}
+  @keyframes dockTruckDrive{
+    0%{left:-10%; opacity:1;}
+    34%{left:34%; opacity:1;}
+    40%{left:34%; opacity:1;}
+    46%{left:34%; opacity:0;}
+    100%{left:-10%; opacity:0;}
+  }
+
+  /* Container "tách" khỏi xe, bay theo cung lên boong tàu rồi biến mất (coi như nhập vào chồng
+     container đã vẽ sẵn trên tàu) — cùng hình dạng với container trên xe để chuyển cảnh mượt.
+     Toạ độ top/left tính TAY theo đúng vị trí pixel thật của container trên xe (~54% chiều cao, khớp
+     .dock-truck-container) và vị trí 2 container có sẵn trên tàu (~53% chiều cao, khớp .dock-ship-stack)
+     — cả 2 đều nằm gần đáy khung 44px, không phải giữa khung, nên KHÔNG dùng top:50% như bản đầu. */
+  .dock-cargo{
+    position:absolute; left:35%; top:54%; width:22px; height:13px; margin:-6.5px 0 0 -11px;
+    background:#3a4356; border:1px solid rgba(255,255,255,0.18); border-top:2px solid var(--amber-bright); border-radius:2px;
+    opacity:0; animation:dockCargoLift 15s ease-in-out infinite;
+  }
+  @keyframes dockCargoLift{
+    0%{left:35%; top:54%; opacity:0;}
+    35%{left:35%; top:54%; opacity:0;}
+    38%{left:35%; top:54%; opacity:1;}
+    44%{left:50%; top:16%; opacity:1;}
+    49%{left:64%; top:52%; opacity:1;}
+    52%{left:64%; top:52%; opacity:0;}
+    100%{left:35%; top:54%; opacity:0;}
+  }
+
+  /* Tàu container: đậu sẵn ở cầu cảng chờ nhận hàng, sau khi nhận xong mới nhổ neo ra khơi. */
+  .dock-ship{position:absolute; bottom:5px; width:74px; height:26px; left:58%; opacity:1; animation:dockShipSail 15s ease-in-out infinite, dockShipBob 3s ease-in-out infinite;}
+  .dock-ship-hull{position:absolute; left:0; bottom:0; width:74px; height:12px; background:#232a38; border-top:1px solid rgba(255,255,255,0.12); clip-path:polygon(6% 0, 94% 0, 100% 100%, 0% 100%);}
+  .dock-ship-cabin{position:absolute; right:4px; bottom:11px; width:10px; height:12px; background:#2f3848; border-radius:2px 2px 0 0;}
+  .dock-ship-stack{position:absolute; bottom:11px; width:14px; height:9px; background:#3a4356; border-radius:1px;}
+  .dock-ship-stack-1{left:8px; border-top:2px solid var(--teal);}
+  .dock-ship-stack-2{left:26px; border-top:2px solid var(--violet);}
+  @keyframes dockShipSail{
+    0%{left:58%; opacity:1;}
+    52%{left:58%; opacity:1;}
+    60%{left:63%; opacity:1;}
+    92%{left:122%; opacity:1;}
+    96%{left:122%; opacity:0;}
+    100%{left:58%; opacity:0;}
+  }
+  @keyframes dockShipBob{ 0%,100%{transform:translateY(0);} 50%{transform:translateY(2px);} }
+
+  @media (max-width:900px){ .dock-scene{display:none;} }
   .notif-badge{
     position:absolute; top:4px; right:4px; min-width:16px; height:16px; padding:0 3px; border-radius:8px;
     background:var(--red); color:#fff; font-size:10px; font-weight:800; align-items:center; justify-content:center;
