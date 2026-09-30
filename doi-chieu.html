@@ -124,6 +124,10 @@
   table.dt th.col-hethong{background:rgba(110,79,224,0.12);}
   table.dt td.col-sotay{background:rgba(44,111,203,0.06); color:var(--blue); font-weight:600;}
   table.dt td.col-hethong{background:rgba(110,79,224,0.06); color:var(--violet); font-weight:600;}
+  /* Tô đỏ nguyên dòng khi phát hiện lệch số (trạng thái "mismatch") -> dễ nhận ra ngay dòng có vấn đề
+     mà không cần đọc từng ô. !important để thắng nền xanh/tím riêng của cột Sổ tay/Hệ thống. */
+  table.dt tr.row-mismatch td{background:rgba(214,57,75,0.10) !important;}
+  table.dt tr.row-mismatch:hover td{background:rgba(214,57,75,0.16) !important;}
 
   /* ===== Lịch sử đối chiếu đã lưu ===== */
   #history-panel .reconcile-toolbar select, #history-panel .reconcile-toolbar input[type=date]{padding:8px 10px; border-radius:8px; border:1px solid var(--line); font-size:12.5px; font-family:var(--sans); color:var(--text); background:var(--panel-2);}
@@ -938,7 +942,7 @@ function renderReconcile(){
       const diffPcs = r.logPcs - r.sysPcs;
       const diffCls = v => v === 0 ? 'diff-ok' : 'diff-bad';
       const diffText = v => (v > 0 ? '+' : '') + fmt(v);
-      return `<tr>
+      return `<tr class="${status === 'mismatch' ? 'row-mismatch' : ''}">
         <td>${escHtml(r.date)}</td>
         <td>${escHtml(r.itemRaw)}</td>
         <td class="num col-sotay">${r.inLog ? fmt(r.logPallet) : '—'}</td>
@@ -1066,7 +1070,7 @@ function renderHistoryGroupHtml(g){
           </tr></thead>
           <tbody>
             ${rows.map(h => `
-              <tr>
+              <tr class="${h.status === 'mismatch' ? 'row-mismatch' : ''}">
                 <td>${escHtml(h.itemRaw)}</td>
                 <td class="num col-sotay">${h.inLog ? fmt(h.logPallet) : '—'}</td>
                 <td class="num col-hethong">${h.inSys ? fmt(h.sysPallet) : '—'}</td>
