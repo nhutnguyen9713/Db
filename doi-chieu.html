@@ -105,7 +105,7 @@
 
   <div class="panel" id="entry-panel">
     <h2><span class="step">2</span>Nhập sổ nhận hàng (thủ công)</h2>
-    <div class="hint">Ghi lại đúng như sổ tay tại kho — mỗi dòng là 1 lượt nhận hàng của 1 mã hàng trong 1 ca.</div>
+    <div class="hint">Ghi lại đúng như sổ tay tại kho — mỗi dòng là 1 lượt nhận hàng của 1 mã hàng trong 1 ca. Ca Ngày: 7h sáng – 7h tối; Ca Đêm: 7h tối – 7h sáng hôm sau (0h–7h sáng vẫn tính là ca đêm của <b>ngày hôm trước</b>, không phải ngày mới) — Ngày/Ca mặc định tự chọn theo giờ hiện tại, có thể đổi lại tay.</div>
     <div class="entry-form">
       <div><label>Ngày</label><input type="date" id="f-date"></div>
       <div><label>Ca</label><select id="f-shift"><option value="ngay">Ngày</option><option value="dem">Đêm</option></select></div>
@@ -133,7 +133,7 @@
 
   <div class="panel" id="reconcile-panel">
     <h2><span class="step">3</span>Bảng đối chiếu (theo Ngày + Item)</h2>
-    <div class="hint">Gộp tất cả ca trong ngày của sổ tay rồi so với tổng số dòng Receive hệ thống cùng ngày/mã hàng — hệ thống không có khái niệm "ca" nên chỉ đối chiếu được theo ngày. <b>SL Pallet hệ thống</b> = số dòng Receive (mỗi dòng tính 1 pallet); <b>SL Pcs hệ thống</b> = tổng Transaction Qty. SL Ctn không có bên hệ thống nên chỉ hiển thị tham khảo.</div>
+    <div class="hint">Gộp tất cả ca trong ngày của sổ tay rồi so với tổng số dòng Receive hệ thống cùng ngày/mã hàng — hệ thống không có khái niệm "ca" nên chỉ đối chiếu được theo ngày (dòng Receive quét lúc 0h–7h sáng được tính về <b>ngày hôm trước</b>, đúng ngày ca đêm bắt đầu, khớp với cách ghi sổ tay). <b>SL Pallet hệ thống</b> = số dòng Receive (mỗi dòng tính 1 pallet); <b>SL Pcs hệ thống</b> = tổng Transaction Qty. SL Ctn không có bên hệ thống nên chỉ hiển thị tham khảo.</div>
     <div class="reconcile-toolbar">
       <input type="text" id="recon-search" placeholder="Tìm theo mã hàng…">
       <label><input type="checkbox" id="recon-only-mismatch"> Chỉ hiện dòng lệch/thiếu</label>
@@ -200,6 +200,19 @@ function dateKey(d){
   if(!d) return null;
   const p = n => String(n).padStart(2,'0');
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+// Quy ước Ca theo giờ thực tế: 7h sáng - 7h tối = Ca NGÀY; 7h tối - 7h sáng hôm sau = Ca ĐÊM. "Ngày"
+// (dùng để đối chiếu) tính theo NGÀY CA BẮT ĐẦU — nửa đêm về sáng (0h-6h59) vẫn thuộc ca đêm của HÔM
+// TRƯỚC, không tính sang ngày mới, dù đồng hồ/lịch đã qua ngày mới. Dùng CHUNG cho:
+//  - Mặc định Ngày/Ca của form nhập tay (tính theo giờ hiện tại lúc mở trang).
+//  - Gán "Ngày" cho từng dòng Receive đọc từ file Transaction (theo giờ ghi nhận thật trên hệ thống)
+//    để đối chiếu đúng ca đêm dù dòng Receive đó được quét sau 0h (qua ngày lịch mới).
+function shiftInfo(d){
+  const h = d.getHours();
+  const shift = (h >= 7 && h < 19) ? 'ngay' : 'dem';
+  const biz = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if(h < 7) biz.setDate(biz.getDate() - 1);
+  return { shift, dateKey: dateKey(biz) };
 }
 function fmt(n){ return Math.round(n||0).toLocaleString('en-US'); }
 function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -300,7 +313,7 @@ function parseReceiveRows(rows){
       item: txItemText(r[colItem]),
       itemRaw: txNorm(r[colItem]),
       qty: Number(r[colQty]) || 0,
-      dateKey: dateKey(dt),
+      dateKey: shiftInfo(dt).dateKey, // theo NGÀY CA BẮT ĐẦU (0h-6h59 tính về hôm trước), không phải ngày lịch
       locator: colLocator !== -1 ? txNorm(r[colLocator]) : '',
       user: colUser !== -1 ? txNorm(r[colUser]) : '',
     });
@@ -408,12 +421,12 @@ const logTbody = document.getElementById('log-tbody');
 const logTfoot = document.getElementById('log-tfoot');
 const logEmpty = document.getElementById('log-empty');
 
-function todayStr(){
-  const d = new Date();
-  const p = n => String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
-}
-fDate.value = todayStr();
+// Mặc định Ngày + Ca theo GIỜ THỰC TẾ lúc mở trang (xem shiftInfo()) — VD mở trang lúc 2h sáng vẫn
+// đang là ca đêm của NGÀY HÔM TRƯỚC (ca đêm bắt đầu 19h hôm trước, kéo dài tới 7h sáng), không phải
+// ca ngày/ngày mới dù đồng hồ đã qua 0h.
+const nowShift = shiftInfo(new Date());
+fDate.value = nowShift.dateKey;
+fShift.value = nowShift.shift;
 
 document.getElementById('btn-add-entry').addEventListener('click', () => {
   formError.textContent = '';
