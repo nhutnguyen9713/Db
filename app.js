@@ -3995,6 +3995,8 @@ function renderContainerPickingOverview(){
     contPickAllRows = [];
     renderKhoContSummary([]);
     renderHiddenContBar();
+    if(typeof updateMascotMood === 'function') updateMascotMood();
+    if(typeof updateTn5Weather === 'function') updateTn5Weather(0);
     return;
   }
 
@@ -4149,6 +4151,8 @@ function renderContainerPickingOverview(){
     contPickAllRows = [];
     renderKhoContSummary([]);
     renderHiddenContBar();
+    if(typeof updateMascotMood === 'function') updateMascotMood();
+    if(typeof updateTn5Weather === 'function') updateTn5Weather(0);
     return;
   }
 
@@ -4167,6 +4171,131 @@ function renderContainerPickingOverview(){
     detailWrap.style.display = '';
   }
   renderKhoContSummary(detailRows);
+  if(typeof checkPickCompletionConfetti === 'function') checkPickCompletionConfetti(detailRows);
+  if(typeof updateMascotMood === 'function') updateMascotMood();
+  if(typeof updateTn5Weather === 'function') updateTn5Weather(total);
+}
+
+/* ============================================================
+   🎉 Pháo giấy khi container vừa Pick xong — CSS thuần (không canvas), tự dọn dẹp sau khi rơi hết.
+   ============================================================ */
+function fireConfetti(bursts){
+  const n = Math.max(1, Math.min(bursts || 1, 3)); // tối đa 3 đợt cùng lúc, tránh rối mắt khi nhiều
+  // container cùng chuyển trạng thái Pick xong trong 1 lần tải dữ liệu.
+  const colors = ['#F5A623', '#6E4FE0', '#0E8F76', '#2C6FCB', '#D6394B'];
+  const piecesPerBurst = 26;
+  for(let b = 0; b < n; b++){
+    for(let i = 0; i < piecesPerBurst; i++){
+      const el = document.createElement('div');
+      el.className = 'tn5-confetti-piece';
+      const size = 6 + Math.random() * 6;
+      el.style.left = (Math.random() * 100) + 'vw';
+      el.style.width = size + 'px';
+      el.style.height = (size * 1.6) + 'px';
+      el.style.background = colors[Math.floor(Math.random() * colors.length)];
+      el.style.borderRadius = Math.random() < 0.4 ? '50%' : '2px';
+      const duration = 2.2 + Math.random() * 1.4;
+      const delay = b * 0.15 + Math.random() * 0.3;
+      el.style.animationDuration = duration + 's';
+      el.style.animationDelay = delay + 's';
+      el.style.setProperty('--tn5-confetti-rotate', (Math.random() < 0.5 ? '' : '-') + (480 + Math.random() * 480) + 'deg');
+      el.style.setProperty('--tn5-confetti-drift', (Math.random() * 120 - 60) + 'px');
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), (duration + delay) * 1000 + 200);
+    }
+  }
+}
+
+// Ghi nhớ các container ĐÃ pick xong (theo instanceKey) từ lần tính trước để phát hiện đúng những
+// container VỪA MỚI chuyển sang Pick xong — không nổ pháo giấy ngay từ lần tải dữ liệu đầu tiên (lúc
+// đó coi như chỉ đang "ghi nhận" trạng thái ban đầu, chưa có gì "vừa xảy ra").
+let _tn5PickDoneSeenKeys = null;
+function checkPickCompletionConfetti(detailRows){
+  const doneNow = new Set((detailRows || []).filter(r => r.status === 'done' || r.status === 'manualDone').map(r => r.instanceKey));
+  if(_tn5PickDoneSeenKeys === null){
+    _tn5PickDoneSeenKeys = doneNow;
+    return;
+  }
+  let newlyDoneCount = 0;
+  doneNow.forEach(k => { if(!_tn5PickDoneSeenKeys.has(k)) newlyDoneCount++; });
+  _tn5PickDoneSeenKeys = doneNow;
+  if(newlyDoneCount > 0) fireConfetti(Math.min(newlyDoneCount, 3));
+}
+
+/* ============================================================
+   😺 Mascot mèo — đổi tâm trạng theo tình trạng pick hàng hiện tại (container thiếu hàng / đã xong hết).
+   ============================================================ */
+function updateMascotMood(){
+  const el = document.getElementById('tn5-mascot');
+  if(!el) return;
+  const rows = contPickAllRows || [];
+  const hasShort = rows.some(r => r.shortItems && r.shortItems.length);
+  const allDone = rows.length > 0 && rows.every(r => r.status === 'done' || r.status === 'manualDone');
+  let mood = '😺', title = 'Mọi thứ ổn — chưa có cảnh báo gì.';
+  if(hasShort){
+    const shortCount = rows.filter(r => r.shortItems && r.shortItems.length).length;
+    mood = '🙀';
+    title = `Có ${shortCount} container đang thiếu hàng để pick!`;
+  } else if(allDone){
+    mood = '😻';
+    title = 'Tất cả container trong Plan đã pick xong!';
+  }
+  el.textContent = mood;
+  el.title = title;
+}
+
+/* ============================================================
+   🌤️ "Thời tiết" khối lượng việc hôm nay — ước lượng vui theo tổng số container trong Plan đang tải.
+   ============================================================ */
+function updateTn5Weather(total){
+  const wrapEl = document.getElementById('tn5-weather');
+  const iconEl = document.getElementById('tn5-weather-icon');
+  const labelEl = document.getElementById('tn5-weather-label');
+  if(!wrapEl || !iconEl || !labelEl) return;
+  let icon = '🌤️', label = 'Chưa có dữ liệu Plan';
+  if(total > 0){
+    if(total <= 8){ icon = '☀️'; label = 'Nhẹ nhàng'; }
+    else if(total <= 18){ icon = '⛅'; label = 'Bình thường'; }
+    else if(total <= 30){ icon = '🌧️'; label = 'Bận rộn'; }
+    else{ icon = '⛈️'; label = 'Bão container'; }
+  }
+  iconEl.textContent = icon;
+  labelEl.textContent = label;
+  wrapEl.title = total > 0 ? `${fmt(total)} container trong Plan đang tải` : 'Chưa tải Plan xuất cont nào';
+}
+
+/* ============================================================
+   🕹️ Easter egg — gõ mã Konami (↑ ↑ ↓ ↓ ← → ← → B A) ở bất kỳ đâu (ngoài ô nhập liệu) để xem bất ngờ.
+   ============================================================ */
+const TN5_KONAMI_SEQUENCE = ['arrowup', 'arrowup', 'arrowdown', 'arrowdown', 'arrowleft', 'arrowright', 'arrowleft', 'arrowright', 'b', 'a'];
+let _tn5KonamiBuffer = [];
+document.addEventListener('keydown', (e) => {
+  const tag = (e.target && e.target.tagName) || '';
+  if(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target && e.target.isContentEditable)) return;
+  const k = e.key.toLowerCase();
+  _tn5KonamiBuffer.push(k);
+  if(_tn5KonamiBuffer.length > TN5_KONAMI_SEQUENCE.length) _tn5KonamiBuffer.shift();
+  if(_tn5KonamiBuffer.length === TN5_KONAMI_SEQUENCE.length && _tn5KonamiBuffer.every((v, i) => v === TN5_KONAMI_SEQUENCE[i])){
+    _tn5KonamiBuffer = [];
+    triggerTn5Easteregg();
+  }
+});
+function triggerTn5Easteregg(){
+  fireConfetti(3);
+  const mascotEl = document.getElementById('tn5-mascot');
+  if(mascotEl){
+    mascotEl.textContent = '🥳';
+    mascotEl.classList.add('tn5-mascot-party');
+    setTimeout(() => {
+      mascotEl.classList.remove('tn5-mascot-party');
+      if(typeof updateMascotMood === 'function') updateMascotMood();
+    }, 4000);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'tn5-easter-toast';
+  toast.textContent = '🎉 Bạn tìm thấy mã bí mật! Chúc 1 ngày pick hàng suôn sẻ 🐱';
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3600);
 }
 
 let cptActiveFilterDropdown = null; // {col, el}

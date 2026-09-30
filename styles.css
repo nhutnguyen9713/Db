@@ -253,6 +253,12 @@
   .snapshot .updated-at{margin-top:5px; padding-top:5px; border-top:1px solid var(--line); font-size:10.5px; color:var(--muted-2);}
   #uploaded-file-line{border-top:none; padding-top:0; margin-top:3px; max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 
+  /* ===== "Thời tiết" khối lượng việc hôm nay (lấp khoảng trống cạnh Ngày chốt dữ liệu) ===== */
+  .tn5-weather{display:flex; align-items:center; gap:10px; font-family:var(--mono); border-left:1px solid var(--line); padding-left:16px;}
+  .tn5-weather-icon{font-size:28px; line-height:1;}
+  .tn5-weather-label{color:var(--text); font-size:15px; font-weight:600;}
+  .tn5-weather-sub{font-size:10.5px; color:var(--muted-2); margin-top:2px; text-transform:uppercase; letter-spacing:.03em;}
+
   .upload-wrap{display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
   .btn-update{
     font-family:var(--mono); font-size:12px; font-weight:700; letter-spacing:.04em;
@@ -1763,3 +1769,40 @@
   .tx-detail-toggle > summary::before{content:'▸ ';}
   .tx-detail-toggle[open] > summary::before{content:'▾ ';}
   .tx-detail-toggle > summary:hover{color:var(--text);}
+
+  /* ===== 😺 Mascot mèo — góc phải màn hình, đổi tâm trạng theo tình trạng pick hàng ===== */
+  .tn5-mascot{
+    position:fixed; bottom:18px; right:18px; z-index:500;
+    width:44px; height:44px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--line); box-shadow:0 6px 18px rgba(0,0,0,0.18);
+    display:flex; align-items:center; justify-content:center; font-size:22px;
+    user-select:none; cursor:default;
+    animation:tn5MascotBob 3s ease-in-out infinite;
+  }
+  @keyframes tn5MascotBob{ 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
+  .tn5-mascot-party{ animation:tn5MascotParty .5s ease-in-out infinite !important; }
+  @keyframes tn5MascotParty{ 0%,100%{transform:scale(1) rotate(0deg);} 50%{transform:scale(1.25) rotate(15deg);} }
+
+  /* ===== 🎉 Pháo giấy khi container vừa Pick xong / Easter egg ===== */
+  .tn5-confetti-piece{
+    position:fixed; top:-20px; z-index:9999; pointer-events:none;
+    animation-name:tn5ConfettiFall; animation-timing-function:cubic-bezier(.25,.46,.45,.94); animation-fill-mode:forwards;
+  }
+  @keyframes tn5ConfettiFall{
+    0%{transform:translateY(0) translateX(0) rotate(0deg); opacity:1;}
+    100%{transform:translateY(105vh) translateX(var(--tn5-confetti-drift, 0px)) rotate(var(--tn5-confetti-rotate, 360deg)); opacity:0.85;}
+  }
+
+  /* ===== 🕹️ Toast thông báo Easter egg ===== */
+  .tn5-easter-toast{
+    position:fixed; top:20px; left:50%; z-index:9999;
+    background:var(--violet); color:#fff; font-family:var(--sans); font-weight:700; font-size:14px;
+    padding:12px 22px; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.25);
+    animation:tn5ToastPop 3.6s ease forwards;
+  }
+  @keyframes tn5ToastPop{
+    0%{opacity:0; transform:translate(-50%,-12px);}
+    10%{opacity:1; transform:translate(-50%,0);}
+    88%{opacity:1; transform:translate(-50%,0);}
+    100%{opacity:0; transform:translate(-50%,-12px);}
+  }
