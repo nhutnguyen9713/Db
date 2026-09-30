@@ -132,7 +132,7 @@
 
   /* ===== Popover xem chi tiết dòng hệ thống (khi bấm vào 1 dòng đối chiếu) ===== */
   .sys-popover-backdrop{position:fixed; inset:0; background:rgba(22,32,46,0.45); z-index:300; display:flex; align-items:center; justify-content:center; padding:16px;}
-  .sys-popover-panel{background:var(--panel); border-radius:12px; max-width:540px; width:100%; max-height:82vh; overflow:auto; padding:18px 20px 20px; box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+  .sys-popover-panel{background:var(--panel); border-radius:12px; max-width:720px; width:100%; max-height:82vh; overflow:auto; padding:18px 20px 20px; box-shadow:0 20px 60px rgba(0,0,0,0.3);}
   .sys-popover-head{display:flex; align-items:flex-start; justify-content:space-between; gap:12px;}
   .sys-popover-head h3{font-size:14.5px; margin:0 0 4px; font-family:var(--mono); word-break:break-word;}
   .sys-popover-sub{font-size:12px; color:var(--muted);}
@@ -432,6 +432,10 @@ function parseReceiveRows(rows){
   const colDate = findCol(headers, ['transaction date']);
   const colLocator = findCol(headers, ['locator name']);
   const colUser = findCol(headers, ['user name']);
+  // GI No. / Lot No. — KHÔNG bắt buộc (không phải file Transaction nào cũng có sẵn 2 cột này), cùng
+  // nhóm alias tên cột đang dùng bên app.js để nhận diện nhất quán dù tiêu đề cột ghi khác nhau chút ít.
+  const colGi = findCol(headers, ['gi no', 'gi no.', 'gi number', 'gi']);
+  const colLot = findCol(headers, ['lot no', 'lot no.', 'lot number', 'lot']);
   if(colType === -1 || colItem === -1 || colQty === -1 || colDate === -1){
     throw new Error('File thiếu cột bắt buộc (Transaction Type / Item No / Transaction Qty / Transaction Date).');
   }
@@ -453,6 +457,8 @@ function parseReceiveRows(rows){
       locator,
       kho: khoFromLocator(locator), // null nếu locator không khớp đúng 1 trong 3 vị trí trung gian
       user: colUser !== -1 ? txNorm(r[colUser]) : '',
+      gi: colGi !== -1 ? txNorm(r[colGi]) : '',
+      lot: colLot !== -1 ? txNorm(r[colLot]) : '',
     });
   }
   return out;
@@ -1018,9 +1024,9 @@ function showSysPopover(date, item, itemRaw){
       </div>
       ${sysRows.length ? `
         <table class="dt">
-          <thead><tr><th>Giờ</th><th>Locator</th><th>Người quét</th><th style="text-align:right">SL</th></tr></thead>
+          <thead><tr><th>Giờ</th><th>Locator</th><th>GI No</th><th>Lot No</th><th>Người quét</th><th style="text-align:right">Pallet</th><th style="text-align:right">SL</th></tr></thead>
           <tbody>
-            ${sysRows.map(row => `<tr><td>${escHtml(row.time)}</td><td>${escHtml(row.locator)}</td><td>${escHtml(row.user || '—')}</td><td class="num">${fmt(row.qty)}</td></tr>`).join('')}
+            ${sysRows.map(row => `<tr><td>${escHtml(row.time)}</td><td>${escHtml(row.locator)}</td><td>${escHtml(row.gi || '—')}</td><td>${escHtml(row.lot || '—')}</td><td>${escHtml(row.user || '—')}</td><td class="num">1</td><td class="num">${fmt(row.qty)}</td></tr>`).join('')}
           </tbody>
         </table>
         <div class="sys-popover-total"><span><b>${fmt(sysRows.length)}</b> dòng (= Pallet hệ thống)</span><span><b>${fmt(totalQty)}</b> tổng SL (= Pcs hệ thống)</span></div>
