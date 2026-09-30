@@ -22,6 +22,12 @@
   h1{font-size:20px; margin:4px 0 4px;}
   .sub{font-size:13px; color:var(--muted); line-height:1.5; max-width:760px;}
 
+  /* ===== Tab chuyển trang (Đối chiếu / Lịch sử đã lưu) ===== */
+  .view-tabs{display:flex; gap:8px; margin-bottom:14px;}
+  .view-tab-btn{padding:8px 16px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--muted); font-size:13px; font-weight:700; cursor:pointer; font-family:var(--sans);}
+  .view-tab-btn:hover{border-color:var(--blue); color:var(--blue);}
+  .view-tab-btn.active{background:var(--blue); border-color:var(--blue); color:#fff;}
+
   /* ===== Tab chọn kho ===== */
   .kho-tabs{display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;}
   .kho-tab-btn{padding:9px 18px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--muted); font-size:13.5px; font-weight:700; cursor:pointer; font-family:var(--sans);}
@@ -105,6 +111,23 @@
   td.diff-ok{color:var(--teal);}
   .recon-summary{display:flex; gap:20px; flex-wrap:wrap; margin-top:14px; font-size:12.5px;}
   .recon-summary b{font-family:var(--mono);}
+
+  /* ===== Tô màu cột Sổ tay / Hệ thống cho dễ phân biệt ===== */
+  .col-legend{display:flex; gap:14px; font-size:11.5px; color:var(--muted); margin-left:auto;}
+  .legend-chip{display:flex; align-items:center; gap:5px; white-space:nowrap;}
+  .legend-chip::before{content:''; width:10px; height:10px; border-radius:3px; display:inline-block;}
+  .legend-chip.sotay::before{background:var(--blue);}
+  .legend-chip.hethong::before{background:var(--violet);}
+  .save-btn{padding:8px 16px; border-radius:8px; border:none; background:var(--blue); color:#fff; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap; font-family:var(--sans);}
+  .save-btn:hover{filter:brightness(1.08);}
+  table.dt th.col-sotay{background:rgba(44,111,203,0.12);}
+  table.dt th.col-hethong{background:rgba(110,79,224,0.12);}
+  table.dt td.col-sotay{background:rgba(44,111,203,0.06); color:var(--blue); font-weight:600;}
+  table.dt td.col-hethong{background:rgba(110,79,224,0.06); color:var(--violet); font-weight:600;}
+
+  /* ===== Lịch sử đối chiếu đã lưu ===== */
+  #history-panel .reconcile-toolbar select, #history-panel .reconcile-toolbar input[type=date]{padding:8px 10px; border-radius:8px; border:1px solid var(--line); font-size:12.5px; font-family:var(--sans); color:var(--text); background:var(--panel-2);}
+  #history-panel .reconcile-toolbar input[type=text]{flex:1; min-width:160px;}
 </style>
 </head>
 <body>
@@ -116,6 +139,9 @@
     <div class="sub">So sánh sổ nhận hàng viết tay với dữ liệu Receive thật trong file Transaction — phát hiện chênh lệch giữa số ghi tay và số hệ thống. Phân riêng theo từng kho (không có Kho 2B vì kho này không nhận hàng từ sản xuất, chỉ là kho chứa hàng). (Phần Transfer/Picking sẽ làm sau.)</div>
   </header>
 
+  <div class="view-tabs" id="view-tabs"></div>
+
+  <div id="work-view">
   <div class="kho-tabs" id="kho-tabs"></div>
 
   <div class="panel" id="upload-panel">
@@ -165,18 +191,20 @@
 
   <div class="panel" id="reconcile-panel">
     <h2><span class="step">3</span>Bảng đối chiếu (theo Ngày + Item) — <span id="recon-panel-kho"></span></h2>
-    <div class="hint">Gộp tất cả ca trong ngày của sổ tay rồi so với tổng số dòng Receive hệ thống cùng ngày/mã hàng — hệ thống không có khái niệm "ca" nên chỉ đối chiếu được theo ngày (dòng Receive quét lúc 0h–7h sáng được tính về <b>ngày hôm trước</b>, đúng ngày ca đêm bắt đầu, khớp với cách ghi sổ tay). <b>SL Pallet hệ thống</b> = số dòng Receive (mỗi dòng tính 1 pallet); <b>SL Pcs hệ thống</b> = tổng Transaction Qty. SL Ctn không có bên hệ thống nên chỉ hiển thị tham khảo.</div>
+    <div class="hint">Gộp tất cả ca trong ngày của sổ tay rồi so với tổng số dòng Receive hệ thống cùng ngày/mã hàng — hệ thống không có khái niệm "ca" nên chỉ đối chiếu được theo ngày (dòng Receive quét lúc 0h–7h sáng được tính về <b>ngày hôm trước</b>, đúng ngày ca đêm bắt đầu, khớp với cách ghi sổ tay). <b>SL Pallet hệ thống</b> = số dòng Receive (mỗi dòng tính 1 pallet); <b>SL Pcs hệ thống</b> = tổng Transaction Qty. SL Ctn không có bên hệ thống nên chỉ hiển thị tham khảo. Xem xong, bấm <b>"💾 Lưu tất cả"</b> để lưu vĩnh viễn các dòng này sang tab "Lịch sử đã lưu" — dữ liệu đã lưu sẽ KHÔNG mất dù sau đó xoá/ghi đè file Transaction hay sổ tay đang làm việc.</div>
     <div class="reconcile-toolbar">
       <input type="text" id="recon-search" placeholder="Tìm theo mã hàng…">
       <label><input type="checkbox" id="recon-only-mismatch"> Chỉ hiện dòng lệch/thiếu</label>
+      <div class="col-legend"><span class="legend-chip sotay">Sổ tay</span><span class="legend-chip hethong">Hệ thống</span></div>
+      <button type="button" class="save-btn" id="btn-save-recon">💾 Lưu tất cả</button>
     </div>
     <div class="table-scroll">
       <table class="dt" id="recon-table">
         <thead><tr>
           <th>Ngày</th><th>Item</th>
-          <th style="text-align:right">Pallet (Sổ tay)</th><th style="text-align:right">Pallet (Hệ thống)</th><th style="text-align:right">Lệch Pallet</th>
-          <th style="text-align:right">Pcs (Sổ tay)</th><th style="text-align:right">Pcs (Hệ thống)</th><th style="text-align:right">Lệch Pcs</th>
-          <th style="text-align:right">Ctn (Sổ tay)</th>
+          <th class="col-sotay" style="text-align:right">Pallet (Sổ tay)</th><th class="col-hethong" style="text-align:right">Pallet (Hệ thống)</th><th style="text-align:right">Lệch Pallet</th>
+          <th class="col-sotay" style="text-align:right">Pcs (Sổ tay)</th><th class="col-hethong" style="text-align:right">Pcs (Hệ thống)</th><th style="text-align:right">Lệch Pcs</th>
+          <th class="col-sotay" style="text-align:right">Ctn (Sổ tay)</th>
           <th>Trạng thái</th>
         </tr></thead>
         <tbody id="recon-tbody"></tbody>
@@ -184,6 +212,37 @@
       <div class="empty-note" id="recon-empty">Chưa đủ dữ liệu để đối chiếu — cần cả file Transaction lẫn sổ nhận hàng.</div>
     </div>
     <div class="recon-summary" id="recon-summary"></div>
+  </div>
+  </div><!-- /work-view -->
+
+  <div class="panel" id="history-panel" style="display:none;">
+    <h2>📜 Lịch sử đối chiếu đã lưu</h2>
+    <div class="hint">Các dòng đã bấm "💾 Lưu tất cả" ở bảng đối chiếu (bước 3) được giữ lại <b>vĩnh viễn</b> tại đây, gộp chung cả 3 kho — không mất dù sau đó xoá hoặc tải đè file Transaction/sổ tay đang làm việc ở tab "Đối chiếu". Lưu lại cùng 1 dòng (cùng Kho + Ngày + Item) sẽ tự cập nhật số liệu mới nhất, không tạo trùng lặp. Lọc theo Kho / Ngày / Ca / mã hàng bên dưới.</div>
+    <div class="reconcile-toolbar">
+      <select id="hist-filter-kho"></select>
+      <input type="date" id="hist-filter-date">
+      <select id="hist-filter-shift">
+        <option value="">Tất cả ca</option>
+        <option value="ngay">Ca Ngày</option>
+        <option value="dem">Ca Đêm</option>
+      </select>
+      <input type="text" id="hist-search" placeholder="Tìm theo mã hàng…">
+      <button type="button" class="clear-link" id="btn-hist-clear-filters">Xoá bộ lọc</button>
+    </div>
+    <div class="table-scroll">
+      <table class="dt" id="hist-table">
+        <thead><tr>
+          <th>Ngày</th><th>Kho</th><th>Ca</th><th>Item</th>
+          <th class="col-sotay" style="text-align:right">Pallet (Sổ tay)</th><th class="col-hethong" style="text-align:right">Pallet (Hệ thống)</th>
+          <th class="col-sotay" style="text-align:right">Pcs (Sổ tay)</th><th class="col-hethong" style="text-align:right">Pcs (Hệ thống)</th>
+          <th class="col-sotay" style="text-align:right">Ctn (Sổ tay)</th>
+          <th>Trạng thái</th><th>Lúc lưu</th><th></th>
+        </tr></thead>
+        <tbody id="hist-tbody"></tbody>
+      </table>
+      <div class="empty-note" id="hist-empty">Chưa lưu dòng nào — sang tab "Đối chiếu" rồi bấm "💾 Lưu tất cả".</div>
+    </div>
+    <div class="recon-summary" id="hist-summary"></div>
   </div>
 
 </div>
@@ -808,17 +867,27 @@ const reconSearch = document.getElementById('recon-search');
 const reconOnlyMismatch = document.getElementById('recon-only-mismatch');
 
 function buildReconcileRows(){
-  const byKey = new Map(); // "date||item" -> { date, item, itemRaw, logPallet, logCtn, logPcs, sysPallet, sysPcs, inLog, inSys }
+  // logByShift: tách riêng số sổ tay theo Ngày/Đêm (hệ thống không có khái niệm ca nên không có mục
+  // tương ứng) — dùng để lọc theo Ca khi lưu vào Lịch sử, dù bảng đối chiếu vẫn gộp cả ngày để hiển thị.
+  const byKey = new Map(); // "date||item" -> { date, item, itemRaw, logPallet, logCtn, logPcs, sysPallet, sysPcs, inLog, inSys, logByShift }
   const getRow = (date, item, itemRaw) => {
     const key = date + '||' + item;
     let r = byKey.get(key);
-    if(!r){ r = { date, item, itemRaw: itemRaw || item, logPallet:0, logCtn:0, logPcs:0, sysPallet:0, sysPcs:0, inLog:false, inSys:false }; byKey.set(key, r); }
+    if(!r){
+      r = {
+        date, item, itemRaw: itemRaw || item, logPallet:0, logCtn:0, logPcs:0, sysPallet:0, sysPcs:0, inLog:false, inSys:false,
+        logByShift: { ngay:{pallet:0,ctn:0,pcs:0}, dem:{pallet:0,ctn:0,pcs:0} },
+      };
+      byKey.set(key, r);
+    }
     return r;
   };
   logEntries.filter(e => e.kho === activeKho).forEach(e => {
     const r = getRow(e.date, e.item, e.itemRaw);
     r.inLog = true;
     r.logPallet += e.pallet; r.logCtn += e.ctn; r.logPcs += e.pcs;
+    const sh = r.logByShift[e.shift === 'dem' ? 'dem' : 'ngay'];
+    sh.pallet += e.pallet; sh.ctn += e.ctn; sh.pcs += e.pcs;
   });
   if(txReceiveData && txReceiveData.rows){
     txReceiveData.rows.filter(row => row.kho === activeKho).forEach(row => {
@@ -868,13 +937,13 @@ function renderReconcile(){
       return `<tr>
         <td>${escHtml(r.date)}</td>
         <td>${escHtml(r.itemRaw)}</td>
-        <td class="num">${r.inLog ? fmt(r.logPallet) : '—'}</td>
-        <td class="num">${r.inSys ? fmt(r.sysPallet) : '—'}</td>
+        <td class="num col-sotay">${r.inLog ? fmt(r.logPallet) : '—'}</td>
+        <td class="num col-hethong">${r.inSys ? fmt(r.sysPallet) : '—'}</td>
         <td class="num ${r.inLog && r.inSys ? diffCls(diffPallet) : ''}">${r.inLog && r.inSys ? diffText(diffPallet) : '—'}</td>
-        <td class="num">${r.inLog ? fmt(r.logPcs) : '—'}</td>
-        <td class="num">${r.inSys ? fmt(r.sysPcs) : '—'}</td>
+        <td class="num col-sotay">${r.inLog ? fmt(r.logPcs) : '—'}</td>
+        <td class="num col-hethong">${r.inSys ? fmt(r.sysPcs) : '—'}</td>
         <td class="num ${r.inLog && r.inSys ? diffCls(diffPcs) : ''}">${r.inLog && r.inSys ? diffText(diffPcs) : '—'}</td>
-        <td class="num">${r.inLog ? fmt(r.logCtn) : '—'}</td>
+        <td class="num col-sotay">${r.inLog ? fmt(r.logCtn) : '—'}</td>
         <td><span class="status-badge ${status}">${STATUS_LABEL[status]}</span></td>
       </tr>`;
     }).join('');
@@ -895,13 +964,169 @@ reconSearch.addEventListener('input', renderReconcile);
 reconOnlyMismatch.addEventListener('change', renderReconcile);
 
 /* ============================================================
+   ④ Lịch sử đối chiếu đã lưu — bấm "Lưu tất cả" ở bảng đối chiếu sẽ CHỤP LẠI (snapshot) toàn bộ các
+   dòng đang có của kho đang chọn, lưu VĨNH VIỄN tại đây (localStorage riêng, không đụng tới dữ liệu
+   Transaction/sổ tay đang làm việc). Lưu lại đúng 1 dòng (cùng Kho+Ngày+Item) sẽ GHI ĐÈ bản cũ (cập
+   nhật số liệu mới nhất), không tạo trùng lặp. Gộp chung cả 3 kho, lọc theo Kho/Ngày/Ca/mã hàng.
+   ============================================================ */
+const LS_HISTORY_KEY = 'tn5_doichieu_history_v1';
+function loadHistory(){
+  try{ const v = JSON.parse(localStorage.getItem(LS_HISTORY_KEY) || '[]'); return Array.isArray(v) ? v : []; }
+  catch(err){ return []; }
+}
+function saveHistoryData(){ try{ localStorage.setItem(LS_HISTORY_KEY, JSON.stringify(savedHistory)); }catch(err){} }
+let savedHistory = loadHistory(); // [{key, kho, date, item, itemRaw, logPallet, logCtn, logPcs, logByShift, sysPallet, sysPcs, inLog, inSys, status, savedAt}]
+
+const histTbody = document.getElementById('hist-tbody');
+const histEmpty = document.getElementById('hist-empty');
+const histSummary = document.getElementById('hist-summary');
+const histFilterKho = document.getElementById('hist-filter-kho');
+const histFilterDate = document.getElementById('hist-filter-date');
+const histFilterShift = document.getElementById('hist-filter-shift');
+const histSearch = document.getElementById('hist-search');
+const btnHistClearFilters = document.getElementById('btn-hist-clear-filters');
+
+histFilterKho.innerHTML = '<option value="">Tất cả kho</option>' + KHO_LIST.map(k => `<option value="${k.key}">${escHtml(k.label)}</option>`).join('');
+
+function saveReconcileSnapshot(){
+  const rows = buildReconcileRows();
+  if(!rows.length){ alert('Chưa có dòng đối chiếu nào ở kho này để lưu.'); return; }
+  if(!confirm(`Lưu ${rows.length} dòng đối chiếu của ${khoLabel(activeKho)} vào Lịch sử đã lưu?`)) return;
+  const byKey = new Map(savedHistory.map(h => [h.key, h]));
+  const now = new Date().toISOString();
+  rows.forEach(r => {
+    const key = activeKho + '||' + r.date + '||' + r.item;
+    byKey.set(key, {
+      key, kho: activeKho, date: r.date, item: r.item, itemRaw: r.itemRaw,
+      logPallet: r.logPallet, logCtn: r.logCtn, logPcs: r.logPcs, logByShift: r.logByShift,
+      sysPallet: r.sysPallet, sysPcs: r.sysPcs, inLog: r.inLog, inSys: r.inSys,
+      status: reconcileStatus(r), savedAt: now,
+    });
+  });
+  savedHistory = [...byKey.values()];
+  saveHistoryData();
+  renderHistory();
+}
+document.getElementById('btn-save-recon').addEventListener('click', saveReconcileSnapshot);
+
+function histShiftBadges(h){
+  const has = s => h.logByShift && h.logByShift[s] && (h.logByShift[s].pallet || h.logByShift[s].ctn || h.logByShift[s].pcs);
+  const parts = [];
+  if(has('ngay')) parts.push('<span class="shift-badge ngay">Ngày</span>');
+  if(has('dem')) parts.push('<span class="shift-badge dem">Đêm</span>');
+  return parts.join(' ') || '<span style="color:var(--muted-2);">—</span>';
+}
+
+function renderHistory(){
+  if(!savedHistory.length){
+    histTbody.innerHTML = '';
+    histEmpty.style.display = 'block';
+    histSummary.innerHTML = '';
+    return;
+  }
+  histEmpty.style.display = 'none';
+  const khoF = histFilterKho.value;
+  const dateF = histFilterDate.value;
+  const shiftF = histFilterShift.value;
+  const q = removeDiacritics(histSearch.value.trim().toLowerCase());
+  const filtered = savedHistory.filter(h => {
+    if(khoF && h.kho !== khoF) return false;
+    if(dateF && h.date !== dateF) return false;
+    if(shiftF){
+      const v = h.logByShift && h.logByShift[shiftF];
+      if(!v || (!v.pallet && !v.ctn && !v.pcs)) return false;
+    }
+    if(q && !removeDiacritics((h.itemRaw||'').toLowerCase()).includes(q)) return false;
+    return true;
+  }).sort((a,b) => b.date.localeCompare(a.date) || khoLabel(a.kho).localeCompare(khoLabel(b.kho)) || a.itemRaw.localeCompare(b.itemRaw));
+
+  if(!filtered.length){
+    histTbody.innerHTML = `<tr><td colspan="11" style="text-align:center; color:var(--muted-2); font-family:var(--sans);">Không có dòng nào khớp bộ lọc.</td></tr>`;
+  } else {
+    histTbody.innerHTML = filtered.map(h => `
+      <tr>
+        <td>${escHtml(h.date)}</td>
+        <td>${escHtml(khoLabel(h.kho))}</td>
+        <td>${histShiftBadges(h)}</td>
+        <td>${escHtml(h.itemRaw)}</td>
+        <td class="num col-sotay">${h.inLog ? fmt(h.logPallet) : '—'}</td>
+        <td class="num col-hethong">${h.inSys ? fmt(h.sysPallet) : '—'}</td>
+        <td class="num col-sotay">${h.inLog ? fmt(h.logPcs) : '—'}</td>
+        <td class="num col-hethong">${h.inSys ? fmt(h.sysPcs) : '—'}</td>
+        <td class="num col-sotay">${h.inLog ? fmt(h.logCtn) : '—'}</td>
+        <td><span class="status-badge ${h.status}">${STATUS_LABEL[h.status]}</span></td>
+        <td>${escHtml(new Date(h.savedAt).toLocaleString('vi-VN'))}</td>
+        <td><button type="button" class="del-btn" data-key="${escHtml(h.key)}" title="Xoá khỏi lịch sử">✕</button></td>
+      </tr>`).join('');
+  }
+  const nMatch = filtered.filter(h => h.status === 'match').length;
+  const nMismatch = filtered.filter(h => h.status === 'mismatch').length;
+  const nMissingSys = filtered.filter(h => h.status === 'missing-sys').length;
+  const nMissingLog = filtered.filter(h => h.status === 'missing-log').length;
+  histSummary.innerHTML = `
+    <span><b>${fmt(filtered.length)}</b> / ${fmt(savedHistory.length)} dòng đã lưu</span>
+    <span style="color:var(--teal);"><b>${fmt(nMatch)}</b> khớp</span>
+    <span style="color:var(--red);"><b>${fmt(nMismatch)}</b> lệch số</span>
+    <span style="color:var(--amber);"><b>${fmt(nMissingSys)}</b> chưa thấy trên hệ thống</span>
+    <span style="color:var(--violet);"><b>${fmt(nMissingLog)}</b> chưa ghi sổ tay</span>
+  `;
+}
+histTbody.addEventListener('click', (e) => {
+  const btn = e.target.closest('.del-btn');
+  if(!btn) return;
+  if(!confirm('Xoá dòng này khỏi Lịch sử đã lưu?')) return;
+  savedHistory = savedHistory.filter(h => h.key !== btn.dataset.key);
+  saveHistoryData();
+  renderHistory();
+});
+histFilterKho.addEventListener('change', renderHistory);
+histFilterDate.addEventListener('change', renderHistory);
+histFilterShift.addEventListener('change', renderHistory);
+histSearch.addEventListener('input', renderHistory);
+btnHistClearFilters.addEventListener('click', () => {
+  histFilterKho.value = ''; histFilterDate.value = ''; histFilterShift.value = ''; histSearch.value = '';
+  renderHistory();
+});
+
+/* ============================================================
+   Tab chuyển TRANG (Đối chiếu <-> Lịch sử đã lưu) — KHÁC với tab chọn Kho ở trên: tab Kho chỉ chọn kho
+   đang làm việc trong chế độ "Đối chiếu", còn đây chuyển hẳn sang xem dữ liệu đã lưu (gộp cả 3 kho).
+   ============================================================ */
+const LS_VIEW_KEY = 'tn5_doichieu_active_view_v1';
+const viewTabsEl = document.getElementById('view-tabs');
+const workViewEl = document.getElementById('work-view');
+const historyViewEl = document.getElementById('history-panel');
+let activeView = (() => {
+  try{ const v = localStorage.getItem(LS_VIEW_KEY); return v === 'history' ? 'history' : 'work'; }
+  catch(err){ return 'work'; }
+})();
+function renderViewTabs(){
+  viewTabsEl.innerHTML = `
+    <button type="button" class="view-tab-btn${activeView === 'work' ? ' active' : ''}" data-view="work">📋 Đối chiếu</button>
+    <button type="button" class="view-tab-btn${activeView === 'history' ? ' active' : ''}" data-view="history">📜 Lịch sử đã lưu</button>
+  `;
+  workViewEl.style.display = activeView === 'work' ? '' : 'none';
+  historyViewEl.style.display = activeView === 'history' ? '' : 'none';
+}
+viewTabsEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.view-tab-btn');
+  if(!btn) return;
+  activeView = btn.dataset.view;
+  try{ localStorage.setItem(LS_VIEW_KEY, activeView); }catch(err){}
+  renderViewTabs();
+  if(activeView === 'history') renderHistory();
+});
+
+/* ============================================================
    Khởi động
    ============================================================ */
+renderViewTabs();
 renderKhoTabs();
 renderTxSummary();
 renderStageTable();
 renderLog();
 renderReconcile();
+renderHistory();
 </script>
 </body>
 </html>
