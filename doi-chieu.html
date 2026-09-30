@@ -75,6 +75,18 @@
   .del-btn:hover{color:var(--red); background:rgba(214,57,75,0.1);}
   .empty-note{font-size:12.5px; color:var(--muted-2); padding:16px 4px; text-align:center;}
 
+  /* ===== Sửa dòng sổ tay (inline) ===== */
+  .log-row-actions, .log-edit-actions{display:flex; gap:2px; justify-content:flex-end;}
+  .edit-btn{border:none; background:none; color:var(--muted); cursor:pointer; font-size:14px; padding:2px 6px; border-radius:5px;}
+  .edit-btn:hover{color:var(--violet); background:rgba(110,79,224,0.1);}
+  .log-save-btn{border:none; background:none; color:var(--teal); cursor:pointer; font-size:15px; font-weight:700; padding:2px 6px; border-radius:5px;}
+  .log-save-btn:hover{background:rgba(14,143,118,0.12);}
+  .log-cancel-btn{border:none; background:none; color:var(--muted); cursor:pointer; font-size:15px; padding:2px 6px; border-radius:5px;}
+  .log-cancel-btn:hover{color:var(--red); background:rgba(214,57,75,0.1);}
+  table.dt .log-edit-field{width:100%; padding:6px 7px; border-radius:6px; border:1px solid var(--violet); background:#fff; font-size:12.5px; font-family:var(--sans); color:var(--text);}
+  table.dt .log-edit-field[type=number]{font-family:var(--mono);}
+  tr.log-editing{background:rgba(110,79,224,0.05);}
+
   .shift-badge{display:inline-block; padding:1px 7px; border-radius:5px; font-size:10.5px; font-weight:700;}
   .shift-badge.ngay{background:rgba(245,166,35,0.15); color:var(--amber);}
   .shift-badge.dem{background:rgba(110,79,224,0.12); color:var(--violet);}
@@ -412,6 +424,7 @@ khoTabsEl.addEventListener('click', (e) => {
   if(!btn) return;
   activeKho = btn.dataset.kho;
   try{ localStorage.setItem(LS_KHO_KEY, activeKho); }catch(err){}
+  editingLogId = null; // đổi kho -> huỷ trạng thái đang sửa dở (nếu có) để tránh nhầm lẫn
   renderKhoTabs();
   renderTxSummary();
   renderStageTable();
@@ -668,6 +681,11 @@ document.getElementById('btn-stage-confirm').addEventListener('click', () => {
   focusStageCell(0, remaining.length ? 'date' : 'item');
 });
 
+// Sửa dòng sổ tay đã xác nhận (đề phòng lỡ nhập sai) — sửa TẠI CHỖ ngay trên bảng, không cần mở lại
+// bảng staging. Chỉ 1 dòng được sửa cùng lúc (editingLogId), dùng lại đúng luật hợp lệ như lúc xác
+// nhận theo lượt (bắt buộc Ngày + Item, ít nhất 1 trong 3 số lượng > 0).
+let editingLogId = null;
+
 function renderLog(){
   const khoEntries = logEntries.filter(e => e.kho === activeKho);
   if(!khoEntries.length){
@@ -677,7 +695,26 @@ function renderLog(){
   }
   logEmpty.style.display = 'none';
   const sorted = [...khoEntries].sort((a,b) => b.date.localeCompare(a.date) || a.item.localeCompare(b.item));
-  logTbody.innerHTML = sorted.map(e => `
+  logTbody.innerHTML = sorted.map(e => {
+    if(e.id === editingLogId){
+      return `
+      <tr class="log-editing" data-edit-id="${escHtml(e.id)}">
+        <td><input type="date" class="log-edit-field" data-field="date" value="${escHtml(e.date)}"></td>
+        <td><select class="log-edit-field" data-field="shift">
+          <option value="ngay"${e.shift === 'ngay' ? ' selected' : ''}>Ngày</option>
+          <option value="dem"${e.shift === 'dem' ? ' selected' : ''}>Đêm</option>
+        </select></td>
+        <td><input type="text" class="log-edit-field" data-field="item" value="${escHtml(e.itemRaw || e.item)}"></td>
+        <td><input type="number" class="log-edit-field" data-field="pallet" min="0" step="1" value="${escHtml(e.pallet)}"></td>
+        <td><input type="number" class="log-edit-field" data-field="ctn" min="0" step="1" value="${escHtml(e.ctn)}"></td>
+        <td><input type="number" class="log-edit-field" data-field="pcs" min="0" step="1" value="${escHtml(e.pcs)}"></td>
+        <td class="log-edit-actions">
+          <button type="button" class="log-save-btn" data-id="${escHtml(e.id)}" title="Lưu">✓</button>
+          <button type="button" class="log-cancel-btn" title="Huỷ">✕</button>
+        </td>
+      </tr>`;
+    }
+    return `
     <tr>
       <td>${escHtml(e.date)}</td>
       <td><span class="shift-badge ${e.shift}">${e.shift === 'ngay' ? 'Ngày' : 'Đêm'}</span></td>
@@ -685,22 +722,65 @@ function renderLog(){
       <td class="num">${fmt(e.pallet)}</td>
       <td class="num">${fmt(e.ctn)}</td>
       <td class="num">${fmt(e.pcs)}</td>
-      <td><button type="button" class="del-btn" data-id="${escHtml(e.id)}" title="Xoá dòng này">✕</button></td>
-    </tr>`).join('');
+      <td class="log-row-actions">
+        <button type="button" class="edit-btn" data-id="${escHtml(e.id)}" title="Sửa dòng này">✎</button>
+        <button type="button" class="del-btn" data-id="${escHtml(e.id)}" title="Xoá dòng này">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
   const totalPallet = khoEntries.reduce((s,e)=>s+e.pallet,0);
   const totalCtn = khoEntries.reduce((s,e)=>s+e.ctn,0);
   const totalPcs = khoEntries.reduce((s,e)=>s+e.pcs,0);
   logTfoot.innerHTML = `<tr><td colspan="3">Tổng (${fmt(khoEntries.length)} dòng)</td><td class="num">${fmt(totalPallet)}</td><td class="num">${fmt(totalCtn)}</td><td class="num">${fmt(totalPcs)}</td><td></td></tr>`;
 }
+
+function saveLogEdit(id){
+  const tr = logTbody.querySelector(`tr[data-edit-id="${id}"]`);
+  if(!tr) return;
+  const get = f => tr.querySelector(`[data-field="${f}"]`).value;
+  const date = get('date');
+  const shift = get('shift') === 'dem' ? 'dem' : 'ngay';
+  const itemRaw = (get('item') || '').trim();
+  const pallet = Number(get('pallet')) || 0;
+  const ctn = Number(get('ctn')) || 0;
+  const pcs = Number(get('pcs')) || 0;
+  if(!date){ formError.textContent = 'Chưa chọn ngày.'; return; }
+  if(!itemRaw){ formError.textContent = 'Chưa nhập Item.'; return; }
+  if(pallet <= 0 && ctn <= 0 && pcs <= 0){ formError.textContent = 'Phải nhập ít nhất 1 trong 3 số lượng (Pallet/Ctn/Pcs) lớn hơn 0.'; return; }
+  const entry = logEntries.find(x => x.id === id);
+  if(!entry) return;
+  Object.assign(entry, { date, shift, item: txItemText(itemRaw), itemRaw, pallet, ctn, pcs });
+  saveLog(logEntries);
+  formError.textContent = '';
+  editingLogId = null;
+  renderLog();
+  renderReconcile();
+}
+
 logTbody.addEventListener('click', (e) => {
+  const editBtn = e.target.closest('.edit-btn');
+  if(editBtn){ editingLogId = editBtn.dataset.id; formError.textContent = ''; renderLog(); return; }
+  const saveBtn = e.target.closest('.log-save-btn');
+  if(saveBtn){ saveLogEdit(saveBtn.dataset.id); return; }
+  const cancelBtn = e.target.closest('.log-cancel-btn');
+  if(cancelBtn){ editingLogId = null; formError.textContent = ''; renderLog(); return; }
   const btn = e.target.closest('.del-btn');
   if(!btn) return;
   const id = btn.dataset.id;
   if(!confirm('Xoá dòng sổ nhận hàng này?')) return;
   logEntries = logEntries.filter(x => x.id !== id);
   saveLog(logEntries);
+  if(editingLogId === id) editingLogId = null;
   renderLog();
   renderReconcile();
+});
+// Enter trong lúc sửa -> lưu; Escape -> huỷ sửa (không lưu). Cho phép sửa nhanh bằng bàn phím, đúng
+// tinh thần bảng nhập staging phía trên.
+logTbody.addEventListener('keydown', (e) => {
+  const tr = e.target.closest('tr[data-edit-id]');
+  if(!tr) return;
+  if(e.key === 'Enter'){ e.preventDefault(); saveLogEdit(tr.dataset.editId); }
+  else if(e.key === 'Escape'){ e.preventDefault(); editingLogId = null; formError.textContent = ''; renderLog(); }
 });
 
 /* ============================================================
