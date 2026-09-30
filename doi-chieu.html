@@ -94,7 +94,7 @@
 
   <div class="panel" id="upload-panel">
     <h2><span class="step">1</span>Tải file Transaction</h2>
-    <div class="hint">Dùng đúng file Transaction xuất từ WMS (.xlsx/.xls/.csv/.tsv) — giống hệt file tải lên ở tab Transaction của TN5 Dashboard. Trang này chỉ lấy các dòng <b>Transaction Type = RECEIVE</b>.</div>
+    <div class="hint">Dùng đúng file Transaction xuất từ WMS (.xlsx/.xls/.csv/.tsv) — giống hệt file tải lên ở tab Transaction của TN5 Dashboard. Trang này chỉ lấy các dòng <b>Transaction Type = RECEIVE</b>. Giờ ghi trên file đã tự trừ 1 tiếng trước khi tính Ca/Ngày (đồng hồ hệ thống WMS đang chạy nhanh hơn giờ thực tế đúng 1 tiếng).</div>
     <div class="upload-row">
       <label class="file-btn">📂 Chọn file Transaction<input type="file" id="tx-file-input" accept=".xlsx,.xls,.csv,.tsv,.txt"></label>
       <span id="upload-status"></span>
@@ -194,7 +194,14 @@ function txParseTxDateTime(s){
   const mon = MONTHS[m[2].toLowerCase()];
   if(mon === undefined) return null;
   const d = new Date(Number(m[3]), mon, Number(m[1]), Number(m[4]), Number(m[5]), m[6] ? Number(m[6]) : 0);
-  return isNaN(d.getTime()) ? null : d;
+  if(isNaN(d.getTime())) return null;
+  // SỬA: đồng hồ hệ thống WMS ghi giờ trên file Transaction luôn NHANH HƠN giờ thực tế đúng 1 tiếng
+  // (hệ thống đang lấy giờ +1) — trừ lại 1h ngay khi đọc để có đúng giờ thực tế, dùng cho MỌI tính
+  // toán sau đó (đặc biệt là xác định Ca/Ngày theo giờ thực ở shiftInfo()). Chỉ áp dụng cho nhánh có
+  // giờ thật (định dạng "DD-Mon-YYYY HH:mm:ss" của WMS) — 2 nhánh dự phòng bên trên không có giờ
+  // (chỉ có ngày) nên không trừ, tránh lùi nhầm sang 23h hôm trước.
+  d.setHours(d.getHours() - 1);
+  return d;
 }
 function dateKey(d){
   if(!d) return null;
