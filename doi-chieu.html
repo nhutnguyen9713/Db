@@ -50,16 +50,18 @@
   .tx-kho-breakdown b{font-family:var(--mono); color:var(--text);}
   .tx-kho-breakdown .unassigned{color:var(--red);}
 
-  /* ===== Manual entry form ===== */
-  .entry-form{display:grid; grid-template-columns:150px 110px 1fr 110px 110px 110px auto; gap:10px; align-items:end;}
-  .entry-form label{display:block; font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:5px;}
-  .entry-form input, .entry-form select{width:100%; padding:8px 10px; border-radius:7px; border:1px solid var(--line); background:var(--panel-2); font-size:13.5px; font-family:var(--sans); color:var(--text);}
-  .entry-form input:focus, .entry-form select:focus{outline:none; border-color:var(--violet);}
-  .entry-form input[type=number]{font-family:var(--mono);}
-  #btn-add-entry{padding:9px 18px; border-radius:8px; border:none; background:var(--teal); color:#fff; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap;}
-  #btn-add-entry:hover{filter:brightness(1.06);}
+  /* ===== Bảng nhập liên tục (staging) — điều hướng bằng phím mũi tên, xác nhận theo LƯỢT (nhiều dòng) ===== */
+  .stage-actions{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px;}
+  #btn-stage-add-row{padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); font-size:12.5px; font-weight:700; cursor:pointer; font-family:var(--sans);}
+  #btn-stage-add-row:hover{border-color:var(--violet); color:var(--violet);}
+  #btn-stage-confirm{padding:9px 20px; border-radius:8px; border:none; background:var(--teal); color:#fff; font-size:13px; font-weight:700; cursor:pointer; font-family:var(--sans);}
+  #btn-stage-confirm:hover{filter:brightness(1.06);}
+  .stage-hint{font-size:11.5px; color:var(--muted-2);}
+  table.stage-table tbody td{padding:4px 6px;}
+  table.stage-table input, table.stage-table select{width:100%; padding:7px 8px; border-radius:6px; border:1px solid var(--line); background:var(--panel-2); font-size:13px; font-family:var(--sans); color:var(--text);}
+  table.stage-table input[type=number]{font-family:var(--mono);}
+  table.stage-table input:focus, table.stage-table select:focus{outline:none; border-color:var(--violet); background:#fff;}
   #entry-form-error{color:var(--red); font-size:12px; margin-top:8px; min-height:1em;}
-  @media (max-width:900px){ .entry-form{grid-template-columns:1fr 1fr;} #btn-add-entry{grid-column:1/-1;} }
 
   /* ===== Tables ===== */
   .table-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:10px; margin-top:14px;}
@@ -116,15 +118,21 @@
 
   <div class="panel" id="entry-panel">
     <h2><span class="step">2</span>Nhập sổ nhận hàng (thủ công) — <span id="entry-panel-kho"></span></h2>
-    <div class="hint">Ghi lại đúng như sổ tay tại kho — mỗi dòng là 1 lượt nhận hàng của 1 mã hàng trong 1 ca. Dòng vừa thêm sẽ thuộc đúng kho đang chọn ở tab phía trên. Ca Ngày: 7h sáng – 7h tối; Ca Đêm: 7h tối – 7h sáng hôm sau (0h–7h sáng vẫn tính là ca đêm của <b>ngày hôm trước</b>, không phải ngày mới) — Ngày/Ca mặc định tự chọn theo giờ hiện tại, có thể đổi lại tay.</div>
-    <div class="entry-form">
-      <div><label>Ngày</label><input type="date" id="f-date"></div>
-      <div><label>Ca</label><select id="f-shift"><option value="ngay">Ngày</option><option value="dem">Đêm</option></select></div>
-      <div><label>Item</label><input type="text" id="f-item" placeholder="VD: 020353007"></div>
-      <div><label>SL Pallet</label><input type="number" id="f-pallet" min="0" step="1" placeholder="0"></div>
-      <div><label>SL Ctn</label><input type="number" id="f-ctn" min="0" step="1" placeholder="0"></div>
-      <div><label>SL Pcs</label><input type="number" id="f-pcs" min="0" step="1" placeholder="0"></div>
-      <button type="button" id="btn-add-entry">+ Thêm dòng</button>
+    <div class="hint">Ghi lại đúng như sổ tay tại kho — mỗi dòng là 1 lượt nhận hàng của 1 mã hàng trong 1 ca. Nhập xong nhiều dòng rồi bấm "Xác nhận tất cả" 1 lần (không cần xác nhận từng dòng). Dùng phím <b>↑ ↓</b> để di chuyển lên/xuống giữa các dòng (cùng cột), <b>← →</b> để di chuyển giữa các ô trong 1 dòng, <b>Enter</b> để xuống dòng — xuống ở dòng cuối cùng sẽ tự thêm 1 dòng trống mới. Các dòng vừa nhập thuộc đúng kho đang chọn ở tab phía trên. Ca Ngày: 7h sáng – 7h tối; Ca Đêm: 7h tối – 7h sáng hôm sau (0h–7h sáng vẫn tính là ca đêm của <b>ngày hôm trước</b>, không phải ngày mới) — Ngày/Ca mặc định tự chọn theo giờ hiện tại, có thể đổi lại tay.</div>
+    <div class="table-scroll">
+      <table class="dt stage-table" id="stage-table">
+        <thead><tr>
+          <th>Ngày</th><th>Ca</th><th>Item</th>
+          <th style="text-align:right">SL Pallet</th><th style="text-align:right">SL Ctn</th><th style="text-align:right">SL Pcs</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="stage-tbody"></tbody>
+      </table>
+    </div>
+    <div class="stage-actions">
+      <button type="button" id="btn-stage-add-row">+ Thêm dòng trống</button>
+      <button type="button" id="btn-stage-confirm">✓ Xác nhận tất cả</button>
+      <span class="stage-hint">Chỉ những dòng đã nhập đủ mới được lưu vào sổ khi xác nhận.</span>
     </div>
     <div id="entry-form-error"></div>
 
@@ -406,6 +414,7 @@ khoTabsEl.addEventListener('click', (e) => {
   try{ localStorage.setItem(LS_KHO_KEY, activeKho); }catch(err){}
   renderKhoTabs();
   renderTxSummary();
+  renderStageTable();
   renderLog();
   renderReconcile();
 });
@@ -486,47 +495,177 @@ btnClearTx.addEventListener('click', () => {
 });
 
 /* ============================================================
-   ② Nhập sổ nhận hàng (thủ công)
+   ② Nhập sổ nhận hàng (thủ công) — bảng nhập liên tục (staging), điều hướng bằng phím mũi tên, xác
+   nhận theo LƯỢT (nhiều dòng 1 lúc) thay vì xác nhận từng dòng riêng lẻ.
    ============================================================ */
-const fDate = document.getElementById('f-date');
-const fShift = document.getElementById('f-shift');
-const fItem = document.getElementById('f-item');
-const fPallet = document.getElementById('f-pallet');
-const fCtn = document.getElementById('f-ctn');
-const fPcs = document.getElementById('f-pcs');
+const LS_STAGE_KEY = 'tn5_doichieu_stage_v1';
+const STAGE_FIELDS = ['date','shift','item','pallet','ctn','pcs']; // thứ tự di chuyển khi bấm ← →
+
+function emptyStageRow(){
+  const s = shiftInfo(new Date());
+  return { date: s.dateKey, shift: s.shift, item: '', pallet: '', ctn: '', pcs: '' };
+}
+function loadStage(){
+  try{
+    const raw = JSON.parse(localStorage.getItem(LS_STAGE_KEY) || 'null');
+    if(raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  }catch(err){}
+  return {};
+}
+function saveStage(){
+  try{ localStorage.setItem(LS_STAGE_KEY, JSON.stringify(stagedRows)); }catch(err){}
+}
+let stagedRows = loadStage(); // { khoKey: [{date,shift,item,pallet,ctn,pcs}, ...] } — riêng theo TỪNG kho
+function currentStageRows(){
+  if(!Array.isArray(stagedRows[activeKho]) || !stagedRows[activeKho].length){
+    stagedRows[activeKho] = [emptyStageRow()];
+  }
+  return stagedRows[activeKho];
+}
+
+const stageTbody = document.getElementById('stage-tbody');
 const formError = document.getElementById('entry-form-error');
 const logTbody = document.getElementById('log-tbody');
 const logTfoot = document.getElementById('log-tfoot');
 const logEmpty = document.getElementById('log-empty');
 
-// Mặc định Ngày + Ca theo GIỜ THỰC TẾ lúc mở trang (xem shiftInfo()) — VD mở trang lúc 2h sáng vẫn
-// đang là ca đêm của NGÀY HÔM TRƯỚC (ca đêm bắt đầu 19h hôm trước, kéo dài tới 7h sáng), không phải
-// ca ngày/ngày mới dù đồng hồ đã qua 0h.
-const nowShift = shiftInfo(new Date());
-fDate.value = nowShift.dateKey;
-fShift.value = nowShift.shift;
+function stageCellEl(rowIdx, field){
+  return stageTbody.querySelector(`[data-row="${rowIdx}"][data-field="${field}"]`);
+}
+function focusStageCell(rowIdx, field){
+  const el = stageCellEl(rowIdx, field);
+  if(el){ el.focus(); if(el.select) el.select(); }
+}
+function readStageRowFromDom(rowIdx){
+  const row = currentStageRows()[rowIdx];
+  if(!row) return;
+  STAGE_FIELDS.forEach(f => { const el = stageCellEl(rowIdx, f); if(el) row[f] = el.value; });
+}
 
-document.getElementById('btn-add-entry').addEventListener('click', () => {
-  formError.textContent = '';
-  const date = fDate.value;
-  const shift = fShift.value;
-  const itemRaw = fItem.value.trim();
-  const pallet = Number(fPallet.value) || 0;
-  const ctn = Number(fCtn.value) || 0;
-  const pcs = Number(fPcs.value) || 0;
-  if(!date){ formError.textContent = 'Chưa chọn ngày.'; return; }
-  if(!itemRaw){ formError.textContent = 'Chưa nhập Item.'; return; }
-  if(pallet <= 0 && ctn <= 0 && pcs <= 0){ formError.textContent = 'Phải nhập ít nhất 1 trong 3 số lượng (Pallet/Ctn/Pcs) lớn hơn 0.'; return; }
-  logEntries.push({
-    id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
-    date, shift, item: txItemText(itemRaw), itemRaw, pallet, ctn, pcs, kho: activeKho,
+function renderStageTable(){
+  const rows = currentStageRows();
+  stageTbody.innerHTML = rows.map((row, idx) => `
+    <tr>
+      <td><input type="date" data-row="${idx}" data-field="date" value="${escHtml(row.date)}"></td>
+      <td><select data-row="${idx}" data-field="shift">
+        <option value="ngay"${row.shift === 'ngay' ? ' selected' : ''}>Ngày</option>
+        <option value="dem"${row.shift === 'dem' ? ' selected' : ''}>Đêm</option>
+      </select></td>
+      <td><input type="text" data-row="${idx}" data-field="item" value="${escHtml(row.item)}" placeholder="VD: 020353007"></td>
+      <td><input type="number" data-row="${idx}" data-field="pallet" value="${escHtml(row.pallet)}" min="0" step="1" placeholder="0"></td>
+      <td><input type="number" data-row="${idx}" data-field="ctn" value="${escHtml(row.ctn)}" min="0" step="1" placeholder="0"></td>
+      <td><input type="number" data-row="${idx}" data-field="pcs" value="${escHtml(row.pcs)}" min="0" step="1" placeholder="0"></td>
+      <td><button type="button" class="del-btn stage-del-btn" data-row="${idx}" title="Xoá dòng này">✕</button></td>
+    </tr>`).join('');
+  saveStage();
+}
+
+stageTbody.addEventListener('input', (e) => {
+  const el = e.target.closest('[data-row][data-field]');
+  if(!el) return;
+  const row = currentStageRows()[Number(el.dataset.row)];
+  if(row){ row[el.dataset.field] = el.value; saveStage(); }
+});
+
+stageTbody.addEventListener('click', (e) => {
+  const btn = e.target.closest('.stage-del-btn');
+  if(!btn) return;
+  const rowIdx = Number(btn.dataset.row);
+  const rows = currentStageRows();
+  if(rows.length <= 1){
+    // Chỉ còn 1 dòng -> xoá trắng nội dung thay vì xoá cả dòng (luôn giữ ít nhất 1 dòng để nhập tiếp).
+    rows[0] = emptyStageRow();
+  } else {
+    rows.splice(rowIdx, 1);
+  }
+  renderStageTable();
+});
+
+// Điều hướng bằng phím — theo đúng yêu cầu: mũi tên di chuyển qua lại giữa các ô, không xác nhận
+// từng dòng. ↑/↓: cùng cột, đổi dòng. ←/→: cùng dòng, đổi cột (thứ tự STAGE_FIELDS). Enter coi như ↓.
+// ArrowDown/Enter ở dòng CUỐI CÙNG luôn tự thêm 1 dòng trống mới rồi chuyển focus vào đó, để nhập liên
+// tục nhiều dòng không cần bấm nút "+ Thêm dòng trống". Không xét vị trí con trỏ trong ô (đơn giản, dễ
+// đoán) — mũi tên LUÔN đổi ô/dòng, không di chuyển con trỏ bên trong nội dung đang gõ.
+stageTbody.addEventListener('keydown', (e) => {
+  const el = e.target.closest('[data-row][data-field]');
+  if(!el) return;
+  const rowIdx = Number(el.dataset.row);
+  const field = el.dataset.field;
+  const fieldIdx = STAGE_FIELDS.indexOf(field);
+  const rows = currentStageRows();
+
+  if(e.key === 'ArrowUp'){
+    if(rowIdx > 0){ e.preventDefault(); readStageRowFromDom(rowIdx); focusStageCell(rowIdx - 1, field); }
+    return;
+  }
+  if(e.key === 'ArrowDown' || e.key === 'Enter'){
+    e.preventDefault();
+    readStageRowFromDom(rowIdx);
+    if(rowIdx === rows.length - 1){
+      rows.push(emptyStageRow());
+      renderStageTable();
+    }
+    focusStageCell(rowIdx + 1, field);
+    return;
+  }
+  if(e.key === 'ArrowLeft'){
+    if(fieldIdx > 0){ e.preventDefault(); readStageRowFromDom(rowIdx); focusStageCell(rowIdx, STAGE_FIELDS[fieldIdx - 1]); }
+    return;
+  }
+  if(e.key === 'ArrowRight'){
+    if(fieldIdx < STAGE_FIELDS.length - 1){ e.preventDefault(); readStageRowFromDom(rowIdx); focusStageCell(rowIdx, STAGE_FIELDS[fieldIdx + 1]); }
+    return;
+  }
+});
+
+document.getElementById('btn-stage-add-row').addEventListener('click', () => {
+  currentStageRows().push(emptyStageRow());
+  renderStageTable();
+  focusStageCell(currentStageRows().length - 1, 'date');
+});
+
+// Xác nhận theo LƯỢT: đọc toàn bộ các dòng đang nhập, lưu tất cả dòng HỢP LỆ vào sổ 1 lần. Dòng trống
+// hoàn toàn (chưa gõ gì) bị bỏ qua âm thầm, không báo lỗi. Dòng có lỗi (đã gõ dở nhưng thiếu/sai) được
+// GIỮ LẠI nguyên trạng trên bảng nhập để sửa tiếp — không xoá mất dữ liệu đã gõ chỉ vì xác nhận cả lượt.
+document.getElementById('btn-stage-confirm').addEventListener('click', () => {
+  const rows = currentStageRows();
+  rows.forEach((_, idx) => readStageRowFromDom(idx));
+
+  const valid = [];
+  const errs = [];
+  const remaining = []; // các dòng lỗi -> giữ lại trên bảng nhập để sửa
+  rows.forEach((row, idx) => {
+    const date = row.date;
+    const shift = row.shift === 'dem' ? 'dem' : 'ngay';
+    const itemRaw = (row.item || '').trim();
+    const pallet = Number(row.pallet) || 0;
+    const ctn = Number(row.ctn) || 0;
+    const pcs = Number(row.pcs) || 0;
+    // Dòng coi là "trống" khi chưa nhập Item lẫn số lượng nào — KHÔNG xét Ngày/Ca vì 2 ô này luôn có
+    // giá trị mặc định ngay khi dòng mới được tạo (nên không thể dùng để phân biệt dòng đã gõ hay chưa).
+    if(!itemRaw && !pallet && !ctn && !pcs) return;
+    let err = null;
+    if(!date) err = `Dòng ${idx+1}: chưa chọn ngày.`;
+    else if(!itemRaw) err = `Dòng ${idx+1}: chưa nhập Item.`;
+    else if(pallet <= 0 && ctn <= 0 && pcs <= 0) err = `Dòng ${idx+1}: phải nhập ít nhất 1 trong 3 số lượng (Pallet/Ctn/Pcs) lớn hơn 0.`;
+    if(err){ errs.push(err); remaining.push(row); return; }
+    valid.push({
+      id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2,6) + idx,
+      date, shift, item: txItemText(itemRaw), itemRaw, pallet, ctn, pcs, kho: activeKho,
+    });
   });
-  saveLog(logEntries);
-  // Chừa lại Ngày/Ca (thường nhập liên tiếp nhiều dòng cùng ngày/ca) — chỉ xoá phần Item/số lượng.
-  fItem.value = ''; fPallet.value = ''; fCtn.value = ''; fPcs.value = '';
-  fItem.focus();
+
+  if(!valid.length && !errs.length){ formError.textContent = 'Chưa có dòng nào để xác nhận.'; return; }
+
+  if(valid.length){ logEntries.push(...valid); saveLog(logEntries); }
+  formError.textContent = errs.length ? `Đã xác nhận ${valid.length} dòng hợp lệ. Còn ${errs.length} dòng cần sửa lại — ${errs.join(' ')}` : '';
+
+  // Chỉ giữ lại các dòng LỖI (để sửa tiếp) + luôn có 1 dòng trống ở cuối để nhập mới.
+  stagedRows[activeKho] = remaining.length ? remaining.concat([emptyStageRow()]) : [emptyStageRow()];
+  renderStageTable();
   renderLog();
   renderReconcile();
+  focusStageCell(0, remaining.length ? 'date' : 'item');
 });
 
 function renderLog(){
@@ -665,6 +804,7 @@ reconOnlyMismatch.addEventListener('change', renderReconcile);
    ============================================================ */
 renderKhoTabs();
 renderTxSummary();
+renderStageTable();
 renderLog();
 renderReconcile();
 </script>
