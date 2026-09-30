@@ -13146,7 +13146,9 @@ let txState = null; // { records:[...], receive:[...], transfer:[...], picking:[
 const txSort = {
   receive: { key: 'total', dir: -1 },
   transfer: { key: 'total', dir: -1 },
-  picking: { key: 'total', dir: -1 }
+  picking: { key: 'total', dir: -1 },
+  reworkXuat: { key: 'total', dir: -1 },
+  reworkNhap: { key: 'total', dir: -1 }
 };
 
 function txItemText(raw){
@@ -13753,6 +13755,8 @@ const TX_TABLE_DEFS = {
   receive: { cols: ['khoXuat','transType','item','locator','user'], tbody:'tx-receive-tbody', tfoot:'tx-receive-tfoot', empty:'tx-receive-empty', search:'tx-receive-search', summary:'tx-receive-summary', table:'tx-receive-table', label:'dòng Receive', clearBtn:'tx-receive-clear-filters' },
   transfer: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty','chuyen'], tbody:'tx-transfer-tbody', tfoot:'tx-transfer-tfoot', empty:'tx-transfer-empty', search:'tx-transfer-search', summary:'tx-transfer-summary', table:'tx-transfer-table', label:'nhóm Transfer', clearBtn:'tx-transfer-clear-filters' },
   picking: { cols: ['khoXuat','locatorDen','item','user','reference','contCount'], tbody:'tx-picking-tbody', tfoot:'tx-picking-tfoot', empty:'tx-picking-empty', search:'tx-picking-search', summary:'tx-picking-summary', table:'tx-picking-table', label:'nhóm Picking', clearBtn:'tx-picking-clear-filters' },
+  reworkXuat: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty'], tbody:'tx-reworkXuat-tbody', tfoot:'tx-reworkXuat-tfoot', empty:'tx-reworkXuat-empty', search:'tx-reworkXuat-search', summary:'tx-reworkXuat-summary', table:'tx-reworkXuat-table', label:'dòng Rework (Xuất)', clearBtn:'tx-reworkXuat-clear-filters' },
+  reworkNhap: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty'], tbody:'tx-reworkNhap-tbody', tfoot:'tx-reworkNhap-tfoot', empty:'tx-reworkNhap-empty', search:'tx-reworkNhap-search', summary:'tx-reworkNhap-summary', table:'tx-reworkNhap-table', label:'dòng Rework (Nhập)', clearBtn:'tx-reworkNhap-clear-filters' },
   // 2 bảng "Xe Trung Chuyển" — chỉ cần đủ field mà txUpdateFilterIcons()/nút Xoá bộ lọc cần, phần vẽ
   // bảng thật vẫn dùng riêng renderXeTrungChuyenTable() (khác cấu trúc renderTxTable ở 3 kind trên).
   itnTransferGroups: { table:'tx-xtc-transfer-table', clearBtn:'tx-xtc-transfer-clear-filters' },
@@ -13768,11 +13772,14 @@ function txApplyDefaultFilters(){
   txColFilters.receive = txDefaultColFilters();
   txColFilters.transfer = txDefaultColFilters();
   txColFilters.picking = txDefaultColFilters();
+  txColFilters.reworkXuat = txDefaultColFilters();
+  txColFilters.reworkNhap = txDefaultColFilters();
   txColFilters.itnTransferGroups = txDefaultColFilters();
   txColFilters.itnReceivingGroups = txDefaultColFilters();
 }
 const txColFilters = {
   receive: txDefaultColFilters(), transfer: txDefaultColFilters(), picking: txDefaultColFilters(),
+  reworkXuat: txDefaultColFilters(), reworkNhap: txDefaultColFilters(),
   itnTransferGroups: txDefaultColFilters(), itnReceivingGroups: txDefaultColFilters()
 }; // { kind: { colKey: Set(labels) | undefined } }
 // Vẽ lại đúng bảng theo kind — renderTxTable() chỉ hiểu 3 kind gốc (receive/transfer/picking), 2 bảng
@@ -13885,11 +13892,14 @@ function renderTxTable(kind){
 const TX_CHART_ITEMS = [
   { key:'receive', label:'Receive', color:'var(--teal)' },
   { key:'transfer', label:'Transfer', color:'var(--blue)' },
-  { key:'picking', label:'Picking', color:'var(--violet)' }
+  { key:'picking', label:'Picking', color:'var(--violet)' },
+  { key:'reworkNhap', label:'Nhận RW', color:'var(--amber-bright)' }
 ];
 // Thứ tự 4 kho hiển thị RIÊNG trong biểu đồ (giống CPT_KHO_ORDER/PICK_SLIP_KHO_ORDER dùng ở nơi khác
 // trong app) — mỗi kho 1 khung, luôn tính trên TOÀN BỘ dữ liệu của đúng kho đó, KHÔNG phụ thuộc bộ
-// lọc cột/ô tìm kiếm hiện tại của 3 bảng bên dưới.
+// lọc cột/ô tìm kiếm hiện tại của 3 bảng bên dưới. Riêng "Nhận RW" lấy từ txState.reworkNhap (kho ở
+// đây là kho NHẬN, xem txBuildReworkDetailRows()), vẫn dùng chung txKhoTotalFor() vì field group-by
+// vẫn tên "khoXuat" như các kind khác (chỉ khác Ý NGHĨA, không khác tên field).
 const TX_CHART_KHO_ORDER = ['2B', '3A', '3B', 'DG1'];
 
 function txKhoTotalFor(kind, khoShort){
@@ -14111,13 +14121,45 @@ function renderTxReworkSummaries(){
   });
 }
 
+// Dòng chi tiết Rework (cho bảng "Xem chi tiết từng dòng" + biểu đồ Grand Total) — gộp nhóm giống hệt
+// kiểu bảng Transfer (Kho + Menu Name + Item + Locator xuất + Locator đến + User), nhưng KHÔNG gộp
+// theo Reference/Chuyến vì Rework không có khái niệm đó. Field "khoXuat" dùng CHUNG cho cả Xuất lẫn
+// Nhập (dù ở Nhập nó thực ra là kho NHẬN) để tái dùng được đúng txKhoTotalFor()/renderTxTable() có sẵn
+// — nhãn cột hiển thị cho người dùng vẫn ghi rõ "Kho xuất"/"Kho nhận" tương ứng, không gây nhầm lẫn.
+function txBuildReworkDetailRows(records){
+  const locatorKhoMap = buildLocatorKhoMap();
+  const xuatMap = new Map(), nhapMap = new Map();
+  for(const group of txGroupBySetId(records || [])){
+    const d = txDescribeSet(group, locatorKhoMap);
+    if(!d.locatorXuat || !d.locatorDen) continue;
+    const xuatIsProd = txLocatorHasProdSuffix(d.locatorXuat);
+    const denIsProd = txLocatorHasProdSuffix(d.locatorDen);
+    let map, kho;
+    if(denIsProd && !xuatIsProd){ map = xuatMap; kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap); }
+    else if(xuatIsProd && !denIsProd){ map = nhapMap; kho = resolveKhoForLocator(d.locatorDen, locatorKhoMap); }
+    else continue;
+    const key = [kho, d.menuName, d.item, d.locatorXuat, d.locatorDen, d.user].join('||');
+    const cur = map.get(key);
+    if(cur){ cur.total++; cur.qty += d.qty; }
+    else map.set(key, { khoXuat: kho || '—', menuName: d.menuName, item: d.item, locatorXuat: d.locatorXuat, locatorDen: d.locatorDen, user: d.user, qty: d.qty, total: 1 });
+  }
+  return { xuat: [...xuatMap.values()], nhap: [...nhapMap.values()] };
+}
+
 function renderTransactionPage(){
   renderTxKpiStrip();
   renderTxSummaries();
   renderTxReworkSummaries();
+  if(txState){
+    const rw = txBuildReworkDetailRows(txState.records);
+    txState.reworkXuat = rw.xuat;
+    txState.reworkNhap = rw.nhap;
+  }
   renderTxTable('receive');
   renderTxTable('transfer');
   renderTxTable('picking');
+  renderTxTable('reworkXuat');
+  renderTxTable('reworkNhap');
   renderXeTrungChuyenTable('itnTransferGroups', 'tx-xtc-transfer');
   renderXeTrungChuyenTable('itnReceivingGroups', 'tx-xtc-receiving');
   renderTxChart();

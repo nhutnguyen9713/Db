@@ -1486,6 +1486,60 @@ function gateBustedUrl(base){
       <div class="tx-sum-grid" id="tx-rework-xuat-sumgrid"></div>
       <div class="tx-sum-subhead" style="margin-top:14px;">↙ Nhập — chuyển từ vị trí PROD về</div>
       <div class="tx-sum-grid" id="tx-rework-nhap-sumgrid"></div>
+      <details class="tx-detail-toggle" style="margin-top:6px;">
+      <summary>Xem chi tiết từng dòng</summary>
+      <div class="tx-sum-subhead" style="margin-top:10px;">↗ Xuất — chuyển đến vị trí PROD</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-reworkXuat-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-reworkXuat-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-reworkXuat-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:320px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-reworkXuat-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho xuất <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến (PROD) <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-reworkXuat-tbody"></tbody>
+          <tfoot id="tx-reworkXuat-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-reworkXuat-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+
+      <div class="tx-sum-subhead" style="margin-top:18px;">↙ Nhập — chuyển từ vị trí PROD về</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-reworkNhap-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-reworkNhap-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-reworkNhap-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:320px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-reworkNhap-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho nhận <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất (PROD) <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-reworkNhap-tbody"></tbody>
+          <tfoot id="tx-reworkNhap-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-reworkNhap-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+      </details>
     </div>
 
     <div class="panel search-panel" id="tx-panel-picking" style="margin-top:16px; border-color:var(--violet);">
