@@ -132,13 +132,23 @@
 
   /* ===== Popover xem chi tiết dòng hệ thống (khi bấm vào 1 dòng đối chiếu) ===== */
   .sys-popover-backdrop{position:fixed; inset:0; background:rgba(22,32,46,0.45); z-index:300; display:flex; align-items:center; justify-content:center; padding:16px;}
-  .sys-popover-panel{background:var(--panel); border-radius:12px; max-width:720px; width:100%; max-height:82vh; overflow:auto; padding:18px 20px 20px; box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+  .sys-popover-panel{background:var(--panel); border-radius:12px; max-width:min(960px, 94vw); width:100%; max-height:82vh; overflow-y:auto; overflow-x:hidden; padding:18px 20px 20px; box-shadow:0 20px 60px rgba(0,0,0,0.3);}
   .sys-popover-head{display:flex; align-items:flex-start; justify-content:space-between; gap:12px;}
   .sys-popover-head h3{font-size:14.5px; margin:0 0 4px; font-family:var(--mono); word-break:break-word;}
   .sys-popover-sub{font-size:12px; color:var(--muted);}
   .sys-popover-close{border:none; background:var(--panel-2); color:var(--muted); width:28px; height:28px; border-radius:8px; cursor:pointer; font-size:14px; flex-shrink:0;}
   .sys-popover-close:hover{background:rgba(214,57,75,0.12); color:var(--red);}
-  .sys-popover-panel table.dt{margin-top:12px; min-width:0;}
+  /* table-layout:fixed + white-space:normal -> chữ dài (Lot No/GI No) tự xuống dòng thay vì đẩy bảng
+     tràn ngang phải cuộn ngang; nhiều dòng thì cả popover cuộn dọc (panel đã overflow-y:auto). */
+  .sys-popover-panel table.dt{margin-top:12px; min-width:0; width:100%; table-layout:fixed;}
+  .sys-popover-panel table.dt th, .sys-popover-panel table.dt td{white-space:normal; word-break:break-word; font-size:12px;}
+  .sys-popover-panel table.dt th:nth-child(1), .sys-popover-panel table.dt td:nth-child(1){width:9%;}
+  .sys-popover-panel table.dt th:nth-child(2), .sys-popover-panel table.dt td:nth-child(2){width:13%;}
+  .sys-popover-panel table.dt th:nth-child(3), .sys-popover-panel table.dt td:nth-child(3){width:16%;}
+  .sys-popover-panel table.dt th:nth-child(4), .sys-popover-panel table.dt td:nth-child(4){width:27%;}
+  .sys-popover-panel table.dt th:nth-child(5), .sys-popover-panel table.dt td:nth-child(5){width:11%;}
+  .sys-popover-panel table.dt th:nth-child(6), .sys-popover-panel table.dt td:nth-child(6){width:8%;}
+  .sys-popover-panel table.dt th:nth-child(7), .sys-popover-panel table.dt td:nth-child(7){width:16%;}
   .sys-popover-total{margin-top:12px; font-size:12px; color:var(--muted); display:flex; gap:16px; flex-wrap:wrap;}
   .sys-popover-total b{font-family:var(--mono); color:var(--text);}
 
@@ -1028,9 +1038,9 @@ function showSysPopover(date, item, itemRaw){
       </div>
       ${sysRows.length ? `
         <table class="dt">
-          <thead><tr><th>Giờ</th><th>Locator</th><th>GI No</th><th>Lot No</th><th>Pallet No</th><th>Người quét</th><th style="text-align:right">SL</th></tr></thead>
+          <thead><tr><th>Giờ</th><th>Locator</th><th>GI No</th><th>Lot No</th><th>Pallet No</th><th style="text-align:right">SL</th><th>Người quét</th></tr></thead>
           <tbody>
-            ${sysRows.map(row => `<tr><td>${escHtml(row.time)}</td><td>${escHtml(row.locator)}</td><td>${escHtml(row.gi || '—')}</td><td>${escHtml(row.lot || '—')}</td><td>${escHtml(row.palletNo || '—')}</td><td>${escHtml(row.user || '—')}</td><td class="num">${fmt(row.qty)}</td></tr>`).join('')}
+            ${sysRows.map(row => `<tr><td>${escHtml(row.time)}</td><td>${escHtml(row.locator)}</td><td>${escHtml(row.gi || '—')}</td><td>${escHtml(row.lot || '—')}</td><td>${escHtml(row.palletNo || '—')}</td><td class="num">${fmt(row.qty)}</td><td>${escHtml(row.user || '—')}</td></tr>`).join('')}
           </tbody>
         </table>
         <div class="sys-popover-total"><span><b>${fmt(sysRows.length)}</b> dòng (= Pallet hệ thống)</span><span><b>${fmt(totalQty)}</b> tổng SL (= Pcs hệ thống)</span></div>
