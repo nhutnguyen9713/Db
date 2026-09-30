@@ -128,6 +128,21 @@
   /* ===== Lịch sử đối chiếu đã lưu ===== */
   #history-panel .reconcile-toolbar select, #history-panel .reconcile-toolbar input[type=date]{padding:8px 10px; border-radius:8px; border:1px solid var(--line); font-size:12.5px; font-family:var(--sans); color:var(--text); background:var(--panel-2);}
   #history-panel .reconcile-toolbar input[type=text]{flex:1; min-width:160px;}
+  /* Mỗi nhóm (Ngày+Ca+Kho) thu gọn thành 1 thanh tiêu đề — chỉ hiện Ngày/Kho/Ca + tổng kết, bấm vào
+     mới xổ ra bảng chi tiết từng mã hàng bên dưới. */
+  .hist-group{border:1px solid var(--line); border-radius:10px; margin-top:12px; overflow:hidden;}
+  .hist-group:first-child{margin-top:0;}
+  .hist-group-header{width:100%; display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:12px 14px; background:var(--panel-2); border:none; cursor:pointer; text-align:left; font-family:var(--sans); color:var(--text);}
+  .hist-group-header:hover{background:#EEF2F9;}
+  .hist-group-chevron{color:var(--muted-2); font-size:11px; width:10px; flex-shrink:0; transition:transform .15s;}
+  .hist-group.expanded .hist-group-chevron{transform:rotate(90deg);}
+  .hist-group-title{display:flex; align-items:center; gap:8px; font-size:13px; flex-wrap:wrap;}
+  .hist-group-title b{font-family:var(--mono);}
+  .hist-group-kho{background:rgba(110,79,224,0.12); color:var(--violet); font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; white-space:nowrap;}
+  .hist-group-stats{display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--muted); margin-left:auto;}
+  .hist-group-stats b{font-family:var(--mono); color:var(--text);}
+  .hist-group-body{padding:0 14px 14px;}
+  .hist-group-body .table-scroll{margin-top:10px;}
 </style>
 </head>
 <body>
@@ -229,19 +244,8 @@
       <input type="text" id="hist-search" placeholder="Tìm theo mã hàng…">
       <button type="button" class="clear-link" id="btn-hist-clear-filters">Xoá bộ lọc</button>
     </div>
-    <div class="table-scroll">
-      <table class="dt" id="hist-table">
-        <thead><tr>
-          <th>Ngày</th><th>Kho</th><th>Ca</th><th>Item</th>
-          <th class="col-sotay" style="text-align:right">Pallet (Sổ tay)</th><th class="col-hethong" style="text-align:right">Pallet (Hệ thống)</th>
-          <th class="col-sotay" style="text-align:right">Pcs (Sổ tay)</th><th class="col-hethong" style="text-align:right">Pcs (Hệ thống)</th>
-          <th class="col-sotay" style="text-align:right">Ctn (Sổ tay)</th>
-          <th>Trạng thái</th><th>Lúc lưu</th><th></th>
-        </tr></thead>
-        <tbody id="hist-tbody"></tbody>
-      </table>
-      <div class="empty-note" id="hist-empty">Chưa lưu dòng nào — sang tab "Đối chiếu" rồi bấm "💾 Lưu tất cả".</div>
-    </div>
+    <div id="hist-groups"></div>
+    <div class="empty-note" id="hist-empty">Chưa lưu dòng nào — sang tab "Đối chiếu" rồi bấm "💾 Lưu tất cả".</div>
     <div class="recon-summary" id="hist-summary"></div>
   </div>
 
@@ -977,7 +981,7 @@ function loadHistory(){
 function saveHistoryData(){ try{ localStorage.setItem(LS_HISTORY_KEY, JSON.stringify(savedHistory)); }catch(err){} }
 let savedHistory = loadHistory(); // [{key, kho, date, item, itemRaw, logPallet, logCtn, logPcs, logByShift, sysPallet, sysPcs, inLog, inSys, status, savedAt}]
 
-const histTbody = document.getElementById('hist-tbody');
+const histGroupsEl = document.getElementById('hist-groups');
 const histEmpty = document.getElementById('hist-empty');
 const histSummary = document.getElementById('hist-summary');
 const histFilterKho = document.getElementById('hist-filter-kho');
@@ -1009,17 +1013,80 @@ function saveReconcileSnapshot(){
 }
 document.getElementById('btn-save-recon').addEventListener('click', saveReconcileSnapshot);
 
-function histShiftBadges(h){
-  const has = s => h.logByShift && h.logByShift[s] && (h.logByShift[s].pallet || h.logByShift[s].ctn || h.logByShift[s].pcs);
+// Nhóm các dòng đã lưu theo Kho+Ngày (mỗi lượt "Lưu tất cả" thường cùng 1 kho/1 ngày) -> mỗi nhóm thu
+// gọn thành 1 thanh tiêu đề (Ngày, Kho, Ca gộp của cả nhóm + tổng kết), bấm vào mới xổ ra bảng chi tiết
+// từng mã hàng. expandedHistoryGroups không lưu localStorage -> luôn thu gọn lại khi tải lại trang.
+const expandedHistoryGroups = new Set();
+function buildHistoryGroups(rows){
+  const map = new Map();
+  rows.forEach(h => {
+    const key = h.kho + '||' + h.date;
+    let g = map.get(key);
+    if(!g){ g = { key, kho: h.kho, date: h.date, rows: [] }; map.set(key, g); }
+    g.rows.push(h);
+  });
+  return [...map.values()].sort((a,b) => b.date.localeCompare(a.date) || khoLabel(a.kho).localeCompare(khoLabel(b.kho)));
+}
+function groupShiftBadges(rows){
+  const has = s => rows.some(h => h.logByShift && h.logByShift[s] && (h.logByShift[s].pallet || h.logByShift[s].ctn || h.logByShift[s].pcs));
   const parts = [];
   if(has('ngay')) parts.push('<span class="shift-badge ngay">Ngày</span>');
   if(has('dem')) parts.push('<span class="shift-badge dem">Đêm</span>');
   return parts.join(' ') || '<span style="color:var(--muted-2);">—</span>';
 }
+function renderHistoryGroupHtml(g){
+  const rows = [...g.rows].sort((a,b) => a.itemRaw.localeCompare(b.itemRaw));
+  const nMatch = rows.filter(h => h.status === 'match').length;
+  const nMismatch = rows.filter(h => h.status === 'mismatch').length;
+  const nMissingSys = rows.filter(h => h.status === 'missing-sys').length;
+  const nMissingLog = rows.filter(h => h.status === 'missing-log').length;
+  const expanded = expandedHistoryGroups.has(g.key);
+  return `
+  <div class="hist-group${expanded ? ' expanded' : ''}">
+    <button type="button" class="hist-group-header" data-key="${escHtml(g.key)}">
+      <span class="hist-group-chevron">▸</span>
+      <span class="hist-group-title"><b>${escHtml(g.date)}</b><span class="hist-group-kho">${escHtml(khoLabel(g.kho))}</span>${groupShiftBadges(rows)}</span>
+      <span class="hist-group-stats">
+        <span><b>${fmt(rows.length)}</b> dòng đã lưu</span>
+        <span style="color:var(--teal);"><b>${fmt(nMatch)}</b> khớp</span>
+        <span style="color:var(--red);"><b>${fmt(nMismatch)}</b> lệch số</span>
+        <span style="color:var(--amber);"><b>${fmt(nMissingSys)}</b> chưa thấy trên hệ thống</span>
+        <span style="color:var(--violet);"><b>${fmt(nMissingLog)}</b> chưa ghi sổ tay</span>
+      </span>
+    </button>
+    <div class="hist-group-body" style="display:${expanded ? 'block' : 'none'};">
+      <div class="table-scroll">
+        <table class="dt">
+          <thead><tr>
+            <th>Item</th>
+            <th class="col-sotay" style="text-align:right">Pallet (Sổ tay)</th><th class="col-hethong" style="text-align:right">Pallet (Hệ thống)</th>
+            <th class="col-sotay" style="text-align:right">Pcs (Sổ tay)</th><th class="col-hethong" style="text-align:right">Pcs (Hệ thống)</th>
+            <th class="col-sotay" style="text-align:right">Ctn (Sổ tay)</th>
+            <th>Trạng thái</th><th>Lúc lưu</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(h => `
+              <tr>
+                <td>${escHtml(h.itemRaw)}</td>
+                <td class="num col-sotay">${h.inLog ? fmt(h.logPallet) : '—'}</td>
+                <td class="num col-hethong">${h.inSys ? fmt(h.sysPallet) : '—'}</td>
+                <td class="num col-sotay">${h.inLog ? fmt(h.logPcs) : '—'}</td>
+                <td class="num col-hethong">${h.inSys ? fmt(h.sysPcs) : '—'}</td>
+                <td class="num col-sotay">${h.inLog ? fmt(h.logCtn) : '—'}</td>
+                <td><span class="status-badge ${h.status}">${STATUS_LABEL[h.status]}</span></td>
+                <td>${escHtml(new Date(h.savedAt).toLocaleString('vi-VN'))}</td>
+                <td><button type="button" class="del-btn" data-key="${escHtml(h.key)}" title="Xoá khỏi lịch sử">✕</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
 
 function renderHistory(){
   if(!savedHistory.length){
-    histTbody.innerHTML = '';
+    histGroupsEl.innerHTML = '';
     histEmpty.style.display = 'block';
     histSummary.innerHTML = '';
     return;
@@ -1038,26 +1105,12 @@ function renderHistory(){
     }
     if(q && !removeDiacritics((h.itemRaw||'').toLowerCase()).includes(q)) return false;
     return true;
-  }).sort((a,b) => b.date.localeCompare(a.date) || khoLabel(a.kho).localeCompare(khoLabel(b.kho)) || a.itemRaw.localeCompare(b.itemRaw));
+  });
 
   if(!filtered.length){
-    histTbody.innerHTML = `<tr><td colspan="11" style="text-align:center; color:var(--muted-2); font-family:var(--sans);">Không có dòng nào khớp bộ lọc.</td></tr>`;
+    histGroupsEl.innerHTML = `<div class="empty-note">Không có dòng nào khớp bộ lọc.</div>`;
   } else {
-    histTbody.innerHTML = filtered.map(h => `
-      <tr>
-        <td>${escHtml(h.date)}</td>
-        <td>${escHtml(khoLabel(h.kho))}</td>
-        <td>${histShiftBadges(h)}</td>
-        <td>${escHtml(h.itemRaw)}</td>
-        <td class="num col-sotay">${h.inLog ? fmt(h.logPallet) : '—'}</td>
-        <td class="num col-hethong">${h.inSys ? fmt(h.sysPallet) : '—'}</td>
-        <td class="num col-sotay">${h.inLog ? fmt(h.logPcs) : '—'}</td>
-        <td class="num col-hethong">${h.inSys ? fmt(h.sysPcs) : '—'}</td>
-        <td class="num col-sotay">${h.inLog ? fmt(h.logCtn) : '—'}</td>
-        <td><span class="status-badge ${h.status}">${STATUS_LABEL[h.status]}</span></td>
-        <td>${escHtml(new Date(h.savedAt).toLocaleString('vi-VN'))}</td>
-        <td><button type="button" class="del-btn" data-key="${escHtml(h.key)}" title="Xoá khỏi lịch sử">✕</button></td>
-      </tr>`).join('');
+    histGroupsEl.innerHTML = buildHistoryGroups(filtered).map(renderHistoryGroupHtml).join('');
   }
   const nMatch = filtered.filter(h => h.status === 'match').length;
   const nMismatch = filtered.filter(h => h.status === 'mismatch').length;
@@ -1071,13 +1124,22 @@ function renderHistory(){
     <span style="color:var(--violet);"><b>${fmt(nMissingLog)}</b> chưa ghi sổ tay</span>
   `;
 }
-histTbody.addEventListener('click', (e) => {
-  const btn = e.target.closest('.del-btn');
-  if(!btn) return;
-  if(!confirm('Xoá dòng này khỏi Lịch sử đã lưu?')) return;
-  savedHistory = savedHistory.filter(h => h.key !== btn.dataset.key);
-  saveHistoryData();
-  renderHistory();
+histGroupsEl.addEventListener('click', (e) => {
+  const delBtn = e.target.closest('.del-btn');
+  if(delBtn){
+    if(!confirm('Xoá dòng này khỏi Lịch sử đã lưu?')) return;
+    savedHistory = savedHistory.filter(h => h.key !== delBtn.dataset.key);
+    saveHistoryData();
+    renderHistory();
+    return;
+  }
+  const header = e.target.closest('.hist-group-header');
+  if(header){
+    const key = header.dataset.key;
+    if(expandedHistoryGroups.has(key)) expandedHistoryGroups.delete(key);
+    else expandedHistoryGroups.add(key);
+    renderHistory();
+  }
 });
 histFilterKho.addEventListener('change', renderHistory);
 histFilterDate.addEventListener('change', renderHistory);
