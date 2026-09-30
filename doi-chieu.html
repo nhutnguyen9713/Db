@@ -999,9 +999,11 @@ function closeSysPopover(){
 function sysPopoverKeydown(e){ if(e.key === 'Escape') closeSysPopover(); }
 function showSysPopover(date, item, itemRaw){
   closeSysPopover();
+  // (a.time||'') đề phòng dữ liệu txReceiveData cũ còn lưu trong localStorage từ TRƯỚC khi có trường
+  // "time" (bản cũ của trang) — không chặn popover mở lên chỉ vì thiếu trường này ở dữ liệu cũ.
   const sysRows = (txReceiveData && txReceiveData.rows ? txReceiveData.rows : [])
     .filter(row => row.kho === activeKho && row.dateKey === date && row.item === item)
-    .sort((a,b) => a.time.localeCompare(b.time));
+    .sort((a,b) => (a.time||'').localeCompare(b.time||''));
   const totalQty = sysRows.reduce((s,row) => s + row.qty, 0);
   const backdrop = document.createElement('div');
   backdrop.className = 'sys-popover-backdrop';
