@@ -67,6 +67,7 @@
   .table-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:10px; margin-top:14px;}
   table.dt{width:100%; border-collapse:collapse; font-size:12.5px; min-width:560px;}
   table.dt thead th{padding:8px 10px; background:var(--panel-2); color:var(--muted); font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; text-align:left; white-space:nowrap; border-bottom:1px solid var(--line);}
+  #stage-table thead th{text-align:center;}
   table.dt tbody td{padding:7px 10px; border-top:1px solid var(--line-soft); font-family:var(--mono); white-space:nowrap;}
   table.dt tbody tr:hover{background:var(--panel-2);}
   table.dt td.num{text-align:right;}
@@ -130,12 +131,12 @@
 
   <div class="panel" id="entry-panel">
     <h2><span class="step">2</span>Nhập sổ nhận hàng (thủ công) — <span id="entry-panel-kho"></span></h2>
-    <div class="hint">Ghi lại đúng như sổ tay tại kho — mỗi dòng là 1 lượt nhận hàng của 1 mã hàng trong 1 ca. Nhập xong nhiều dòng rồi bấm "Xác nhận tất cả" 1 lần (không cần xác nhận từng dòng). Dùng phím <b>↑ ↓</b> để di chuyển lên/xuống giữa các dòng (cùng cột), <b>← →</b> để di chuyển giữa các ô trong 1 dòng, <b>Enter</b> để xuống dòng — xuống ở dòng cuối cùng sẽ tự thêm 1 dòng trống mới. Các dòng vừa nhập thuộc đúng kho đang chọn ở tab phía trên. Ca Ngày: 7h sáng – 7h tối; Ca Đêm: 7h tối – 7h sáng hôm sau (0h–7h sáng vẫn tính là ca đêm của <b>ngày hôm trước</b>, không phải ngày mới) — Ngày/Ca mặc định tự chọn theo giờ hiện tại, có thể đổi lại tay.</div>
+    <div class="hint">Ghi lại đúng như sổ tay tại kho — mỗi dòng là 1 lượt nhận hàng của 1 mã hàng trong 1 ca. Nhập xong nhiều dòng rồi bấm "Xác nhận tất cả" 1 lần (không cần xác nhận từng dòng). Dùng phím <b>↑ ↓</b> để di chuyển lên/xuống giữa các dòng (cùng cột), <b>← →</b> để di chuyển giữa các ô trong 1 dòng, <b>Enter</b> để xuống dòng — xuống ở dòng cuối cùng sẽ tự thêm 1 dòng mới (giữ nguyên Ngày/Ca của dòng trước) và đưa con trỏ thẳng vào ô Item để gõ tiếp. Sửa Ngày/Ca ở dòng nào thì các dòng thêm sau đó cũng lấy đúng Ngày/Ca vừa sửa. Các dòng vừa nhập thuộc đúng kho đang chọn ở tab phía trên. Ca Ngày: 7h sáng – 7h tối; Ca Đêm: 7h tối – 7h sáng hôm sau (0h–7h sáng vẫn tính là ca đêm của <b>ngày hôm trước</b>, không phải ngày mới) — Ngày/Ca mặc định tự chọn theo giờ hiện tại, có thể đổi lại tay.</div>
     <div class="table-scroll">
       <table class="dt stage-table" id="stage-table">
         <thead><tr>
           <th>Ngày</th><th>Ca</th><th>Item</th>
-          <th style="text-align:right">SL Pallet</th><th style="text-align:right">SL Ctn</th><th style="text-align:right">SL Pcs</th>
+          <th>SL Pallet</th><th>SL Ctn</th><th>SL Pcs</th>
           <th></th>
         </tr></thead>
         <tbody id="stage-tbody"></tbody>
@@ -518,6 +519,14 @@ function emptyStageRow(){
   const s = shiftInfo(new Date());
   return { date: s.dateKey, shift: s.shift, item: '', pallet: '', ctn: '', pcs: '' };
 }
+// Dòng mới thêm tiếp theo -> kế thừa Ngày/Ca của dòng NGAY TRƯỚC ĐÓ (thường cả lượt nhập chung 1
+// ngày/1 ca, chỉ Item/số lượng khác nhau) thay vì luôn quay về giờ hiện tại — nếu người dùng vừa sửa
+// Ngày/Ca ở dòng đó thì các dòng thêm sau sẽ giữ đúng giá trị vừa sửa.
+function nextStageRow(rows){
+  const last = rows[rows.length - 1];
+  if(last) return { date: last.date, shift: last.shift, item: '', pallet: '', ctn: '', pcs: '' };
+  return emptyStageRow();
+}
 function loadStage(){
   try{
     const raw = JSON.parse(localStorage.getItem(LS_STAGE_KEY) || 'null');
@@ -586,8 +595,9 @@ stageTbody.addEventListener('click', (e) => {
   const rowIdx = Number(btn.dataset.row);
   const rows = currentStageRows();
   if(rows.length <= 1){
-    // Chỉ còn 1 dòng -> xoá trắng nội dung thay vì xoá cả dòng (luôn giữ ít nhất 1 dòng để nhập tiếp).
-    rows[0] = emptyStageRow();
+    // Chỉ còn 1 dòng -> xoá trắng Item/số lượng nhưng GIỮ NGUYÊN Ngày/Ca đang chọn (không mất công chọn
+    // lại), luôn giữ ít nhất 1 dòng để nhập tiếp.
+    rows[0] = { date: rows[0].date, shift: rows[0].shift, item: '', pallet: '', ctn: '', pcs: '' };
   } else {
     rows.splice(rowIdx, 1);
   }
@@ -596,9 +606,10 @@ stageTbody.addEventListener('click', (e) => {
 
 // Điều hướng bằng phím — theo đúng yêu cầu: mũi tên di chuyển qua lại giữa các ô, không xác nhận
 // từng dòng. ↑/↓: cùng cột, đổi dòng. ←/→: cùng dòng, đổi cột (thứ tự STAGE_FIELDS). Enter coi như ↓.
-// ArrowDown/Enter ở dòng CUỐI CÙNG luôn tự thêm 1 dòng trống mới rồi chuyển focus vào đó, để nhập liên
-// tục nhiều dòng không cần bấm nút "+ Thêm dòng trống". Không xét vị trí con trỏ trong ô (đơn giản, dễ
-// đoán) — mũi tên LUÔN đổi ô/dòng, không di chuyển con trỏ bên trong nội dung đang gõ.
+// ArrowDown/Enter ở dòng CUỐI CÙNG luôn tự THÊM 1 dòng mới (kế thừa Ngày/Ca của dòng trước) rồi chuyển
+// con trỏ LUÔN về ô Item của dòng mới đó (không theo cột đang gõ) — vì mỗi dòng mới thường chỉ cần gõ
+// tiếp Item/số lượng, Ngày/Ca đã có sẵn. Không xét vị trí con trỏ trong ô (đơn giản, dễ đoán) — mũi tên
+// LUÔN đổi ô/dòng, không di chuyển con trỏ bên trong nội dung đang gõ.
 stageTbody.addEventListener('keydown', (e) => {
   const el = e.target.closest('[data-row][data-field]');
   if(!el) return;
@@ -614,11 +625,12 @@ stageTbody.addEventListener('keydown', (e) => {
   if(e.key === 'ArrowDown' || e.key === 'Enter'){
     e.preventDefault();
     readStageRowFromDom(rowIdx);
-    if(rowIdx === rows.length - 1){
-      rows.push(emptyStageRow());
+    const isNewRow = rowIdx === rows.length - 1;
+    if(isNewRow){
+      rows.push(nextStageRow(rows));
       renderStageTable();
     }
-    focusStageCell(rowIdx + 1, field);
+    focusStageCell(rowIdx + 1, isNewRow ? 'item' : field);
     return;
   }
   if(e.key === 'ArrowLeft'){
@@ -632,9 +644,10 @@ stageTbody.addEventListener('keydown', (e) => {
 });
 
 document.getElementById('btn-stage-add-row').addEventListener('click', () => {
-  currentStageRows().push(emptyStageRow());
+  const rows = currentStageRows();
+  rows.push(nextStageRow(rows));
   renderStageTable();
-  focusStageCell(currentStageRows().length - 1, 'date');
+  focusStageCell(rows.length - 1, 'item');
 });
 
 // Xác nhận theo LƯỢT: đọc toàn bộ các dòng đang nhập, lưu tất cả dòng HỢP LỆ vào sổ 1 lần. Dòng trống
@@ -673,8 +686,10 @@ document.getElementById('btn-stage-confirm').addEventListener('click', () => {
   if(valid.length){ logEntries.push(...valid); saveLog(logEntries); }
   formError.textContent = errs.length ? `Đã xác nhận ${valid.length} dòng hợp lệ. Còn ${errs.length} dòng cần sửa lại — ${errs.join(' ')}` : '';
 
-  // Chỉ giữ lại các dòng LỖI (để sửa tiếp) + luôn có 1 dòng trống ở cuối để nhập mới.
-  stagedRows[activeKho] = remaining.length ? remaining.concat([emptyStageRow()]) : [emptyStageRow()];
+  // Chỉ giữ lại các dòng LỖI (để sửa tiếp) + luôn có 1 dòng trống ở cuối để nhập mới, kế thừa đúng
+  // Ngày/Ca của lượt vừa xác nhận (thường nhập tiếp cùng ngày/ca).
+  const freshRow = nextStageRow(rows);
+  stagedRows[activeKho] = remaining.length ? remaining.concat([freshRow]) : [freshRow];
   renderStageTable();
   renderLog();
   renderReconcile();
