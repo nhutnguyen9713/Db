@@ -3427,9 +3427,6 @@ function togglePickedManual(type, cNo, loadDate, planTime){
   saveStateToStorage();
   scheduleAutoSaveToCloud('contoverride', [STORAGE_KEY_MANUAL_PICKED], 'Đánh dấu Pick xong tay');
   renderPlanPanel(); // vẽ lại cả bảng so sánh SL Plan vs Tồn kho để cập nhật ngay, không trễ nhịp
-  if(typeof renderKioskPage === 'function' && document.getElementById('page-kiosk') && document.getElementById('page-kiosk').style.display !== 'none'){
-    renderKioskPage();
-  }
   if(typeof renderAlertsPanel === 'function') renderAlertsPanel();
 }
 
@@ -9345,107 +9342,6 @@ if(pickSlipToggleViewBtn) pickSlipToggleViewBtn.addEventListener('click', toggle
 const pickSlipOverlayEl = document.getElementById('pick-slip-overlay');
 if(pickSlipOverlayEl) pickSlipOverlayEl.addEventListener('click', (e) => { if(e.target === pickSlipOverlayEl) closePickSlip(); });
 
-/* ============ Màn hình kho — chỉ hiện container cần load HÔM NAY, chữ to cho xem trên điện thoại ============ */
-const KIOSK_WEEKDAY_VI = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
-function kioskTodayDDMMYYYY(){
-  const d = new Date();
-  const p = n => String(n).padStart(2, '0');
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
-}
-function kioskParseTimeToMinutes(t){
-  const m = String(t || '').match(/^(\d{1,2}):(\d{2})/);
-  return m ? Number(m[1]) * 60 + Number(m[2]) : 99999;
-}
-
-function renderKioskPage(){
-  const listEl = document.getElementById('kiosk-list');
-  const summaryEl = document.getElementById('kiosk-summary');
-  const dateEl = document.getElementById('kiosk-date');
-  if(!listEl) return;
-
-  if(typeof renderContainerPickingOverview === 'function') renderContainerPickingOverview();
-
-  const todayStr = kioskTodayDDMMYYYY();
-  const now = new Date();
-  if(dateEl) dateEl.textContent = `${KIOSK_WEEKDAY_VI[now.getDay()]}, ${todayStr}`;
-
-  // Hiện ĐẦY ĐỦ container như bảng thống kê (không chỉ lọc riêng hôm nay) — sắp theo ngày giờ load
-  // tăng dần, giống mặc định của bảng thống kê Picking Status.
-  const todays = (contPickAllRows || [])
-    .slice()
-    .sort((a, b) => ovParseDateTimeSortKey(a.loadDate, a.planTime) - ovParseDateTimeSortKey(b.loadDate, b.planTime));
-
-  const notStarted = todays.filter(r => r.status === 'notStarted').length;
-  const inProgress = todays.filter(r => r.status === 'inProgress').length;
-  const done = todays.filter(r => r.status === 'done').length;
-
-  if(summaryEl){
-    summaryEl.innerHTML = `
-      <div class="kiosk-kpi"><div class="kiosk-kpi-val">${fmt(todays.length)}</div><div class="kiosk-kpi-label">TỔNG CONTAINER</div></div>
-      <div class="kiosk-kpi bad"><div class="kiosk-kpi-val">${fmt(notStarted)}</div><div class="kiosk-kpi-label">CHƯA PICK</div></div>
-      <div class="kiosk-kpi warn"><div class="kiosk-kpi-val">${fmt(inProgress)}</div><div class="kiosk-kpi-label">ĐANG PICK</div></div>
-      <div class="kiosk-kpi good"><div class="kiosk-kpi-val">${fmt(done)}</div><div class="kiosk-kpi-label">PICK XONG</div></div>
-    `;
-  }
-
-  if(!todays.length){
-    listEl.innerHTML = `<div class="kiosk-empty">✓ Chưa có container nào trong Plan đã tải.</div>`;
-    return;
-  }
-
-  const KIOSK_KHO_COLORS = {'Kho 2B':'#2C6FCB','Kho 3A':'#6E4FE0','Kho 3B':'#0E8F76','Kho DG1':'#B76E00'};
-  listEl.innerHTML = todays.map(r => {
-    const shortHtml = (r.shortItems && r.shortItems.length)
-      ? `<div class="kiosk-card-warn">⚠ Thiếu ${fmt(r.shortItems.length)} mã: ${escHtml(r.shortItems.map(it => it.item).join(', '))}</div>`
-      : '';
-    const manualBtnLabel = r.isManual ? 'Bỏ đánh dấu' : 'Đánh dấu xong';
-    const manualBtnIcon = r.isManual
-      ? '<path d="M18 6 6 18"/><path d="M6 6l12 12"/>'
-      : '<path d="M20 6 9 17l-5-5"/>';
-    const khoColor = KIOSK_KHO_COLORS[r.topKho] || '#8A97AC';
-    const cardBgStyle = ` style="background:${hexToRgba(khoColor, 0.22)};"`;
-    return `<div class="kiosk-card lvl-${r.status}"${cardBgStyle}>
-      <div class="kiosk-card-cont">${escHtml(r.type)}-${escHtml(String(r.cNo))}</div>
-      <div class="kiosk-card-time"><div class="kiosk-card-loaddate">${escHtml(r.loadDate || '—')}</div>${escHtml(r.planTime)}</div>
-      <div class="kiosk-card-status" style="color:${CONT_PICK_STATUS_COLOR[r.status]}">${CONT_PICK_STATUS_LABEL[r.status]} · ${r.pct.toFixed(0)}%${r.isManual ? ' <span style="color:var(--muted-2); font-weight:400; font-size:13px;">(tồn kho thực: ' + r.autoPct.toFixed(0) + '%)</span>' : ''}</div>
-      <button type="button" class="kiosk-card-mark-btn${r.isManual ? ' marked' : ''}" data-mark-type="${escAttr(r.type)}" data-mark-cno="${escAttr(String(r.cNo))}" data-mark-loaddate="${escAttr(r.loadDateKey || '')}" data-mark-plantime="${escAttr(r.planTimeKey || '')}">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${manualBtnIcon}</svg>
-        ${manualBtnLabel}
-      </button>
-      <button type="button" class="kiosk-card-pick-btn" data-pick-type="${escAttr(r.type)}" data-pick-cno="${escAttr(String(r.cNo))}" data-pick-instance="${escAttr(r.instanceKey)}" title="Xem gợi ý pick hàng cho container này">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        Gợi ý pick
-      </button>
-      <div class="kiosk-card-meta">Invoice: ${escHtml(r.invoice)} &nbsp;·&nbsp; CR: ${escHtml(r.csr)}${r.topKho ? ` &nbsp;·&nbsp; Kho nhiều hàng nhất: <b style="color:${khoColor};">${escHtml(r.topKho.replace('Kho ', ''))}</b>` : ''}</div>
-      ${shortHtml}
-    </div>`;
-  }).join('');
-}
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('.kiosk-card-pick-btn');
-  if(btn){ openPickSlip(btn.dataset.pickType, btn.dataset.pickCno, btn.dataset.pickInstance); return; }
-  const markBtn = e.target.closest('.kiosk-card-mark-btn');
-  if(markBtn) togglePickedManual(markBtn.dataset.markType, markBtn.dataset.markCno, markBtn.dataset.markLoaddate, markBtn.dataset.markPlantime);
-});
-
-const kioskRefreshBtn = document.getElementById('kiosk-refresh-btn');
-if(kioskRefreshBtn) kioskRefreshBtn.addEventListener('click', async () => {
-  kioskRefreshBtn.classList.add('spinning');
-  try{
-    if(typeof CloudVault !== 'undefined' && CloudVault.url && CloudVault.token){
-      await CloudVault.readAll();
-    }
-    renderKioskPage();
-  }catch(e){ console.warn('Làm mới Màn hình kho lỗi:', e); }
-  finally{ kioskRefreshBtn.classList.remove('spinning'); }
-});
-// Tự làm mới mỗi 60 giây (không gọi mạng, chỉ vẽ lại từ dữ liệu hiện có) — phòng khi màn hình
-// được để mở cả ngày ở khu vực kho mà không ai đụng vào.
-setInterval(() => {
-  const pageEl = document.getElementById('page-kiosk');
-  if(pageEl && pageEl.style.display !== 'none') renderKioskPage();
-}, 60000);
-
 
 function fmtShortDate(isoDate){
   const parts = String(isoDate || '').split('-');
@@ -12568,7 +12464,6 @@ const pageKiemTonEl = document.getElementById('page-kiemton');
 const pageSodo3bEl = document.getElementById('page-sodo3b');
 const pageTransactionEl = document.getElementById('page-transaction');
 const pageCompareEl = document.getElementById('page-compare');
-const pageKioskEl = document.getElementById('page-kiosk');
 document.querySelectorAll('.sidebar-nav-btn[data-page]').forEach(btn => {
   btn.addEventListener('click', () => {
     const page = btn.dataset.page;
@@ -12580,7 +12475,6 @@ document.querySelectorAll('.sidebar-nav-btn[data-page]').forEach(btn => {
     if(pageSodo3bEl) pageSodo3bEl.style.display = page === 'sodo3b' ? '' : 'none';
     if(pageTransactionEl) pageTransactionEl.style.display = page === 'transaction' ? '' : 'none';
     if(pageCompareEl) pageCompareEl.style.display = page === 'compare' ? '' : 'none';
-    if(pageKioskEl) pageKioskEl.style.display = page === 'kiosk' ? '' : 'none';
     if(page === 'search'){
       renderKhoSearchPage();
       if(searchCtrlMain) setTimeout(() => searchCtrlMain.focus(), 50);
@@ -12592,9 +12486,6 @@ document.querySelectorAll('.sidebar-nav-btn[data-page]').forEach(btn => {
     }
     if(page === 'sodo3b'){
       renderSodo3B();
-    }
-    if(page === 'kiosk'){
-      if(typeof renderKioskPage === 'function') renderKioskPage();
     }
     updateSearchFabVisibility();
   });
