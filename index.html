@@ -1474,6 +1474,20 @@ function gateBustedUrl(base){
       </details>
     </div>
 
+    <div class="panel search-panel" id="tx-panel-rework" style="margin-top:16px; border-color:var(--teal);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--teal);box-shadow:0 0 8px var(--teal);"></span>REWORK</div>
+          <h1 style="font-size:17px;">Hàng Rework — Có Xuất và Nhận</h1>
+          <div class="sub" style="margin-top:2px;">Chuyển pallet đi/về vị trí Rework (locator có hậu tố "PROD") — <b>Xuất</b>: từ vị trí bất kỳ đến vị trí PROD (trừ SL ở kho xuất, cộng SL ở PROD); <b>Nhập</b>: từ vị trí PROD về vị trí bất kỳ (trừ SL ở PROD, cộng SL ở kho nhận) — toàn bộ file.</div>
+        </div>
+      </div>
+      <div class="tx-sum-subhead">↗ Xuất — chuyển đến vị trí PROD</div>
+      <div class="tx-sum-grid" id="tx-rework-xuat-sumgrid"></div>
+      <div class="tx-sum-subhead" style="margin-top:14px;">↙ Nhập — chuyển từ vị trí PROD về</div>
+      <div class="tx-sum-grid" id="tx-rework-nhap-sumgrid"></div>
+    </div>
+
     <div class="panel search-panel" id="tx-panel-picking" style="margin-top:16px; border-color:var(--violet);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
         <div>

@@ -1754,6 +1754,7 @@
 
   /* ===== Trang Thống kê Transaction: bảng TỔNG HỢP (theo kho / người / container) ===== */
   .tx-sum-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; margin-bottom:10px;}
+  .tx-sum-subhead{font-size:11.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin:4px 0 8px;}
   .tx-sum-card{border:1px solid var(--line); border-radius:10px; background:var(--panel-2); overflow:hidden; display:flex; flex-direction:column; min-width:0;}
   .tx-sum-card h3{margin:0; padding:9px 12px; font-size:11.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:8px;}
   .tx-sum-badge{font-weight:600; letter-spacing:0; text-transform:none; color:var(--muted-2);}

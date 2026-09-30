@@ -14034,9 +14034,87 @@ function renderTxSummaries(){
   });
 }
 
+// ============ Hàng Rework (Có Xuất và Nhận) — locator hậu tố "PROD" ============
+// Dùng LẠI đúng cách tách locator Xuất/Đến + SL của txDescribeSet() cho TỪNG giao dịch gốc (trước khi
+// gộp nhóm) — KHÔNG dùng lại txState.transfer (đã gộp theo Kho xuất+Item+Locator đến+User+Reference,
+// bỏ qua Locator xuất) vì 1 dòng gộp có thể lẫn cả giao dịch liên quan PROD lẫn không liên quan, không
+// tách đúng Xuất/Nhập được nữa sau khi đã gộp.
+function txLocatorHasProdSuffix(locator){
+  return /PROD$/i.test(String(locator || '').trim());
+}
+function txBuildReworkSummaries(records){
+  const locatorKhoMap = buildLocatorKhoMap();
+  const mk = () => ({ byKho: new Map(), byUser: new Map() });
+  const out = { xuat: mk(), nhap: mk() };
+  const bump = (map, key, qty, user, kho) => {
+    let e = map.get(key);
+    if(!e){ e = { key, count: 0, qty: 0, users: new Set(), khos: new Set() }; map.set(key, e); }
+    e.count++;
+    e.qty += qty;
+    if(user) e.users.add(user);
+    if(kho && kho !== '—') e.khos.add(kho);
+  };
+  for(const group of txGroupBySetId(records || [])){
+    const d = txDescribeSet(group, locatorKhoMap);
+    if(!d.locatorXuat || !d.locatorDen) continue; // cần đủ cả 2 đầu mới coi là 1 lượt chuyển thật
+    const xuatIsProd = txLocatorHasProdSuffix(d.locatorXuat);
+    const denIsProd = txLocatorHasProdSuffix(d.locatorDen);
+    if(denIsProd && !xuatIsProd){
+      // XUẤT: từ vị trí bất kỳ -> PROD. "Kho" = kho của vị trí xuất (vị trí bất kỳ, nơi hàng rời đi).
+      const kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap);
+      bump(out.xuat.byKho, kho || '—', d.qty, d.user, null);
+      bump(out.xuat.byUser, d.user || '—', d.qty, null, kho);
+    } else if(xuatIsProd && !denIsProd){
+      // NHẬP: từ PROD -> vị trí bất kỳ. "Kho" = kho của vị trí đến (vị trí bất kỳ, nơi hàng về).
+      const kho = resolveKhoForLocator(d.locatorDen, locatorKhoMap);
+      bump(out.nhap.byKho, kho || '—', d.qty, d.user, null);
+      bump(out.nhap.byUser, d.user || '—', d.qty, null, kho);
+    }
+    // Cả 2 đầu đều PROD hoặc đều không phải PROD -> không liên quan tới Rework, bỏ qua.
+  }
+  return out;
+}
+function renderTxReworkSummaries(){
+  const grids = { xuat: document.getElementById('tx-rework-xuat-sumgrid'), nhap: document.getElementById('tx-rework-nhap-sumgrid') };
+  if(!grids.xuat && !grids.nhap) return;
+  if(!txState || !txState.records){
+    Object.values(grids).forEach(g => { if(g) g.innerHTML = '<div class="tx-sum-empty">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>'; });
+    return;
+  }
+  const sum = txBuildReworkSummaries(txState.records);
+  const byCountDesc = (a, b) => (b.count - a.count) || String(a.key).localeCompare(String(b.key), 'vi', { numeric: true });
+  const joinSet = s => [...s].sort().join(', ') || '—';
+  ['xuat', 'nhap'].forEach(dir => {
+    const grid = grids[dir];
+    if(!grid) return;
+    const s = sum[dir];
+    const khoRows = [...s.byKho.values()].sort(byCountDesc);
+    const userRows = [...s.byUser.values()].sort(byCountDesc);
+    if(!khoRows.length){
+      grid.innerHTML = '<div class="tx-sum-empty">Không có giao dịch Rework loại này trong file.</div>';
+      return;
+    }
+    const totalCount = khoRows.reduce((t, r) => t + r.count, 0);
+    const totalQty = khoRows.reduce((t, r) => t + r.qty, 0);
+    let html = txSumCardHtml('Theo kho', `${fmt(khoRows.length)} kho`, khoRows, [
+      { label: 'Kho', get: r => r.key },
+      { label: 'Lượt', get: r => fmt(r.count), num: true },
+      { label: 'SL', get: r => fmt(r.qty), num: true },
+    ], ['Tổng', fmt(totalCount), fmt(totalQty)]);
+    html += txSumCardHtml('Theo người thao tác', `${fmt(userRows.length)} người`, userRows, [
+      { label: 'Người', get: r => r.key },
+      { label: 'Kho', get: r => joinSet(r.khos) },
+      { label: 'Lượt', get: r => fmt(r.count), num: true },
+      { label: 'SL', get: r => fmt(r.qty), num: true },
+    ], ['Tổng', '', fmt(totalCount), fmt(totalQty)]);
+    grid.innerHTML = html;
+  });
+}
+
 function renderTransactionPage(){
   renderTxKpiStrip();
   renderTxSummaries();
+  renderTxReworkSummaries();
   renderTxTable('receive');
   renderTxTable('transfer');
   renderTxTable('picking');
