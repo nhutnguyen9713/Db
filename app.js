@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.17';
+const APP_VERSION = 'v3.18';
 const APP_VERSION_DATE = '02/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13309,7 +13309,7 @@ function txDescribeSet(group, locatorKhoMap){
   const isPicking = menuLower.startsWith('pick(') || menuLower === 'pick order';
   const reference = first.reference || (negRow && negRow.reference) || (posRow && posRow.reference) || '';
   // GI No. (số pallet) — cùng 1 GI No. ở cả 2 dòng xuất/nhập của 1 giao dịch (cùng 1 pallet), dùng để
-  // chặn gian lận đếm trùng ở Put Away (xem txDedupePutAwayByGi()). Trống nếu file Transaction không
+  // chặn gian lận đếm trùng ở Put Away/Lên-Xuống (xem txDedupeByGiEarliest()). Trống nếu file Transaction không
   // có cột này (không bắt buộc).
   const gi = txNorm(first.gi || (negRow && negRow.gi) || (posRow && posRow.gi) || '');
   let kind = null, kho = '—';
@@ -14170,6 +14170,29 @@ function renderTxReworkSummaries(){
 function txLocatorHasMezzaninePrefix(locator){
   return /^3AFG/i.test(String(locator || '').trim());
 }
+// Menu Name KHÔNG tính vào Lên/Xuống — "Put Away" (đúng tên menu hệ thống) không phải nghiệp vụ di
+// chuyển lên/xuống khu lầu thật, theo yêu cầu người dùng xác nhận trực tiếp (không phải suy đoán).
+function txUpDownIsExcludedMenuName(menuName){
+  return String(menuName || '').toLowerCase() === 'put away';
+}
+// Gom các giao dịch Lên/Xuống hợp lệ (đã lọc locator/Menu Name) RỒI mới khử trùng theo GI No. (chặn
+// gian lận quét lặp lại cùng 1 pallet nhiều lần — xem txDedupeByGiEarliest()) — dùng CHUNG cho cả bảng
+// tổng hợp lẫn bảng chi tiết để 2 nơi luôn khớp số liệu với nhau.
+function txCollectUpDownCandidates(records){
+  const locatorKhoMap = buildLocatorKhoMap();
+  const upList = [], downList = [];
+  for(const group of txGroupBySetId(records || [])){
+    const d = txDescribeSet(group, locatorKhoMap);
+    if(!d.locatorXuat || !d.locatorDen) continue; // cần đủ cả 2 đầu mới coi là 1 lượt chuyển thật
+    if(txUpDownIsExcludedMenuName(d.menuName)) continue;
+    const xuatIsMezz = txLocatorHasMezzaninePrefix(d.locatorXuat);
+    const denIsMezz = txLocatorHasMezzaninePrefix(d.locatorDen);
+    if(denIsMezz && !xuatIsMezz) upList.push(d);
+    else if(xuatIsMezz && !denIsMezz) downList.push(d);
+    // Cả 2 đầu đều 3AFG hoặc đều không phải 3AFG -> không liên quan Lên/Xuống, bỏ qua.
+  }
+  return { up: txDedupeByGiEarliest(upList), down: txDedupeByGiEarliest(downList) };
+}
 function txBuildUpDownSummaries(records){
   const locatorKhoMap = buildLocatorKhoMap();
   const mk = () => ({ byKho: new Map(), byUser: new Map() });
@@ -14182,24 +14205,19 @@ function txBuildUpDownSummaries(records){
     if(user) e.users.add(user);
     if(kho && kho !== '—') e.khos.add(kho);
   };
-  for(const group of txGroupBySetId(records || [])){
-    const d = txDescribeSet(group, locatorKhoMap);
-    if(!d.locatorXuat || !d.locatorDen) continue; // cần đủ cả 2 đầu mới coi là 1 lượt chuyển thật
-    const xuatIsMezz = txLocatorHasMezzaninePrefix(d.locatorXuat);
-    const denIsMezz = txLocatorHasMezzaninePrefix(d.locatorDen);
-    if(denIsMezz && !xuatIsMezz){
-      // LÊN: từ vị trí bất kỳ -> 3AFG. "Kho" = kho của vị trí xuất (vị trí bất kỳ, nơi hàng rời đi).
-      const kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap);
-      bump(out.up.byKho, kho || '—', d.qty, d.user, null);
-      bump(out.up.byUser, d.user || '—', d.qty, null, kho);
-    } else if(xuatIsMezz && !denIsMezz){
-      // XUỐNG: từ 3AFG -> vị trí bất kỳ. "Kho" LUÔN LÀ 3A (KHÔNG lấy theo locator đến) — vì muốn qua
-      // được kho khác (vd 2B) thì hàng bắt buộc phải xuống lầu (khu 3AFG) về kho 3A TRƯỚC, đây là
-      // domain-knowledge người dùng xác nhận trực tiếp, không phải suy đoán.
-      bump(out.down.byKho, '3A', d.qty, d.user, null);
-      bump(out.down.byUser, d.user || '—', d.qty, null, '3A');
-    }
-    // Cả 2 đầu đều 3AFG hoặc đều không phải 3AFG -> không liên quan Lên/Xuống, bỏ qua.
+  const candidates = txCollectUpDownCandidates(records);
+  // LÊN: từ vị trí bất kỳ -> 3AFG. "Kho" = kho của vị trí xuất (vị trí bất kỳ, nơi hàng rời đi).
+  for(const d of candidates.up){
+    const kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap);
+    bump(out.up.byKho, kho || '—', d.qty, d.user, null);
+    bump(out.up.byUser, d.user || '—', d.qty, null, kho);
+  }
+  // XUỐNG: từ 3AFG -> vị trí bất kỳ. "Kho" LUÔN LÀ 3A (KHÔNG lấy theo locator đến) — vì muốn qua được
+  // kho khác (vd 2B) thì hàng bắt buộc phải xuống lầu (khu 3AFG) về kho 3A TRƯỚC, đây là domain-
+  // knowledge người dùng xác nhận trực tiếp, không phải suy đoán.
+  for(const d of candidates.down){
+    bump(out.down.byKho, '3A', d.qty, d.user, null);
+    bump(out.down.byUser, d.user || '—', d.qty, null, '3A');
   }
   return out;
 }
@@ -14270,21 +14288,16 @@ function txBuildReworkDetailRows(records){
 function txBuildUpDownDetailRows(records){
   const locatorKhoMap = buildLocatorKhoMap();
   const upMap = new Map(), downMap = new Map();
-  for(const group of txGroupBySetId(records || [])){
-    const d = txDescribeSet(group, locatorKhoMap);
-    if(!d.locatorXuat || !d.locatorDen) continue;
-    const xuatIsMezz = txLocatorHasMezzaninePrefix(d.locatorXuat);
-    const denIsMezz = txLocatorHasMezzaninePrefix(d.locatorDen);
-    let map, kho;
-    if(denIsMezz && !xuatIsMezz){ map = upMap; kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap); }
-    // XUỐNG: "Kho nhận" LUÔN LÀ 3A (không lấy theo locator đến) — xem giải thích ở txBuildUpDownSummaries().
-    else if(xuatIsMezz && !denIsMezz){ map = downMap; kho = '3A'; }
-    else continue;
+  const candidates = txCollectUpDownCandidates(records);
+  const addRow = (map, d, kho) => {
     const key = [kho, d.menuName, d.item, d.locatorXuat, d.locatorDen, d.user].join('||');
     const cur = map.get(key);
     if(cur){ cur.total++; cur.qty += d.qty; }
     else map.set(key, { khoXuat: kho || '—', menuName: d.menuName, item: d.item, locatorXuat: d.locatorXuat, locatorDen: d.locatorDen, user: d.user, qty: d.qty, total: 1 });
-  }
+  };
+  for(const d of candidates.up) addRow(upMap, d, resolveKhoForLocator(d.locatorXuat, locatorKhoMap));
+  // XUỐNG: "Kho nhận" LUÔN LÀ 3A (không lấy theo locator đến) — xem giải thích ở txBuildUpDownSummaries().
+  for(const d of candidates.down) addRow(downMap, d, '3A');
   return { up: [...upMap.values()], down: [...downMap.values()] };
 }
 
@@ -14299,12 +14312,12 @@ function txLocatorIsStagingTG(locator){
 // trí lưu trữ thật), "Put Away" (đúng tên menu hệ thống) cũng KHÔNG tính — theo yêu cầu người dùng xác
 // nhận trực tiếp (không phải suy đoán), dù tên trùng với tên tính năng.
 const TX_PUTAWAY_EXCLUDED_MENU_NAMES = new Set(['pick(csr)', 'itn transfer', 'put away']);
-// Chặn gian lận đếm trùng: cùng 1 GI No. (1 pallet) có thể bị quét qua FG-TG nhiều lần (vd xuất ra vị
-// trí khác rồi quét lại vào FG-TG để "cất" thêm 1 lần nữa) — chỉ tính đúng 1 LƯỢT Put Away duy nhất
-// cho mỗi GI No., giữ lại lượt SỚM NHẤT theo thời gian, bỏ các lượt lặp lại sau đó. Dòng không có GI
-// No. (file Transaction không có cột này) không gộp được theo pallet nên vẫn giữ nguyên, tính riêng
-// từng dòng như trước (không coi là trùng).
-function txDedupePutAwayByGi(list){
+// Chặn gian lận đếm trùng (DÙNG CHUNG cho cả Put Away lẫn Lên/Xuống): cùng 1 GI No. (1 pallet) có thể
+// bị quét qua FG-TG/khu lầu 3AFG nhiều lần (vd xuất ra vị trí khác rồi quét lại để "cất"/"chuyển" thêm
+// 1 lần nữa) — chỉ tính đúng 1 LƯỢT duy nhất cho mỗi GI No., giữ lại lượt SỚM NHẤT theo thời gian, bỏ
+// các lượt lặp lại sau đó. Dòng không có GI No. (file Transaction không có cột này) không gộp được
+// theo pallet nên vẫn giữ nguyên, tính riêng từng dòng như trước (không coi là trùng).
+function txDedupeByGiEarliest(list){
   const byGi = new Map(); // gi -> d giữ lại (sớm nhất theo dt)
   const noGi = [];
   for(const d of list){
@@ -14332,7 +14345,7 @@ function txCollectPutAwayCandidates(records, masterMap){
     if(TX_PUTAWAY_EXCLUDED_MENU_NAMES.has(String(d.menuName || '').toLowerCase())) continue;
     out.push(d);
   }
-  return txDedupePutAwayByGi(out);
+  return txDedupeByGiEarliest(out);
 }
 function txBuildPutAwaySummaries(records, masterMap){
   const locatorKhoMap = buildLocatorKhoMap();
