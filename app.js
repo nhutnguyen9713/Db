@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.12';
+const APP_VERSION = 'v3.13';
 const APP_VERSION_DATE = '02/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -14289,7 +14289,11 @@ function txBuildUpDownDetailRows(records){
 function txLocatorIsStagingTG(locator){
   return /FG-TG$/i.test(String(locator || '').trim());
 }
-function txBuildPutAwaySummaries(records){
+// Menu Name KHÔNG tính vào Put Away (dù locator khớp "FG-TG") — "Pick(CSR)" là thao tác pick cont
+// (hàng rời khỏi kho, không phải cất hàng), "ITN Transfer" là chuyển đi khu ITN (không phải cất về vị
+// trí lưu trữ thật) — cả 2 đều không phải nghiệp vụ "cất hàng" thật sự.
+const TX_PUTAWAY_EXCLUDED_MENU_NAMES = new Set(['pick(csr)', 'itn transfer']);
+function txBuildPutAwaySummaries(records, masterMap){
   const locatorKhoMap = buildLocatorKhoMap();
   const byKho = new Map(), byUser = new Map();
   const bump = (map, key, qty, user, kho) => {
@@ -14306,6 +14310,10 @@ function txBuildPutAwaySummaries(records){
     const xuatIsTG = txLocatorIsStagingTG(d.locatorXuat);
     const denIsTG = txLocatorIsStagingTG(d.locatorDen);
     if(!xuatIsTG || denIsTG) continue; // chỉ tính từ TG -> vị trí thật (không tính TG -> TG hay chiều ngược lại)
+    // Nhân sự SHIP (đánh dấu "SHIP" trong bảng Master) không tính vào Put Away — xem giải thích ở
+    // txBuildStatsFromRecords() (áp dụng cùng quy ước với Pick cont).
+    if(masterMap && masterMap[d.user] === 'SHIP') continue;
+    if(TX_PUTAWAY_EXCLUDED_MENU_NAMES.has(String(d.menuName || '').toLowerCase())) continue;
     const kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap);
     bump(byKho, kho || '—', d.qty, d.user, null);
     bump(byUser, d.user || '—', d.qty, null, kho);
@@ -14319,7 +14327,7 @@ function renderTxPutAwaySummaries(){
     grid.innerHTML = '<div class="tx-sum-empty">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>';
     return;
   }
-  const s = txBuildPutAwaySummaries(txState.records);
+  const s = txBuildPutAwaySummaries(txState.records, txMasterMap);
   const byCountDesc = (a, b) => (b.count - a.count) || String(a.key).localeCompare(String(b.key), 'vi', { numeric: true });
   const joinSet = set => [...set].sort().join(', ') || '—';
   const khoRows = [...s.byKho.values()].sort(byCountDesc);
@@ -14345,13 +14353,15 @@ function renderTxPutAwaySummaries(){
 }
 // Dòng chi tiết Put Away (cho bảng "Xem chi tiết từng dòng") — gộp nhóm giống hệt
 // txBuildReworkDetailRows()/txBuildUpDownDetailRows() nhưng chỉ 1 chiều.
-function txBuildPutAwayDetailRows(records){
+function txBuildPutAwayDetailRows(records, masterMap){
   const locatorKhoMap = buildLocatorKhoMap();
   const map = new Map();
   for(const group of txGroupBySetId(records || [])){
     const d = txDescribeSet(group, locatorKhoMap);
     if(!d.locatorXuat || !d.locatorDen) continue;
     if(!txLocatorIsStagingTG(d.locatorXuat) || txLocatorIsStagingTG(d.locatorDen)) continue;
+    if(masterMap && masterMap[d.user] === 'SHIP') continue;
+    if(TX_PUTAWAY_EXCLUDED_MENU_NAMES.has(String(d.menuName || '').toLowerCase())) continue;
     const kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap);
     const key = [kho, d.menuName, d.item, d.locatorXuat, d.locatorDen, d.user].join('||');
     const cur = map.get(key);
@@ -14374,7 +14384,7 @@ function renderTransactionPage(){
     const ud = txBuildUpDownDetailRows(txState.records);
     txState.updownUp = ud.up;
     txState.updownDown = ud.down;
-    txState.putaway = txBuildPutAwayDetailRows(txState.records);
+    txState.putaway = txBuildPutAwayDetailRows(txState.records, txMasterMap);
   }
   renderTxTable('receive');
   renderTxTable('transfer');
