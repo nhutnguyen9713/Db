@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.15';
+const APP_VERSION = 'v3.16';
 const APP_VERSION_DATE = '02/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -14292,8 +14292,9 @@ function txLocatorIsStagingTG(locator){
 }
 // Menu Name KHÔNG tính vào Put Away (dù locator khớp "FG-TG") — "Pick(CSR)" là thao tác pick cont
 // (hàng rời khỏi kho, không phải cất hàng), "ITN Transfer" là chuyển đi khu ITN (không phải cất về vị
-// trí lưu trữ thật) — cả 2 đều không phải nghiệp vụ "cất hàng" thật sự.
-const TX_PUTAWAY_EXCLUDED_MENU_NAMES = new Set(['pick(csr)', 'itn transfer']);
+// trí lưu trữ thật), "Put Away" (đúng tên menu hệ thống) cũng KHÔNG tính — theo yêu cầu người dùng xác
+// nhận trực tiếp (không phải suy đoán), dù tên trùng với tên tính năng.
+const TX_PUTAWAY_EXCLUDED_MENU_NAMES = new Set(['pick(csr)', 'itn transfer', 'put away']);
 function txBuildPutAwaySummaries(records, masterMap){
   const locatorKhoMap = buildLocatorKhoMap();
   const byKho = new Map(), byUser = new Map();
