@@ -14102,6 +14102,81 @@ function renderTxReworkSummaries(){
   });
 }
 
+// ============ Move Pallet Lên/Xuống khu lầu M1/M2 Kho 3A — locator có tiền tố "3AFG" ============
+// Dùng LẠI đúng cách tách locator Xuất/Đến của hàng Rework ở trên, chỉ khác điều kiện nhận diện: thay
+// vì xét HẬU TỐ "PROD" thì xét TIỀN TỐ "3AFG" (khu lầu M1/M2 Kho 3A — xem OV_3A_M1_CAPACITY_PER_LOC).
+function txLocatorHasMezzaninePrefix(locator){
+  return /^3AFG/i.test(String(locator || '').trim());
+}
+function txBuildUpDownSummaries(records){
+  const locatorKhoMap = buildLocatorKhoMap();
+  const mk = () => ({ byKho: new Map(), byUser: new Map() });
+  const out = { up: mk(), down: mk() };
+  const bump = (map, key, qty, user, kho) => {
+    let e = map.get(key);
+    if(!e){ e = { key, count: 0, qty: 0, users: new Set(), khos: new Set() }; map.set(key, e); }
+    e.count++;
+    e.qty += qty;
+    if(user) e.users.add(user);
+    if(kho && kho !== '—') e.khos.add(kho);
+  };
+  for(const group of txGroupBySetId(records || [])){
+    const d = txDescribeSet(group, locatorKhoMap);
+    if(!d.locatorXuat || !d.locatorDen) continue; // cần đủ cả 2 đầu mới coi là 1 lượt chuyển thật
+    const xuatIsMezz = txLocatorHasMezzaninePrefix(d.locatorXuat);
+    const denIsMezz = txLocatorHasMezzaninePrefix(d.locatorDen);
+    if(denIsMezz && !xuatIsMezz){
+      // LÊN: từ vị trí bất kỳ -> 3AFG. "Kho" = kho của vị trí xuất (vị trí bất kỳ, nơi hàng rời đi).
+      const kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap);
+      bump(out.up.byKho, kho || '—', d.qty, d.user, null);
+      bump(out.up.byUser, d.user || '—', d.qty, null, kho);
+    } else if(xuatIsMezz && !denIsMezz){
+      // XUỐNG: từ 3AFG -> vị trí bất kỳ. "Kho" = kho của vị trí đến (vị trí bất kỳ, nơi hàng về).
+      const kho = resolveKhoForLocator(d.locatorDen, locatorKhoMap);
+      bump(out.down.byKho, kho || '—', d.qty, d.user, null);
+      bump(out.down.byUser, d.user || '—', d.qty, null, kho);
+    }
+    // Cả 2 đầu đều 3AFG hoặc đều không phải 3AFG -> không liên quan Lên/Xuống, bỏ qua.
+  }
+  return out;
+}
+function renderTxUpDownSummaries(){
+  const grids = { up: document.getElementById('tx-updown-up-sumgrid'), down: document.getElementById('tx-updown-down-sumgrid') };
+  if(!grids.up && !grids.down) return;
+  if(!txState || !txState.records){
+    Object.values(grids).forEach(g => { if(g) g.innerHTML = '<div class="tx-sum-empty">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>'; });
+    return;
+  }
+  const sum = txBuildUpDownSummaries(txState.records);
+  const byCountDesc = (a, b) => (b.count - a.count) || String(a.key).localeCompare(String(b.key), 'vi', { numeric: true });
+  const joinSet = s => [...s].sort().join(', ') || '—';
+  ['up', 'down'].forEach(dir => {
+    const grid = grids[dir];
+    if(!grid) return;
+    const s = sum[dir];
+    const khoRows = [...s.byKho.values()].sort(byCountDesc);
+    const userRows = [...s.byUser.values()].sort(byCountDesc);
+    if(!khoRows.length){
+      grid.innerHTML = '<div class="tx-sum-empty">Không có giao dịch Lên/Xuống loại này trong file.</div>';
+      return;
+    }
+    const totalCount = khoRows.reduce((t, r) => t + r.count, 0);
+    const totalQty = khoRows.reduce((t, r) => t + r.qty, 0);
+    let html = txSumCardHtml('Theo kho', `${fmt(khoRows.length)} kho`, khoRows, [
+      { label: 'Kho', get: r => r.key },
+      { label: 'Lượt', get: r => fmt(r.count), num: true },
+      { label: 'SL', get: r => fmt(r.qty), num: true },
+    ], ['Tổng', fmt(totalCount), fmt(totalQty)]);
+    html += txSumCardHtml('Theo người thao tác', `${fmt(userRows.length)} người`, userRows, [
+      { label: 'Người', get: r => r.key },
+      { label: 'Kho', get: r => joinSet(r.khos) },
+      { label: 'Lượt', get: r => fmt(r.count), num: true },
+      { label: 'SL', get: r => fmt(r.qty), num: true },
+    ], ['Tổng', '', fmt(totalCount), fmt(totalQty)]);
+    grid.innerHTML = html;
+  });
+}
+
 // Dòng chi tiết Rework (cho bảng "Xem chi tiết từng dòng" + biểu đồ Grand Total) — gộp nhóm giống hệt
 // kiểu bảng Transfer (Kho + Menu Name + Item + Locator xuất + Locator đến + User), nhưng KHÔNG gộp
 // theo Reference/Chuyến vì Rework không có khái niệm đó. Field "khoXuat" dùng CHUNG cho cả Xuất lẫn
@@ -14131,6 +14206,7 @@ function renderTransactionPage(){
   renderTxKpiStrip();
   renderTxSummaries();
   renderTxReworkSummaries();
+  renderTxUpDownSummaries();
   if(txState){
     const rw = txBuildReworkDetailRows(txState.records);
     txState.reworkXuat = rw.xuat;

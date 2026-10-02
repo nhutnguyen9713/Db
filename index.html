@@ -1539,6 +1539,20 @@ function gateBustedUrl(base){
       </details>
     </div>
 
+    <div class="panel search-panel" id="tx-panel-updown" style="margin-top:16px; border-color:var(--red);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--red);box-shadow:0 0 8px var(--red);"></span>MOVE PALLET UP/DOWN</div>
+          <h1 style="font-size:17px;">Chuyển pallet Lên/Xuống khu lầu (3AFG)</h1>
+          <div class="sub" style="margin-top:2px;">Chuyển pallet lên/xuống khu lầu M1/M2 Kho 3A (locator có tiền tố "3AFG") — <b>Lên</b>: từ vị trí bất kỳ đến vị trí 3AFG (trừ SL ở vị trí xuất, cộng SL ở 3AFG); <b>Xuống</b>: từ vị trí 3AFG về vị trí bất kỳ (trừ SL ở 3AFG, cộng SL ở vị trí nhận) — toàn bộ file.</div>
+        </div>
+      </div>
+      <div class="tx-sum-subhead">↑ Lên — chuyển đến khu lầu (3AFG)</div>
+      <div class="tx-sum-grid" id="tx-updown-up-sumgrid"></div>
+      <div class="tx-sum-subhead" style="margin-top:14px;">↓ Xuống — chuyển từ khu lầu (3AFG) về</div>
+      <div class="tx-sum-grid" id="tx-updown-down-sumgrid"></div>
+    </div>
+
     <div class="panel search-panel" id="tx-panel-picking" style="margin-top:16px; border-color:var(--violet);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
         <div>
