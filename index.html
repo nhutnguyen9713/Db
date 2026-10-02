@@ -1436,12 +1436,16 @@ function gateBustedUrl(base){
         <div>
           <div class="brand-eyebrow"><span class="dot" style="background:var(--blue);box-shadow:0 0 8px var(--blue);"></span>TRANSFER</div>
           <h1 style="font-size:17px;">Chuyển pallet (Transfer)</h1>
-          <div class="sub" style="margin-top:2px;">Chuyển pallet giữa các vị trí (mọi thao tác di chuyển, trừ Pick cont) — tổng theo kho xuất và theo người thao tác (toàn bộ file).</div>
+          <div class="sub" style="margin-top:2px;">Chuyển hàng qua khu ITN — <b>Xuất</b>: Menu Name "ITN Transfer" (chuyển đi, tổng theo kho xuất); <b>Nhận</b>: Menu Name "ITN Receiving" (nhận về, tổng theo kho nhận) — tổng theo người thao tác tương ứng (toàn bộ file).</div>
         </div>
       </div>
+      <div class="tx-sum-subhead">↗ Xuất — ITN Transfer</div>
       <div class="tx-sum-grid" id="tx-transfer-sumgrid"></div>
+      <div class="tx-sum-subhead" style="margin-top:14px;">↙ Nhận — ITN Receiving</div>
+      <div class="tx-sum-grid" id="tx-transfer-nhap-sumgrid"></div>
       <details class="tx-detail-toggle">
-      <summary>Xem chi tiết từng dòng (theo Chuyến, có tick đã kiểm)</summary>
+      <summary>Xem chi tiết từng dòng</summary>
+      <div class="tx-sum-subhead" style="margin-top:10px;">↗ Xuất — ITN Transfer (theo Chuyến, có tick đã kiểm)</div>
       <div class="kho-modal-toolbar" style="padding:0 0 12px;">
         <input type="text" class="kho-search" id="tx-transfer-search" placeholder="Tìm theo Kho, Item, Locator, User…">
         <div class="kho-summary" id="tx-transfer-summary">—</div>
@@ -1467,6 +1471,32 @@ function gateBustedUrl(base){
           <tfoot id="tx-transfer-tfoot"></tfoot>
         </table>
         <div class="kho-empty" id="tx-transfer-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+
+      <div class="tx-sum-subhead" style="margin-top:18px;">↙ Nhận — ITN Receiving</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-transferNhap-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-transferNhap-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-transferNhap-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:420px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-transferNhap-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho nhận <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất (ITN) <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-transferNhap-tbody"></tbody>
+          <tfoot id="tx-transferNhap-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-transferNhap-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
       </div>
       </details>
     </div>

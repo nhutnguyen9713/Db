@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.18';
+const APP_VERSION = 'v3.19';
 const APP_VERSION_DATE = '02/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13127,6 +13127,7 @@ let txState = null; // { records:[...], receive:[...], transfer:[...], picking:[
 const txSort = {
   receive: { key: 'total', dir: -1 },
   transfer: { key: 'total', dir: -1 },
+  transferNhap: { key: 'total', dir: -1 },
   putaway: { key: 'total', dir: -1 },
   picking: { key: 'total', dir: -1 },
   reworkXuat: { key: 'total', dir: -1 },
@@ -13741,7 +13742,8 @@ function txFilterRows(rows, query){
 
 const TX_TABLE_DEFS = {
   receive: { cols: ['khoXuat','transType','item','locator','user'], tbody:'tx-receive-tbody', tfoot:'tx-receive-tfoot', empty:'tx-receive-empty', search:'tx-receive-search', summary:'tx-receive-summary', table:'tx-receive-table', label:'dòng Receive', clearBtn:'tx-receive-clear-filters' },
-  transfer: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty','chuyen'], tbody:'tx-transfer-tbody', tfoot:'tx-transfer-tfoot', empty:'tx-transfer-empty', search:'tx-transfer-search', summary:'tx-transfer-summary', table:'tx-transfer-table', label:'nhóm Transfer', clearBtn:'tx-transfer-clear-filters' },
+  transfer: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty','chuyen'], tbody:'tx-transfer-tbody', tfoot:'tx-transfer-tfoot', empty:'tx-transfer-empty', search:'tx-transfer-search', summary:'tx-transfer-summary', table:'tx-transfer-table', label:'nhóm Transfer (Xuất)', clearBtn:'tx-transfer-clear-filters' },
+  transferNhap: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty'], tbody:'tx-transferNhap-tbody', tfoot:'tx-transferNhap-tfoot', empty:'tx-transferNhap-empty', search:'tx-transferNhap-search', summary:'tx-transferNhap-summary', table:'tx-transferNhap-table', label:'dòng Transfer (Nhận)', clearBtn:'tx-transferNhap-clear-filters' },
   putaway: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty'], tbody:'tx-putaway-tbody', tfoot:'tx-putaway-tfoot', empty:'tx-putaway-empty', search:'tx-putaway-search', summary:'tx-putaway-summary', table:'tx-putaway-table', label:'dòng Put Away', clearBtn:'tx-putaway-clear-filters' },
   picking: { cols: ['khoXuat','locatorDen','item','user','reference','contCount'], tbody:'tx-picking-tbody', tfoot:'tx-picking-tfoot', empty:'tx-picking-empty', search:'tx-picking-search', summary:'tx-picking-summary', table:'tx-picking-table', label:'nhóm Picking', clearBtn:'tx-picking-clear-filters' },
   reworkXuat: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty'], tbody:'tx-reworkXuat-tbody', tfoot:'tx-reworkXuat-tfoot', empty:'tx-reworkXuat-empty', search:'tx-reworkXuat-search', summary:'tx-reworkXuat-summary', table:'tx-reworkXuat-table', label:'dòng Rework (Xuất)', clearBtn:'tx-reworkXuat-clear-filters' },
@@ -13762,6 +13764,7 @@ function txDefaultColFilters(){
 function txApplyDefaultFilters(){
   txColFilters.receive = txDefaultColFilters();
   txColFilters.transfer = txDefaultColFilters();
+  txColFilters.transferNhap = txDefaultColFilters();
   txColFilters.putaway = txDefaultColFilters();
   txColFilters.picking = txDefaultColFilters();
   txColFilters.reworkXuat = txDefaultColFilters();
@@ -13772,7 +13775,7 @@ function txApplyDefaultFilters(){
   txColFilters.itnReceivingGroups = txDefaultColFilters();
 }
 const txColFilters = {
-  receive: txDefaultColFilters(), transfer: txDefaultColFilters(), putaway: txDefaultColFilters(), picking: txDefaultColFilters(),
+  receive: txDefaultColFilters(), transfer: txDefaultColFilters(), transferNhap: txDefaultColFilters(), putaway: txDefaultColFilters(), picking: txDefaultColFilters(),
   reworkXuat: txDefaultColFilters(), reworkNhap: txDefaultColFilters(),
   updownUp: txDefaultColFilters(), updownDown: txDefaultColFilters(),
   itnTransferGroups: txDefaultColFilters(), itnReceivingGroups: txDefaultColFilters()
@@ -13888,7 +13891,10 @@ const TX_CHART_ITEMS = [
   // Kho 2B không có nghiệp vụ Receive thật (không nhận hàng trực tiếp vào 2B) -> ẩn cột này riêng ở
   // khung Kho 2B (excludeKho), các khung kho khác vẫn hiện bình thường.
   { key:'receive', label:'Receive', color:'var(--teal)', excludeKho:'2B' },
-  { key:'transfer', label:'Transfer', color:'var(--blue)' },
+  // 1 cột gộp Xuất/Nhận Transfer (2 thanh cạnh nhau) — Xuất lấy từ Menu Name "ITN Transfer"
+  // (txState.transfer, đã có sẵn), Nhận lấy từ "ITN Receiving" (txState.transferNhap).
+  { key:'transferSplit', label:'Xuất/Nhận Transfer',
+    split:{ top:{ key:'transfer', color:'var(--blue)', label:'Xuất' }, bottom:{ key:'transferNhap', color:'var(--violet)', label:'Nhận' } } },
   { key:'putaway', label:'Put Away', color:'var(--amber-bright)' },
   { key:'picking', label:'Picking', color:'var(--violet)' },
   // 1 cột gộp Xuất/Nhận RW (2 thanh cạnh nhau, giống cột Lên/Xuống 3AFG bên dưới) — hiện ở MỌI khung
@@ -14164,6 +14170,79 @@ function renderTxReworkSummaries(){
   });
 }
 
+// ============ Transfer — "Nhận" (ITN Receiving), cặp với "Xuất" (ITN Transfer, đã có sẵn ở trên qua
+// txBuildSummaries()/txState.transfer) ============ "Kho" = kho NHẬN (vị trí hàng về, locator đến) —
+// đối xứng với "Xuất" dùng kho của locator xuất (vị trí hàng rời đi).
+function txBuildTransferNhapSummaries(records){
+  const locatorKhoMap = buildLocatorKhoMap();
+  const byKho = new Map(), byUser = new Map();
+  const bump = (map, key, qty, user, kho) => {
+    let e = map.get(key);
+    if(!e){ e = { key, count: 0, qty: 0, users: new Set(), khos: new Set() }; map.set(key, e); }
+    e.count++;
+    e.qty += qty;
+    if(user) e.users.add(user);
+    if(kho && kho !== '—') e.khos.add(kho);
+  };
+  for(const group of txGroupBySetId(records || [])){
+    const d = txDescribeSet(group, locatorKhoMap);
+    if(d.menuName !== 'ITN Receiving') continue;
+    if(!d.locatorXuat || !d.locatorDen) continue;
+    const kho = resolveKhoForLocator(d.locatorDen, locatorKhoMap);
+    bump(byKho, kho || '—', d.qty, d.user, null);
+    bump(byUser, d.user || '—', d.qty, null, kho);
+  }
+  return { byKho, byUser };
+}
+function renderTxTransferNhapSummaries(){
+  const grid = document.getElementById('tx-transfer-nhap-sumgrid');
+  if(!grid) return;
+  if(!txState || !txState.records){
+    grid.innerHTML = '<div class="tx-sum-empty">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>';
+    return;
+  }
+  const s = txBuildTransferNhapSummaries(txState.records);
+  const byCountDesc = (a, b) => (b.count - a.count) || String(a.key).localeCompare(String(b.key), 'vi', { numeric: true });
+  const joinSet = set => [...set].sort().join(', ') || '—';
+  const khoRows = [...s.byKho.values()].sort(byCountDesc);
+  const userRows = [...s.byUser.values()].sort(byCountDesc);
+  if(!khoRows.length){
+    grid.innerHTML = '<div class="tx-sum-empty">Không có giao dịch ITN Receiving trong file.</div>';
+    return;
+  }
+  const totalCount = khoRows.reduce((t, r) => t + r.count, 0);
+  const totalQty = khoRows.reduce((t, r) => t + r.qty, 0);
+  let html = txSumCardHtml('Theo kho', `${fmt(khoRows.length)} kho`, khoRows, [
+    { label: 'Kho', get: r => r.key },
+    { label: 'Lượt', get: r => fmt(r.count), num: true },
+    { label: 'SL', get: r => fmt(r.qty), num: true },
+  ], ['Tổng', fmt(totalCount), fmt(totalQty)]);
+  html += txSumCardHtml('Theo người thao tác', `${fmt(userRows.length)} người`, userRows, [
+    { label: 'Người', get: r => r.key },
+    { label: 'Kho', get: r => joinSet(r.khos) },
+    { label: 'Lượt', get: r => fmt(r.count), num: true },
+    { label: 'SL', get: r => fmt(r.qty), num: true },
+  ], ['Tổng', '', fmt(totalCount), fmt(totalQty)]);
+  grid.innerHTML = html;
+}
+// Dòng chi tiết Transfer-Nhận (cho bảng "Xem chi tiết từng dòng") — gộp nhóm giống hệt
+// txBuildReworkDetailRows() nhưng chỉ phía ITN Receiving.
+function txBuildTransferNhapDetailRows(records){
+  const locatorKhoMap = buildLocatorKhoMap();
+  const map = new Map();
+  for(const group of txGroupBySetId(records || [])){
+    const d = txDescribeSet(group, locatorKhoMap);
+    if(d.menuName !== 'ITN Receiving') continue;
+    if(!d.locatorXuat || !d.locatorDen) continue;
+    const kho = resolveKhoForLocator(d.locatorDen, locatorKhoMap);
+    const key = [kho, d.menuName, d.item, d.locatorXuat, d.locatorDen, d.user].join('||');
+    const cur = map.get(key);
+    if(cur){ cur.total++; cur.qty += d.qty; }
+    else map.set(key, { khoXuat: kho || '—', menuName: d.menuName, item: d.item, locatorXuat: d.locatorXuat, locatorDen: d.locatorDen, user: d.user, qty: d.qty, total: 1 });
+  }
+  return [...map.values()];
+}
+
 // ============ Move Pallet Lên/Xuống khu lầu M1/M2 Kho 3A — locator có tiền tố "3AFG" ============
 // Dùng LẠI đúng cách tách locator Xuất/Đến của hàng Rework ở trên, chỉ khác điều kiện nhận diện: thay
 // vì xét HẬU TỐ "PROD" thì xét TIỀN TỐ "3AFG" (khu lầu M1/M2 Kho 3A — xem OV_3A_M1_CAPACITY_PER_LOC).
@@ -14414,6 +14493,7 @@ function txBuildPutAwayDetailRows(records, masterMap){
 function renderTransactionPage(){
   renderTxKpiStrip();
   renderTxSummaries();
+  renderTxTransferNhapSummaries();
   renderTxPutAwaySummaries();
   renderTxReworkSummaries();
   renderTxUpDownSummaries();
@@ -14425,9 +14505,11 @@ function renderTransactionPage(){
     txState.updownUp = ud.up;
     txState.updownDown = ud.down;
     txState.putaway = txBuildPutAwayDetailRows(txState.records, txMasterMap);
+    txState.transferNhap = txBuildTransferNhapDetailRows(txState.records);
   }
   renderTxTable('receive');
   renderTxTable('transfer');
+  renderTxTable('transferNhap');
   renderTxTable('putaway');
   renderTxTable('picking');
   renderTxTable('reworkXuat');
