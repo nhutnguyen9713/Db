@@ -14174,10 +14174,11 @@ function txBuildUpDownSummaries(records){
       bump(out.up.byKho, kho || '—', d.qty, d.user, null);
       bump(out.up.byUser, d.user || '—', d.qty, null, kho);
     } else if(xuatIsMezz && !denIsMezz){
-      // XUỐNG: từ 3AFG -> vị trí bất kỳ. "Kho" = kho của vị trí đến (vị trí bất kỳ, nơi hàng về).
-      const kho = resolveKhoForLocator(d.locatorDen, locatorKhoMap);
-      bump(out.down.byKho, kho || '—', d.qty, d.user, null);
-      bump(out.down.byUser, d.user || '—', d.qty, null, kho);
+      // XUỐNG: từ 3AFG -> vị trí bất kỳ. "Kho" LUÔN LÀ 3A (KHÔNG lấy theo locator đến) — vì muốn qua
+      // được kho khác (vd 2B) thì hàng bắt buộc phải xuống lầu (khu 3AFG) về kho 3A TRƯỚC, đây là
+      // domain-knowledge người dùng xác nhận trực tiếp, không phải suy đoán.
+      bump(out.down.byKho, '3A', d.qty, d.user, null);
+      bump(out.down.byUser, d.user || '—', d.qty, null, '3A');
     }
     // Cả 2 đầu đều 3AFG hoặc đều không phải 3AFG -> không liên quan Lên/Xuống, bỏ qua.
   }
@@ -14257,7 +14258,8 @@ function txBuildUpDownDetailRows(records){
     const denIsMezz = txLocatorHasMezzaninePrefix(d.locatorDen);
     let map, kho;
     if(denIsMezz && !xuatIsMezz){ map = upMap; kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap); }
-    else if(xuatIsMezz && !denIsMezz){ map = downMap; kho = resolveKhoForLocator(d.locatorDen, locatorKhoMap); }
+    // XUỐNG: "Kho nhận" LUÔN LÀ 3A (không lấy theo locator đến) — xem giải thích ở txBuildUpDownSummaries().
+    else if(xuatIsMezz && !denIsMezz){ map = downMap; kho = '3A'; }
     else continue;
     const key = [kho, d.menuName, d.item, d.locatorXuat, d.locatorDen, d.user].join('||');
     const cur = map.get(key);
