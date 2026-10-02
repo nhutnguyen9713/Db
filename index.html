@@ -1471,6 +1471,44 @@ function gateBustedUrl(base){
       </details>
     </div>
 
+    <div class="panel search-panel" id="tx-panel-putaway" style="margin-top:16px; border-color:var(--amber-bright);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--amber-bright);box-shadow:0 0 8px var(--amber-bright);"></span>PUT AWAY</div>
+          <h1 style="font-size:17px;">Cất hàng (Put Away)</h1>
+          <div class="sub" style="margin-top:2px;">Quét từ vị trí tạm/trung gian (locator hậu tố "FG-TG", VD "D3B-FG-TG") đến vị trí bất kỳ — tổng theo kho (suy từ chính vị trí FG-TG) và theo người thao tác (toàn bộ file).</div>
+        </div>
+      </div>
+      <div class="tx-sum-grid" id="tx-putaway-sumgrid"></div>
+      <details class="tx-detail-toggle">
+      <summary>Xem chi tiết từng dòng</summary>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-putaway-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-putaway-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-putaway-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:420px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-putaway-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất (TG) <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-putaway-tbody"></tbody>
+          <tfoot id="tx-putaway-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-putaway-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+      </details>
+    </div>
+
     <div class="panel search-panel" id="tx-panel-rework" style="margin-top:16px; border-color:var(--teal);">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
         <div>

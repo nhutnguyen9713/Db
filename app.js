@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.10';
+const APP_VERSION = 'v3.11';
 const APP_VERSION_DATE = '02/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13127,6 +13127,7 @@ let txState = null; // { records:[...], receive:[...], transfer:[...], picking:[
 const txSort = {
   receive: { key: 'total', dir: -1 },
   transfer: { key: 'total', dir: -1 },
+  putaway: { key: 'total', dir: -1 },
   picking: { key: 'total', dir: -1 },
   reworkXuat: { key: 'total', dir: -1 },
   reworkNhap: { key: 'total', dir: -1 },
@@ -13737,6 +13738,7 @@ function txFilterRows(rows, query){
 const TX_TABLE_DEFS = {
   receive: { cols: ['khoXuat','transType','item','locator','user'], tbody:'tx-receive-tbody', tfoot:'tx-receive-tfoot', empty:'tx-receive-empty', search:'tx-receive-search', summary:'tx-receive-summary', table:'tx-receive-table', label:'dòng Receive', clearBtn:'tx-receive-clear-filters' },
   transfer: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty','chuyen'], tbody:'tx-transfer-tbody', tfoot:'tx-transfer-tfoot', empty:'tx-transfer-empty', search:'tx-transfer-search', summary:'tx-transfer-summary', table:'tx-transfer-table', label:'nhóm Transfer', clearBtn:'tx-transfer-clear-filters' },
+  putaway: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty'], tbody:'tx-putaway-tbody', tfoot:'tx-putaway-tfoot', empty:'tx-putaway-empty', search:'tx-putaway-search', summary:'tx-putaway-summary', table:'tx-putaway-table', label:'dòng Put Away', clearBtn:'tx-putaway-clear-filters' },
   picking: { cols: ['khoXuat','locatorDen','item','user','reference','contCount'], tbody:'tx-picking-tbody', tfoot:'tx-picking-tfoot', empty:'tx-picking-empty', search:'tx-picking-search', summary:'tx-picking-summary', table:'tx-picking-table', label:'nhóm Picking', clearBtn:'tx-picking-clear-filters' },
   reworkXuat: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty'], tbody:'tx-reworkXuat-tbody', tfoot:'tx-reworkXuat-tfoot', empty:'tx-reworkXuat-empty', search:'tx-reworkXuat-search', summary:'tx-reworkXuat-summary', table:'tx-reworkXuat-table', label:'dòng Rework (Xuất)', clearBtn:'tx-reworkXuat-clear-filters' },
   reworkNhap: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty'], tbody:'tx-reworkNhap-tbody', tfoot:'tx-reworkNhap-tfoot', empty:'tx-reworkNhap-empty', search:'tx-reworkNhap-search', summary:'tx-reworkNhap-summary', table:'tx-reworkNhap-table', label:'dòng Rework (Nhập)', clearBtn:'tx-reworkNhap-clear-filters' },
@@ -13756,6 +13758,7 @@ function txDefaultColFilters(){
 function txApplyDefaultFilters(){
   txColFilters.receive = txDefaultColFilters();
   txColFilters.transfer = txDefaultColFilters();
+  txColFilters.putaway = txDefaultColFilters();
   txColFilters.picking = txDefaultColFilters();
   txColFilters.reworkXuat = txDefaultColFilters();
   txColFilters.reworkNhap = txDefaultColFilters();
@@ -13765,7 +13768,7 @@ function txApplyDefaultFilters(){
   txColFilters.itnReceivingGroups = txDefaultColFilters();
 }
 const txColFilters = {
-  receive: txDefaultColFilters(), transfer: txDefaultColFilters(), picking: txDefaultColFilters(),
+  receive: txDefaultColFilters(), transfer: txDefaultColFilters(), putaway: txDefaultColFilters(), picking: txDefaultColFilters(),
   reworkXuat: txDefaultColFilters(), reworkNhap: txDefaultColFilters(),
   updownUp: txDefaultColFilters(), updownDown: txDefaultColFilters(),
   itnTransferGroups: txDefaultColFilters(), itnReceivingGroups: txDefaultColFilters()
@@ -14279,9 +14282,88 @@ function txBuildUpDownDetailRows(records){
   return { up: [...upMap.values()], down: [...downMap.values()] };
 }
 
+// ============ Put Away — locator xuất hậu tố "FG-TG" (vị trí tạm/trung gian, VD "D3B-FG-TG",
+// "DG3-FG-TG") sang vị trí bất kỳ ============ Chỉ 1 CHIỀU (không có Xuất/Nhập như Rework) — "quét"
+// từ vị trí tạm về vị trí lưu trữ thật. "Kho" = kho của chính vị trí FG-TG (đã tự mang tên kho).
+function txLocatorIsStagingTG(locator){
+  return /FG-TG$/i.test(String(locator || '').trim());
+}
+function txBuildPutAwaySummaries(records){
+  const locatorKhoMap = buildLocatorKhoMap();
+  const byKho = new Map(), byUser = new Map();
+  const bump = (map, key, qty, user, kho) => {
+    let e = map.get(key);
+    if(!e){ e = { key, count: 0, qty: 0, users: new Set(), khos: new Set() }; map.set(key, e); }
+    e.count++;
+    e.qty += qty;
+    if(user) e.users.add(user);
+    if(kho && kho !== '—') e.khos.add(kho);
+  };
+  for(const group of txGroupBySetId(records || [])){
+    const d = txDescribeSet(group, locatorKhoMap);
+    if(!d.locatorXuat || !d.locatorDen) continue; // cần đủ cả 2 đầu mới coi là 1 lượt chuyển thật
+    const xuatIsTG = txLocatorIsStagingTG(d.locatorXuat);
+    const denIsTG = txLocatorIsStagingTG(d.locatorDen);
+    if(!xuatIsTG || denIsTG) continue; // chỉ tính từ TG -> vị trí thật (không tính TG -> TG hay chiều ngược lại)
+    const kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap);
+    bump(byKho, kho || '—', d.qty, d.user, null);
+    bump(byUser, d.user || '—', d.qty, null, kho);
+  }
+  return { byKho, byUser };
+}
+function renderTxPutAwaySummaries(){
+  const grid = document.getElementById('tx-putaway-sumgrid');
+  if(!grid) return;
+  if(!txState || !txState.records){
+    grid.innerHTML = '<div class="tx-sum-empty">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>';
+    return;
+  }
+  const s = txBuildPutAwaySummaries(txState.records);
+  const byCountDesc = (a, b) => (b.count - a.count) || String(a.key).localeCompare(String(b.key), 'vi', { numeric: true });
+  const joinSet = set => [...set].sort().join(', ') || '—';
+  const khoRows = [...s.byKho.values()].sort(byCountDesc);
+  const userRows = [...s.byUser.values()].sort(byCountDesc);
+  if(!khoRows.length){
+    grid.innerHTML = '<div class="tx-sum-empty">Không có giao dịch Put Away trong file.</div>';
+    return;
+  }
+  const totalCount = khoRows.reduce((t, r) => t + r.count, 0);
+  const totalQty = khoRows.reduce((t, r) => t + r.qty, 0);
+  let html = txSumCardHtml('Theo kho', `${fmt(khoRows.length)} kho`, khoRows, [
+    { label: 'Kho', get: r => r.key },
+    { label: 'Lượt', get: r => fmt(r.count), num: true },
+    { label: 'SL', get: r => fmt(r.qty), num: true },
+  ], ['Tổng', fmt(totalCount), fmt(totalQty)]);
+  html += txSumCardHtml('Theo người thao tác', `${fmt(userRows.length)} người`, userRows, [
+    { label: 'Người', get: r => r.key },
+    { label: 'Kho', get: r => joinSet(r.khos) },
+    { label: 'Lượt', get: r => fmt(r.count), num: true },
+    { label: 'SL', get: r => fmt(r.qty), num: true },
+  ], ['Tổng', '', fmt(totalCount), fmt(totalQty)]);
+  grid.innerHTML = html;
+}
+// Dòng chi tiết Put Away (cho bảng "Xem chi tiết từng dòng") — gộp nhóm giống hệt
+// txBuildReworkDetailRows()/txBuildUpDownDetailRows() nhưng chỉ 1 chiều.
+function txBuildPutAwayDetailRows(records){
+  const locatorKhoMap = buildLocatorKhoMap();
+  const map = new Map();
+  for(const group of txGroupBySetId(records || [])){
+    const d = txDescribeSet(group, locatorKhoMap);
+    if(!d.locatorXuat || !d.locatorDen) continue;
+    if(!txLocatorIsStagingTG(d.locatorXuat) || txLocatorIsStagingTG(d.locatorDen)) continue;
+    const kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap);
+    const key = [kho, d.menuName, d.item, d.locatorXuat, d.locatorDen, d.user].join('||');
+    const cur = map.get(key);
+    if(cur){ cur.total++; cur.qty += d.qty; }
+    else map.set(key, { khoXuat: kho || '—', menuName: d.menuName, item: d.item, locatorXuat: d.locatorXuat, locatorDen: d.locatorDen, user: d.user, qty: d.qty, total: 1 });
+  }
+  return [...map.values()];
+}
+
 function renderTransactionPage(){
   renderTxKpiStrip();
   renderTxSummaries();
+  renderTxPutAwaySummaries();
   renderTxReworkSummaries();
   renderTxUpDownSummaries();
   if(txState){
@@ -14291,9 +14373,11 @@ function renderTransactionPage(){
     const ud = txBuildUpDownDetailRows(txState.records);
     txState.updownUp = ud.up;
     txState.updownDown = ud.down;
+    txState.putaway = txBuildPutAwayDetailRows(txState.records);
   }
   renderTxTable('receive');
   renderTxTable('transfer');
+  renderTxTable('putaway');
   renderTxTable('picking');
   renderTxTable('reworkXuat');
   renderTxTable('reworkNhap');
