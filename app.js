@@ -13895,7 +13895,11 @@ const TX_CHART_ITEMS = [
 // txState.updownDown (kho ở "Xuống" cũng là kho NHẬN, xem txBuildUpDownDetailRows()) — vẫn dùng chung
 // txKhoTotalFor() vì field group-by vẫn tên "khoXuat" như các kind khác (chỉ khác Ý NGHĨA, không khác
 // tên field).
-const TX_CHART_KHO_ORDER = ['2B', '3A', '3B', 'DG1'];
+const TX_CHART_KHO_ORDER = ['2B', '3A', '3B'];
+// Chiều cao TỐI THIỂU cố định cho phần nhãn dưới mỗi cột — cột "Lên/Xuống 3AFG" có nhãn 2 dòng + chú
+// thích 2 dòng (dài hơn các cột khác), nếu không chặn chiều cao thì cột này bị đẩy lên cao hơn hẳn các
+// cột còn lại (đáy cột lệch nhau) do cả cột đều canh theo đáy khung (justify-content:flex-end).
+const TX_CHART_LABEL_MIN_HEIGHT = 58;
 
 function txKhoTotalFor(kind, khoShort){
   if(!txState) return { total: 0, rowsCount: 0 };
@@ -13926,13 +13930,13 @@ function txChartGroupHtml(label, items){
         return `<div class="tx-chart-bar-col">
           <div class="tx-chart-bar-value" style="white-space:nowrap;"><span style="color:${top.color}">${fmt(top.total)}</span><span style="color:var(--muted-2); font-weight:600;"> / </span><span style="color:${bottom.color}">${fmt(bottom.total)}</span></div>
           <div class="tx-chart-bar" style="height:${pct}%; background:${barBg};"></div>
-          <div class="tx-chart-bar-label">${it.label}<div class="tx-chart-bar-sub">${fmt(top.rowsCount)} dòng ${top.label} · ${fmt(bottom.rowsCount)} dòng ${bottom.label}</div></div>
+          <div class="tx-chart-bar-label" style="min-height:${TX_CHART_LABEL_MIN_HEIGHT}px;">${it.label}<div class="tx-chart-bar-sub">${fmt(top.rowsCount)} ${top.label} · ${fmt(bottom.rowsCount)} ${bottom.label}</div></div>
         </div>`;
       }
       return `<div class="tx-chart-bar-col">
         <div class="tx-chart-bar-value" style="color:${it.color}">${fmt(it.total)}</div>
         <div class="tx-chart-bar" style="height:${pct}%; background:${it.color};"></div>
-        <div class="tx-chart-bar-label">${it.label}<div class="tx-chart-bar-sub">${fmt(it.rowsCount)} dòng đang hiển thị</div></div>
+        <div class="tx-chart-bar-label" style="min-height:${TX_CHART_LABEL_MIN_HEIGHT}px;">${it.label}<div class="tx-chart-bar-sub">${fmt(it.rowsCount)} dòng đang hiển thị</div></div>
       </div>`;
     }).join('')}</div>
   </div>`;
