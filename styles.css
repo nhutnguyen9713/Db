@@ -1692,12 +1692,20 @@
   .simple-bar-fill{height:100%; border-radius:4px; transition:width .3s ease;}
   .simple-bar-value{font-family:var(--mono); font-size:11px; text-align:right; color:var(--amber); font-weight:600;}
 
-  .tx-chart-row{display:flex; flex-wrap:wrap; gap:14px; align-items:stretch;}
+  .tx-chart-row{display:flex; flex-wrap:wrap; gap:14px; align-items:stretch; justify-content:center;}
   .tx-chart-group{flex:1 1 240px; border:2px solid var(--violet); border-radius:10px; padding-top:8px;}
   .tx-chart-group-label{font-family:var(--mono); font-size:14px; font-weight:800; color:var(--violet); text-align:center; text-transform:uppercase; letter-spacing:.04em;}
-  .tx-chart-wrap{display:flex; align-items:flex-end; gap:14px; height:190px; padding:16px 12px 0; justify-content:center;}
-  .tx-chart-bar-col{flex:0 1 80px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%;}
+  .tx-chart-wrap{display:flex; align-items:flex-start; gap:14px; padding:16px 12px 0; justify-content:center;}
+  .tx-chart-bar-col{flex:0 1 80px; display:flex; flex-direction:column; align-items:center;}
   .tx-chart-bar-value{font-family:var(--mono); font-weight:800; font-size:16px; margin-bottom:8px; white-space:nowrap;}
+  /* Khung CAO CỐ ĐỊNH riêng cho phần cột màu — tách biệt khỏi value/label phía trên/dưới. Trước đây
+     chiều cao % của .tx-chart-bar tính theo CẢ CỘT (gồm cả value+label), nên cột 100% không đủ chỗ
+     (value+label chiếm mất một phần), bị flex-shrink nén xuống thấp hơn hẳn giá trị % khai báo — cột
+     lớn (gần 100%) và cột vừa (gần giá trị cột lớn) bị nén gần bằng nhau, nhìn sai lệch tỉ lệ. Tách
+     khung riêng CAO CỐ ĐỊNH để % luôn tính đúng theo đúng khung này, không bị cộng dồn với nội dung
+     khác trong cột.
+  */
+  .tx-chart-bar-track{height:150px; width:100%; display:flex; align-items:flex-end; justify-content:center;}
   .tx-chart-bar{width:44px; border-radius:9px 9px 3px 3px; transition:height .45s cubic-bezier(.4,0,.2,1); min-height:3px; box-shadow:0 4px 14px rgba(0,0,0,0.12);}
   .tx-chart-bar-label{margin-top:12px; font-family:var(--mono); font-size:12.5px; color:var(--text); text-align:center; font-weight:700;}
   .tx-chart-bar-sub{font-family:var(--mono); font-size:10.5px; color:var(--muted-2); margin-top:2px; font-weight:400;}
