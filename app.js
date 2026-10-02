@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.09';
+const APP_VERSION = 'v3.10';
 const APP_VERSION_DATE = '02/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13881,7 +13881,10 @@ const TX_CHART_ITEMS = [
   { key:'receive', label:'Receive', color:'var(--teal)' },
   { key:'transfer', label:'Transfer', color:'var(--blue)' },
   { key:'picking', label:'Picking', color:'var(--violet)' },
-  { key:'reworkNhap', label:'Nhận RW', color:'var(--amber-bright)' },
+  // 1 cột gộp Xuất/Nhận RW (2 thanh cạnh nhau, giống cột Lên/Xuống 3AFG bên dưới) — hiện ở MỌI khung
+  // kho (không giới hạn onlyKho) vì hàng Rework có thể xuất/nhận ở bất kỳ kho nào.
+  { key:'reworkSplit', label:'Xuất/Nhận RW',
+    split:{ top:{ key:'reworkXuat', color:'var(--teal)', label:'Xuất' }, bottom:{ key:'reworkNhap', color:'var(--amber-bright)', label:'Nhận' } } },
   // 1 cột gộp chung Lên/Xuống 3AFG (thay vì 2 cột riêng) để biểu đồ đều cột giữa các khung kho — cột
   // được tô 2 nửa màu khác nhau (đỏ/vàng đất) theo tỉ lệ Lên/Xuống, chỉ hiện ở khung Kho 3A (xem
   // onlyKho bên dưới) vì khu lầu 3AFG chỉ thuộc Kho 3A.
@@ -13890,9 +13893,10 @@ const TX_CHART_ITEMS = [
 ];
 // Thứ tự 4 kho hiển thị RIÊNG trong biểu đồ (giống CPT_KHO_ORDER/PICK_SLIP_KHO_ORDER dùng ở nơi khác
 // trong app) — mỗi kho 1 khung, luôn tính trên TOÀN BỘ dữ liệu của đúng kho đó, KHÔNG phụ thuộc bộ
-// lọc cột/ô tìm kiếm hiện tại của 3 bảng bên dưới. Riêng "Nhận RW" lấy từ txState.reworkNhap (kho ở
-// đây là kho NHẬN, xem txBuildReworkDetailRows()), "Lên/Xuống 3AFG" lấy từ txState.updownUp/
-// txState.updownDown (kho ở "Xuống" cũng là kho NHẬN, xem txBuildUpDownDetailRows()) — vẫn dùng chung
+// lọc cột/ô tìm kiếm hiện tại của 3 bảng bên dưới. Riêng "Xuất/Nhận RW" lấy từ txState.reworkXuat/
+// txState.reworkNhap (kho ở "Nhận" là kho NHẬN, xem txBuildReworkDetailRows()), "Lên/Xuống 3AFG" lấy
+// từ txState.updownUp/txState.updownDown (kho ở "Xuống" cũng là kho NHẬN, xem
+// txBuildUpDownDetailRows()) — vẫn dùng chung
 // txKhoTotalFor() vì field group-by vẫn tên "khoXuat" như các kind khác (chỉ khác Ý NGHĨA, không khác
 // tên field).
 const TX_CHART_KHO_ORDER = ['2B', '3A', '3B'];
