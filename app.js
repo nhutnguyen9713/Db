@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.11';
+const APP_VERSION = 'v3.12';
 const APP_VERSION_DATE = '02/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13883,6 +13883,7 @@ function renderTxTable(kind){
 const TX_CHART_ITEMS = [
   { key:'receive', label:'Receive', color:'var(--teal)' },
   { key:'transfer', label:'Transfer', color:'var(--blue)' },
+  { key:'putaway', label:'Put Away', color:'var(--amber-bright)' },
   { key:'picking', label:'Picking', color:'var(--violet)' },
   // 1 cột gộp Xuất/Nhận RW (2 thanh cạnh nhau, giống cột Lên/Xuống 3AFG bên dưới) — hiện ở MỌI khung
   // kho (không giới hạn onlyKho) vì hàng Rework có thể xuất/nhận ở bất kỳ kho nào.
