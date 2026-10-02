@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.16';
+const APP_VERSION = 'v3.17';
 const APP_VERSION_DATE = '02/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13308,13 +13308,17 @@ function txDescribeSet(group, locatorKhoMap){
   const menuLower = menuName.toLowerCase();
   const isPicking = menuLower.startsWith('pick(') || menuLower === 'pick order';
   const reference = first.reference || (negRow && negRow.reference) || (posRow && posRow.reference) || '';
+  // GI No. (số pallet) — cùng 1 GI No. ở cả 2 dòng xuất/nhập của 1 giao dịch (cùng 1 pallet), dùng để
+  // chặn gian lận đếm trùng ở Put Away (xem txDedupePutAwayByGi()). Trống nếu file Transaction không
+  // có cột này (không bắt buộc).
+  const gi = txNorm(first.gi || (negRow && negRow.gi) || (posRow && posRow.gi) || '');
   let kind = null, kho = '—';
   if(transType === 'RECEIVE'){ kind = 'receive'; kho = resolveKhoForLocator(locatorDen || first.locator, locatorKhoMap); }
   else if(isPicking){ kind = 'picking'; kho = resolveKhoForLocator(locatorXuat, locatorKhoMap); }
   else if(menuName === 'ITN Transfer'){ kind = 'transfer'; kho = resolveKhoForLocator(locatorXuat, locatorKhoMap); }
   else { kind = null; }
   const crCodes = kind === 'picking' ? (reference.match(/CR\d+/gi) || []).map(c => c.toUpperCase()) : [];
-  return { first, transType, menuName, item, user, locatorXuat, locatorDen, dt, qty, reference, kind, kho, crCodes };
+  return { first, transType, menuName, item, user, locatorXuat, locatorDen, dt, qty, reference, gi, kind, kho, crCodes };
 }
 
 function txBuildStatsFromRecords(records, masterMap){
@@ -14295,6 +14299,41 @@ function txLocatorIsStagingTG(locator){
 // trí lưu trữ thật), "Put Away" (đúng tên menu hệ thống) cũng KHÔNG tính — theo yêu cầu người dùng xác
 // nhận trực tiếp (không phải suy đoán), dù tên trùng với tên tính năng.
 const TX_PUTAWAY_EXCLUDED_MENU_NAMES = new Set(['pick(csr)', 'itn transfer', 'put away']);
+// Chặn gian lận đếm trùng: cùng 1 GI No. (1 pallet) có thể bị quét qua FG-TG nhiều lần (vd xuất ra vị
+// trí khác rồi quét lại vào FG-TG để "cất" thêm 1 lần nữa) — chỉ tính đúng 1 LƯỢT Put Away duy nhất
+// cho mỗi GI No., giữ lại lượt SỚM NHẤT theo thời gian, bỏ các lượt lặp lại sau đó. Dòng không có GI
+// No. (file Transaction không có cột này) không gộp được theo pallet nên vẫn giữ nguyên, tính riêng
+// từng dòng như trước (không coi là trùng).
+function txDedupePutAwayByGi(list){
+  const byGi = new Map(); // gi -> d giữ lại (sớm nhất theo dt)
+  const noGi = [];
+  for(const d of list){
+    const gi = String(d.gi || '').trim();
+    if(!gi){ noGi.push(d); continue; }
+    const cur = byGi.get(gi);
+    if(!cur || (d.dt && (!cur.dt || d.dt < cur.dt))) byGi.set(gi, d);
+  }
+  return [...byGi.values(), ...noGi];
+}
+// Gom các giao dịch hợp lệ cho Put Away (đã lọc locator/SHIP/Menu Name) RỒI mới khử trùng theo GI No.
+// — dùng CHUNG cho cả bảng tổng hợp lẫn bảng chi tiết để 2 nơi luôn khớp số liệu với nhau.
+function txCollectPutAwayCandidates(records, masterMap){
+  const locatorKhoMap = buildLocatorKhoMap();
+  const out = [];
+  for(const group of txGroupBySetId(records || [])){
+    const d = txDescribeSet(group, locatorKhoMap);
+    if(!d.locatorXuat || !d.locatorDen) continue; // cần đủ cả 2 đầu mới coi là 1 lượt chuyển thật
+    const xuatIsTG = txLocatorIsStagingTG(d.locatorXuat);
+    const denIsTG = txLocatorIsStagingTG(d.locatorDen);
+    if(!xuatIsTG || denIsTG) continue; // chỉ tính từ TG -> vị trí thật (không tính TG -> TG hay chiều ngược lại)
+    // Nhân sự SHIP (đánh dấu "SHIP" trong bảng Master) không tính vào Put Away — xem giải thích ở
+    // txBuildStatsFromRecords() (áp dụng cùng quy ước với Pick cont).
+    if(masterMap && masterMap[d.user] === 'SHIP') continue;
+    if(TX_PUTAWAY_EXCLUDED_MENU_NAMES.has(String(d.menuName || '').toLowerCase())) continue;
+    out.push(d);
+  }
+  return txDedupePutAwayByGi(out);
+}
 function txBuildPutAwaySummaries(records, masterMap){
   const locatorKhoMap = buildLocatorKhoMap();
   const byKho = new Map(), byUser = new Map();
@@ -14306,16 +14345,7 @@ function txBuildPutAwaySummaries(records, masterMap){
     if(user) e.users.add(user);
     if(kho && kho !== '—') e.khos.add(kho);
   };
-  for(const group of txGroupBySetId(records || [])){
-    const d = txDescribeSet(group, locatorKhoMap);
-    if(!d.locatorXuat || !d.locatorDen) continue; // cần đủ cả 2 đầu mới coi là 1 lượt chuyển thật
-    const xuatIsTG = txLocatorIsStagingTG(d.locatorXuat);
-    const denIsTG = txLocatorIsStagingTG(d.locatorDen);
-    if(!xuatIsTG || denIsTG) continue; // chỉ tính từ TG -> vị trí thật (không tính TG -> TG hay chiều ngược lại)
-    // Nhân sự SHIP (đánh dấu "SHIP" trong bảng Master) không tính vào Put Away — xem giải thích ở
-    // txBuildStatsFromRecords() (áp dụng cùng quy ước với Pick cont).
-    if(masterMap && masterMap[d.user] === 'SHIP') continue;
-    if(TX_PUTAWAY_EXCLUDED_MENU_NAMES.has(String(d.menuName || '').toLowerCase())) continue;
+  for(const d of txCollectPutAwayCandidates(records, masterMap)){
     const kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap);
     bump(byKho, kho || '—', d.qty, d.user, null);
     bump(byUser, d.user || '—', d.qty, null, kho);
@@ -14358,12 +14388,7 @@ function renderTxPutAwaySummaries(){
 function txBuildPutAwayDetailRows(records, masterMap){
   const locatorKhoMap = buildLocatorKhoMap();
   const map = new Map();
-  for(const group of txGroupBySetId(records || [])){
-    const d = txDescribeSet(group, locatorKhoMap);
-    if(!d.locatorXuat || !d.locatorDen) continue;
-    if(!txLocatorIsStagingTG(d.locatorXuat) || txLocatorIsStagingTG(d.locatorDen)) continue;
-    if(masterMap && masterMap[d.user] === 'SHIP') continue;
-    if(TX_PUTAWAY_EXCLUDED_MENU_NAMES.has(String(d.menuName || '').toLowerCase())) continue;
+  for(const d of txCollectPutAwayCandidates(records, masterMap)){
     const kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap);
     const key = [kho, d.menuName, d.item, d.locatorXuat, d.locatorDen, d.user].join('||');
     const cur = map.get(key);
