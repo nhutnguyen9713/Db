@@ -13923,7 +13923,11 @@ function renderTxChart(){
     return;
   }
   const khoGroupsHtml = TX_CHART_KHO_ORDER.map(kho => {
-    const items = TX_CHART_ITEMS.map(it => ({ ...it, ...txKhoTotalFor(it.key, kho) }));
+    // "Lên 3AFG"/"Xuống 3AFG" chỉ liên quan khu lầu M1/M2 Kho 3A -> chỉ hiện 2 cột này ở khung Kho 3A,
+    // các khung kho khác không hiện (tránh gây hiểu nhầm là Kho 2B/3B/DG1 cũng có khu 3AFG).
+    const items = TX_CHART_ITEMS
+      .filter(it => kho === '3A' || (it.key !== 'updownUp' && it.key !== 'updownDown'))
+      .map(it => ({ ...it, ...txKhoTotalFor(it.key, kho) }));
     return txChartGroupHtml(`Kho ${kho}`, items);
   }).join('');
   wrap.innerHTML = `<div class="tx-chart-row">${khoGroupsHtml}</div>`;
