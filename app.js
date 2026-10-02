@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.08';
+const APP_VERSION = 'v3.09';
 const APP_VERSION_DATE = '02/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13919,13 +13919,19 @@ function txChartGroupHtml(label, items){
     <div class="tx-chart-wrap">${items.map(it => {
       const pct = it.total > 0 ? Math.max(3, Math.round((it.total / maxVal) * 100)) : 1;
       if(it.split){
+        // 2 thanh RIÊNG đặt cạnh nhau (trái/phải), mỗi thanh cao theo ĐÚNG tỉ lệ giá trị của chính nó
+        // so với maxVal chung của cả khung (cùng thang đo với Receive/Transfer/...) — KHÔNG chồng lên
+        // nhau theo kiểu 1 thanh chia 2 nửa (dễ gây hiểu nhầm là tỉ lệ Lên/Xuống so với NHAU thay vì so
+        // với các cột khác).
         const { top, bottom } = it.split;
-        const sum = top.total + bottom.total;
-        const topSharePct = sum > 0 ? Math.round((top.total / sum) * 100) : 50;
-        const barBg = `linear-gradient(to bottom, ${top.color} 0%, ${top.color} ${topSharePct}%, ${bottom.color} ${topSharePct}%, ${bottom.color} 100%)`;
+        const pctTop = top.total > 0 ? Math.max(3, Math.round((top.total / maxVal) * 100)) : 1;
+        const pctBottom = bottom.total > 0 ? Math.max(3, Math.round((bottom.total / maxVal) * 100)) : 1;
         return `<div class="tx-chart-bar-col">
           <div class="tx-chart-bar-value" style="white-space:nowrap;"><span style="color:${top.color}">${fmt(top.total)}</span><span style="color:var(--muted-2); font-weight:600;"> / </span><span style="color:${bottom.color}">${fmt(bottom.total)}</span></div>
-          <div class="tx-chart-bar-track"><div class="tx-chart-bar" style="height:${pct}%; background:${barBg};"></div></div>
+          <div class="tx-chart-bar-track" style="gap:6px;">
+            <div class="tx-chart-bar tx-chart-bar-half" style="height:${pctTop}%; background:${top.color};"></div>
+            <div class="tx-chart-bar tx-chart-bar-half" style="height:${pctBottom}%; background:${bottom.color};"></div>
+          </div>
           <div class="tx-chart-bar-label">${it.label}<div class="tx-chart-bar-sub">${fmt(top.rowsCount)} ${top.label} · ${fmt(bottom.rowsCount)} ${bottom.label}</div></div>
         </div>`;
       }

@@ -1707,6 +1707,7 @@
   */
   .tx-chart-bar-track{height:150px; width:100%; display:flex; align-items:flex-end; justify-content:center;}
   .tx-chart-bar{width:44px; border-radius:9px 9px 3px 3px; transition:height .45s cubic-bezier(.4,0,.2,1); min-height:3px; box-shadow:0 4px 14px rgba(0,0,0,0.12);}
+  .tx-chart-bar-half{width:19px;}
   .tx-chart-bar-label{margin-top:12px; font-family:var(--mono); font-size:12.5px; color:var(--text); text-align:center; font-weight:700;}
   .tx-chart-bar-sub{font-family:var(--mono); font-size:10.5px; color:var(--muted-2); margin-top:2px; font-weight:400;}
 
