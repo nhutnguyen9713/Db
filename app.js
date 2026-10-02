@@ -13905,7 +13905,16 @@ function txKhoTotalFor(kind, khoShort){
 
 function txChartGroupHtml(label, items){
   const maxVal = Math.max(1, ...items.map(i => i.total));
-  return `<div class="tx-chart-group">
+  // Khung nào cũng phải có ĐỘ RỘNG tỉ lệ đúng với SỐ CỘT bên trong (vd Kho 3A có thêm cột "Lên/Xuống
+  // 3AFG" -> 5 cột thay vì 4) — nếu không, các khung cùng rộng bằng nhau nhưng khung nhiều cột hơn bị
+  // nén chật hơn hẳn khung ít cột, nhìn lệch hẳn nhau (đây là điều người dùng phản ánh "chưa đều").
+  // flex-grow = số cột (khung nhiều cột được cấp thêm không gian trống nhiều hơn tỉ lệ thuận) + basis
+  // tính theo đúng bề ngang 1 cột (~94px, gồm bar-col 80px + gap 14px) để mọi khung co giãn CÙNG tỉ lệ.
+  // Độ rộng khung CỐ ĐỊNH theo đúng số cột bên trong (không flex-grow) — nếu để co giãn lấp đầy hàng,
+  // khung đứng lẻ loi cuối hàng (xuống dòng) sẽ bị kéo giãn hết phần trống còn lại, phá vỡ độ-rộng-
+  // mỗi-cột đã tính đều ở trên. Để trống dư ở cuối hàng (nếu có) còn hơn làm méo tỉ lệ các khung.
+  const basisPx = items.length * 94 + 24;
+  return `<div class="tx-chart-group" style="flex:0 0 ${basisPx}px;">
     <div class="tx-chart-group-label">${escHtml(label)}</div>
     <div class="tx-chart-wrap">${items.map(it => {
       const pct = it.total > 0 ? Math.max(3, Math.round((it.total / maxVal) * 100)) : 1;
