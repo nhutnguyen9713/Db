@@ -1551,6 +1551,60 @@ function gateBustedUrl(base){
       <div class="tx-sum-grid" id="tx-updown-up-sumgrid"></div>
       <div class="tx-sum-subhead" style="margin-top:14px;">↓ Xuống — chuyển từ khu lầu (3AFG) về</div>
       <div class="tx-sum-grid" id="tx-updown-down-sumgrid"></div>
+      <details class="tx-detail-toggle" style="margin-top:6px;">
+      <summary>Xem chi tiết từng dòng</summary>
+      <div class="tx-sum-subhead" style="margin-top:10px;">↑ Lên — chuyển đến khu lầu (3AFG)</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-updownUp-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-updownUp-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-updownUp-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:320px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-updownUp-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho xuất <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến (3AFG) <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-updownUp-tbody"></tbody>
+          <tfoot id="tx-updownUp-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-updownUp-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+
+      <div class="tx-sum-subhead" style="margin-top:18px;">↓ Xuống — chuyển từ khu lầu (3AFG) về</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-updownDown-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-updownDown-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-updownDown-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:320px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-updownDown-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho nhận <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất (3AFG) <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-updownDown-tbody"></tbody>
+          <tfoot id="tx-updownDown-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-updownDown-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+      </details>
     </div>
 
     <div class="panel search-panel" id="tx-panel-picking" style="margin-top:16px; border-color:var(--violet);">

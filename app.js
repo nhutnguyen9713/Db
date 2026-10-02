@@ -13129,7 +13129,9 @@ const txSort = {
   transfer: { key: 'total', dir: -1 },
   picking: { key: 'total', dir: -1 },
   reworkXuat: { key: 'total', dir: -1 },
-  reworkNhap: { key: 'total', dir: -1 }
+  reworkNhap: { key: 'total', dir: -1 },
+  updownUp: { key: 'total', dir: -1 },
+  updownDown: { key: 'total', dir: -1 }
 };
 
 function txItemText(raw){
@@ -13738,6 +13740,8 @@ const TX_TABLE_DEFS = {
   picking: { cols: ['khoXuat','locatorDen','item','user','reference','contCount'], tbody:'tx-picking-tbody', tfoot:'tx-picking-tfoot', empty:'tx-picking-empty', search:'tx-picking-search', summary:'tx-picking-summary', table:'tx-picking-table', label:'nhóm Picking', clearBtn:'tx-picking-clear-filters' },
   reworkXuat: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty'], tbody:'tx-reworkXuat-tbody', tfoot:'tx-reworkXuat-tfoot', empty:'tx-reworkXuat-empty', search:'tx-reworkXuat-search', summary:'tx-reworkXuat-summary', table:'tx-reworkXuat-table', label:'dòng Rework (Xuất)', clearBtn:'tx-reworkXuat-clear-filters' },
   reworkNhap: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty'], tbody:'tx-reworkNhap-tbody', tfoot:'tx-reworkNhap-tfoot', empty:'tx-reworkNhap-empty', search:'tx-reworkNhap-search', summary:'tx-reworkNhap-summary', table:'tx-reworkNhap-table', label:'dòng Rework (Nhập)', clearBtn:'tx-reworkNhap-clear-filters' },
+  updownUp: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty'], tbody:'tx-updownUp-tbody', tfoot:'tx-updownUp-tfoot', empty:'tx-updownUp-empty', search:'tx-updownUp-search', summary:'tx-updownUp-summary', table:'tx-updownUp-table', label:'dòng Lên (3AFG)', clearBtn:'tx-updownUp-clear-filters' },
+  updownDown: { cols: ['khoXuat','menuName','item','locatorXuat','locatorDen','user','qty'], tbody:'tx-updownDown-tbody', tfoot:'tx-updownDown-tfoot', empty:'tx-updownDown-empty', search:'tx-updownDown-search', summary:'tx-updownDown-summary', table:'tx-updownDown-table', label:'dòng Xuống (3AFG)', clearBtn:'tx-updownDown-clear-filters' },
   // 2 bảng "Xe Trung Chuyển" — chỉ cần đủ field mà txUpdateFilterIcons()/nút Xoá bộ lọc cần, phần vẽ
   // bảng thật vẫn dùng riêng renderXeTrungChuyenTable() (khác cấu trúc renderTxTable ở 3 kind trên).
   itnTransferGroups: { table:'tx-xtc-transfer-table', clearBtn:'tx-xtc-transfer-clear-filters' },
@@ -13755,12 +13759,15 @@ function txApplyDefaultFilters(){
   txColFilters.picking = txDefaultColFilters();
   txColFilters.reworkXuat = txDefaultColFilters();
   txColFilters.reworkNhap = txDefaultColFilters();
+  txColFilters.updownUp = txDefaultColFilters();
+  txColFilters.updownDown = txDefaultColFilters();
   txColFilters.itnTransferGroups = txDefaultColFilters();
   txColFilters.itnReceivingGroups = txDefaultColFilters();
 }
 const txColFilters = {
   receive: txDefaultColFilters(), transfer: txDefaultColFilters(), picking: txDefaultColFilters(),
   reworkXuat: txDefaultColFilters(), reworkNhap: txDefaultColFilters(),
+  updownUp: txDefaultColFilters(), updownDown: txDefaultColFilters(),
   itnTransferGroups: txDefaultColFilters(), itnReceivingGroups: txDefaultColFilters()
 }; // { kind: { colKey: Set(labels) | undefined } }
 // Vẽ lại đúng bảng theo kind — renderTxTable() chỉ hiểu 3 kind gốc (receive/transfer/picking), 2 bảng
@@ -13874,13 +13881,17 @@ const TX_CHART_ITEMS = [
   { key:'receive', label:'Receive', color:'var(--teal)' },
   { key:'transfer', label:'Transfer', color:'var(--blue)' },
   { key:'picking', label:'Picking', color:'var(--violet)' },
-  { key:'reworkNhap', label:'Nhận RW', color:'var(--amber-bright)' }
+  { key:'reworkNhap', label:'Nhận RW', color:'var(--amber-bright)' },
+  { key:'updownUp', label:'Lên 3AFG', color:'var(--red)' },
+  { key:'updownDown', label:'Xuống 3AFG', color:'var(--amber)' }
 ];
 // Thứ tự 4 kho hiển thị RIÊNG trong biểu đồ (giống CPT_KHO_ORDER/PICK_SLIP_KHO_ORDER dùng ở nơi khác
 // trong app) — mỗi kho 1 khung, luôn tính trên TOÀN BỘ dữ liệu của đúng kho đó, KHÔNG phụ thuộc bộ
 // lọc cột/ô tìm kiếm hiện tại của 3 bảng bên dưới. Riêng "Nhận RW" lấy từ txState.reworkNhap (kho ở
-// đây là kho NHẬN, xem txBuildReworkDetailRows()), vẫn dùng chung txKhoTotalFor() vì field group-by
-// vẫn tên "khoXuat" như các kind khác (chỉ khác Ý NGHĨA, không khác tên field).
+// đây là kho NHẬN, xem txBuildReworkDetailRows()), "Lên 3AFG"/"Xuống 3AFG" lấy từ txState.updownUp/
+// txState.updownDown (kho ở "Xuống" cũng là kho NHẬN, xem txBuildUpDownDetailRows()) — vẫn dùng chung
+// txKhoTotalFor() vì field group-by vẫn tên "khoXuat" như các kind khác (chỉ khác Ý NGHĨA, không khác
+// tên field).
 const TX_CHART_KHO_ORDER = ['2B', '3A', '3B', 'DG1'];
 
 function txKhoTotalFor(kind, khoShort){
@@ -14202,6 +14213,28 @@ function txBuildReworkDetailRows(records){
   return { xuat: [...xuatMap.values()], nhap: [...nhapMap.values()] };
 }
 
+// Dòng chi tiết Lên/Xuống (cho bảng "Xem chi tiết từng dòng" + biểu đồ Grand Total) — gộp nhóm giống
+// hệt txBuildReworkDetailRows(), chỉ khác điều kiện nhận diện (tiền tố "3AFG" thay vì hậu tố "PROD").
+function txBuildUpDownDetailRows(records){
+  const locatorKhoMap = buildLocatorKhoMap();
+  const upMap = new Map(), downMap = new Map();
+  for(const group of txGroupBySetId(records || [])){
+    const d = txDescribeSet(group, locatorKhoMap);
+    if(!d.locatorXuat || !d.locatorDen) continue;
+    const xuatIsMezz = txLocatorHasMezzaninePrefix(d.locatorXuat);
+    const denIsMezz = txLocatorHasMezzaninePrefix(d.locatorDen);
+    let map, kho;
+    if(denIsMezz && !xuatIsMezz){ map = upMap; kho = resolveKhoForLocator(d.locatorXuat, locatorKhoMap); }
+    else if(xuatIsMezz && !denIsMezz){ map = downMap; kho = resolveKhoForLocator(d.locatorDen, locatorKhoMap); }
+    else continue;
+    const key = [kho, d.menuName, d.item, d.locatorXuat, d.locatorDen, d.user].join('||');
+    const cur = map.get(key);
+    if(cur){ cur.total++; cur.qty += d.qty; }
+    else map.set(key, { khoXuat: kho || '—', menuName: d.menuName, item: d.item, locatorXuat: d.locatorXuat, locatorDen: d.locatorDen, user: d.user, qty: d.qty, total: 1 });
+  }
+  return { up: [...upMap.values()], down: [...downMap.values()] };
+}
+
 function renderTransactionPage(){
   renderTxKpiStrip();
   renderTxSummaries();
@@ -14211,12 +14244,17 @@ function renderTransactionPage(){
     const rw = txBuildReworkDetailRows(txState.records);
     txState.reworkXuat = rw.xuat;
     txState.reworkNhap = rw.nhap;
+    const ud = txBuildUpDownDetailRows(txState.records);
+    txState.updownUp = ud.up;
+    txState.updownDown = ud.down;
   }
   renderTxTable('receive');
   renderTxTable('transfer');
   renderTxTable('picking');
   renderTxTable('reworkXuat');
   renderTxTable('reworkNhap');
+  renderTxTable('updownUp');
+  renderTxTable('updownDown');
   renderXeTrungChuyenTable('itnTransferGroups', 'tx-xtc-transfer');
   renderXeTrungChuyenTable('itnReceivingGroups', 'tx-xtc-receiving');
   renderTxChart();
