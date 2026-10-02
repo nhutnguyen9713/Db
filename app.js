@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.14';
+const APP_VERSION = 'v3.15';
 const APP_VERSION_DATE = '02/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13916,15 +13916,14 @@ function txKhoTotalFor(kind, khoShort){
 function txChartGroupHtml(label, items){
   const maxVal = Math.max(1, ...items.map(i => i.total));
   // Khung nào cũng phải có ĐỘ RỘNG tỉ lệ đúng với SỐ CỘT bên trong (vd Kho 3A có thêm cột "Lên/Xuống
-  // 3AFG" -> 5 cột thay vì 4) — nếu không, các khung cùng rộng bằng nhau nhưng khung nhiều cột hơn bị
-  // nén chật hơn hẳn khung ít cột, nhìn lệch hẳn nhau (đây là điều người dùng phản ánh "chưa đều").
-  // flex-grow = số cột (khung nhiều cột được cấp thêm không gian trống nhiều hơn tỉ lệ thuận) + basis
-  // tính theo đúng bề ngang 1 cột (~94px, gồm bar-col 80px + gap 14px) để mọi khung co giãn CÙNG tỉ lệ.
-  // Độ rộng khung CỐ ĐỊNH theo đúng số cột bên trong (không flex-grow) — nếu để co giãn lấp đầy hàng,
-  // khung đứng lẻ loi cuối hàng (xuống dòng) sẽ bị kéo giãn hết phần trống còn lại, phá vỡ độ-rộng-
-  // mỗi-cột đã tính đều ở trên. Để trống dư ở cuối hàng (nếu có) còn hơn làm méo tỉ lệ các khung.
+  // 3AFG" -> nhiều cột hơn) — nếu không, các khung cùng rộng bằng nhau nhưng khung nhiều cột hơn bị nén
+  // chật hơn hẳn khung ít cột, nhìn lệch hẳn nhau. flex-grow = số cột (khung nhiều cột được cấp thêm
+  // không gian nhiều hơn tỉ lệ thuận khi còn dư chỗ) + basis tính theo đúng bề ngang 1 cột (~94px, gồm
+  // bar-col 80px + gap 14px) để mọi khung co giãn CÙNG tỉ lệ. .tx-chart-row dùng flex-wrap:nowrap (luôn
+  // 1 hàng, không rớt dòng) + overflow-x:auto — khi không đủ chỗ, mọi khung tự co lại (flex-shrink) theo
+  // ĐÚNG tỉ lệ số cột thay vì xuống dòng; trường hợp quá hẹp (điện thoại) thì cuộn ngang thay vì nén vỡ.
   const basisPx = items.length * 94 + 24;
-  return `<div class="tx-chart-group" style="flex:0 0 ${basisPx}px;">
+  return `<div class="tx-chart-group" style="flex:${items.length} 1 ${basisPx}px;">
     <div class="tx-chart-group-label">${escHtml(label)}</div>
     <div class="tx-chart-wrap">${items.map(it => {
       const pct = it.total > 0 ? Math.max(3, Math.round((it.total / maxVal) * 100)) : 1;
