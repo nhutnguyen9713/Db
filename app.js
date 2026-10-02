@@ -13882,13 +13882,16 @@ const TX_CHART_ITEMS = [
   { key:'transfer', label:'Transfer', color:'var(--blue)' },
   { key:'picking', label:'Picking', color:'var(--violet)' },
   { key:'reworkNhap', label:'Nhận RW', color:'var(--amber-bright)' },
-  { key:'updownUp', label:'Lên 3AFG', color:'var(--red)' },
-  { key:'updownDown', label:'Xuống 3AFG', color:'var(--amber)' }
+  // 1 cột gộp chung Lên/Xuống 3AFG (thay vì 2 cột riêng) để biểu đồ đều cột giữa các khung kho — cột
+  // được tô 2 nửa màu khác nhau (đỏ/vàng đất) theo tỉ lệ Lên/Xuống, chỉ hiện ở khung Kho 3A (xem
+  // onlyKho bên dưới) vì khu lầu 3AFG chỉ thuộc Kho 3A.
+  { key:'updownSplit', label:'Lên/Xuống 3AFG', onlyKho:'3A',
+    split:{ top:{ key:'updownUp', color:'var(--red)', label:'Lên' }, bottom:{ key:'updownDown', color:'var(--amber)', label:'Xuống' } } }
 ];
 // Thứ tự 4 kho hiển thị RIÊNG trong biểu đồ (giống CPT_KHO_ORDER/PICK_SLIP_KHO_ORDER dùng ở nơi khác
 // trong app) — mỗi kho 1 khung, luôn tính trên TOÀN BỘ dữ liệu của đúng kho đó, KHÔNG phụ thuộc bộ
 // lọc cột/ô tìm kiếm hiện tại của 3 bảng bên dưới. Riêng "Nhận RW" lấy từ txState.reworkNhap (kho ở
-// đây là kho NHẬN, xem txBuildReworkDetailRows()), "Lên 3AFG"/"Xuống 3AFG" lấy từ txState.updownUp/
+// đây là kho NHẬN, xem txBuildReworkDetailRows()), "Lên/Xuống 3AFG" lấy từ txState.updownUp/
 // txState.updownDown (kho ở "Xuống" cũng là kho NHẬN, xem txBuildUpDownDetailRows()) — vẫn dùng chung
 // txKhoTotalFor() vì field group-by vẫn tên "khoXuat" như các kind khác (chỉ khác Ý NGHĨA, không khác
 // tên field).
@@ -13906,6 +13909,17 @@ function txChartGroupHtml(label, items){
     <div class="tx-chart-group-label">${escHtml(label)}</div>
     <div class="tx-chart-wrap">${items.map(it => {
       const pct = it.total > 0 ? Math.max(3, Math.round((it.total / maxVal) * 100)) : 1;
+      if(it.split){
+        const { top, bottom } = it.split;
+        const sum = top.total + bottom.total;
+        const topSharePct = sum > 0 ? Math.round((top.total / sum) * 100) : 50;
+        const barBg = `linear-gradient(to bottom, ${top.color} 0%, ${top.color} ${topSharePct}%, ${bottom.color} ${topSharePct}%, ${bottom.color} 100%)`;
+        return `<div class="tx-chart-bar-col">
+          <div class="tx-chart-bar-value" style="white-space:nowrap;"><span style="color:${top.color}">${fmt(top.total)}</span><span style="color:var(--muted-2); font-weight:600;"> / </span><span style="color:${bottom.color}">${fmt(bottom.total)}</span></div>
+          <div class="tx-chart-bar" style="height:${pct}%; background:${barBg};"></div>
+          <div class="tx-chart-bar-label">${it.label}<div class="tx-chart-bar-sub">${fmt(top.rowsCount)} dòng ${top.label} · ${fmt(bottom.rowsCount)} dòng ${bottom.label}</div></div>
+        </div>`;
+      }
       return `<div class="tx-chart-bar-col">
         <div class="tx-chart-bar-value" style="color:${it.color}">${fmt(it.total)}</div>
         <div class="tx-chart-bar" style="height:${pct}%; background:${it.color};"></div>
@@ -13923,11 +13937,16 @@ function renderTxChart(){
     return;
   }
   const khoGroupsHtml = TX_CHART_KHO_ORDER.map(kho => {
-    // "Lên 3AFG"/"Xuống 3AFG" chỉ liên quan khu lầu M1/M2 Kho 3A -> chỉ hiện 2 cột này ở khung Kho 3A,
-    // các khung kho khác không hiện (tránh gây hiểu nhầm là Kho 2B/3B/DG1 cũng có khu 3AFG).
     const items = TX_CHART_ITEMS
-      .filter(it => kho === '3A' || (it.key !== 'updownUp' && it.key !== 'updownDown'))
-      .map(it => ({ ...it, ...txKhoTotalFor(it.key, kho) }));
+      .filter(it => !it.onlyKho || it.onlyKho === kho)
+      .map(it => {
+        if(it.split){
+          const top = { ...it.split.top, ...txKhoTotalFor(it.split.top.key, kho) };
+          const bottom = { ...it.split.bottom, ...txKhoTotalFor(it.split.bottom.key, kho) };
+          return { ...it, split:{ top, bottom }, total: top.total + bottom.total, rowsCount: top.rowsCount + bottom.rowsCount };
+        }
+        return { ...it, ...txKhoTotalFor(it.key, kho) };
+      });
     return txChartGroupHtml(`Kho ${kho}`, items);
   }).join('');
   wrap.innerHTML = `<div class="tx-chart-row">${khoGroupsHtml}</div>`;
