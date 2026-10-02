@@ -1391,7 +1391,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.13';
+const APP_VERSION = 'v3.14';
 const APP_VERSION_DATE = '02/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13881,7 +13881,9 @@ function renderTxTable(kind){
 }
 
 const TX_CHART_ITEMS = [
-  { key:'receive', label:'Receive', color:'var(--teal)' },
+  // Kho 2B không có nghiệp vụ Receive thật (không nhận hàng trực tiếp vào 2B) -> ẩn cột này riêng ở
+  // khung Kho 2B (excludeKho), các khung kho khác vẫn hiện bình thường.
+  { key:'receive', label:'Receive', color:'var(--teal)', excludeKho:'2B' },
   { key:'transfer', label:'Transfer', color:'var(--blue)' },
   { key:'putaway', label:'Put Away', color:'var(--amber-bright)' },
   { key:'picking', label:'Picking', color:'var(--violet)' },
@@ -13961,7 +13963,7 @@ function renderTxChart(){
   }
   const khoGroupsHtml = TX_CHART_KHO_ORDER.map(kho => {
     const items = TX_CHART_ITEMS
-      .filter(it => !it.onlyKho || it.onlyKho === kho)
+      .filter(it => (!it.onlyKho || it.onlyKho === kho) && it.excludeKho !== kho)
       .map(it => {
         if(it.split){
           const top = { ...it.split.top, ...txKhoTotalFor(it.split.top.key, kho) };
