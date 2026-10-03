@@ -3980,6 +3980,7 @@ document.addEventListener('click', (e) => {
 });
 
 function renderContainerPickingOverview(){
+  if(typeof txRefreshCrInvoice === 'function') txRefreshCrInvoice();
   const panelEl = document.getElementById('cont-picking-overview');
   const kpiEl = document.getElementById('cont-picking-kpi-strip');
   const detailWrap = document.getElementById('cont-picking-detail-wrap');
@@ -13990,17 +13991,55 @@ function escHtml(s){
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// Tính sẵn các bảng chi tiết dẫn xuất (Transfer Nhận, Put Away, Rework, Lên/Xuống 3AFG) từ records —
+// phải chạy TRƯỚC khi vẽ dải KPI để dải KPI có đủ số liệu của mọi mục trong tab.
+function txEnsureDerived(){
+  if(!txState || !txState.records) return;
+  const rw = txBuildReworkDetailRows(txState.records);
+  txState.reworkXuat = rw.xuat;
+  txState.reworkNhap = rw.nhap;
+  const ud = txBuildUpDownDetailRows(txState.records);
+  txState.updownUp = ud.up;
+  txState.updownDown = ud.down;
+  txState.putaway = txBuildPutAwayDetailRows(txState.records, txMasterMap);
+  txState.transferNhap = txBuildTransferNhapDetailRows(txState.records);
+}
+
+// Danh sách ô KPI của TOÀN BỘ các mục trong tab Transaction — dùng chung cho dải KPI trên màn hình và
+// bảng "Tổng quan số liệu" trong file Excel xuất ra, để 2 nơi luôn khớp nhau.
+function txKpiItems(){
+  if(!txState || !txState.kpi) return [];
+  const k = txState.kpi;
+  const sumTotal = arr => (arr || []).reduce((t, r) => t + (r.total || 0), 0);
+  const chuyenOf = arr => new Set((arr || []).map(r => r.reference).filter(Boolean)).size;
+  const rowsOf = arr => (arr || []).length;
+  const tn = txState.transferNhap, pa = txState.putaway, rx = txState.reworkXuat, rn = txState.reworkNhap;
+  const up = txState.updownUp, dn = txState.updownDown;
+  const itnT = txState.itnTransferGroups, itnR = txState.itnReceivingGroups;
+  return [
+    { label:'TỔNG DÒNG', value:k.nRows, foot:'dòng giao dịch trong file' },
+    { label:'RECEIVE', value:k.countReceive, foot:`${fmt(k.receiveGroups)} dòng thống kê`, cls:'accent' },
+    { label:'TRANSFER · XUẤT', value:k.transferTotal, foot:`${fmt(k.transferGroups)} dòng thống kê / ${fmt(k.countTransfer)} bản ghi ITN Transfer`, cls:'good' },
+    { label:'TRANSFER · NHẬN', value:sumTotal(tn), foot:`${fmt(rowsOf(tn))} dòng thống kê · ITN Receiving`, cls:'good' },
+    { label:'PUT AWAY', value:sumTotal(pa), foot:`${fmt(rowsOf(pa))} dòng thống kê · cất hàng từ FG-TG` },
+    { label:'PICKING', value:k.pickingTotal, foot:`${fmt(k.pickingGroups)} dòng thống kê / ${fmt(k.countPicking)} bản ghi Pick Order` },
+    { label:'REWORK · XUẤT', value:sumTotal(rx), foot:`${fmt(rowsOf(rx))} dòng thống kê · chuyển đến PROD` },
+    { label:'REWORK · NHẬP', value:sumTotal(rn), foot:`${fmt(rowsOf(rn))} dòng thống kê · chuyển từ PROD về` },
+    { label:'LÊN KHU LẦU 3AFG', value:sumTotal(up), foot:`${fmt(rowsOf(up))} dòng thống kê`, cls:'bad' },
+    { label:'XUỐNG KHU LẦU 3AFG', value:sumTotal(dn), foot:`${fmt(rowsOf(dn))} dòng thống kê`, cls:'bad' },
+    { label:'XE TRUNG CHUYỂN · ĐI', value:sumTotal(itnT), foot:`${fmt(rowsOf(itnT))} dòng · ${fmt(chuyenOf(itnT))} chuyến` },
+    { label:'XE TRUNG CHUYỂN · NHẬN', value:sumTotal(itnR), foot:`${fmt(rowsOf(itnR))} dòng · ${fmt(chuyenOf(itnR))} chuyến` }
+  ];
+}
+
 function renderTxKpiStrip(){
   const el = document.getElementById('transaction-kpi-strip');
   if(!el) return;
   if(!txState){ el.innerHTML = ''; return; }
-  const k = txState.kpi;
-  el.innerHTML = `
-    <div class="kpi"><div class="label">TỔNG DÒNG</div><div class="value">${fmt(k.nRows)}</div><div class="foot">dòng giao dịch trong file</div></div>
-    <div class="kpi accent"><div class="label">RECEIVE</div><div class="value">${fmt(k.countReceive)}</div><div class="foot">${fmt(k.receiveGroups)} dòng thống kê</div></div>
-    <div class="kpi good"><div class="label">TRANSFER</div><div class="value">${fmt(k.transferTotal)}</div><div class="foot">${fmt(k.transferGroups)} dòng thống kê / ${fmt(k.countTransfer)} bản ghi (mọi Menu Name, trừ Pick Order)</div></div>
-    <div class="kpi"><div class="label">PICKING</div><div class="value">${fmt(k.pickingTotal)}</div><div class="foot">${fmt(k.pickingGroups)} dòng thống kê / ${fmt(k.countPicking)} bản ghi Pick Order</div></div>
-  `;
+  txEnsureDerived();
+  el.innerHTML = txKpiItems().map(it =>
+    `<div class="kpi${it.cls ? ' ' + it.cls : ''}"><div class="label">${escHtml(it.label)}</div><div class="value">${fmt(it.value)}</div><div class="foot">${escHtml(it.foot)}</div></div>`
+  ).join('');
 }
 
 // Bảng TỔNG HỢP cho 3 loại Nhận / Chuyển / Pick cont — tính thẳng từ records gốc (không phụ thuộc bộ
@@ -14032,6 +14071,64 @@ function txBuildSummaries(records, masterMap){
   return out;
 }
 
+// Sắp xếp bảng "Theo người thao tác": gom những người CÙNG KHO nằm cạnh nhau (thứ tự kho 2B → 3A → 3B → kho khác),
+// trong mỗi kho người nhiều lượt nhất lên trước. Người thao tác ở nhiều kho xếp theo kho đứng đầu của họ.
+const TX_USER_KHO_ORDER = ['2B', '3A', '3B'];
+function txUserKhoRank(khos){
+  const arr = [...(khos || [])].filter(k => k && k !== '—');
+  if(!arr.length) return 999;
+  return Math.min(...arr.map(k => { const i = TX_USER_KHO_ORDER.indexOf(k); return i === -1 ? 100 : i; }));
+}
+function txUserByKhoCmp(a, b){
+  const ra = txUserKhoRank(a.khos), rb = txUserKhoRank(b.khos);
+  if(ra !== rb) return ra - rb;
+  const ka = [...(a.khos || [])].filter(k => k && k !== '—').sort().join(', ');
+  const kb = [...(b.khos || [])].filter(k => k && k !== '—').sort().join(', ');
+  const kc = ka.localeCompare(kb, 'vi', { numeric:true });
+  if(kc) return kc;
+  return (b.count - a.count) || String(a.key).localeCompare(String(b.key), 'vi', { numeric:true });
+}
+
+// ---- Invoice theo mã CR (cột "Invoice" ở bảng Pick cont → Theo container) ----
+// Lấy từ file Plan (Row/FC/HCP) đã tải: mỗi dòng Plan có cột CSR (= mã CR, VD CR0167111) và cột Invoice.
+// 1 CR có thể ứng với nhiều Invoice (nhiều lượt/nhiều Plan) -> liệt kê hết, cách nhau bởi dấu phẩy.
+function txBuildCrInvoiceMap(){
+  const map = new Map();
+  try {
+    PLAN_TYPES.forEach(type => {
+      const rows = (planData[type] && planData[type].detailRows) || [];
+      rows.forEach(r => {
+        const inv = (r.invoice || '').trim();
+        const csr = (r.csr || '').trim();
+        if(!inv || !csr) return;
+        const codes = csr.match(/CR\d+/gi) || [csr];
+        codes.forEach(c => {
+          const key = c.toUpperCase();
+          if(!map.has(key)) map.set(key, new Set());
+          map.get(key).add(inv);
+        });
+      });
+    });
+  } catch(e){ /* Plan chưa sẵn sàng -> bỏ qua, cột Invoice hiện "—" */ }
+  return map;
+}
+function txInvoiceForCr(cr, map){
+  const m = map || txBuildCrInvoiceMap();
+  const set = m.get(String(cr || '').toUpperCase());
+  return set && set.size ? [...set].join(', ') : '—';
+}
+// Plan được tải/sửa SAU khi bảng Transaction đã vẽ -> vẽ lại bảng tổng hợp khi bản đồ CR→Invoice đổi.
+var txCrInvoiceSig = '';
+function txRefreshCrInvoice(){
+  try {
+    const m = txBuildCrInvoiceMap();
+    const sig = [...m].map(([k, v]) => k + ':' + [...v].join('|')).join(';');
+    if(sig === txCrInvoiceSig) return;
+    txCrInvoiceSig = sig;
+    if(txState && txState.records) renderTxSummaries();
+  } catch(e){ /* txState chưa khởi tạo — bỏ qua */ }
+}
+
 // cols: [{ label, get(row), num }] — bảng nhỏ có tiêu đề, cuộn trong khung, dòng Tổng cố định ở đáy.
 function txSumCardHtml(title, badge, rows, cols, footCells){
   const head = cols.map(c => `<th${c.num ? ' class="num"' : ''}>${escHtml(c.label)}</th>`).join('');
@@ -14060,7 +14157,7 @@ function renderTxSummaries(){
     if(!grid) return;
     const s = sum[k];
     const khoRows = [...s.byKho.values()].sort(byCountDesc);
-    const userRows = [...s.byUser.values()].sort(byCountDesc);
+    const userRows = [...s.byUser.values()].sort(txUserByKhoCmp);
     if(!khoRows.length){
       grid.innerHTML = '<div class="tx-sum-empty">Không có giao dịch loại này trong file.</div>';
       return;
@@ -14081,8 +14178,10 @@ function renderTxSummaries(){
     if(k === 'picking'){
       const contRows = [...sum.pickByCont.values()].sort((a, b) => String(a.key).localeCompare(String(b.key), 'vi', { numeric: true }));
       const realConts = contRows.filter(r => r.key !== '(không có CR)').length;
+      const crInvMap = txBuildCrInvoiceMap();
       html += txSumCardHtml('Theo container (CR)', `${fmt(realConts)} container`, contRows, [
         { label: 'Container', get: r => r.key },
+        { label: 'Invoice', get: r => txInvoiceForCr(r.key, crInvMap) },
         { label: 'Lượt', get: r => fmt(r.count), num: true },
         { label: 'SL', get: r => fmt(r.qty), num: true },
         { label: 'Kho', get: r => joinSet(r.khos) },
@@ -14148,7 +14247,7 @@ function renderTxReworkSummaries(){
     if(!grid) return;
     const s = sum[dir];
     const khoRows = [...s.byKho.values()].sort(byCountDesc);
-    const userRows = [...s.byUser.values()].sort(byCountDesc);
+    const userRows = [...s.byUser.values()].sort(txUserByKhoCmp);
     if(!khoRows.length){
       grid.innerHTML = '<div class="tx-sum-empty">Không có giao dịch Rework loại này trong file.</div>';
       return;
@@ -14205,7 +14304,7 @@ function renderTxTransferNhapSummaries(){
   const byCountDesc = (a, b) => (b.count - a.count) || String(a.key).localeCompare(String(b.key), 'vi', { numeric: true });
   const joinSet = set => [...set].sort().join(', ') || '—';
   const khoRows = [...s.byKho.values()].sort(byCountDesc);
-  const userRows = [...s.byUser.values()].sort(byCountDesc);
+  const userRows = [...s.byUser.values()].sort(txUserByKhoCmp);
   if(!khoRows.length){
     grid.innerHTML = '<div class="tx-sum-empty">Không có giao dịch ITN Receiving trong file.</div>';
     return;
@@ -14315,7 +14414,7 @@ function renderTxUpDownSummaries(){
     if(!grid) return;
     const s = sum[dir];
     const khoRows = [...s.byKho.values()].sort(byCountDesc);
-    const userRows = [...s.byUser.values()].sort(byCountDesc);
+    const userRows = [...s.byUser.values()].sort(txUserByKhoCmp);
     if(!khoRows.length){
       grid.innerHTML = '<div class="tx-sum-empty">Không có giao dịch Lên/Xuống loại này trong file.</div>';
       return;
@@ -14455,7 +14554,7 @@ function renderTxPutAwaySummaries(){
   const byCountDesc = (a, b) => (b.count - a.count) || String(a.key).localeCompare(String(b.key), 'vi', { numeric: true });
   const joinSet = set => [...set].sort().join(', ') || '—';
   const khoRows = [...s.byKho.values()].sort(byCountDesc);
-  const userRows = [...s.byUser.values()].sort(byCountDesc);
+  const userRows = [...s.byUser.values()].sort(txUserByKhoCmp);
   if(!khoRows.length){
     grid.innerHTML = '<div class="tx-sum-empty">Không có giao dịch Put Away trong file.</div>';
     return;
@@ -14491,22 +14590,13 @@ function txBuildPutAwayDetailRows(records, masterMap){
 }
 
 function renderTransactionPage(){
+  txEnsureDerived();
   renderTxKpiStrip();
   renderTxSummaries();
   renderTxTransferNhapSummaries();
   renderTxPutAwaySummaries();
   renderTxReworkSummaries();
   renderTxUpDownSummaries();
-  if(txState){
-    const rw = txBuildReworkDetailRows(txState.records);
-    txState.reworkXuat = rw.xuat;
-    txState.reworkNhap = rw.nhap;
-    const ud = txBuildUpDownDetailRows(txState.records);
-    txState.updownUp = ud.up;
-    txState.updownDown = ud.down;
-    txState.putaway = txBuildPutAwayDetailRows(txState.records, txMasterMap);
-    txState.transferNhap = txBuildTransferNhapDetailRows(txState.records);
-  }
   renderTxTable('receive');
   renderTxTable('transfer');
   renderTxTable('transferNhap');
@@ -14924,7 +15014,7 @@ async function txExportExcel(){
 
     // ---------- Sheet 1: Tổng quan ----------
     const ws = workbook.addWorksheet('Tổng quan', { views:[{ showGridLines:false }] });
-    const widths = [18, 11, 13, 3, 28, 12, 11, 13, 3, 18, 11, 13, 12, 30];
+    const widths = [18, 11, 13, 3, 28, 12, 11, 13, 3, 18, 22, 11, 13, 12, 30];
     widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
     const LAST_COL = widths.length;
 
@@ -15012,7 +15102,7 @@ async function txExportExcel(){
     // Bảng "Theo kho" + "Theo người thao tác" đặt cạnh nhau (A-C và E-H) từ {byKho, byUser}.
     function kuTables(s){
       const khoRows = [...s.byKho.values()].sort(byCountDesc);
-      const userRows = [...s.byUser.values()].sort(byCountDesc);
+      const userRows = [...s.byUser.values()].sort(txUserByKhoCmp);
       if(!khoRows.length) return null;
       const totalCount = khoRows.reduce((t, r) => t + r.count, 0);
       const totalQty = khoRows.reduce((t, r) => t + r.qty, 0);
@@ -15045,15 +15135,11 @@ async function txExportExcel(){
     }
 
     // ----- KPI -----
-    const k = txState.kpi || {};
+    txEnsureDerived();
     row += drawTable(row, {
       c0:1, title:'TỔNG QUAN SỐ LIỆU', headers:['Chỉ số', '', 'Giá trị'],
-      rows: [
-        ['Tổng dòng giao dịch trong file', '', toNum(k.nRows)],
-        ['Receive (dòng thống kê: ' + fmt(k.receiveGroups || 0) + ')', '', toNum(k.countReceive)],
-        ['Transfer (' + fmt(k.transferGroups || 0) + ' dòng thống kê / ' + fmt(k.countTransfer || 0) + ' bản ghi)', '', toNum(k.transferTotal)],
-        ['Picking (' + fmt(k.pickingGroups || 0) + ' dòng thống kê / ' + fmt(k.countPicking || 0) + ' bản ghi Pick Order)', '', toNum(k.pickingTotal)]
-      ], foot:null, numCols:new Set([2])
+      rows: txKpiItems().map((it, i) => [i === 0 ? 'Tổng dòng giao dịch trong file' : `${it.label} (${it.foot})`, '', toNum(it.value)]),
+      foot:null, numCols:new Set([2])
     }, COLORS.head) + 1;
 
     // ----- Grand Total theo kho (giống khung biểu đồ) -----
@@ -15116,6 +15202,7 @@ async function txExportExcel(){
     // PICKING (thêm bảng theo container)
     row += drawBanner(row, 'PICKING', 'Pick cont (Pick Order)', 'Lấy hàng xuất container — tổng theo kho, theo người pick và theo từng container (mã CR trong Reference, toàn bộ file).', COLORS.picking);
     {
+      const crInvMap = txBuildCrInvoiceMap();
       const pk = kuTables(sum.picking);
       let specs = pk;
       if(pk){
@@ -15123,9 +15210,9 @@ async function txExportExcel(){
         const realConts = contRows.filter(r => r.key !== '(không có CR)').length;
         specs = pk.concat([{
           c0:10, title:'THEO CONTAINER (CR)', badge:`${fmt(realConts)} container`,
-          headers:['Container', 'Lượt', 'SL', 'Kho', 'Người pick'],
-          rows: contRows.map(r => [r.key, r.count, r.qty, joinSet(r.khos), joinSet(r.users)]),
-          foot:null, numCols:new Set([1, 2])
+          headers:['Container', 'Invoice', 'Lượt', 'SL', 'Kho', 'Người pick'],
+          rows: contRows.map(r => [r.key, txInvoiceForCr(r.key, crInvMap), r.count, r.qty, joinSet(r.khos), joinSet(r.users)]),
+          foot:null, numCols:new Set([2, 3])
         }]);
       }
       row += drawGroup(row, null, specs, COLORS.picking) + 1;
