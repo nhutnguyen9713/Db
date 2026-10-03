@@ -14895,6 +14895,392 @@ if(txBtnReset){
 }
 
 // Khôi phục dữ liệu Transaction đã lưu (nếu có) khi mở lại trang
+// ============ XUẤT EXCEL — toàn bộ trang "Thống kê Transaction" ============
+// Dùng LẠI đúng các hàm tính tổng hợp mà màn hình đang dùng (txBuildSummaries, txBuildTransferNhapSummaries,
+// txBuildPutAwaySummaries, txBuildReworkSummaries, txBuildUpDownSummaries) và dữ liệu chi tiết trong txState
+// nên số liệu trong file Excel luôn khớp với trên màn hình. Luôn xuất TOÀN BỘ file (không phụ thuộc bộ lọc cột /
+// ô tìm kiếm của các bảng chi tiết). Sheet 1 "Tổng quan" = KPI + Grand Total theo kho + mọi bảng tổng hợp;
+// các sheet sau = bảng "Xem chi tiết từng dòng" của từng mục (kể cả 2 bảng Xe Trung Chuyển).
+async function txExportExcel(){
+  if(typeof ExcelJS === 'undefined'){ alert('Không xuất được Excel: thư viện ExcelJS chưa tải được (cần Internet).'); return; }
+  if(!txState || !txState.records){ alert('Chưa có dữ liệu Transaction — hãy tải file Transaction trước khi xuất Excel.'); return; }
+  const btn = document.getElementById('btn-export-transaction');
+  const oldBtnHtml = btn ? btn.innerHTML : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Đang xuất…'; }
+  try {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'TN5 Dashboard';
+    workbook.created = new Date();
+
+    // ---------- style helpers ----------
+    const thin = { style:'thin', color:{ argb:'FFD9DEE7' } };
+    const BORDER = { top:thin, left:thin, bottom:thin, right:thin };
+    const NUM_FMT = '#,##0';
+    const fillOf = argb => ({ type:'pattern', pattern:'solid', fgColor:{ argb } });
+    const COLORS = { receive:'FF0F9D8A', transfer:'FF2F6FD0', putaway:'FFE59A1B', rework:'FF0F9D8A', updown:'FFD6394B', picking:'FF7C4DDB', itn:'FFB8791A', head:'FF1F2937' };
+    const byCountDesc = (a, b) => (b.count - a.count) || String(a.key).localeCompare(String(b.key), 'vi', { numeric:true });
+    const joinSet = s => [...s].sort().join(', ') || '—';
+    const toNum = v => (v === undefined || v === null || v === '' || isNaN(Number(v))) ? null : Number(v);
+
+    // ---------- Sheet 1: Tổng quan ----------
+    const ws = workbook.addWorksheet('Tổng quan', { views:[{ showGridLines:false }] });
+    const widths = [18, 11, 13, 3, 28, 12, 11, 13, 3, 18, 11, 13, 12, 30];
+    widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+    const LAST_COL = widths.length;
+
+    let row = 1;
+    ws.getCell(row, 1).value = 'THỐNG KÊ TRANSACTION';
+    ws.getCell(row, 1).font = { bold:true, size:16, color:{ argb:COLORS.head } };
+    row++;
+    const fileName = txState.fileName ? `File: ${txState.fileName}` : '';
+    const updAt = txState.updatedAtText ? `Cập nhật lúc ${txState.updatedAtText}` : '';
+    ws.getCell(row, 1).value = [updAt, fileName].filter(Boolean).join('   |   ') || 'Dữ liệu Transaction';
+    ws.getCell(row, 1).font = { italic:true, size:10, color:{ argb:'FF6B7280' } };
+    row += 2;
+
+    // Vẽ 1 bảng nhỏ (tiêu đề + header + dòng + dòng Tổng) bắt đầu tại (r0, c0). Trả về số dòng đã dùng.
+    // spec: { c0, title, badge, headers[], rows[][], foot[]|null, numCols:Set<index> }
+    function drawTable(r0, spec, accent){
+      const { c0, title, badge, headers, rows, foot } = spec;
+      const num = spec.numCols || new Set();
+      const ncol = headers.length;
+      // dòng tiêu đề bảng
+      const tCell = ws.getCell(r0, c0);
+      tCell.value = title;
+      tCell.font = { bold:true, size:11, color:{ argb:COLORS.head } };
+      if(badge){
+        const bCell = ws.getCell(r0, c0 + ncol - 1);
+        bCell.value = badge;
+        bCell.font = { size:9, color:{ argb:'FF6B7280' } };
+        bCell.alignment = { horizontal:'right' };
+      }
+      // header
+      headers.forEach((h, i) => {
+        const c = ws.getCell(r0 + 1, c0 + i);
+        c.value = h;
+        c.font = { bold:true, size:10, color:{ argb:'FFFFFFFF' } };
+        c.fill = fillOf(accent);
+        c.border = BORDER;
+        c.alignment = { horizontal: num.has(i) ? 'right' : 'left', vertical:'middle' };
+      });
+      // body
+      rows.forEach((rw, ri) => {
+        rw.forEach((v, i) => {
+          const c = ws.getCell(r0 + 2 + ri, c0 + i);
+          c.value = v;
+          c.border = BORDER;
+          if(num.has(i)){ c.numFmt = NUM_FMT; c.alignment = { horizontal:'right' }; }
+          if(ri % 2 === 1) c.fill = fillOf('FFF7F9FC');
+        });
+      });
+      let used = 2 + rows.length;
+      if(foot){
+        foot.forEach((v, i) => {
+          const c = ws.getCell(r0 + used, c0 + i);
+          c.value = v;
+          c.font = { bold:true };
+          c.border = { ...BORDER, top:{ style:'medium', color:{ argb:'FF9CA3AF' } } };
+          c.fill = fillOf('FFEEF2F7');
+          if(num.has(i)){ c.numFmt = NUM_FMT; c.alignment = { horizontal:'right' }; }
+        });
+        used++;
+      }
+      return used;
+    }
+
+    // Thanh tiêu đề của 1 mục lớn (màu theo loại) trải suốt chiều ngang.
+    function drawBanner(r0, eyebrow, title, desc, accent){
+      for(let c = 1; c <= LAST_COL; c++){ ws.getCell(r0, c).fill = fillOf(accent); }
+      const t = ws.getCell(r0, 1);
+      t.value = `${eyebrow}  —  ${title}`;
+      t.font = { bold:true, size:13, color:{ argb:'FFFFFFFF' } };
+      ws.getRow(r0).height = 22;
+      t.alignment = { vertical:'middle' };
+      let used = 1;
+      if(desc){
+        ws.mergeCells(r0 + 1, 1, r0 + 1, LAST_COL);
+        const d = ws.getCell(r0 + 1, 1);
+        d.value = desc;
+        d.font = { italic:true, size:9, color:{ argb:'FF6B7280' } };
+        d.alignment = { wrapText:true, vertical:'top' };
+        ws.getRow(r0 + 1).height = 26;
+        used++;
+      }
+      return used;
+    }
+
+    // Bảng "Theo kho" + "Theo người thao tác" đặt cạnh nhau (A-C và E-H) từ {byKho, byUser}.
+    function kuTables(s){
+      const khoRows = [...s.byKho.values()].sort(byCountDesc);
+      const userRows = [...s.byUser.values()].sort(byCountDesc);
+      if(!khoRows.length) return null;
+      const totalCount = khoRows.reduce((t, r) => t + r.count, 0);
+      const totalQty = khoRows.reduce((t, r) => t + r.qty, 0);
+      return [
+        { c0:1, title:'THEO KHO', badge:`${fmt(khoRows.length)} kho`, headers:['Kho', 'Lượt', 'SL'],
+          rows: khoRows.map(r => [r.key, r.count, r.qty]), foot:['Tổng', totalCount, totalQty], numCols:new Set([1, 2]) },
+        { c0:5, title:'THEO NGƯỜI THAO TÁC', badge:`${fmt(userRows.length)} người`, headers:['Người', 'Kho', 'Lượt', 'SL'],
+          rows: userRows.map(r => [r.key, joinSet(r.khos), r.count, r.qty]), foot:['Tổng', '', totalCount, totalQty], numCols:new Set([2, 3]) }
+      ];
+    }
+
+    // Vẽ 1 nhóm bảng (sub-title + các bảng cạnh nhau). Trả về số dòng đã dùng.
+    function drawGroup(r0, subTitle, specs, accent, emptyMsg){
+      let used = 0;
+      if(subTitle){
+        const s = ws.getCell(r0, 1);
+        s.value = subTitle;
+        s.font = { bold:true, size:11, color:{ argb:accent } };
+        used++;
+      }
+      if(!specs){
+        const m = ws.getCell(r0 + used, 1);
+        m.value = emptyMsg || 'Không có giao dịch loại này trong file.';
+        m.font = { italic:true, color:{ argb:'FF6B7280' } };
+        return used + 1;
+      }
+      let maxUsed = 0;
+      specs.forEach(sp => { maxUsed = Math.max(maxUsed, drawTable(r0 + used, sp, accent)); });
+      return used + maxUsed;
+    }
+
+    // ----- KPI -----
+    const k = txState.kpi || {};
+    row += drawTable(row, {
+      c0:1, title:'TỔNG QUAN SỐ LIỆU', headers:['Chỉ số', '', 'Giá trị'],
+      rows: [
+        ['Tổng dòng giao dịch trong file', '', toNum(k.nRows)],
+        ['Receive (dòng thống kê: ' + fmt(k.receiveGroups || 0) + ')', '', toNum(k.countReceive)],
+        ['Transfer (' + fmt(k.transferGroups || 0) + ' dòng thống kê / ' + fmt(k.countTransfer || 0) + ' bản ghi)', '', toNum(k.transferTotal)],
+        ['Picking (' + fmt(k.pickingGroups || 0) + ' dòng thống kê / ' + fmt(k.countPicking || 0) + ' bản ghi Pick Order)', '', toNum(k.pickingTotal)]
+      ], foot:null, numCols:new Set([2])
+    }, COLORS.head) + 1;
+
+    // ----- Grand Total theo kho (giống khung biểu đồ) -----
+    const chartRows = [
+      { label:'Receive', key:'receive', exclude:'2B' },
+      { label:'Transfer — Xuất', key:'transfer' },
+      { label:'Transfer — Nhận', key:'transferNhap' },
+      { label:'Put Away', key:'putaway' },
+      { label:'Picking', key:'picking' },
+      { label:'Rework — Xuất', key:'reworkXuat' },
+      { label:'Rework — Nhận', key:'reworkNhap' },
+      { label:'Lên khu lầu 3AFG', key:'updownUp', only:'3A' },
+      { label:'Xuống khu lầu 3AFG', key:'updownDown', only:'3A' }
+    ];
+    const gtKho = (typeof TX_CHART_KHO_ORDER !== 'undefined') ? TX_CHART_KHO_ORDER : ['2B', '3A', '3B'];
+    const gtRows = chartRows.map(it => {
+      const vals = gtKho.map(kho => {
+        if((it.only && it.only !== kho) || it.exclude === kho) return null;
+        return txKhoTotalFor(it.key, kho).total;
+      });
+      const sum = vals.reduce((t, v) => t + (v || 0), 0);
+      return [it.label, ...vals, sum];
+    });
+    row += drawTable(row, {
+      c0:1, title:'BIỂU ĐỒ — GRAND TOTAL THEO KHO', badge:'Total của các dòng thống kê',
+      headers:['Hạng mục', ...gtKho.map(x => 'Kho ' + x), 'Tổng'],
+      rows: gtRows, foot:null, numCols:new Set(gtKho.map((_, i) => i + 1).concat([gtKho.length + 1]))
+    }, COLORS.head) + 2;
+
+    // ----- Các mục tổng hợp -----
+    const sum = txBuildSummaries(txState.records, txMasterMap);
+    const nhapSum = txBuildTransferNhapSummaries(txState.records);
+    const paSum = txBuildPutAwaySummaries(txState.records, txMasterMap);
+    const rwSum = txBuildReworkSummaries(txState.records);
+    const udSum = txBuildUpDownSummaries(txState.records);
+
+    // RECEIVE
+    row += drawBanner(row, 'RECEIVE', 'Nhập kho (Receive)', 'Hàng nhập vào kho — tổng theo kho và theo người thao tác (toàn bộ file).', COLORS.receive);
+    row += drawGroup(row, null, kuTables(sum.receive), COLORS.receive) + 1;
+
+    // TRANSFER
+    row += drawBanner(row, 'TRANSFER', 'Chuyển pallet (Transfer)', 'Chuyển hàng qua khu ITN — Xuất: Menu Name "ITN Transfer" (tổng theo kho xuất); Nhận: Menu Name "ITN Receiving" (tổng theo kho nhận).', COLORS.transfer);
+    row += drawGroup(row, '↗ XUẤT — ITN TRANSFER', kuTables(sum.transfer), COLORS.transfer) + 1;
+    row += drawGroup(row, '↙ NHẬN — ITN RECEIVING', kuTables(nhapSum), COLORS.transfer, 'Không có giao dịch ITN Receiving trong file.') + 1;
+
+    // PUT AWAY
+    row += drawBanner(row, 'PUT AWAY', 'Cất hàng (Put Away)', 'Quét từ vị trí tạm/trung gian (locator hậu tố "FG-TG") đến vị trí bất kỳ — tổng theo kho và theo người thao tác (toàn bộ file).', COLORS.putaway);
+    row += drawGroup(row, null, kuTables(paSum), COLORS.putaway, 'Không có giao dịch Put Away trong file.') + 1;
+
+    // REWORK
+    row += drawBanner(row, 'REWORK', 'Hàng Rework — Có Xuất và Nhận', 'Chuyển pallet đi/về vị trí Rework (locator có hậu tố "PROD").', COLORS.rework);
+    row += drawGroup(row, '↗ XUẤT — CHUYỂN ĐẾN VỊ TRÍ PROD', kuTables(rwSum.xuat), COLORS.rework, 'Không có giao dịch Rework loại này trong file.') + 1;
+    row += drawGroup(row, '↙ NHẬP — CHUYỂN TỪ VỊ TRÍ PROD VỀ', kuTables(rwSum.nhap), COLORS.rework, 'Không có giao dịch Rework loại này trong file.') + 1;
+
+    // MOVE PALLET UP/DOWN
+    row += drawBanner(row, 'MOVE PALLET UP/DOWN', 'Chuyển pallet Lên/Xuống khu lầu (3AFG)', 'Chuyển pallet lên/xuống khu lầu M1/M2 Kho 3A (locator có tiền tố "3AFG").', COLORS.updown);
+    row += drawGroup(row, '↑ LÊN — CHUYỂN ĐẾN KHU LẦU (3AFG)', kuTables(udSum.up), COLORS.updown, 'Không có giao dịch Lên/Xuống loại này trong file.') + 1;
+    row += drawGroup(row, '↓ XUỐNG — CHUYỂN TỪ KHU LẦU (3AFG) VỀ', kuTables(udSum.down), COLORS.updown, 'Không có giao dịch Lên/Xuống loại này trong file.') + 1;
+
+    // PICKING (thêm bảng theo container)
+    row += drawBanner(row, 'PICKING', 'Pick cont (Pick Order)', 'Lấy hàng xuất container — tổng theo kho, theo người pick và theo từng container (mã CR trong Reference, toàn bộ file).', COLORS.picking);
+    {
+      const pk = kuTables(sum.picking);
+      let specs = pk;
+      if(pk){
+        const contRows = [...sum.pickByCont.values()].sort((a, b) => String(a.key).localeCompare(String(b.key), 'vi', { numeric:true }));
+        const realConts = contRows.filter(r => r.key !== '(không có CR)').length;
+        specs = pk.concat([{
+          c0:10, title:'THEO CONTAINER (CR)', badge:`${fmt(realConts)} container`,
+          headers:['Container', 'Lượt', 'SL', 'Kho', 'Người pick'],
+          rows: contRows.map(r => [r.key, r.count, r.qty, joinSet(r.khos), joinSet(r.users)]),
+          foot:null, numCols:new Set([1, 2])
+        }]);
+      }
+      row += drawGroup(row, null, specs, COLORS.picking) + 1;
+    }
+
+    // ---------- Các sheet chi tiết ("Xem chi tiết từng dòng") ----------
+    const thLabel = (tableId, key) => {
+      const th = document.querySelector(`#${tableId} thead th[data-key="${key}"]`);
+      if(!th) return key;
+      const c = th.cloneNode(true);
+      c.querySelectorAll('.arrow, .th-filter-btn, button').forEach(n => n.remove());
+      return c.textContent.trim() || key;
+    };
+    const NUM_KEYS = new Set(['qty', 'contCount', 'total']);
+
+    function addDetailSheet(sheetName, kind, accent, withCheck){
+      const def = TX_TABLE_DEFS[kind];
+      let rows = (txState[kind] || []).slice();
+      const st = (typeof txSort !== 'undefined') ? txSort[kind] : null;
+      if(st && st.key) rows = txSortRows(rows, st.key, st.dir);
+      const sh = workbook.addWorksheet(sheetName);
+      const keys = def.cols.concat(['total']);
+      const headers = keys.map(c => c === 'total' ? 'Total' : thLabel(def.table, c));
+      if(withCheck) headers.push('Đã kiểm');
+      const hr = sh.addRow(headers);
+      hr.eachCell(c => {
+        c.font = { bold:true, color:{ argb:'FFFFFFFF' } };
+        c.fill = fillOf(accent);
+        c.border = BORDER;
+        c.alignment = { vertical:'middle', horizontal:'left' };
+      });
+      keys.forEach((c, i) => { if(NUM_KEYS.has(c)) hr.getCell(i + 1).alignment = { vertical:'middle', horizontal:'right' }; });
+      rows.forEach(r => {
+        const vals = keys.map(c => NUM_KEYS.has(c) ? toNum(r[c]) : (r[c] === undefined || r[c] === null ? '' : r[c]));
+        if(withCheck) vals.push(txTransferChecked[txTransferRowKey(r)] ? '✓' : '');
+        const rw = sh.addRow(vals);
+        rw.eachCell((c, i) => {
+          c.border = BORDER;
+          if(NUM_KEYS.has(keys[i - 1])){ c.numFmt = NUM_FMT; c.alignment = { horizontal:'right' }; }
+          if(withCheck && i === keys.length + 1) c.alignment = { horizontal:'center' };
+        });
+      });
+      // dòng Grand Total (giống tfoot trên màn hình)
+      if(rows.length){
+        const grandContSet = new Set();
+        rows.forEach(r => (r.contCodes || []).forEach(x => grandContSet.add(x)));
+        const grandChuyenSet = new Set();
+        rows.forEach(r => { if(r.chuyen) grandChuyenSet.add(r.chuyen); });
+        const foot = keys.map((c, i) => {
+          if(i === 0) return 'Grand Total';
+          if(c === 'qty') return rows.reduce((s, r) => s + (r.qty || 0), 0);
+          if(c === 'contCount') return grandContSet.size;
+          if(c === 'chuyen') return grandChuyenSet.size;
+          if(c === 'total') return rows.reduce((s, r) => s + (r.total || 0), 0);
+          return '';
+        });
+        if(withCheck) foot.push('');
+        const fr = sh.addRow(foot);
+        fr.eachCell((c, i) => {
+          c.font = { bold:true };
+          c.fill = fillOf('FFEEF2F7');
+          c.border = { ...BORDER, top:{ style:'medium', color:{ argb:'FF9CA3AF' } } };
+          if(NUM_KEYS.has(keys[i - 1]) || keys[i - 1] === 'chuyen'){ c.numFmt = NUM_FMT; c.alignment = { horizontal:'right' }; }
+        });
+      } else {
+        sh.addRow(['Không có giao dịch loại này trong file.']).getCell(1).font = { italic:true, color:{ argb:'FF6B7280' } };
+      }
+      // độ rộng cột + cố định header + bộ lọc
+      headers.forEach((h, i) => {
+        let w = String(h).length;
+        rows.slice(0, 500).forEach(r => {
+          const key = keys[i];
+          const v = key ? r[key] : '';
+          const len = (v === undefined || v === null) ? 0 : String(v).length;
+          if(len > w) w = len;
+        });
+        sh.getColumn(i + 1).width = Math.min(42, Math.max(10, w + 3));
+      });
+      sh.views = [{ state:'frozen', ySplit:1 }];
+      if(rows.length) sh.autoFilter = { from:{ row:1, column:1 }, to:{ row:1, column:headers.length } };
+    }
+
+    // Xe Trung Chuyển: cột khác (Item, Locator đến/xuất, Chuyến, Reference, User, SL, Total)
+    function addItnSheet(sheetName, stateKey, locLabel, accent){
+      const rows = (txState[stateKey] || []).slice();
+      const sh = workbook.addWorksheet(sheetName);
+      const headers = ['Item', locLabel, 'Chuyến', 'Reference', 'User Name', 'SL', 'Total'];
+      const hr = sh.addRow(headers);
+      hr.eachCell((c, i) => {
+        c.font = { bold:true, color:{ argb:'FFFFFFFF' } };
+        c.fill = fillOf(accent);
+        c.border = BORDER;
+        c.alignment = { vertical:'middle', horizontal: i >= 6 ? 'right' : 'left' };
+      });
+      rows.forEach(r => {
+        const rw = sh.addRow([r.item || '', r.locator || '', r.chuyen || '', r.reference || '', r.user || '', toNum(r.qty), toNum(r.total)]);
+        rw.eachCell((c, i) => {
+          c.border = BORDER;
+          if(i >= 6){ c.numFmt = NUM_FMT; c.alignment = { horizontal:'right' }; }
+        });
+      });
+      if(rows.length){
+        const fr = sh.addRow(['Grand Total', '', '', '', '', rows.reduce((s, r) => s + (r.qty || 0), 0), rows.reduce((s, r) => s + (r.total || 0), 0)]);
+        fr.eachCell((c, i) => {
+          c.font = { bold:true };
+          c.fill = fillOf('FFEEF2F7');
+          c.border = { ...BORDER, top:{ style:'medium', color:{ argb:'FF9CA3AF' } } };
+          if(i >= 6){ c.numFmt = NUM_FMT; c.alignment = { horizontal:'right' }; }
+        });
+      } else {
+        sh.addRow(['Không có dữ liệu.']).getCell(1).font = { italic:true, color:{ argb:'FF6B7280' } };
+      }
+      [22, 22, 12, 20, 28, 10, 10].forEach((w, i) => { sh.getColumn(i + 1).width = w; });
+      sh.views = [{ state:'frozen', ySplit:1 }];
+      if(rows.length) sh.autoFilter = { from:{ row:1, column:1 }, to:{ row:1, column:headers.length } };
+    }
+
+    addDetailSheet('Receive', 'receive', COLORS.receive, false);
+    addDetailSheet('Transfer Xuất', 'transfer', COLORS.transfer, true);
+    addDetailSheet('Transfer Nhận', 'transferNhap', COLORS.transfer, false);
+    addDetailSheet('Put Away', 'putaway', COLORS.putaway, false);
+    addDetailSheet('Rework Xuất', 'reworkXuat', COLORS.rework, false);
+    addDetailSheet('Rework Nhận', 'reworkNhap', COLORS.rework, false);
+    addDetailSheet('Lên 3AFG', 'updownUp', COLORS.updown, false);
+    addDetailSheet('Xuống 3AFG', 'updownDown', COLORS.updown, false);
+    addDetailSheet('Picking', 'picking', COLORS.picking, false);
+    addItnSheet('Xe TC - Chuyển đi', 'itnTransferGroups', 'Locator đến', COLORS.itn);
+    addItnSheet('Xe TC - Nhận', 'itnReceivingGroups', 'Locator xuất', COLORS.itn);
+
+    // ---------- tải file về ----------
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const d = new Date();
+    const p2 = n => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}`;
+    a.href = url;
+    a.download = `Thong_ke_Transaction_${stamp}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  } catch(err){
+    console.error('Xuất Excel Transaction lỗi:', err);
+    alert('Xuất Excel thất bại: ' + (err && err.message ? err.message : err));
+  } finally {
+    if(btn){ btn.disabled = false; btn.innerHTML = oldBtnHtml; }
+  }
+}
+(function(){
+  const btnTxExport = document.getElementById('btn-export-transaction');
+  if(btnTxExport) btnTxExport.addEventListener('click', txExportExcel);
+})();
+
 function initTransactionPage(){
   const saved = txLoadFromStorage();
   if(saved){
