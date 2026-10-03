@@ -1327,7 +1327,7 @@ function gateBustedUrl(base){
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
               Xoá
             </button>
-            <button class="btn-update btn-ghost-outline" id="btn-export-transaction" type="button" title="Xuất toàn bộ trang Thống kê Transaction ra 1 file Excel: sheet Tổng quan (KPI, Grand Total theo kho, Receive / Transfer / Put Away / Rework / Lên-Xuống 3AFG / Picking) + các sheet chi tiết từng dòng">
+            <button class="btn-update btn-ghost-outline" id="btn-export-transaction" type="button" onclick="if(typeof txExportExcel!=='function'){alert('Chưa có hàm xuất Excel: file app.js trên web vẫn là bản cũ. Hãy upload app.js mới lên GitHub rồi tải lại cứng (Ctrl+F5).');}" title="Xuất toàn bộ trang Thống kê Transaction ra 1 file Excel: sheet Tổng quan (KPI, Grand Total theo kho, Receive / Transfer / Put Away / Rework / Lên-Xuống 3AFG / Picking) + các sheet chi tiết từng dòng">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
               Xuất Excel
             </button>
