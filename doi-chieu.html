@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Đối chiếu Receive — TN5</title>
+<meta name="description" content="Đối chiếu sổ nhận hàng viết tay với file Transaction (Receive) của kho.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#F3F5F9; --panel:#FFFFFF; --panel-2:#F8FAFD; --line:#E1E7F0; --line-soft:#EDF1F7;
+    --text:#16202E; --muted:#55637C; --muted-2:#7E8CA3;
+    --amber:#B76E00; --amber-bright:#F5A623; --teal:#0E8F76; --red:#D6394B; --blue:#2C6FCB; --violet:#6E4FE0;
+    --mono:'JetBrains Mono', ui-monospace, monospace; --sans:-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; padding:20px 20px 60px; background:var(--bg); color:var(--text); font-family:var(--sans);}
+  .wrap{max-width:1200px; margin:0 auto;}
+  header{margin-bottom:20px;}
+  .eyebrow{font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--violet); text-transform:uppercase; display:flex; align-items:center; gap:6px;}
+  .eyebrow .dot{width:6px; height:6px; border-radius:50%; background:var(--violet); box-shadow:0 0 6px var(--violet);}
+  h1{font-size:20px; margin:4px 0 4px;}
+  .sub{font-size:13px; color:var(--muted); line-height:1.5; max-width:760px;}
+
+  /* ===== Tab chuyển trang (Đối chiếu / Lịch sử đã lưu) ===== */
+  .view-tabs{display:flex; gap:8px; margin-bottom:14px;}
+  .view-tab-btn{padding:8px 16px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--muted); font-size:13px; font-weight:700; cursor:pointer; font-family:var(--sans);}
+  .view-tab-btn:hover{border-color:var(--blue); color:var(--blue);}
+  .view-tab-btn.active{background:var(--blue); border-color:var(--blue); color:#fff;}
+
+  /* ===== Tab chọn kho ===== */
+  .kho-tabs{display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;}
+  .kho-tab-btn{padding:9px 18px; border-radius:9px; border:1px solid var(--line); background:var(--panel); color:var(--muted); font-size:13.5px; font-weight:700; cursor:pointer; font-family:var(--sans);}
+  .kho-tab-btn:hover{border-color:var(--violet); color:var(--violet);}
+  .kho-tab-btn.active{background:var(--violet); border-color:var(--violet); color:#fff;}
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:18px;}
+  .panel h2{font-size:15px; margin:0 0 4px; display:flex; align-items:center; gap:8px;}
+  .panel h2 .step{display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; background:var(--violet); color:#fff; font-size:11px; font-weight:700; font-family:var(--mono);}
+  .panel .hint{font-size:12px; color:var(--muted); margin:0 0 14px; line-height:1.5;}
+
+  /* ===== Upload ===== */
+  .upload-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .file-btn{position:relative; overflow:hidden; display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:8px; border:1px solid var(--violet); background:var(--violet); color:#fff; font-size:13px; font-weight:700; cursor:pointer;}
+  .file-btn input[type=file]{position:absolute; inset:0; opacity:0; cursor:pointer;}
+  .file-btn:hover{filter:brightness(1.06);}
+  #upload-status{font-size:12.5px; color:var(--muted);}
+  #upload-status.ok{color:var(--teal); font-weight:600;}
+  #upload-status.err{color:var(--red); font-weight:600;}
+  .tx-summary{display:flex; gap:22px; flex-wrap:wrap; margin-top:14px;}
+  .tx-summary div{display:flex; flex-direction:column; gap:2px;}
+  .tx-summary b{font-family:var(--mono); font-size:18px;}
+  .tx-summary span{font-family:var(--mono); font-size:9.5px; color:var(--muted-2); text-transform:uppercase; letter-spacing:.04em;}
+  .clear-link{margin-left:auto; background:none; border:none; color:var(--muted); font-size:12px; text-decoration:underline; cursor:pointer; padding:4px;}
+  .tx-kho-breakdown{display:flex; gap:16px; flex-wrap:wrap; margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); font-size:12px; color:var(--muted);}
+  .tx-kho-breakdown b{font-family:var(--mono); color:var(--text);}
+  .tx-kho-breakdown .unassigned{color:var(--red);}
+
+  /* ===== Bảng nhập liên tục (staging) — điều hướng bằng phím mũi tên, xác nhận theo LƯỢT (nhiều dòng) ===== */
+  .stage-actions{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px;}
+  #btn-stage-add-row{padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); font-size:12.5px; font-weight:700; cursor:pointer; font-family:var(--sans);}
+  #btn-stage-add-row:hover{border-color:var(--violet); color:var(--violet);}
+  #btn-stage-confirm{padding:9px 20px; border-radius:8px; border:none; background:var(--teal); color:#fff; font-size:13px; font-weight:700; cursor:pointer; font-family:var(--sans);}
+  #btn-stage-confirm:hover{filter:brightness(1.06);}
+  .stage-hint{font-size:11.5px; color:var(--muted-2);}
+  table.stage-table tbody td{padding:4px 6px;}
+  table.stage-table input, table.stage-table select{width:100%; padding:7px 8px; border-radius:6px; border:1px solid var(--line); background:var(--panel-2); font-size:13px; font-family:var(--sans); color:var(--text);}
+  table.stage-table input[type=number]{font-family:var(--mono);}
+  table.stage-table input:focus, table.stage-table select:focus{outline:none; border-color:var(--violet); background:#fff;}
+  #entry-form-error{color:var(--red); font-size:12px; margin-top:8px; min-height:1em;}
+
+  /* ===== Tables ===== */
+  .table-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:10px; margin-top:14px;}
+  table.dt{width:100%; border-collapse:collapse; font-size:12.5px; min-width:560px;}
+  table.dt thead th{padding:8px 10px; background:var(--panel-2); color:var(--muted); font-weight:700; font-size:10.5px; text-transform:uppercase; letter-spacing:.03em; text-align:left; white-space:nowrap; border-bottom:1px solid var(--line);}
+  #stage-table thead th{text-align:center;}
+  table.dt tbody td{padding:7px 10px; border-top:1px solid var(--line-soft); font-family:var(--mono); white-space:nowrap;}
+  table.dt tbody tr:hover{background:var(--panel-2);}
+  table.dt td.num{text-align:right;}
+  table.dt tfoot td{padding:8px 10px; font-weight:700; border-top:2px solid var(--line); font-family:var(--mono);}
+  .del-btn{border:none; background:none; color:var(--muted); cursor:pointer; font-size:15px; padding:2px 6px; border-radius:5px;}
+  .del-btn:hover{color:var(--red); background:rgba(214,57,75,0.1);}
+  .empty-note{font-size:12.5px; color:var(--muted-2); padding:16px 4px; text-align:center;}
+
+  /* ===== Sửa dòng sổ tay (inline) ===== */
+  .log-row-actions, .log-edit-actions{display:flex; gap:2px; justify-content:flex-end;}
+  .edit-btn{border:none; background:none; color:var(--muted); cursor:pointer; font-size:14px; padding:2px 6px; border-radius:5px;}
+  .edit-btn:hover{color:var(--violet); background:rgba(110,79,224,0.1);}
+  .log-save-btn{border:none; background:none; color:var(--teal); cursor:pointer; font-size:15px; font-weight:700; padding:2px 6px; border-radius:5px;}
+  .log-save-btn:hover{background:rgba(14,143,118,0.12);}
+  .log-cancel-btn{border:none; background:none; color:var(--muted); cursor:pointer; font-size:15px; padding:2px 6px; border-radius:5px;}
+  .log-cancel-btn:hover{color:var(--red); background:rgba(214,57,75,0.1);}
+  table.dt .log-edit-field{width:100%; padding:6px 7px; border-radius:6px; border:1px solid var(--violet); background:#fff; font-size:12.5px; font-family:var(--sans); color:var(--text);}
+  table.dt .log-edit-field[type=number]{font-family:var(--mono);}
+  tr.log-editing{background:rgba(110,79,224,0.05);}
+
+  .shift-badge{display:inline-block; padding:1px 7px; border-radius:5px; font-size:10.5px; font-weight:700;}
+  .shift-badge.ngay{background:rgba(245,166,35,0.15); color:var(--amber);}
+  .shift-badge.dem{background:rgba(110,79,224,0.12); color:var(--violet);}
+
+  /* ===== Reconcile ===== */
+  .reconcile-toolbar{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:4px;}
+  .reconcile-toolbar input[type=text]{flex:1; min-width:200px; padding:8px 12px; border-radius:8px; border:1px solid var(--line); font-size:13px;}
+  .reconcile-toolbar label{display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted); white-space:nowrap;}
+  .status-badge{display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:700; white-space:nowrap;}
+  .status-badge.match{background:rgba(14,143,118,0.12); color:var(--teal);}
+  .status-badge.mismatch{background:rgba(214,57,75,0.12); color:var(--red);}
+  .status-badge.missing-sys{background:rgba(245,166,35,0.15); color:var(--amber);}
+  .status-badge.missing-log{background:rgba(110,79,224,0.12); color:var(--violet);}
+  td.diff-bad{color:var(--red); font-weight:700;}
+  td.diff-ok{color:var(--teal);}
+  .recon-summary{display:flex; gap:20px; flex-wrap:wrap; margin-top:14px; font-size:12.5px;}
+  .recon-summary b{font-family:var(--mono);}
+
+  /* ===== Tô màu cột Sổ tay / Hệ thống cho dễ phân biệt ===== */
+  .col-legend{display:flex; gap:14px; font-size:11.5px; color:var(--muted); margin-left:auto;}
+  .legend-chip{display:flex; align-items:center; gap:5px; white-space:nowrap;}
+  .legend-chip::before{content:''; width:10px; height:10px; border-radius:3px; display:inline-block;}
+  .legend-chip.sotay::before{background:var(--blue);}
+  .legend-chip.hethong::before{background:var(--violet);}
+  .save-btn{padding:8px 16px; border-radius:8px; border:none; background:var(--blue); color:#fff; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap; font-family:var(--sans);}
+  .save-btn:hover{filter:brightness(1.08);}
+  table.dt th.col-sotay{background:rgba(44,111,203,0.12);}
+  table.dt th.col-hethong{background:rgba(110,79,224,0.12);}
+  table.dt td.col-sotay{background:rgba(44,111,203,0.06); color:var(--blue); font-weight:600;}
+  table.dt td.col-hethong{background:rgba(110,79,224,0.06); color:var(--violet); font-weight:600;}
+  /* Tô đỏ nguyên dòng khi phát hiện lệch số (trạng thái "mismatch") -> dễ nhận ra ngay dòng có vấn đề
+     mà không cần đọc từng ô. !important để thắng nền xanh/tím riêng của cột Sổ tay/Hệ thống. */
+  table.dt tr.row-mismatch td{background:rgba(214,57,75,0.10) !important;}
+  table.dt tr.row-mismatch:hover td{background:rgba(214,57,75,0.16) !important;}
+  table.dt tbody tr.recon-row{cursor:pointer;}
+
+  /* ===== Popover xem chi tiết dòng hệ thống (khi bấm vào 1 dòng đối chiếu) ===== */
+  .sys-popover-backdrop{position:fixed; inset:0; background:rgba(22,32,46,0.45); z-index:300; display:flex; align-items:center; justify-content:center; padding:16px;}
+  .sys-popover-panel{background:var(--panel); border-radius:12px; max-width:min(960px, 94vw); width:100%; max-height:82vh; overflow-y:auto; overflow-x:hidden; padding:18px 20px 20px; box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+  .sys-popover-head{display:flex; align-items:flex-start; justify-content:space-between; gap:12px;}
+  .sys-popover-head h3{font-size:14.5px; margin:0 0 4px; font-family:var(--mono); word-break:break-word;}
+  .sys-popover-sub{font-size:12px; color:var(--muted);}
+  .sys-popover-close{border:none; background:var(--panel-2); color:var(--muted); width:28px; height:28px; border-radius:8px; cursor:pointer; font-size:14px; flex-shrink:0;}
+  .sys-popover-close:hover{background:rgba(214,57,75,0.12); color:var(--red);}
+  /* table-layout:fixed + white-space:normal -> chữ dài (Lot No/GI No) tự xuống dòng thay vì đẩy bảng
+     tràn ngang phải cuộn ngang; nhiều dòng thì cả popover cuộn dọc (panel đã overflow-y:auto). */
+  .sys-popover-panel table.dt{margin-top:12px; min-width:0; width:100%; table-layout:fixed;}
+  .sys-popover-panel table.dt th, .sys-popover-panel table.dt td{white-space:normal; word-break:break-word; font-size:12px;}
+  .sys-popover-panel table.dt th:nth-child(1), .sys-popover-panel table.dt td:nth-child(1){width:9%;}
+  .sys-popover-panel table.dt th:nth-child(2), .sys-popover-panel table.dt td:nth-child(2){width:13%;}
+  .sys-popover-panel table.dt th:nth-child(3), .sys-popover-panel table.dt td:nth-child(3){width:16%;}
+  .sys-popover-panel table.dt th:nth-child(4), .sys-popover-panel table.dt td:nth-child(4){width:27%;}
+  .sys-popover-panel table.dt th:nth-child(5), .sys-popover-panel table.dt td:nth-child(5){width:11%;}
+  .sys-popover-panel table.dt th:nth-child(6), .sys-popover-panel table.dt td:nth-child(6){width:8%;}
+  .sys-popover-panel table.dt th:nth-child(7), .sys-popover-panel table.dt td:nth-child(7){width:16%;}
+  .sys-popover-total{margin-top:12px; font-size:12px; color:var(--muted); display:flex; gap:16px; flex-wrap:wrap;}
+  .sys-popover-total b{font-family:var(--mono); color:var(--text);}
+
+  /* ===== Lịch sử đối chiếu đã lưu ===== */
+  #history-panel .reconcile-toolbar select, #history-panel .reconcile-toolbar input[type=date]{padding:8px 10px; border-radius:8px; border:1px solid var(--line); font-size:12.5px; font-family:var(--sans); color:var(--text); background:var(--panel-2);}
+  #history-panel .reconcile-toolbar input[type=text]{flex:1; min-width:160px;}
+  /* Mỗi nhóm (Ngày+Ca+Kho) thu gọn thành 1 thanh tiêu đề — chỉ hiện Ngày/Kho/Ca + tổng kết, bấm vào
+     mới xổ ra bảng chi tiết từng mã hàng bên dưới. */
+  .hist-group{border:1px solid var(--line); border-radius:10px; margin-top:12px; overflow:hidden;}
+  .hist-group:first-child{margin-top:0;}
+  .hist-group-header{width:100%; display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:12px 14px; background:var(--panel-2); border:none; cursor:pointer; text-align:left; font-family:var(--sans); color:var(--text);}
+  .hist-group-header:hover{background:#EEF2F9;}
+  .hist-group-chevron{color:var(--muted-2); font-size:11px; width:10px; flex-shrink:0; transition:transform .15s;}
+  .hist-group.expanded .hist-group-chevron{transform:rotate(90deg);}
+  .hist-group-title{display:flex; align-items:center; gap:8px; font-size:13px; flex-wrap:wrap;}
+  .hist-group-title b{font-family:var(--mono);}
+  .hist-group-kho{background:rgba(110,79,224,0.12); color:var(--violet); font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; white-space:nowrap;}
+  .hist-group-stats{display:flex; gap:14px; flex-wrap:wrap; font-size:11.5px; color:var(--muted); margin-left:auto;}
+  .hist-group-stats b{font-family:var(--mono); color:var(--text);}
+  .hist-group-body{padding:0 14px 14px;}
+  .hist-group-body .table-scroll{margin-top:10px;}
+
+  /* ===== Màn hình nhỏ (điện thoại): gọn lề, nút to dễ bấm, bảng cuộn ngang trong khung ===== */
+  @media (max-width:700px){
+    .wrap{padding-left:10px; padding-right:10px;}
+    .panel{padding:12px 12px; border-radius:10px;}
+    h1{font-size:17px;}
+    .view-tabs, .kho-tabs{gap:6px;}
+    .view-tab-btn, .kho-tab-btn{flex:1 1 auto; padding:11px 12px; min-height:44px; font-size:13px; text-align:center;}
+    .panel button, .panel select, .panel input{min-height:40px; font-size:14px;}
+    table.dt{font-size:12px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow"><span class="dot"></span>ĐỐI CHIẾU SỔ TAY</div>
+    <h1>Đối chiếu Receive</h1>
+    <div class="sub">So sánh sổ nhận hàng viết tay với dữ liệu Receive thật trong file Transaction — phát hiện chênh lệch giữa số ghi tay và số hệ thống. Phân riêng theo từng kho (không có Kho 2B vì kho này không nhận hàng từ sản xuất, chỉ là kho chứa hàng). (Phần Transfer/Picking sẽ làm sau.)</div>
+  </header>
+
+  <div class="view-tabs" id="view-tabs"></div>
+
+  <div id="work-view">
+  <div class="kho-tabs" id="kho-tabs"></div>
+
+  <div class="panel" id="upload-panel">
+    <h2><span class="step">1</span>Tải file Transaction</h2>
+    <div class="hint">Dùng đúng file Transaction xuất từ WMS (.xlsx/.xls/.csv/.tsv) — giống hệt file tải lên ở tab Transaction của TN5 Dashboard. Trang này chỉ lấy các dòng <b>Transaction Type = RECEIVE</b>, tự phân theo kho dựa vào Locator Name: <b>D3B-FG-TG</b> → Kho 3B, <b>DG3-FG-TG</b> → Kho 3A, <b>DG1-FG-TG</b> → Kho DG1 (locator khác 3 vị trí này sẽ không xác định được kho). Chỉ cần tải file 1 lần, dùng chung cho cả 3 tab kho. Giờ ghi trên file đã tự trừ 1 tiếng trước khi tính Ca/Ngày (đồng hồ hệ thống WMS đang chạy nhanh hơn giờ thực tế đúng 1 tiếng).</div>
+    <div class="upload-row">
+      <label class="file-btn">📂 Chọn file Transaction<input type="file" id="tx-file-input" accept=".xlsx,.xls,.csv,.tsv,.txt"></label>
+      <span id="upload-status"></span>
+      <button type="button" class="clear-link" id="btn-clear-tx" style="display:none;">Xoá dữ liệu file đã tải</button>
+    </div>
+    <div class="tx-summary" id="tx-summary" style="display:none;"></div>
+  </div>
+
+  <div class="panel" id="entry-panel">
+    <h2><span class="step">2</span>Nhập sổ nhận hàng (thủ công) — <span id="entry-panel-kho"></span></h2>
+    <div class="hint">Ghi lại đúng như sổ tay tại kho — mỗi dòng là 1 lượt nhận hàng của 1 mã hàng trong 1 ca. Nhập xong nhiều dòng rồi bấm "Xác nhận tất cả" 1 lần (không cần xác nhận từng dòng). Dùng phím <b>↑ ↓</b> để di chuyển lên/xuống giữa các dòng (cùng cột), <b>← →</b> để di chuyển giữa các ô trong 1 dòng, <b>Enter</b> để xuống dòng — xuống ở dòng cuối cùng sẽ tự thêm 1 dòng mới (giữ nguyên Ngày/Ca của dòng trước) và đưa con trỏ thẳng vào ô Item để gõ tiếp. Sửa Ngày/Ca ở dòng nào thì các dòng thêm sau đó cũng lấy đúng Ngày/Ca vừa sửa. Các dòng vừa nhập thuộc đúng kho đang chọn ở tab phía trên. Ca Ngày: 7h sáng – 7h tối; Ca Đêm: 7h tối – 7h sáng hôm sau (0h–7h sáng vẫn tính là ca đêm của <b>ngày hôm trước</b>, không phải ngày mới) — Ngày/Ca mặc định tự chọn theo giờ hiện tại, có thể đổi lại tay.</div>
+    <div class="table-scroll">
+      <table class="dt stage-table" id="stage-table">
+        <thead><tr>
+          <th>Ngày</th><th>Ca</th><th>Item</th>
+          <th>SL Pallet</th><th>SL Ctn</th><th>SL Pcs</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="stage-tbody"></tbody>
+      </table>
+    </div>
+    <div class="stage-actions">
+      <button type="button" id="btn-stage-add-row">+ Thêm dòng trống</button>
+      <button type="button" id="btn-stage-confirm">✓ Xác nhận tất cả</button>
+      <span class="stage-hint">Chỉ những dòng đã nhập đủ mới được lưu vào sổ khi xác nhận.</span>
+    </div>
+    <div id="entry-form-error"></div>
+
+    <div class="table-scroll">
+      <table class="dt" id="log-table">
+        <thead><tr>
+          <th>Ngày</th><th>Ca</th><th>Item</th>
+          <th style="text-align:right">SL Pallet</th><th style="text-align:right">SL Ctn</th><th style="text-align:right">SL Pcs</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="log-tbody"></tbody>
+        <tfoot id="log-tfoot"></tfoot>
+      </table>
+      <div class="empty-note" id="log-empty">Chưa có dòng nào — nhập ở form phía trên.</div>
+    </div>
+  </div>
+
+  <div class="panel" id="reconcile-panel">
+    <h2><span class="step">3</span>Bảng đối chiếu (theo Ngày + Item) — <span id="recon-panel-kho"></span></h2>
+    <div class="hint">Gộp tất cả ca trong ngày của sổ tay rồi so với tổng số dòng Receive hệ thống cùng ngày/mã hàng — hệ thống không có khái niệm "ca" nên chỉ đối chiếu được theo ngày (dòng Receive quét lúc 0h–7h sáng được tính về <b>ngày hôm trước</b>, đúng ngày ca đêm bắt đầu, khớp với cách ghi sổ tay). <b>SL Pallet hệ thống</b> = số dòng Receive (mỗi dòng tính 1 pallet); <b>SL Pcs hệ thống</b> = tổng Transaction Qty. SL Ctn không có bên hệ thống nên chỉ hiển thị tham khảo. Xem xong, bấm <b>"💾 Lưu tất cả"</b> để lưu vĩnh viễn các dòng này sang tab "Lịch sử đã lưu" — dữ liệu đã lưu sẽ KHÔNG mất dù sau đó xoá/ghi đè file Transaction hay sổ tay đang làm việc.</div>
+    <div class="reconcile-toolbar">
+      <input type="text" id="recon-search" placeholder="Tìm theo mã hàng…">
+      <label><input type="checkbox" id="recon-only-mismatch"> Chỉ hiện dòng lệch/thiếu</label>
+      <div class="col-legend"><span class="legend-chip sotay">Sổ tay</span><span class="legend-chip hethong">Hệ thống</span></div>
+      <button type="button" class="save-btn" id="btn-save-recon">💾 Lưu tất cả</button>
+    </div>
+    <div class="table-scroll">
+      <table class="dt" id="recon-table">
+        <thead><tr>
+          <th>Ngày</th><th>Item</th>
+          <th class="col-sotay" style="text-align:right">Pallet (Sổ tay)</th><th class="col-hethong" style="text-align:right">Pallet (Hệ thống)</th><th style="text-align:right">Lệch Pallet</th>
+          <th class="col-sotay" style="text-align:right">Pcs (Sổ tay)</th><th class="col-hethong" style="text-align:right">Pcs (Hệ thống)</th><th style="text-align:right">Lệch Pcs</th>
+          <th class="col-sotay" style="text-align:right">Ctn (Sổ tay)</th>
+          <th>Trạng thái</th>
+        </tr></thead>
+        <tbody id="recon-tbody"></tbody>
+      </table>
+      <div class="empty-note" id="recon-empty">Chưa đủ dữ liệu để đối chiếu — cần cả file Transaction lẫn sổ nhận hàng.</div>
+    </div>
+    <div class="recon-summary" id="recon-summary"></div>
+  </div>
+  </div><!-- /work-view -->
+
+  <div class="panel" id="history-panel" style="display:none;">
+    <h2>📜 Lịch sử đối chiếu đã lưu</h2>
+    <div class="hint">Các dòng đã bấm "💾 Lưu tất cả" ở bảng đối chiếu (bước 3) được giữ lại <b>vĩnh viễn</b> tại đây, gộp chung cả 3 kho — không mất dù sau đó xoá hoặc tải đè file Transaction/sổ tay đang làm việc ở tab "Đối chiếu". Lưu lại cùng 1 dòng (cùng Kho + Ngày + Item) sẽ tự cập nhật số liệu mới nhất, không tạo trùng lặp. Lọc theo Kho / Ngày / Ca / mã hàng bên dưới.</div>
+    <div class="reconcile-toolbar">
+      <select id="hist-filter-kho"></select>
+      <input type="date" id="hist-filter-date">
+      <select id="hist-filter-shift">
+        <option value="">Tất cả ca</option>
+        <option value="ngay">Ca Ngày</option>
+        <option value="dem">Ca Đêm</option>
+      </select>
+      <input type="text" id="hist-search" placeholder="Tìm theo mã hàng…">
+      <button type="button" class="clear-link" id="btn-hist-clear-filters">Xoá bộ lọc</button>
+    </div>
+    <div id="hist-groups"></div>
+    <div class="empty-note" id="hist-empty">Chưa lưu dòng nào — sang tab "Đối chiếu" rồi bấm "💾 Lưu tất cả".</div>
+    <div class="recon-summary" id="hist-summary"></div>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   Tiện ích dùng chung (đọc file, parse ngày/số...) — PHẢI khớp y hệt logic đang dùng ở tab Transaction
+   của TN5 Dashboard (app.js) để đảm bảo đọc đúng cùng 1 định dạng file, không lệch quy ước.
+   ============================================================ */
+const MONTHS = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+
+// 3 kho có nhận hàng từ sản xuất — MỖI kho có đúng 1 locator trung gian (TG) cố định dùng cho MỌI
+// dòng Receive của kho đó, dùng để phân biệt dòng Receive nào thuộc kho nào. KHÔNG có Kho 2B vì kho
+// này không nhận hàng từ sản xuất (chỉ là kho chứa hàng, nhận điều chuyển từ kho khác).
+const KHO_LIST = [
+  { key:'3B', label:'Kho 3B', locator:'D3B-FG-TG' },
+  { key:'3A', label:'Kho 3A', locator:'DG3-FG-TG' },
+  { key:'DG1', label:'Kho DG1', locator:'DG1-FG-TG' },
+];
+const KHO_LOCATOR_MAP = {}; // { "D3B-FG-TG": "3B", ... } — so khớp NGUYÊN VĂN (đã chuẩn hoá hoa/thường)
+KHO_LIST.forEach(k => { KHO_LOCATOR_MAP[k.locator.toUpperCase()] = k.key; });
+function khoFromLocator(locator){
+  return KHO_LOCATOR_MAP[String(locator||'').trim().toUpperCase()] || null;
+}
+
+function removeDiacritics(str){
+  return (str||'').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/g,'d').replace(/Đ/g,'D');
+}
+function findCol(headers, candidates){
+  const norm = h => removeDiacritics((h||'').toString().toLowerCase().trim()).replace(/\s+/g, ' ');
+  const lower = headers.map(norm);
+  for(const cand of candidates){ const idx = lower.findIndex(h => h === norm(cand)); if(idx !== -1) return idx; }
+  for(const cand of candidates){ const idx = lower.findIndex(h => h.includes(norm(cand))); if(idx !== -1) return idx; }
+  return -1;
+}
+function txNorm(s){ return (s === null || s === undefined) ? '' : String(s).trim(); }
+function txItemText(raw){
+  const s = (raw === null || raw === undefined) ? '' : String(raw).trim();
+  if(!s) return '';
+  return /^\d+$/.test(s) ? s.padStart(9, '0') : s;
+}
+function txParseTxDateTime(s){
+  if(!s) return null;
+  const str = String(s).trim();
+  const m = str.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if(!m){
+    // Dự phòng: một số file xuất kiểu "YYYY-MM-DD HH:mm" hoặc "DD/MM/YYYY HH:mm".
+    const m2 = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m2){ const d = new Date(Number(m2[1]), Number(m2[2])-1, Number(m2[3])); return isNaN(d.getTime()) ? null : d; }
+    const m3 = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(m3){ const d = new Date(Number(m3[3]), Number(m3[2])-1, Number(m3[1])); return isNaN(d.getTime()) ? null : d; }
+    return null;
+  }
+  const mon = MONTHS[m[2].toLowerCase()];
+  if(mon === undefined) return null;
+  const d = new Date(Number(m[3]), mon, Number(m[1]), Number(m[4]), Number(m[5]), m[6] ? Number(m[6]) : 0);
+  if(isNaN(d.getTime())) return null;
+  // SỬA: đồng hồ hệ thống WMS ghi giờ trên file Transaction luôn NHANH HƠN giờ thực tế đúng 1 tiếng
+  // (hệ thống đang lấy giờ +1) — trừ lại 1h ngay khi đọc để có đúng giờ thực tế, dùng cho MỌI tính
+  // toán sau đó (đặc biệt là xác định Ca/Ngày theo giờ thực ở shiftInfo()). Chỉ áp dụng cho nhánh có
+  // giờ thật (định dạng "DD-Mon-YYYY HH:mm:ss" của WMS) — 2 nhánh dự phòng bên trên không có giờ
+  // (chỉ có ngày) nên không trừ, tránh lùi nhầm sang 23h hôm trước.
+  d.setHours(d.getHours() - 1);
+  return d;
+}
+function dateKey(d){
+  if(!d) return null;
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+// Quy ước Ca theo giờ thực tế: 7h sáng - 7h tối = Ca NGÀY; 7h tối - 7h sáng hôm sau = Ca ĐÊM. "Ngày"
+// (dùng để đối chiếu) tính theo NGÀY CA BẮT ĐẦU — nửa đêm về sáng (0h-6h59) vẫn thuộc ca đêm của HÔM
+// TRƯỚC, không tính sang ngày mới, dù đồng hồ/lịch đã qua ngày mới. Dùng CHUNG cho:
+//  - Mặc định Ngày/Ca của form nhập tay (tính theo giờ hiện tại lúc mở trang).
+//  - Gán "Ngày" cho từng dòng Receive đọc từ file Transaction (theo giờ ghi nhận thật trên hệ thống)
+//    để đối chiếu đúng ca đêm dù dòng Receive đó được quét sau 0h (qua ngày lịch mới).
+function shiftInfo(d){
+  const h = d.getHours();
+  const shift = (h >= 7 && h < 19) ? 'ngay' : 'dem';
+  const biz = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if(h < 7) biz.setDate(biz.getDate() - 1);
+  return { shift, dateKey: dateKey(biz) };
+}
+function fmt(n){ return Math.round(n||0).toLocaleString('en-US'); }
+function escHtml(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function decodeTextBuffer(buffer){
+  const bytes = new Uint8Array(buffer);
+  if(bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) return new TextDecoder('utf-8').decode(buffer);
+  if(bytes.length >= 2 && bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(buffer);
+  if(bytes.length >= 2 && bytes[0] === 0xFE && bytes[1] === 0xFF) return new TextDecoder('utf-16be').decode(buffer);
+  return new TextDecoder('utf-8').decode(buffer);
+}
+function guessDelimiter(text){
+  const firstLine = text.split(/\r?\n/, 1)[0] || '';
+  const counts = { ',': (firstLine.match(/,/g)||[]).length, '\t': (firstLine.match(/\t/g)||[]).length, ';': (firstLine.match(/;/g)||[]).length };
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
+}
+function parseDelimitedText(text, delim){
+  const rows = []; let row = []; let field = ''; let inQuotes = false; let fieldStart = true;
+  if(text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){ if(text[i+1] === '"'){ field += '"'; i++; } else inQuotes = false; }
+      else field += c;
+    } else {
+      if(c === '"' && fieldStart){ inQuotes = true; }
+      else if(c === delim){ row.push(field); field = ''; fieldStart = true; continue; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; fieldStart = true; continue; }
+      else if(c === '\r'){ continue; }
+      else field += c;
+      fieldStart = false;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => !(r.length === 1 && r[0] === ''));
+}
+function txExtractSheetRows(workbook){
+  const headerCands = ['transaction type'], menuCands = ['menu name'];
+  let best = null;
+  for(const name of workbook.SheetNames){
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], {header:1, raw:true, defval:null});
+    if(!rows.length) continue;
+    const maxScan = Math.min(rows.length, 10);
+    for(let i=0;i<maxScan;i++){
+      const row = rows[i]; if(!row) continue;
+      if(findCol(row, headerCands) !== -1 && findCol(row, menuCands) !== -1){
+        if(!best || rows.length - i > best.rows.length - best.hIdx){ best = {name, rows, hIdx:i}; }
+        break;
+      }
+    }
+  }
+  if(!best) throw new Error('Không tìm thấy cột "Transaction Type" / "Menu Name" trong file.');
+  return { name: best.name, rows: best.hIdx > 0 ? best.rows.slice(best.hIdx) : best.rows };
+}
+function txReadFileAsRows(file){
+  return new Promise((resolve, reject) => {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const isDelimited = ['csv','tsv','txt'].includes(ext);
+    const r = new FileReader();
+    r.onload = (ev) => {
+      try{
+        if(isDelimited){
+          const text = decodeTextBuffer(ev.target.result);
+          const delim = ext === 'tsv' ? '\t' : (ext === 'csv' ? ',' : guessDelimiter(text));
+          resolve(parseDelimitedText(text, delim));
+        } else {
+          if(typeof XLSX === 'undefined') throw new Error('Thư viện đọc Excel (SheetJS) chưa tải được — cần Internet. Hãy lưu file dạng .csv/.tsv rồi tải lên.');
+          const wb = XLSX.read(ev.target.result, {type:'array', cellDates:false});
+          resolve(txExtractSheetRows(wb).rows);
+        }
+      }catch(err){ reject(err); }
+    };
+    r.onerror = () => reject(new Error('Không đọc được file.'));
+    r.readAsArrayBuffer(file);
+  });
+}
+// Parse rows -> chỉ giữ các dòng Transaction Type = RECEIVE, gọn đủ field cần cho đối chiếu.
+function parseReceiveRows(rows){
+  if(!rows.length) throw new Error('File không có dữ liệu.');
+  const headers = rows[0];
+  const colType = findCol(headers, ['transaction type']);
+  const colItem = findCol(headers, ['item no', 'item no.', 'item number']);
+  const colQty = findCol(headers, ['transaction qty']);
+  const colDate = findCol(headers, ['transaction date']);
+  const colLocator = findCol(headers, ['locator name']);
+  const colUser = findCol(headers, ['user name']);
+  // GI No. / Lot No. / Pallet No. — KHÔNG bắt buộc (không phải file Transaction nào cũng có sẵn các cột
+  // này), cùng nhóm alias tên cột đang dùng bên app.js để nhận diện nhất quán dù tiêu đề cột ghi khác
+  // nhau chút ít. "Pallet No." trong file Transaction là số pallet THẬT do WMS gán khi nhận hàng —
+  // khác với "SL Pallet hệ thống" ở bảng đối chiếu (vẫn tính = số dòng Receive, quy ước đã dùng).
+  const colGi = findCol(headers, ['gi no', 'gi no.', 'gi number', 'gi']);
+  const colLot = findCol(headers, ['lot no', 'lot no.', 'lot number', 'lot']);
+  const colPalletNo = findCol(headers, ['pallet no', 'pallet no.', 'pallet number']);
+  if(colType === -1 || colItem === -1 || colQty === -1 || colDate === -1){
+    throw new Error('File thiếu cột bắt buộc (Transaction Type / Item No / Transaction Qty / Transaction Date).');
+  }
+  const out = [];
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i]; if(!r) continue;
+    const transType = txNorm(r[colType]);
+    if(transType.toUpperCase() !== 'RECEIVE') continue;
+    const dt = txParseTxDateTime(r[colDate]);
+    if(!dt) continue;
+    const locator = colLocator !== -1 ? txNorm(r[colLocator]) : '';
+    const p = n => String(n).padStart(2,'0');
+    out.push({
+      item: txItemText(r[colItem]),
+      itemRaw: txNorm(r[colItem]),
+      qty: Number(r[colQty]) || 0,
+      dateKey: shiftInfo(dt).dateKey, // theo NGÀY CA BẮT ĐẦU (0h-6h59 tính về hôm trước), không phải ngày lịch
+      time: `${p(dt.getHours())}:${p(dt.getMinutes())}`, // giờ thực tế (đã trừ 1h) — hiện trong popover xem chi tiết dòng hệ thống
+      locator,
+      kho: khoFromLocator(locator), // null nếu locator không khớp đúng 1 trong 3 vị trí trung gian
+      user: colUser !== -1 ? txNorm(r[colUser]) : '',
+      gi: colGi !== -1 ? txNorm(r[colGi]) : '',
+      lot: colLot !== -1 ? txNorm(r[colLot]) : '',
+      palletNo: colPalletNo !== -1 ? txNorm(r[colPalletNo]) : '',
+    });
+  }
+  return out;
+}
+
+/* ============================================================
+   Lưu trữ cục bộ (localStorage) — sổ nhận hàng viết tay + dữ liệu Receive từ file vừa tải.
+   ============================================================ */
+const LS_LOG_KEY = 'tn5_doichieu_receive_log_v1';
+const LS_TX_KEY = 'tn5_doichieu_receive_tx_v1';
+
+function loadLog(){
+  try{ return JSON.parse(localStorage.getItem(LS_LOG_KEY) || '[]'); }catch(err){ return []; }
+}
+function saveLog(entries){
+  try{ localStorage.setItem(LS_LOG_KEY, JSON.stringify(entries)); }catch(err){}
+}
+function loadTx(){
+  try{ return JSON.parse(localStorage.getItem(LS_TX_KEY) || 'null'); }catch(err){ return null; }
+}
+function saveTx(data){
+  try{ localStorage.setItem(LS_TX_KEY, JSON.stringify(data)); }catch(err){}
+}
+
+let logEntries = loadLog(); // [{id, date, shift, item, pallet, ctn, pcs, kho}]
+let txReceiveData = loadTx(); // {fileName, uploadedAt, rows:[{item, itemRaw, qty, dateKey, locator, user, kho}]}
+
+/* ============================================================
+   ⓪ Tab chọn kho — 1 khoá chung cho form nhập tay + bảng đối chiếu, file Transaction tải 1 lần dùng
+   chung cho cả 3 tab (tự lọc theo locator).
+   ============================================================ */
+const LS_KHO_KEY = 'tn5_doichieu_active_kho_v1';
+let activeKho = (() => {
+  try{ const v = localStorage.getItem(LS_KHO_KEY); return KHO_LIST.some(k => k.key === v) ? v : KHO_LIST[0].key; }
+  catch(err){ return KHO_LIST[0].key; }
+})();
+const khoTabsEl = document.getElementById('kho-tabs');
+const entryPanelKhoEl = document.getElementById('entry-panel-kho');
+const reconPanelKhoEl = document.getElementById('recon-panel-kho');
+
+function khoLabel(key){ return (KHO_LIST.find(k => k.key === key) || {}).label || key; }
+
+function renderKhoTabs(){
+  khoTabsEl.innerHTML = KHO_LIST.map(k =>
+    `<button type="button" class="kho-tab-btn${k.key === activeKho ? ' active' : ''}" data-kho="${k.key}">${escHtml(k.label)}</button>`
+  ).join('');
+  entryPanelKhoEl.textContent = khoLabel(activeKho);
+  reconPanelKhoEl.textContent = khoLabel(activeKho);
+}
+khoTabsEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.kho-tab-btn');
+  if(!btn) return;
+  activeKho = btn.dataset.kho;
+  try{ localStorage.setItem(LS_KHO_KEY, activeKho); }catch(err){}
+  editingLogId = null; // đổi kho -> huỷ trạng thái đang sửa dở (nếu có) để tránh nhầm lẫn
+  renderKhoTabs();
+  renderTxSummary();
+  renderStageTable();
+  renderLog();
+  renderReconcile();
+});
+
+/* ============================================================
+   ① Tải file Transaction
+   ============================================================ */
+const txFileInput = document.getElementById('tx-file-input');
+const uploadStatus = document.getElementById('upload-status');
+const txSummaryEl = document.getElementById('tx-summary');
+const btnClearTx = document.getElementById('btn-clear-tx');
+
+function renderTxSummary(){
+  if(!txReceiveData || !txReceiveData.rows || !txReceiveData.rows.length){
+    txSummaryEl.style.display = 'none';
+    btnClearTx.style.display = 'none';
+    uploadStatus.textContent = '';
+    uploadStatus.className = '';
+    return;
+  }
+  const rows = txReceiveData.rows.filter(r => r.kho === activeKho);
+  const dates = rows.map(r => r.dateKey).filter(Boolean).sort();
+  const items = new Set(rows.map(r => r.item));
+  const totalQty = rows.reduce((s,r) => s + r.qty, 0);
+  txSummaryEl.innerHTML = `
+    <div><b>${fmt(rows.length)}</b><span>Dòng Receive (${escHtml(khoLabel(activeKho))})</span></div>
+    <div><b>${items.size}</b><span>Mã hàng</span></div>
+    <div><b>${fmt(totalQty)}</b><span>Tổng SL (Pcs)</span></div>
+    <div><b>${dates[0] || '—'} → ${dates[dates.length-1] || '—'}</b><span>Khoảng ngày</span></div>
+  `;
+  // Tách theo TỪNG kho + số dòng không xác định được kho (locator khác 3 vị trí trung gian đã biết)
+  // để dễ phát hiện file có locator sai/thiếu ngay từ lúc tải lên, không đợi tới lúc đối chiếu mới thấy thiếu.
+  const allRows = txReceiveData.rows;
+  const breakdownParts = KHO_LIST.map(k => {
+    const n = allRows.filter(r => r.kho === k.key).length;
+    return `<span>${escHtml(k.label)}: <b>${fmt(n)}</b> dòng</span>`;
+  });
+  const unassigned = allRows.filter(r => !r.kho).length;
+  if(unassigned) breakdownParts.push(`<span class="unassigned">⚠ Không xác định kho: <b>${fmt(unassigned)}</b> dòng (locator khác 3 vị trí trung gian)</span>`);
+  txSummaryEl.insertAdjacentHTML('beforeend', `<div class="tx-kho-breakdown" style="width:100%;">${breakdownParts.join('')}</div>`);
+  txSummaryEl.style.display = 'flex';
+  txSummaryEl.style.flexWrap = 'wrap';
+  btnClearTx.style.display = 'inline';
+  uploadStatus.textContent = `✓ Đã tải "${txReceiveData.fileName}"`;
+  uploadStatus.className = 'ok';
+}
+
+txFileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  uploadStatus.textContent = 'Đang đọc file…';
+  uploadStatus.className = '';
+  try{
+    const rows = await txReadFileAsRows(file);
+    const receiveRows = parseReceiveRows(rows);
+    if(!receiveRows.length){
+      uploadStatus.textContent = '⚠ File đọc được nhưng không có dòng Transaction Type = RECEIVE nào.';
+      uploadStatus.className = 'err';
+      return;
+    }
+    txReceiveData = { fileName: file.name, uploadedAt: new Date().toISOString(), rows: receiveRows };
+    saveTx(txReceiveData);
+    renderTxSummary();
+    renderReconcile();
+  }catch(err){
+    uploadStatus.textContent = '✗ Lỗi: ' + err.message;
+    uploadStatus.className = 'err';
+  }finally{
+    txFileInput.value = '';
+  }
+});
+btnClearTx.addEventListener('click', () => {
+  if(!confirm('Xoá dữ liệu Receive vừa tải khỏi trang này? (không ảnh hưởng file gốc)')) return;
+  txReceiveData = null;
+  saveTx(null);
+  renderTxSummary();
+  renderReconcile();
+});
+
+/* ============================================================
+   ② Nhập sổ nhận hàng (thủ công) — bảng nhập liên tục (staging), điều hướng bằng phím mũi tên, xác
+   nhận theo LƯỢT (nhiều dòng 1 lúc) thay vì xác nhận từng dòng riêng lẻ.
+   ============================================================ */
+const LS_STAGE_KEY = 'tn5_doichieu_stage_v1';
+const STAGE_FIELDS = ['date','shift','item','pallet','ctn','pcs']; // thứ tự di chuyển khi bấm ← →
+
+function emptyStageRow(){
+  const s = shiftInfo(new Date());
+  return { date: s.dateKey, shift: s.shift, item: '', pallet: '', ctn: '', pcs: '' };
+}
+// Dòng mới thêm tiếp theo -> kế thừa Ngày/Ca của dòng NGAY TRƯỚC ĐÓ (thường cả lượt nhập chung 1
+// ngày/1 ca, chỉ Item/số lượng khác nhau) thay vì luôn quay về giờ hiện tại — nếu người dùng vừa sửa
+// Ngày/Ca ở dòng đó thì các dòng thêm sau sẽ giữ đúng giá trị vừa sửa.
+function nextStageRow(rows){
+  const last = rows[rows.length - 1];
+  if(last) return { date: last.date, shift: last.shift, item: '', pallet: '', ctn: '', pcs: '' };
+  return emptyStageRow();
+}
+function loadStage(){
+  try{
+    const raw = JSON.parse(localStorage.getItem(LS_STAGE_KEY) || 'null');
+    if(raw && typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  }catch(err){}
+  return {};
+}
+function saveStage(){
+  try{ localStorage.setItem(LS_STAGE_KEY, JSON.stringify(stagedRows)); }catch(err){}
+}
+let stagedRows = loadStage(); // { khoKey: [{date,shift,item,pallet,ctn,pcs}, ...] } — riêng theo TỪNG kho
+function currentStageRows(){
+  if(!Array.isArray(stagedRows[activeKho]) || !stagedRows[activeKho].length){
+    stagedRows[activeKho] = [emptyStageRow()];
+  }
+  return stagedRows[activeKho];
+}
+
+const stageTbody = document.getElementById('stage-tbody');
+const formError = document.getElementById('entry-form-error');
+const logTbody = document.getElementById('log-tbody');
+const logTfoot = document.getElementById('log-tfoot');
+const logEmpty = document.getElementById('log-empty');
+
+function stageCellEl(rowIdx, field){
+  return stageTbody.querySelector(`[data-row="${rowIdx}"][data-field="${field}"]`);
+}
+function focusStageCell(rowIdx, field){
+  const el = stageCellEl(rowIdx, field);
+  if(el){ el.focus(); if(el.select) el.select(); }
+}
+function readStageRowFromDom(rowIdx){
+  const row = currentStageRows()[rowIdx];
+  if(!row) return;
+  STAGE_FIELDS.forEach(f => { const el = stageCellEl(rowIdx, f); if(el) row[f] = el.value; });
+}
+
+function renderStageTable(){
+  const rows = currentStageRows();
+  stageTbody.innerHTML = rows.map((row, idx) => `
+    <tr>
+      <td><input type="date" data-row="${idx}" data-field="date" value="${escHtml(row.date)}"></td>
+      <td><select data-row="${idx}" data-field="shift">
+        <option value="ngay"${row.shift === 'ngay' ? ' selected' : ''}>Ngày</option>
+        <option value="dem"${row.shift === 'dem' ? ' selected' : ''}>Đêm</option>
+      </select></td>
+      <td><input type="text" data-row="${idx}" data-field="item" value="${escHtml(row.item)}" placeholder="VD: 020353007"></td>
+      <td><input type="number" data-row="${idx}" data-field="pallet" value="${escHtml(row.pallet)}" min="0" step="1" placeholder="0"></td>
+      <td><input type="number" data-row="${idx}" data-field="ctn" value="${escHtml(row.ctn)}" min="0" step="1" placeholder="0"></td>
+      <td><input type="number" data-row="${idx}" data-field="pcs" value="${escHtml(row.pcs)}" min="0" step="1" placeholder="0"></td>
+      <td><button type="button" class="del-btn stage-del-btn" data-row="${idx}" title="Xoá dòng này">✕</button></td>
+    </tr>`).join('');
+  saveStage();
+}
+
+stageTbody.addEventListener('input', (e) => {
+  const el = e.target.closest('[data-row][data-field]');
+  if(!el) return;
+  const row = currentStageRows()[Number(el.dataset.row)];
+  if(row){ row[el.dataset.field] = el.value; saveStage(); }
+});
+
+stageTbody.addEventListener('click', (e) => {
+  const btn = e.target.closest('.stage-del-btn');
+  if(!btn) return;
+  const rowIdx = Number(btn.dataset.row);
+  const rows = currentStageRows();
+  if(rows.length <= 1){
+    // Chỉ còn 1 dòng -> xoá trắng Item/số lượng nhưng GIỮ NGUYÊN Ngày/Ca đang chọn (không mất công chọn
+    // lại), luôn giữ ít nhất 1 dòng để nhập tiếp.
+    rows[0] = { date: rows[0].date, shift: rows[0].shift, item: '', pallet: '', ctn: '', pcs: '' };
+  } else {
+    rows.splice(rowIdx, 1);
+  }
+  renderStageTable();
+});
+
+// Điều hướng bằng phím — theo đúng yêu cầu: mũi tên di chuyển qua lại giữa các ô, không xác nhận
+// từng dòng. ↑/↓: cùng cột, đổi dòng. ←/→: cùng dòng, đổi cột (thứ tự STAGE_FIELDS). Enter coi như ↓.
+// ArrowDown/Enter ở dòng CUỐI CÙNG luôn tự THÊM 1 dòng mới (kế thừa Ngày/Ca của dòng trước) rồi chuyển
+// con trỏ LUÔN về ô Item của dòng mới đó (không theo cột đang gõ) — vì mỗi dòng mới thường chỉ cần gõ
+// tiếp Item/số lượng, Ngày/Ca đã có sẵn. Không xét vị trí con trỏ trong ô (đơn giản, dễ đoán) — mũi tên
+// LUÔN đổi ô/dòng, không di chuyển con trỏ bên trong nội dung đang gõ.
+stageTbody.addEventListener('keydown', (e) => {
+  const el = e.target.closest('[data-row][data-field]');
+  if(!el) return;
+  const rowIdx = Number(el.dataset.row);
+  const field = el.dataset.field;
+  const fieldIdx = STAGE_FIELDS.indexOf(field);
+  const rows = currentStageRows();
+
+  if(e.key === 'ArrowUp'){
+    if(rowIdx > 0){ e.preventDefault(); readStageRowFromDom(rowIdx); focusStageCell(rowIdx - 1, field); }
+    return;
+  }
+  if(e.key === 'ArrowDown' || e.key === 'Enter'){
+    e.preventDefault();
+    readStageRowFromDom(rowIdx);
+    const isNewRow = rowIdx === rows.length - 1;
+    if(isNewRow){
+      rows.push(nextStageRow(rows));
+      renderStageTable();
+    }
+    focusStageCell(rowIdx + 1, isNewRow ? 'item' : field);
+    return;
+  }
+  if(e.key === 'ArrowLeft'){
+    if(fieldIdx > 0){ e.preventDefault(); readStageRowFromDom(rowIdx); focusStageCell(rowIdx, STAGE_FIELDS[fieldIdx - 1]); }
+    return;
+  }
+  if(e.key === 'ArrowRight'){
+    if(fieldIdx < STAGE_FIELDS.length - 1){ e.preventDefault(); readStageRowFromDom(rowIdx); focusStageCell(rowIdx, STAGE_FIELDS[fieldIdx + 1]); }
+    return;
+  }
+});
+
+document.getElementById('btn-stage-add-row').addEventListener('click', () => {
+  const rows = currentStageRows();
+  rows.push(nextStageRow(rows));
+  renderStageTable();
+  focusStageCell(rows.length - 1, 'item');
+});
+
+// Xác nhận theo LƯỢT: đọc toàn bộ các dòng đang nhập, lưu tất cả dòng HỢP LỆ vào sổ 1 lần. Dòng trống
+// hoàn toàn (chưa gõ gì) bị bỏ qua âm thầm, không báo lỗi. Dòng có lỗi (đã gõ dở nhưng thiếu/sai) được
+// GIỮ LẠI nguyên trạng trên bảng nhập để sửa tiếp — không xoá mất dữ liệu đã gõ chỉ vì xác nhận cả lượt.
+document.getElementById('btn-stage-confirm').addEventListener('click', () => {
+  const rows = currentStageRows();
+  rows.forEach((_, idx) => readStageRowFromDom(idx));
+
+  const valid = [];
+  const errs = [];
+  const remaining = []; // các dòng lỗi -> giữ lại trên bảng nhập để sửa
+  rows.forEach((row, idx) => {
+    const date = row.date;
+    const shift = row.shift === 'dem' ? 'dem' : 'ngay';
+    const itemRaw = (row.item || '').trim();
+    const pallet = Number(row.pallet) || 0;
+    const ctn = Number(row.ctn) || 0;
+    const pcs = Number(row.pcs) || 0;
+    // Dòng coi là "trống" khi chưa nhập Item lẫn số lượng nào — KHÔNG xét Ngày/Ca vì 2 ô này luôn có
+    // giá trị mặc định ngay khi dòng mới được tạo (nên không thể dùng để phân biệt dòng đã gõ hay chưa).
+    if(!itemRaw && !pallet && !ctn && !pcs) return;
+    let err = null;
+    if(!date) err = `Dòng ${idx+1}: chưa chọn ngày.`;
+    else if(!itemRaw) err = `Dòng ${idx+1}: chưa nhập Item.`;
+    else if(pallet <= 0 && ctn <= 0 && pcs <= 0) err = `Dòng ${idx+1}: phải nhập ít nhất 1 trong 3 số lượng (Pallet/Ctn/Pcs) lớn hơn 0.`;
+    if(err){ errs.push(err); remaining.push(row); return; }
+    valid.push({
+      id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2,6) + idx,
+      date, shift, item: txItemText(itemRaw), itemRaw, pallet, ctn, pcs, kho: activeKho,
+    });
+  });
+
+  if(!valid.length && !errs.length){ formError.textContent = 'Chưa có dòng nào để xác nhận.'; return; }
+
+  if(valid.length){ logEntries.push(...valid); saveLog(logEntries); }
+  formError.textContent = errs.length ? `Đã xác nhận ${valid.length} dòng hợp lệ. Còn ${errs.length} dòng cần sửa lại — ${errs.join(' ')}` : '';
+
+  // Chỉ giữ lại các dòng LỖI (để sửa tiếp) + luôn có 1 dòng trống ở cuối để nhập mới, kế thừa đúng
+  // Ngày/Ca của lượt vừa xác nhận (thường nhập tiếp cùng ngày/ca).
+  const freshRow = nextStageRow(rows);
+  stagedRows[activeKho] = remaining.length ? remaining.concat([freshRow]) : [freshRow];
+  renderStageTable();
+  renderLog();
+  renderReconcile();
+  focusStageCell(0, remaining.length ? 'date' : 'item');
+});
+
+// Sửa dòng sổ tay đã xác nhận (đề phòng lỡ nhập sai) — sửa TẠI CHỖ ngay trên bảng, không cần mở lại
+// bảng staging. Chỉ 1 dòng được sửa cùng lúc (editingLogId), dùng lại đúng luật hợp lệ như lúc xác
+// nhận theo lượt (bắt buộc Ngày + Item, ít nhất 1 trong 3 số lượng > 0).
+let editingLogId = null;
+
+function renderLog(){
+  const khoEntries = logEntries.filter(e => e.kho === activeKho);
+  if(!khoEntries.length){
+    logTbody.innerHTML = ''; logTfoot.innerHTML = '';
+    logEmpty.style.display = 'block';
+    return;
+  }
+  logEmpty.style.display = 'none';
+  const sorted = [...khoEntries].sort((a,b) => b.date.localeCompare(a.date) || a.item.localeCompare(b.item));
+  logTbody.innerHTML = sorted.map(e => {
+    if(e.id === editingLogId){
+      return `
+      <tr class="log-editing" data-edit-id="${escHtml(e.id)}">
+        <td><input type="date" class="log-edit-field" data-field="date" value="${escHtml(e.date)}"></td>
+        <td><select class="log-edit-field" data-field="shift">
+          <option value="ngay"${e.shift === 'ngay' ? ' selected' : ''}>Ngày</option>
+          <option value="dem"${e.shift === 'dem' ? ' selected' : ''}>Đêm</option>
+        </select></td>
+        <td><input type="text" class="log-edit-field" data-field="item" value="${escHtml(e.itemRaw || e.item)}"></td>
+        <td><input type="number" class="log-edit-field" data-field="pallet" min="0" step="1" value="${escHtml(e.pallet)}"></td>
+        <td><input type="number" class="log-edit-field" data-field="ctn" min="0" step="1" value="${escHtml(e.ctn)}"></td>
+        <td><input type="number" class="log-edit-field" data-field="pcs" min="0" step="1" value="${escHtml(e.pcs)}"></td>
+        <td class="log-edit-actions">
+          <button type="button" class="log-save-btn" data-id="${escHtml(e.id)}" title="Lưu">✓</button>
+          <button type="button" class="log-cancel-btn" title="Huỷ">✕</button>
+        </td>
+      </tr>`;
+    }
+    return `
+    <tr>
+      <td>${escHtml(e.date)}</td>
+      <td><span class="shift-badge ${e.shift}">${e.shift === 'ngay' ? 'Ngày' : 'Đêm'}</span></td>
+      <td>${escHtml(e.itemRaw || e.item)}</td>
+      <td class="num">${fmt(e.pallet)}</td>
+      <td class="num">${fmt(e.ctn)}</td>
+      <td class="num">${fmt(e.pcs)}</td>
+      <td class="log-row-actions">
+        <button type="button" class="edit-btn" data-id="${escHtml(e.id)}" title="Sửa dòng này">✎</button>
+        <button type="button" class="del-btn" data-id="${escHtml(e.id)}" title="Xoá dòng này">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+  const totalPallet = khoEntries.reduce((s,e)=>s+e.pallet,0);
+  const totalCtn = khoEntries.reduce((s,e)=>s+e.ctn,0);
+  const totalPcs = khoEntries.reduce((s,e)=>s+e.pcs,0);
+  logTfoot.innerHTML = `<tr><td colspan="3">Tổng (${fmt(khoEntries.length)} dòng)</td><td class="num">${fmt(totalPallet)}</td><td class="num">${fmt(totalCtn)}</td><td class="num">${fmt(totalPcs)}</td><td></td></tr>`;
+}
+
+function saveLogEdit(id){
+  const tr = logTbody.querySelector(`tr[data-edit-id="${id}"]`);
+  if(!tr) return;
+  const get = f => tr.querySelector(`[data-field="${f}"]`).value;
+  const date = get('date');
+  const shift = get('shift') === 'dem' ? 'dem' : 'ngay';
+  const itemRaw = (get('item') || '').trim();
+  const pallet = Number(get('pallet')) || 0;
+  const ctn = Number(get('ctn')) || 0;
+  const pcs = Number(get('pcs')) || 0;
+  if(!date){ formError.textContent = 'Chưa chọn ngày.'; return; }
+  if(!itemRaw){ formError.textContent = 'Chưa nhập Item.'; return; }
+  if(pallet <= 0 && ctn <= 0 && pcs <= 0){ formError.textContent = 'Phải nhập ít nhất 1 trong 3 số lượng (Pallet/Ctn/Pcs) lớn hơn 0.'; return; }
+  const entry = logEntries.find(x => x.id === id);
+  if(!entry) return;
+  Object.assign(entry, { date, shift, item: txItemText(itemRaw), itemRaw, pallet, ctn, pcs });
+  saveLog(logEntries);
+  formError.textContent = '';
+  editingLogId = null;
+  renderLog();
+  renderReconcile();
+}
+
+logTbody.addEventListener('click', (e) => {
+  const editBtn = e.target.closest('.edit-btn');
+  if(editBtn){ editingLogId = editBtn.dataset.id; formError.textContent = ''; renderLog(); return; }
+  const saveBtn = e.target.closest('.log-save-btn');
+  if(saveBtn){ saveLogEdit(saveBtn.dataset.id); return; }
+  const cancelBtn = e.target.closest('.log-cancel-btn');
+  if(cancelBtn){ editingLogId = null; formError.textContent = ''; renderLog(); return; }
+  const btn = e.target.closest('.del-btn');
+  if(!btn) return;
+  const id = btn.dataset.id;
+  if(!confirm('Xoá dòng sổ nhận hàng này?')) return;
+  logEntries = logEntries.filter(x => x.id !== id);
+  saveLog(logEntries);
+  if(editingLogId === id) editingLogId = null;
+  renderLog();
+  renderReconcile();
+});
+// Enter trong lúc sửa -> lưu; Escape -> huỷ sửa (không lưu). Cho phép sửa nhanh bằng bàn phím, đúng
+// tinh thần bảng nhập staging phía trên.
+logTbody.addEventListener('keydown', (e) => {
+  const tr = e.target.closest('tr[data-edit-id]');
+  if(!tr) return;
+  if(e.key === 'Enter'){ e.preventDefault(); saveLogEdit(tr.dataset.editId); }
+  else if(e.key === 'Escape'){ e.preventDefault(); editingLogId = null; formError.textContent = ''; renderLog(); }
+});
+
+/* ============================================================
+   ③ Bảng đối chiếu (theo Ngày + Item)
+   ============================================================ */
+const reconTbody = document.getElementById('recon-tbody');
+const reconEmpty = document.getElementById('recon-empty');
+const reconSummary = document.getElementById('recon-summary');
+const reconSearch = document.getElementById('recon-search');
+const reconOnlyMismatch = document.getElementById('recon-only-mismatch');
+
+function buildReconcileRows(){
+  // logByShift: tách riêng số sổ tay theo Ngày/Đêm (hệ thống không có khái niệm ca nên không có mục
+  // tương ứng) — dùng để lọc theo Ca khi lưu vào Lịch sử, dù bảng đối chiếu vẫn gộp cả ngày để hiển thị.
+  const byKey = new Map(); // "date||item" -> { date, item, itemRaw, logPallet, logCtn, logPcs, sysPallet, sysPcs, inLog, inSys, logByShift }
+  const getRow = (date, item, itemRaw) => {
+    const key = date + '||' + item;
+    let r = byKey.get(key);
+    if(!r){
+      r = {
+        date, item, itemRaw: itemRaw || item, logPallet:0, logCtn:0, logPcs:0, sysPallet:0, sysPcs:0, inLog:false, inSys:false,
+        logByShift: { ngay:{pallet:0,ctn:0,pcs:0}, dem:{pallet:0,ctn:0,pcs:0} },
+      };
+      byKey.set(key, r);
+    }
+    return r;
+  };
+  logEntries.filter(e => e.kho === activeKho).forEach(e => {
+    const r = getRow(e.date, e.item, e.itemRaw);
+    r.inLog = true;
+    r.logPallet += e.pallet; r.logCtn += e.ctn; r.logPcs += e.pcs;
+    const sh = r.logByShift[e.shift === 'dem' ? 'dem' : 'ngay'];
+    sh.pallet += e.pallet; sh.ctn += e.ctn; sh.pcs += e.pcs;
+  });
+  if(txReceiveData && txReceiveData.rows){
+    txReceiveData.rows.filter(row => row.kho === activeKho).forEach(row => {
+      if(!row.dateKey) return;
+      const r = getRow(row.dateKey, row.item, row.itemRaw);
+      r.inSys = true;
+      r.sysPallet += 1; // mỗi dòng Receive = 1 pallet
+      r.sysPcs += row.qty;
+    });
+  }
+  return [...byKey.values()].sort((a,b) => b.date.localeCompare(a.date) || a.itemRaw.localeCompare(b.itemRaw));
+}
+
+function reconcileStatus(r){
+  if(r.inLog && !r.inSys) return 'missing-sys'; // sổ tay có, hệ thống chưa thấy
+  if(!r.inLog && r.inSys) return 'missing-log'; // hệ thống có, sổ tay chưa ghi
+  if(r.logPallet === r.sysPallet && r.logPcs === r.sysPcs) return 'match';
+  return 'mismatch';
+}
+const STATUS_LABEL = { match: '✓ Khớp', mismatch: '⚠ Lệch số', 'missing-sys': '⚠ Chưa thấy trên hệ thống', 'missing-log': '⚠ Chưa ghi sổ tay' };
+
+function renderReconcile(){
+  const rows = buildReconcileRows();
+  if(!rows.length){
+    reconTbody.innerHTML = '';
+    reconEmpty.style.display = 'block';
+    reconSummary.innerHTML = '';
+    return;
+  }
+  reconEmpty.style.display = 'none';
+  const q = removeDiacritics(reconSearch.value.trim().toLowerCase());
+  const onlyMismatch = reconOnlyMismatch.checked;
+  const filtered = rows.filter(r => {
+    if(q && !removeDiacritics(r.itemRaw.toLowerCase()).includes(q)) return false;
+    if(onlyMismatch && reconcileStatus(r) === 'match') return false;
+    return true;
+  });
+  if(!filtered.length){
+    reconTbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:var(--muted-2); font-family:var(--sans);">Không có dòng nào khớp bộ lọc.</td></tr>`;
+  } else {
+    reconTbody.innerHTML = filtered.map(r => {
+      const status = reconcileStatus(r);
+      const diffPallet = r.logPallet - r.sysPallet;
+      const diffPcs = r.logPcs - r.sysPcs;
+      const diffCls = v => v === 0 ? 'diff-ok' : 'diff-bad';
+      const diffText = v => (v > 0 ? '+' : '') + fmt(v);
+      return `<tr class="recon-row${status === 'mismatch' ? ' row-mismatch' : ''}" data-date="${escHtml(r.date)}" data-item="${escHtml(r.item)}" data-item-raw="${escHtml(r.itemRaw)}" title="Bấm để xem chi tiết dòng hệ thống">
+        <td>${escHtml(r.date)}</td>
+        <td>${escHtml(r.itemRaw)}</td>
+        <td class="num col-sotay">${r.inLog ? fmt(r.logPallet) : '—'}</td>
+        <td class="num col-hethong">${r.inSys ? fmt(r.sysPallet) : '—'}</td>
+        <td class="num ${r.inLog && r.inSys ? diffCls(diffPallet) : ''}">${r.inLog && r.inSys ? diffText(diffPallet) : '—'}</td>
+        <td class="num col-sotay">${r.inLog ? fmt(r.logPcs) : '—'}</td>
+        <td class="num col-hethong">${r.inSys ? fmt(r.sysPcs) : '—'}</td>
+        <td class="num ${r.inLog && r.inSys ? diffCls(diffPcs) : ''}">${r.inLog && r.inSys ? diffText(diffPcs) : '—'}</td>
+        <td class="num col-sotay">${r.inLog ? fmt(r.logCtn) : '—'}</td>
+        <td><span class="status-badge ${status}">${STATUS_LABEL[status]}</span></td>
+      </tr>`;
+    }).join('');
+  }
+  const nMatch = rows.filter(r => reconcileStatus(r) === 'match').length;
+  const nMismatch = rows.filter(r => reconcileStatus(r) === 'mismatch').length;
+  const nMissingSys = rows.filter(r => reconcileStatus(r) === 'missing-sys').length;
+  const nMissingLog = rows.filter(r => reconcileStatus(r) === 'missing-log').length;
+  reconSummary.innerHTML = `
+    <span><b>${fmt(rows.length)}</b> dòng đối chiếu</span>
+    <span style="color:var(--teal);"><b>${fmt(nMatch)}</b> khớp</span>
+    <span style="color:var(--red);"><b>${fmt(nMismatch)}</b> lệch số</span>
+    <span style="color:var(--amber);"><b>${fmt(nMissingSys)}</b> chưa thấy trên hệ thống</span>
+    <span style="color:var(--violet);"><b>${fmt(nMissingLog)}</b> chưa ghi sổ tay</span>
+  `;
+}
+reconSearch.addEventListener('input', renderReconcile);
+reconOnlyMismatch.addEventListener('change', renderReconcile);
+
+// Bấm vào 1 dòng đối chiếu -> xem chi tiết từng dòng Receive GỐC trong file Transaction đã gộp thành
+// con số "Pallet/Pcs (Hệ thống)" của dòng đó (vì hệ thống không lưu theo dòng Ngày+Item gộp sẵn — số
+// hiện trên bảng là TÍNH TOÁN từ nhiều dòng Receive riêng lẻ), giúp đối chiếu thủ công khi nghi ngờ.
+let sysPopoverEl = null;
+function closeSysPopover(){
+  if(!sysPopoverEl) return;
+  sysPopoverEl.remove();
+  sysPopoverEl = null;
+  document.removeEventListener('keydown', sysPopoverKeydown);
+}
+function sysPopoverKeydown(e){ if(e.key === 'Escape') closeSysPopover(); }
+function showSysPopover(date, item, itemRaw){
+  closeSysPopover();
+  // (a.time||'') đề phòng dữ liệu txReceiveData cũ còn lưu trong localStorage từ TRƯỚC khi có trường
+  // "time" (bản cũ của trang) — không chặn popover mở lên chỉ vì thiếu trường này ở dữ liệu cũ.
+  const sysRows = (txReceiveData && txReceiveData.rows ? txReceiveData.rows : [])
+    .filter(row => row.kho === activeKho && row.dateKey === date && row.item === item)
+    .sort((a,b) => (a.time||'').localeCompare(b.time||''));
+  const totalQty = sysRows.reduce((s,row) => s + row.qty, 0);
+  const backdrop = document.createElement('div');
+  backdrop.className = 'sys-popover-backdrop';
+  backdrop.innerHTML = `
+    <div class="sys-popover-panel">
+      <div class="sys-popover-head">
+        <div>
+          <h3>${escHtml(itemRaw)}</h3>
+          <div class="sys-popover-sub">${escHtml(date)} · ${escHtml(khoLabel(activeKho))} · Dòng Receive trong file Transaction</div>
+        </div>
+        <button type="button" class="sys-popover-close" title="Đóng">✕</button>
+      </div>
+      ${sysRows.length ? `
+        <table class="dt">
+          <thead><tr><th>Giờ</th><th>Locator</th><th>GI No</th><th>Lot No</th><th>Pallet No</th><th style="text-align:right">SL</th><th>Người quét</th></tr></thead>
+          <tbody>
+            ${sysRows.map(row => `<tr><td>${escHtml(row.time)}</td><td>${escHtml(row.locator)}</td><td>${escHtml(row.gi || '—')}</td><td>${escHtml(row.lot || '—')}</td><td>${escHtml(row.palletNo || '—')}</td><td class="num">${fmt(row.qty)}</td><td>${escHtml(row.user || '—')}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        <div class="sys-popover-total"><span><b>${fmt(sysRows.length)}</b> dòng (= Pallet hệ thống)</span><span><b>${fmt(totalQty)}</b> tổng SL (= Pcs hệ thống)</span></div>
+      ` : `<div class="empty-note">Không có dòng Receive nào trong file Transaction đang tải khớp Ngày/Item/Kho này.</div>`}
+    </div>`;
+  backdrop.addEventListener('click', (e) => { if(e.target === backdrop) closeSysPopover(); });
+  backdrop.querySelector('.sys-popover-close').addEventListener('click', closeSysPopover);
+  document.body.appendChild(backdrop);
+  sysPopoverEl = backdrop;
+  document.addEventListener('keydown', sysPopoverKeydown);
+}
+reconTbody.addEventListener('click', (e) => {
+  const tr = e.target.closest('tr.recon-row');
+  if(!tr) return;
+  showSysPopover(tr.dataset.date, tr.dataset.item, tr.dataset.itemRaw);
+});
+
+/* ============================================================
+   ④ Lịch sử đối chiếu đã lưu — bấm "Lưu tất cả" ở bảng đối chiếu sẽ CHỤP LẠI (snapshot) toàn bộ các
+   dòng đang có của kho đang chọn, lưu VĨNH VIỄN tại đây (localStorage riêng, không đụng tới dữ liệu
+   Transaction/sổ tay đang làm việc). Lưu lại đúng 1 dòng (cùng Kho+Ngày+Item) sẽ GHI ĐÈ bản cũ (cập
+   nhật số liệu mới nhất), không tạo trùng lặp. Gộp chung cả 3 kho, lọc theo Kho/Ngày/Ca/mã hàng.
+   ============================================================ */
+const LS_HISTORY_KEY = 'tn5_doichieu_history_v1';
+function loadHistory(){
+  try{ const v = JSON.parse(localStorage.getItem(LS_HISTORY_KEY) || '[]'); return Array.isArray(v) ? v : []; }
+  catch(err){ return []; }
+}
+function saveHistoryData(){ try{ localStorage.setItem(LS_HISTORY_KEY, JSON.stringify(savedHistory)); }catch(err){} }
+let savedHistory = loadHistory(); // [{key, kho, date, item, itemRaw, logPallet, logCtn, logPcs, logByShift, sysPallet, sysPcs, inLog, inSys, status, savedAt}]
+
+const histGroupsEl = document.getElementById('hist-groups');
+const histEmpty = document.getElementById('hist-empty');
+const histSummary = document.getElementById('hist-summary');
+const histFilterKho = document.getElementById('hist-filter-kho');
+const histFilterDate = document.getElementById('hist-filter-date');
+const histFilterShift = document.getElementById('hist-filter-shift');
+const histSearch = document.getElementById('hist-search');
+const btnHistClearFilters = document.getElementById('btn-hist-clear-filters');
+
+histFilterKho.innerHTML = '<option value="">Tất cả kho</option>' + KHO_LIST.map(k => `<option value="${k.key}">${escHtml(k.label)}</option>`).join('');
+
+function saveReconcileSnapshot(){
+  const rows = buildReconcileRows();
+  if(!rows.length){ alert('Chưa có dòng đối chiếu nào ở kho này để lưu.'); return; }
+  if(!confirm(`Lưu ${rows.length} dòng đối chiếu của ${khoLabel(activeKho)} vào Lịch sử đã lưu?`)) return;
+  const byKey = new Map(savedHistory.map(h => [h.key, h]));
+  const now = new Date().toISOString();
+  rows.forEach(r => {
+    const key = activeKho + '||' + r.date + '||' + r.item;
+    byKey.set(key, {
+      key, kho: activeKho, date: r.date, item: r.item, itemRaw: r.itemRaw,
+      logPallet: r.logPallet, logCtn: r.logCtn, logPcs: r.logPcs, logByShift: r.logByShift,
+      sysPallet: r.sysPallet, sysPcs: r.sysPcs, inLog: r.inLog, inSys: r.inSys,
+      status: reconcileStatus(r), savedAt: now,
+    });
+  });
+  savedHistory = [...byKey.values()];
+  saveHistoryData();
+  renderHistory();
+}
+document.getElementById('btn-save-recon').addEventListener('click', saveReconcileSnapshot);
+
+// Nhóm các dòng đã lưu theo Kho+Ngày (mỗi lượt "Lưu tất cả" thường cùng 1 kho/1 ngày) -> mỗi nhóm thu
+// gọn thành 1 thanh tiêu đề (Ngày, Kho, Ca gộp của cả nhóm + tổng kết), bấm vào mới xổ ra bảng chi tiết
+// từng mã hàng. expandedHistoryGroups không lưu localStorage -> luôn thu gọn lại khi tải lại trang.
+const expandedHistoryGroups = new Set();
+function buildHistoryGroups(rows){
+  const map = new Map();
+  rows.forEach(h => {
+    const key = h.kho + '||' + h.date;
+    let g = map.get(key);
+    if(!g){ g = { key, kho: h.kho, date: h.date, rows: [] }; map.set(key, g); }
+    g.rows.push(h);
+  });
+  return [...map.values()].sort((a,b) => b.date.localeCompare(a.date) || khoLabel(a.kho).localeCompare(khoLabel(b.kho)));
+}
+function groupShiftBadges(rows){
+  const has = s => rows.some(h => h.logByShift && h.logByShift[s] && (h.logByShift[s].pallet || h.logByShift[s].ctn || h.logByShift[s].pcs));
+  const parts = [];
+  if(has('ngay')) parts.push('<span class="shift-badge ngay">Ngày</span>');
+  if(has('dem')) parts.push('<span class="shift-badge dem">Đêm</span>');
+  return parts.join(' ') || '<span style="color:var(--muted-2);">—</span>';
+}
+function renderHistoryGroupHtml(g){
+  const rows = [...g.rows].sort((a,b) => a.itemRaw.localeCompare(b.itemRaw));
+  const nMatch = rows.filter(h => h.status === 'match').length;
+  const nMismatch = rows.filter(h => h.status === 'mismatch').length;
+  const nMissingSys = rows.filter(h => h.status === 'missing-sys').length;
+  const nMissingLog = rows.filter(h => h.status === 'missing-log').length;
+  const expanded = expandedHistoryGroups.has(g.key);
+  return `
+  <div class="hist-group${expanded ? ' expanded' : ''}">
+    <button type="button" class="hist-group-header" data-key="${escHtml(g.key)}">
+      <span class="hist-group-chevron">▸</span>
+      <span class="hist-group-title"><b>${escHtml(g.date)}</b><span class="hist-group-kho">${escHtml(khoLabel(g.kho))}</span>${groupShiftBadges(rows)}</span>
+      <span class="hist-group-stats">
+        <span><b>${fmt(rows.length)}</b> dòng đã lưu</span>
+        <span style="color:var(--teal);"><b>${fmt(nMatch)}</b> khớp</span>
+        <span style="color:var(--red);"><b>${fmt(nMismatch)}</b> lệch số</span>
+        <span style="color:var(--amber);"><b>${fmt(nMissingSys)}</b> chưa thấy trên hệ thống</span>
+        <span style="color:var(--violet);"><b>${fmt(nMissingLog)}</b> chưa ghi sổ tay</span>
+      </span>
+    </button>
+    <div class="hist-group-body" style="display:${expanded ? 'block' : 'none'};">
+      <div class="table-scroll">
+        <table class="dt">
+          <thead><tr>
+            <th>Item</th>
+            <th class="col-sotay" style="text-align:right">Pallet (Sổ tay)</th><th class="col-hethong" style="text-align:right">Pallet (Hệ thống)</th>
+            <th class="col-sotay" style="text-align:right">Pcs (Sổ tay)</th><th class="col-hethong" style="text-align:right">Pcs (Hệ thống)</th>
+            <th class="col-sotay" style="text-align:right">Ctn (Sổ tay)</th>
+            <th>Trạng thái</th><th>Lúc lưu</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${rows.map(h => `
+              <tr class="${h.status === 'mismatch' ? 'row-mismatch' : ''}">
+                <td>${escHtml(h.itemRaw)}</td>
+                <td class="num col-sotay">${h.inLog ? fmt(h.logPallet) : '—'}</td>
+                <td class="num col-hethong">${h.inSys ? fmt(h.sysPallet) : '—'}</td>
+                <td class="num col-sotay">${h.inLog ? fmt(h.logPcs) : '—'}</td>
+                <td class="num col-hethong">${h.inSys ? fmt(h.sysPcs) : '—'}</td>
+                <td class="num col-sotay">${h.inLog ? fmt(h.logCtn) : '—'}</td>
+                <td><span class="status-badge ${h.status}">${STATUS_LABEL[h.status]}</span></td>
+                <td>${escHtml(new Date(h.savedAt).toLocaleString('vi-VN'))}</td>
+                <td><button type="button" class="del-btn" data-key="${escHtml(h.key)}" title="Xoá khỏi lịch sử">✕</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderHistory(){
+  if(!savedHistory.length){
+    histGroupsEl.innerHTML = '';
+    histEmpty.style.display = 'block';
+    histSummary.innerHTML = '';
+    return;
+  }
+  histEmpty.style.display = 'none';
+  const khoF = histFilterKho.value;
+  const dateF = histFilterDate.value;
+  const shiftF = histFilterShift.value;
+  const q = removeDiacritics(histSearch.value.trim().toLowerCase());
+  const filtered = savedHistory.filter(h => {
+    if(khoF && h.kho !== khoF) return false;
+    if(dateF && h.date !== dateF) return false;
+    if(shiftF){
+      const v = h.logByShift && h.logByShift[shiftF];
+      if(!v || (!v.pallet && !v.ctn && !v.pcs)) return false;
+    }
+    if(q && !removeDiacritics((h.itemRaw||'').toLowerCase()).includes(q)) return false;
+    return true;
+  });
+
+  if(!filtered.length){
+    histGroupsEl.innerHTML = `<div class="empty-note">Không có dòng nào khớp bộ lọc.</div>`;
+  } else {
+    histGroupsEl.innerHTML = buildHistoryGroups(filtered).map(renderHistoryGroupHtml).join('');
+  }
+  const nMatch = filtered.filter(h => h.status === 'match').length;
+  const nMismatch = filtered.filter(h => h.status === 'mismatch').length;
+  const nMissingSys = filtered.filter(h => h.status === 'missing-sys').length;
+  const nMissingLog = filtered.filter(h => h.status === 'missing-log').length;
+  histSummary.innerHTML = `
+    <span><b>${fmt(filtered.length)}</b> / ${fmt(savedHistory.length)} dòng đã lưu</span>
+    <span style="color:var(--teal);"><b>${fmt(nMatch)}</b> khớp</span>
+    <span style="color:var(--red);"><b>${fmt(nMismatch)}</b> lệch số</span>
+    <span style="color:var(--amber);"><b>${fmt(nMissingSys)}</b> chưa thấy trên hệ thống</span>
+    <span style="color:var(--violet);"><b>${fmt(nMissingLog)}</b> chưa ghi sổ tay</span>
+  `;
+}
+histGroupsEl.addEventListener('click', (e) => {
+  const delBtn = e.target.closest('.del-btn');
+  if(delBtn){
+    if(!confirm('Xoá dòng này khỏi Lịch sử đã lưu?')) return;
+    savedHistory = savedHistory.filter(h => h.key !== delBtn.dataset.key);
+    saveHistoryData();
+    renderHistory();
+    return;
+  }
+  const header = e.target.closest('.hist-group-header');
+  if(header){
+    const key = header.dataset.key;
+    if(expandedHistoryGroups.has(key)) expandedHistoryGroups.delete(key);
+    else expandedHistoryGroups.add(key);
+    renderHistory();
+  }
+});
+histFilterKho.addEventListener('change', renderHistory);
+histFilterDate.addEventListener('change', renderHistory);
+histFilterShift.addEventListener('change', renderHistory);
+histSearch.addEventListener('input', renderHistory);
+btnHistClearFilters.addEventListener('click', () => {
+  histFilterKho.value = ''; histFilterDate.value = ''; histFilterShift.value = ''; histSearch.value = '';
+  renderHistory();
+});
+
+/* ============================================================
+   Tab chuyển TRANG (Đối chiếu <-> Lịch sử đã lưu) — KHÁC với tab chọn Kho ở trên: tab Kho chỉ chọn kho
+   đang làm việc trong chế độ "Đối chiếu", còn đây chuyển hẳn sang xem dữ liệu đã lưu (gộp cả 3 kho).
+   ============================================================ */
+const LS_VIEW_KEY = 'tn5_doichieu_active_view_v1';
+const viewTabsEl = document.getElementById('view-tabs');
+const workViewEl = document.getElementById('work-view');
+const historyViewEl = document.getElementById('history-panel');
+let activeView = (() => {
+  try{ const v = localStorage.getItem(LS_VIEW_KEY); return v === 'history' ? 'history' : 'work'; }
+  catch(err){ return 'work'; }
+})();
+function renderViewTabs(){
+  viewTabsEl.innerHTML = `
+    <button type="button" class="view-tab-btn${activeView === 'work' ? ' active' : ''}" data-view="work">📋 Đối chiếu</button>
+    <button type="button" class="view-tab-btn${activeView === 'history' ? ' active' : ''}" data-view="history">📜 Lịch sử đã lưu</button>
+  `;
+  workViewEl.style.display = activeView === 'work' ? '' : 'none';
+  historyViewEl.style.display = activeView === 'history' ? '' : 'none';
+}
+viewTabsEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.view-tab-btn');
+  if(!btn) return;
+  activeView = btn.dataset.view;
+  try{ localStorage.setItem(LS_VIEW_KEY, activeView); }catch(err){}
+  renderViewTabs();
+  if(activeView === 'history') renderHistory();
+});
+
+/* ============================================================
+   Khởi động
+   ============================================================ */
+renderViewTabs();
+renderKhoTabs();
+renderTxSummary();
+renderStageTable();
+renderLog();
+renderReconcile();
+renderHistory();
+</script>
+</body>
+</html>

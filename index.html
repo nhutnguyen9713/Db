@@ -1,0 +1,2541 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta id="viewport-meta" name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Dashboard Tồn Kho — Tổng hợp Mã / Kho</title>
+
+<!-- ===== PWA: cài được thành app riêng trên màn hình chính (iOS & Android) ===== -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#d87a0f">
+<!-- iOS Safari cần các thẻ riêng bên dưới, không chỉ đọc manifest.json như Android -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TN5">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<!-- ===== Hết phần PWA ===== -->
+
+<script>
+/* Bộ bắt lỗi JS hiển thị ngay trên màn hình — để chẩn đoán lỗi trên máy không có console (vd: iPhone) */
+(function(){
+  window.__jsErrors = [];
+  function record(msg){
+    if(window.__jsErrors.indexOf(msg) !== -1) return;
+    window.__jsErrors.push(msg);
+    render();
+  }
+  window.addEventListener('error', function(e){
+    var loc = e.filename ? (e.filename.split('/').pop() + ':' + e.lineno + ':' + e.colno + ' — ') : '';
+    record(loc + (e.message || (e.error && e.error.message) || String(e.error)));
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    var reason = e.reason;
+    record('Promise bị từ chối: ' + (reason && reason.message ? reason.message : String(reason)));
+  });
+  function render(){
+    if(!document.body){ document.addEventListener('DOMContentLoaded', render, { once: true }); return; }
+    var bar = document.getElementById('__js_error_bar__');
+    if(!bar){
+      bar = document.createElement('div');
+      bar.id = '__js_error_bar__';
+      bar.style.cssText = 'position:fixed; top:0; left:0; right:0; z-index:2147483647; background:#c0362c; color:#fff; font:11px/1.5 monospace; padding:10px 14px 34px; max-height:50vh; overflow:auto; white-space:pre-wrap; box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+      var closeBtn = document.createElement('button');
+      closeBtn.textContent = 'Đóng';
+      closeBtn.style.cssText = 'position:absolute; right:10px; bottom:6px; background:#fff; color:#c0362c; border:none; border-radius:5px; padding:4px 10px; font:11px monospace; font-weight:700;';
+      closeBtn.onclick = function(){ bar.style.display = 'none'; };
+      bar.appendChild(closeBtn);
+      document.body.insertBefore(bar, document.body.firstChild);
+    }
+    var list = document.createElement('div');
+    list.innerHTML = '<b>⚠ Có lỗi JavaScript — chụp màn hình này gửi lại để sửa:</b><br>' +
+      window.__jsErrors.map(function(m){ return '• ' + String(m).replace(/</g, '&lt;'); }).join('<br>');
+    var oldList = bar.querySelector('div');
+    if(oldList) bar.removeChild(oldList);
+    bar.insertBefore(list, bar.firstChild);
+  }
+})();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" crossorigin="anonymous"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+/* Dải KPI trang Transaction: 12 ô — chia đều 6 / 4 / 2 cột để hàng cuối luôn đầy, không bị ô trống xám */
+#transaction-kpi-strip{grid-template-columns:repeat(6,1fr);}
+#transaction-kpi-strip .kpi .label{font-size:10.5px;}
+#transaction-kpi-strip .kpi .value{font-size:24px;}
+@media (max-width:1399px){#transaction-kpi-strip{grid-template-columns:repeat(4,1fr);}}
+@media (max-width:1100px){#transaction-kpi-strip{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+
+<div id="cont-pick-tooltip">
+  <div class="cpt-hint">Giữ phím <b>Shift</b> để cố định khung này &amp; cuộn bên trong</div>
+  <div id="cont-pick-tooltip-body"></div>
+</div>
+
+<button id="desktop-mode-toggle" type="button" title="Chuyển đổi chế độ xem giao diện máy tính">
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+  <span id="desktop-mode-toggle-label">Chế độ máy tính</span>
+</button>
+
+<script>
+  (function(){
+    try{
+      // cache tức thời để tránh nháy giao diện khi vừa mở trang; nguồn dữ liệu thật là file đồng bộ (xem
+      // FileVault). "light" (mặc định) không gắn data-theme; giá trị khác 'light' áp thẳng luôn — an
+      // toàn với MỌI id trong thư viện giao diện (kể cả id thêm sau này), không chỉ riêng 'dark', vì lúc
+      // này (đầu trang) THEME_LIBRARY chưa kịp định nghĩa nên không kiểm tra hợp lệ được ở đây.
+      const saved = localStorage.getItem('tn5_theme');
+      if(saved && saved !== 'light'){ document.body.setAttribute('data-theme', saved); }
+    }catch(e){}
+  })();
+</script>
+<div id="loading-overlay"><div class="spinner"></div><div class="msg" id="loading-msg">Đang xử lý file…</div></div>
+<div id="tn5-fortune-bubble" class="tn5-fortune-bubble" title="Bấm để ẩn"></div>
+<div id="tn5-mascot" class="tn5-mascot" title="Mọi thứ ổn — chưa có cảnh báo gì." aria-hidden="true">😺</div>
+
+<div class="app-shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo" id="sidebar-logo-update" role="button" tabindex="0" aria-label="Cập nhật dữ liệu tồn kho" title="Cập nhật dữ liệu — bấm để chọn file tồn kho mới (.xlsx/.csv/.tsv)" style="cursor:pointer;">TN5</div>
+    <nav class="sidebar-nav">
+      <button class="sidebar-nav-btn active" data-page="overview" type="button" title="Overview" aria-label="Overview">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+      </button>
+      <button class="sidebar-nav-btn" data-page="picking" type="button" title="Picking Status" aria-label="Picking Status">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+      </button>
+      <button class="sidebar-nav-btn" data-page="search" type="button" title="Tìm mã hàng" aria-label="Tìm mã hàng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      </button>
+      <button class="sidebar-nav-btn" data-page="kiemton" type="button" title="Kiểm tồn kho" aria-label="Kiểm tồn kho">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 3v2a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V3"/><path d="m9 13 2 2 4-4"/></svg>
+      </button>
+      <button class="sidebar-nav-btn" data-page="sodo3b" type="button" title="Sơ đồ kho 3B" aria-label="Sơ đồ kho 3B">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      </button>
+      <button class="sidebar-nav-btn" data-page="transaction" type="button" title="Transaction" aria-label="Transaction">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M21 7H9a4 4 0 0 0-4 4v1"/><path d="M7 21l-4-4 4-4"/><path d="M3 17h12a4 4 0 0 0 4-4v-1"/></svg>
+      </button>
+      <button class="sidebar-nav-btn" data-page="compare" type="button" title="So sánh WMS vs ERP" aria-label="So sánh WMS vs ERP">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v18"/><path d="m5 7-4 4 4 4"/><path d="M15 3v18"/><path d="m19 7 4 4-4 4"/></svg>
+      </button>
+    </nav>
+    <div class="sidebar-spacer">
+      <div class="dock-scene" aria-hidden="true">
+        <div class="dock-ground"></div>
+        <div class="dock-sea"></div>
+        <div class="dock-pier"></div>
+        <div class="dock-ship">
+          <div class="dock-ship-hull"></div>
+          <div class="dock-ship-cabin"></div>
+          <div class="dock-ship-stack dock-ship-stack-1"></div>
+          <div class="dock-ship-stack dock-ship-stack-2"></div>
+        </div>
+        <div class="dock-cargo"></div>
+        <div class="dock-truck">
+          <div class="dock-truck-container"></div>
+          <div class="dock-truck-cab"></div>
+          <div class="dock-truck-wheel dock-truck-wheel-1"></div>
+          <div class="dock-truck-wheel dock-truck-wheel-2"></div>
+        </div>
+      </div>
+    </div>
+    <button class="sidebar-nav-btn" id="notif-bell-btn" type="button" title="Thông báo &amp; nhật ký thay đổi" style="position:relative;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+      <span id="notif-badge" class="notif-badge" style="display:none;"></span>
+    </button>
+    <div id="notif-panel" class="notif-panel" style="display:none;">
+      <div class="notif-panel-head">
+        <span>🔔 Thông báo &amp; nhật ký</span>
+        <span style="font-size:10.5px; color:var(--muted-2); font-weight:400;">Chỉ lưu trong phiên này</span>
+      </div>
+      <div id="notif-list" class="notif-list"></div>
+    </div>
+    <button class="sidebar-nav-btn" id="btn-save-cloud" type="button" title="Lưu ngay dữ liệu hiện tại lên Cloud — dữ liệu CHỈ được ghi lên Cloud khi bấm nút này, không tự động ghi ngầm nữa">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+      <span class="btn-save-dot"></span>
+    </button>
+    <button class="sidebar-nav-btn" id="settings-open-btn" type="button" title="Cài đặt lưu trữ &amp; đồng bộ">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l-.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <button class="sidebar-nav-btn" id="theme-toggle-btn" type="button" title="Chọn giao diện" style="position:relative;">
+      <svg id="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+      <svg id="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      <svg id="theme-icon-custom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><path d="M12 2a10 10 0 1 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.4-.3-.4-.5-.9-.5-1.4 0-1.1.9-2 2-2h2.3c1.8 0 3.2-1.4 3.2-3.2C20.5 6.5 16.7 2 12 2Z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="7.5" r="1.2" fill="currentColor" stroke="none"/></svg>
+      <span class="theme-badge" id="theme-badge" style="display:none;"></span>
+    </button>
+    <div id="theme-panel" class="theme-panel" style="display:none;">
+      <div class="theme-panel-head">Giao diện</div>
+      <div id="theme-panel-list"></div>
+    </div>
+    <!-- Cố tình đặt XA nút "Lưu" ở trên — 2 nút Lưu/Làm mới dữ liệu nằm sát nhau rất dễ bấm lộn, mà bấm
+         nhầm "Làm mới dữ liệu" (tải đè từ Cloud) khi đang có thay đổi CHƯA LƯU sẽ MẤT DỮ LIỆU đó. -->
+    <button class="sidebar-nav-btn" id="btn-refresh-data" type="button" title="Tải lại dữ liệu mới nhất từ Cloud — giống bấm &quot;Kết nối&quot; ở mục Cloud — rồi làm mới toàn bộ bảng">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    </button>
+  </aside>
+
+  <div class="main-area">
+  <div class="wrap" id="page-overview">
+  <header>
+    <div>
+      <div class="brand-eyebrow"><span class="dot"></span>WMS SNAPSHOT · TỒN KHO THÀNH PHẨM</div>
+      <h1>Dashboard Tổng hợp Mã hàng &amp; Kho</h1>
+      <div class="sub" id="sub-line">—</div>
+    </div>
+    <div class="header-right"></div>
+  </header>
+
+  <div class="panel search-panel" id="alerts-panel" style="border-color:rgba(214,57,75,0.35); display:none;">
+    <div class="alerts-head" id="alerts-head">
+      <div>
+        <div class="brand-eyebrow"><span class="dot" style="background:var(--red); box-shadow:0 0 8px var(--red);"></span>CẢNH BÁO</div>
+        <h1 style="font-size:18px;">Cảnh báo hôm nay</h1>
+        <div class="alerts-summary" id="alerts-summary">—</div>
+      </div>
+    </div>
+    <div class="alerts-grid" id="alerts-grid"></div>
+  </div>
+
+  <div class="kcs-panel" id="kpi-strip" title="Nhấn để xem bảng thống kê chi tiết container" onclick="scrollToContPickingOverview()"></div>
+
+  <div class="panel search-panel cc-collapse-panel" id="trend-chart-panel" style="margin-bottom:16px; display:none;">
+    <div class="cc-collapse-head" data-collapse-toggle>
+      <div style="width:100%;">
+        <div class="brand-eyebrow"><span class="dot" style="background:var(--blue); box-shadow:0 0 8px var(--blue);"></span>XU HƯỚNG</div>
+        <h1 style="font-size:17px;">Xu hướng Utilization theo thời gian</h1>
+        <div class="sub" id="trend-chart-sub">Ghi 1 điểm/ngày mỗi khi mở dashboard — dữ liệu tích luỹ dần, chưa có sẽ không hiện trên biểu đồ.</div>
+      </div>
+      <span class="cc-collapse-chevron">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </span>
+    </div>
+    <div class="cc-collapse-body">
+      <div class="trend-legend" id="trend-legend"></div>
+      <div id="trend-chart-wrap"></div>
+    </div>
+  </div>
+
+  <div class="ov-wrap">
+    <div class="ov-wrap-head">
+      <div>
+        <div class="brand-eyebrow"><span class="dot"></span>SỨC CHỨA</div>
+        <h1 style="font-size:16px; margin:2px 0 0;">Tổng quan sức chứa (3B / 3A / 2B)</h1>
+      </div>
+      <button type="button" class="btn-update btn-ghost-outline" id="btn-ov-config" title="Tự chọn vị trí nào tính vào Utilization mỗi kho — sức chứa từng vị trí vẫn tự lấy theo Sơ đồ kho">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+        Tuỳ chỉnh vị trí
+      </button>
+    </div>
+    <div class="panel search-panel" id="ov-block-3B" style="margin-bottom:16px;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot"></span>KHO 3B</div>
+          <h1 style="font-size:17px;">Tổng quan sức chứa — Kho 3B</h1>
+          <div class="cmp-head-summary" id="ov-head-summary-3B">Chưa có dữ liệu<span class="ov-config-tag" id="ov-config-tag-3B" title="Vị trí + sức chứa lấy trực tiếp từ Grid tuỳ chỉnh ở trang Sơ đồ kho">● Theo Sơ đồ kho</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="sub" style="margin-bottom:6px;">Pallet tại D3B-FG-A01 → A33 (Floor), không tính D3B-FG-PROD và D3B-Loading.</div>
+        <div class="ov-grid">
+          <div>
+            <div class="ov-col-title">Tỷ lệ sử dụng sức chứa</div>
+            <div class="ov-col-sub">Pallet đang chứa / tổng sức chứa chuẩn</div>
+            <div class="ov-ring-wrap">
+              <div class="ov-ring-outer" id="ov-ring-3B">
+                <div class="ov-ring-inner">
+                  <div class="ov-ring-value" id="ov-util-3B">0%</div>
+                  <div class="ov-ring-label">Utilization</div>
+                </div>
+              </div>
+              <div class="ov-ring-ng-badge" id="ov-ring-ng-badge-3B" style="display:none;"></div>
+            </div>
+            <div class="ov-mini-kpis">
+              <div class="ov-mini-kpi"><div class="v" id="ov-pallets-3B">0</div><div class="l">PALLET ĐANG CHỨA</div></div>
+              <div class="ov-mini-kpi"><div class="v" id="ov-capacity-3B">0</div><div class="l">TỔNG SỨC CHỨA CHUẨN</div></div>
+              <div class="ov-mini-kpi"><div class="v" id="ov-positions-3B">0</div><div class="l">TỔNG VỊ TRÍ TÍNH UTILIZATION</div></div>
+            </div>
+          </div>
+          <div>
+            <div class="ov-col-title">Phân bố trạng thái vị trí</div>
+            <div class="ov-col-sub" id="ov-dist-sub-3B">Trống, thấp, vừa và gần đầy/đầy theo capacity từng locator</div>
+            <div class="ov-dist-bar" id="ov-dist-bar-3B"></div>
+<div class="ov-dist-badges" id="ov-dist-badges-3B"></div>
+          </div>
+          <div>
+            <div class="ov-col-title">So sánh pallet và sức chứa</div>
+            <div class="ov-col-sub">Phần sức chứa đã dùng và còn trống</div>
+            <div class="ov-cmp-wrap">
+              <div class="ov-cmp-col">
+                <div class="ov-cmp-value" id="ov-cmp-used-val-3B">0</div>
+                <div class="ov-cmp-bar-track"><div class="ov-cmp-bar used" id="ov-cmp-used-bar-3B" style="height:4%;"></div></div>
+                <div class="ov-cmp-label">Đã dùng</div>
+              </div>
+              <div class="ov-cmp-col">
+                <div class="ov-cmp-value" id="ov-cmp-free-val-3B">0</div>
+                <div class="ov-cmp-bar-track"><div class="ov-cmp-bar free" id="ov-cmp-free-bar-3B" style="height:4%;"></div></div>
+                <div class="ov-cmp-label">Còn trống</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ov-formula-note" id="ov-formula-note-3B"></div>
+        <div class="ov-ng-section cc-collapse-panel" id="ov-ng-section-3B">
+          <div class="ov-ng-head cc-collapse-head" data-collapse-toggle>
+            <div>
+              <div class="ov-col-title" style="margin-top:16px;">Hàng NG</div>
+              <div class="ov-ng-summary" id="ov-ng-summary-3B">Đang tải…</div>
+            </div>
+            <span class="cc-collapse-chevron">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </div>
+          <div class="cc-collapse-body">
+            <div class="ov-col-sub">Mã hàng + locator đang có hàng NG trong kho này — có cảnh báo nếu mã + PO đó đang nằm trong kế hoạch xuất cont</div>
+            <div class="ov-ng-list" id="ov-ng-list-3B"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel search-panel" id="ov-block-3A" style="margin-bottom:16px;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot"></span>KHO 3A</div>
+          <h1 style="font-size:17px;">Tổng quan sức chứa — Kho 3A</h1>
+          <div class="cmp-head-summary" id="ov-head-summary-3A">Chưa có dữ liệu<span class="ov-config-tag" id="ov-config-tag-3A" title="Vị trí + sức chứa lấy trực tiếp từ Grid tuỳ chỉnh ở trang Sơ đồ kho">● Theo Sơ đồ kho</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="sub" style="margin-bottom:6px;">Racking 3A (dãy A–E, bay 1–17, tier T1/T2/T3/T5) + Floor (DG3-FG-A/B/C) + Mezzanine M1.</div>
+        <div class="ov-grid">
+          <div>
+            <div class="ov-col-title">Tỷ lệ sử dụng sức chứa</div>
+            <div class="ov-col-sub">Pallet đang chứa / tổng sức chứa chuẩn</div>
+            <div class="ov-ring-wrap">
+              <div class="ov-ring-outer" id="ov-ring-3A">
+                <div class="ov-ring-inner">
+                  <div class="ov-ring-value" id="ov-util-3A">0%</div>
+                  <div class="ov-ring-label">Utilization</div>
+                </div>
+              </div>
+              <div class="ov-ring-ng-badge" id="ov-ring-ng-badge-3A" style="display:none;"></div>
+            </div>
+            <div class="ov-mini-kpis">
+              <div class="ov-mini-kpi"><div class="v" id="ov-pallets-3A">0</div><div class="l">PALLET ĐANG CHỨA</div></div>
+              <div class="ov-mini-kpi"><div class="v" id="ov-capacity-3A">0</div><div class="l">TỔNG SỨC CHỨA CHUẨN</div></div>
+              <div class="ov-mini-kpi"><div class="v" id="ov-positions-3A">0</div><div class="l">TỔNG VỊ TRÍ TÍNH UTILIZATION</div></div>
+            </div>
+          </div>
+          <div>
+            <div class="ov-col-title">Phân bố trạng thái vị trí</div>
+            <div class="ov-col-sub" id="ov-dist-sub-3A">Racking: trống, 1/2 pallet và đầy 2/2 (sức chứa 2 pallet/vị trí)</div>
+            <div class="ov-dist-bar" id="ov-dist-bar-3A"></div>
+<div class="ov-dist-badges" id="ov-dist-badges-3A"></div>
+          </div>
+          <div>
+            <div class="ov-col-title">So sánh pallet và sức chứa</div>
+            <div class="ov-col-sub">Phần sức chứa đã dùng và còn trống</div>
+            <div class="ov-cmp-wrap">
+              <div class="ov-cmp-col">
+                <div class="ov-cmp-value" id="ov-cmp-used-val-3A">0</div>
+                <div class="ov-cmp-bar-track"><div class="ov-cmp-bar used" id="ov-cmp-used-bar-3A" style="height:4%;"></div></div>
+                <div class="ov-cmp-label">Đã dùng</div>
+              </div>
+              <div class="ov-cmp-col">
+                <div class="ov-cmp-value" id="ov-cmp-free-val-3A">0</div>
+                <div class="ov-cmp-bar-track"><div class="ov-cmp-bar free" id="ov-cmp-free-bar-3A" style="height:4%;"></div></div>
+                <div class="ov-cmp-label">Còn trống</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ov-formula-note" id="ov-formula-note-3A"></div>
+        <div class="ov-ng-section cc-collapse-panel" id="ov-ng-section-3A">
+          <div class="ov-ng-head cc-collapse-head" data-collapse-toggle>
+            <div>
+              <div class="ov-col-title" style="margin-top:16px;">Hàng NG</div>
+              <div class="ov-ng-summary" id="ov-ng-summary-3A">Đang tải…</div>
+            </div>
+            <span class="cc-collapse-chevron">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </div>
+          <div class="cc-collapse-body">
+            <div class="ov-col-sub">Mã hàng + locator đang có hàng NG trong kho này — có cảnh báo nếu mã + PO đó đang nằm trong kế hoạch xuất cont</div>
+            <div class="ov-ng-list" id="ov-ng-list-3A"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="panel search-panel" id="ov-block-2B" style="margin-bottom:16px;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot"></span>KHO 2B</div>
+          <h1 style="font-size:17px;">Tổng quan sức chứa — Kho 2B</h1>
+          <div class="cmp-head-summary" id="ov-head-summary-2B">Chưa có dữ liệu<span class="ov-config-tag" id="ov-config-tag-2B" title="Vị trí + sức chứa lấy trực tiếp từ Grid tuỳ chỉnh ở trang Sơ đồ kho">● Theo Sơ đồ kho</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="sub" style="margin-bottom:6px;">Toàn bộ locator D2B-FG-A→H (không tính Pick Area), không tính D2B-FG-H01.</div>
+        <div class="ov-grid">
+          <div>
+            <div class="ov-col-title">Tỷ lệ sử dụng sức chứa</div>
+            <div class="ov-col-sub">Pallet đang chứa / tổng sức chứa chuẩn</div>
+            <div class="ov-ring-wrap">
+              <div class="ov-ring-outer" id="ov-ring-2B">
+                <div class="ov-ring-inner">
+                  <div class="ov-ring-value" id="ov-util-2B">0%</div>
+                  <div class="ov-ring-label">Utilization</div>
+                </div>
+              </div>
+              <div class="ov-ring-ng-badge" id="ov-ring-ng-badge-2B" style="display:none;"></div>
+            </div>
+            <div class="ov-mini-kpis">
+              <div class="ov-mini-kpi"><div class="v" id="ov-pallets-2B">0</div><div class="l">PALLET ĐANG CHỨA</div></div>
+              <div class="ov-mini-kpi"><div class="v" id="ov-capacity-2B">0</div><div class="l">TỔNG SỨC CHỨA CHUẨN</div></div>
+              <div class="ov-mini-kpi"><div class="v" id="ov-positions-2B">0</div><div class="l">TỔNG VỊ TRÍ TÍNH UTILIZATION</div></div>
+            </div>
+          </div>
+          <div>
+            <div class="ov-col-title">Phân bố trạng thái vị trí</div>
+            <div class="ov-col-sub" id="ov-dist-sub-2B">Trống, thấp, vừa và gần đầy/đầy theo capacity từng locator</div>
+            <div class="ov-dist-bar" id="ov-dist-bar-2B"></div>
+<div class="ov-dist-badges" id="ov-dist-badges-2B"></div>
+          </div>
+          <div>
+            <div class="ov-col-title">So sánh pallet và sức chứa</div>
+            <div class="ov-col-sub">Phần sức chứa đã dùng và còn trống</div>
+            <div class="ov-cmp-wrap">
+              <div class="ov-cmp-col">
+                <div class="ov-cmp-value" id="ov-cmp-used-val-2B">0</div>
+                <div class="ov-cmp-bar-track"><div class="ov-cmp-bar used" id="ov-cmp-used-bar-2B" style="height:4%;"></div></div>
+                <div class="ov-cmp-label">Đã dùng</div>
+              </div>
+              <div class="ov-cmp-col">
+                <div class="ov-cmp-value" id="ov-cmp-free-val-2B">0</div>
+                <div class="ov-cmp-bar-track"><div class="ov-cmp-bar free" id="ov-cmp-free-bar-2B" style="height:4%;"></div></div>
+                <div class="ov-cmp-label">Còn trống</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="ov-formula-note" id="ov-formula-note-2B"></div>
+        <div class="ov-ng-section cc-collapse-panel" id="ov-ng-section-2B">
+          <div class="ov-ng-head cc-collapse-head" data-collapse-toggle>
+            <div>
+              <div class="ov-col-title" style="margin-top:16px;">Hàng NG</div>
+              <div class="ov-ng-summary" id="ov-ng-summary-2B">Đang tải…</div>
+            </div>
+            <span class="cc-collapse-chevron">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </div>
+          <div class="cc-collapse-body">
+            <div class="ov-col-sub">Mã hàng + locator đang có hàng NG trong kho này — có cảnh báo nếu mã + PO đó đang nằm trong kế hoạch xuất cont</div>
+            <div class="ov-ng-list" id="ov-ng-list-2B"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal tuỳ chỉnh danh sách locator tính Utilization — CHỈ chọn vị trí nào tính, KHÔNG còn sửa
+       capacity ở đây nữa (capacity luôn tự lấy theo Sơ đồ kho). -->
+  <div id="ov-config-modal" class="ov-config-modal" style="display:none;">
+    <div class="ov-config-backdrop" id="ov-config-backdrop"></div>
+    <div class="ov-config-panel">
+      <div class="ov-config-header">
+        <div>
+          <h2>Tuỳ chỉnh vị trí tính Utilization</h2>
+          <div class="sub" style="margin:2px 0 0;">Chọn đúng danh sách locator thuộc từng kho được TÍNH vào Utilization/Capacity. Sức chứa mỗi vị trí luôn tự lấy theo Sơ đồ kho (Grid tuỳ chỉnh), không sửa được ở đây.</div>
+        </div>
+        <button type="button" id="ov-config-close" class="ov-config-close-btn" title="Đóng">✕</button>
+      </div>
+      <div class="ov-config-tabs" id="ov-config-tabs">
+        <button type="button" class="ov-config-tab active" data-kho="3B">Kho 3B</button>
+        <button type="button" class="ov-config-tab" data-kho="3A">Kho 3A</button>
+        <button type="button" class="ov-config-tab" data-kho="2B">Kho 2B</button>
+      </div>
+      <div class="ov-config-toolbar">
+        <input type="text" id="ov-config-search" placeholder="Tìm locator…">
+        <span class="ov-config-count" id="ov-config-count">0 vị trí</span>
+        <button type="button" class="ov-config-mini-btn" id="ov-config-selall">Chọn tất cả</button>
+        <button type="button" class="ov-config-mini-btn" id="ov-config-clrall">Bỏ chọn</button>
+        <button type="button" class="ov-config-mini-btn" id="ov-config-resetdefault" title="Bỏ tuỳ chỉnh — quay lại tính TOÀN BỘ vị trí theo đúng Sơ đồ kho, tự cập nhật khi sơ đồ đổi">Về mặc định</button>
+        <button type="button" class="ov-config-mini-btn" id="ov-config-export-excel" title="Xuất bảng vị trí cả 3 kho (đúng trạng thái đang chọn) ra file Excel">📤 Xuất Excel</button>
+      </div>
+      <div class="ov-config-list-head">
+        <span></span><span>Locator</span><span>SL tồn</span><span>Sức chứa</span>
+      </div>
+      <div class="ov-config-list" id="ov-config-list"></div>
+      <div class="ov-config-footer">
+        <button type="button" class="btn-update btn-ghost-outline" id="ov-config-cancel">Huỷ</button>
+        <button type="button" class="btn-update" id="ov-config-save">Lưu &amp; tính lại</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel theo dõi vị trí Kho 3B -->
+  <div class="grid" id="watch-locator-row-3b" style="display:none;">
+    <div class="panel row3 cc-collapse-panel" id="watch-locator-panel-3b">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div>
+          <h2 style="margin:0;"><span class="tag" style="background:var(--blue)">3B</span>Theo dõi vị trí D3B-FG-TG &amp; D3B-FG-ITN<span class="pallet-total-badge" id="watch-pallet-total-3b"></span></h2>
+          <div class="desc">Chi tiết từng dòng tồn kho tại 2 vị trí này — Item No., SL tồn, GI No., Lot No., Pallet</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="cc-collapse-hint">Bấm để mở/thu gọn</span>
+          <span class="cc-collapse-chevron">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </span>
+        </div>
+      </div>
+      <div class="cc-collapse-body">
+      <div class="plan-table-wrap">
+        <table class="plan-detail-table" id="watch-locator-table-3b">
+          <thead>
+            <tr>
+              <th>Item No.</th>
+              <th>Locator</th>
+              <th style="text-align:right">SL tồn</th>
+              <th>GI No.</th>
+              <th>Lot No.</th>
+              <th>Pallet</th>
+            </tr>
+          </thead>
+          <tbody id="watch-locator-tbody-3b"></tbody>
+        </table>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel theo dõi vị trí Kho 3A -->
+  <div class="grid" id="watch-locator-row-3a" style="display:none;">
+    <div class="panel row3 cc-collapse-panel" id="watch-locator-panel-3a">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div>
+          <h2 style="margin:0;"><span class="tag" style="background:var(--violet)">3A</span>Theo dõi vị trí DG3-FG-TG &amp; DG3-FG-ITN<span class="pallet-total-badge" id="watch-pallet-total-3a"></span></h2>
+          <div class="desc">Chi tiết từng dòng tồn kho tại 2 vị trí này — Item No., SL tồn, GI No., Lot No., Pallet</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="cc-collapse-hint">Bấm để mở/thu gọn</span>
+          <span class="cc-collapse-chevron">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </span>
+        </div>
+      </div>
+      <div class="cc-collapse-body">
+      <div class="plan-table-wrap">
+        <table class="plan-detail-table" id="watch-locator-table-3a">
+          <thead>
+            <tr>
+              <th>Item No.</th>
+              <th>Locator</th>
+              <th style="text-align:right">SL tồn</th>
+              <th>GI No.</th>
+              <th>Lot No.</th>
+              <th>Pallet</th>
+            </tr>
+          </thead>
+          <tbody id="watch-locator-tbody-3a"></tbody>
+        </table>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center; padding:14px 0 4px;">
+    <button type="button" class="btn-export-excel" id="item-cbm-open-library" style="font-size:11px; padding:5px 12px; opacity:0.75;" title="Xem/xuất Excel thư viện CBM theo từng mã hàng — tự gom từ cột CBM mỗi lần tải Plan mới">
+      📦 Thư viện CBM
+    </button>
+  </div>
+
+  <footer>
+    <span id="foot-left">—</span>
+    <span id="foot-right">Nguồn: sheet "Du lieu goc" · Kho phân loại theo Locator Name (3A/3B/2B/DG1)</span>
+  </footer>
+
+  </div>
+
+  <div class="wrap" id="page-picking" style="display:none;">
+
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; margin-bottom:16px;">
+    <!-- Dòng trạng thái tải/lưu (upload-status) không hiện trực tiếp ở đây nữa — đã có nút chuông
+         thông báo 🔔 ở đầu sidebar theo dõi & hiện lại y hệt các thông báo này rồi (xem
+         watchStatusElForNotif). Vẫn giữ nguyên trong DOM (chỉ ẩn bằng display:none) để không phải
+         sửa hàng chục chỗ set text/class vào #upload-status trong toàn bộ file, và để nút chuông
+         vẫn tiếp tục bắt được thay đổi bình thường. -->
+    <div class="upload-wrap" style="align-items:flex-start; display:none;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      </div>
+      <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.tsv,.txt">
+      <div class="upload-status" id="upload-status">Bấm chữ "TN5" ở đầu sidebar để tải file .xlsx / .csv / .tsv mới, làm mới dashboard</div>
+    </div>
+    <div class="snapshot">
+      NGÀY CHỐT DỮ LIỆU<br><b id="snapshot-date">—</b>
+      <div class="updated-at" id="updated-at-line">Cập nhật lúc —</div>
+      <div class="updated-at" id="uploaded-file-line">File: Dữ liệu mặc định</div>
+    </div>
+    <div class="snapshot-actions" id="snapshot-plan-actions" style="display:none;">
+    <button class="btn-export-excel" id="btn-export-combined-plan" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+      Xuất Excel
+    </button>
+    <button class="btn-export-excel" id="btn-combined-plan-img" type="button" title="Lưu bảng Tổng hợp 3 Plan thành ảnh PNG">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
+      Lưu ảnh
+    </button>
+    <span style="flex-basis:100%;height:0;"></span>
+    <a class="btn-export-excel" href="./tong-hop-3-plan.html" target="_blank" rel="noopener" title="Mở trang xem Container theo Kho — link cố định, tự lấy dữ liệu mới nhất từ Cloud, cài được lên Màn hình chính (iPhone/Android) như 1 app riêng">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6"/><path d="M10 14 21 3"/></svg>
+      Xem theo Container
+    </a>
+    </div>
+    <div class="tn5-presence" id="tn5-presence" style="display:none;">
+      <button type="button" class="tn5-presence-btn" id="tn5-presence-btn" title="Ai đang mở dashboard" aria-label="Ai đang online">
+        <span class="tn5-presence-dot"></span><b id="tn5-presence-n">0</b> online
+      </button>
+      <div class="tn5-presence-pop" id="tn5-presence-pop" style="display:none;"></div>
+    </div>
+    <div class="tn5-forecast-wrap" id="tn5-forecast-wrap">
+      <div class="tn5-forecast" id="tn5-forecast-1" data-slot="1"></div>
+      <div class="tn5-forecast" id="tn5-forecast-2" data-slot="2"></div>
+    </div>
+  </div>
+
+  <div class="plan-bar" id="plan-bar">
+    <div class="plan-bar-label"><span class="tag">PLAN</span>Plan xuất cont</div>
+    <div class="plan-buttons">
+      <div class="plan-item">
+        <button class="btn-plan" data-plan="Row" type="button">Plan Row</button>
+        <input type="file" class="plan-file-input" data-plan="Row" accept=".xlsx,.xls,.csv,.tsv,.txt" style="display:none">
+        <span class="plan-status" data-plan-status="Row">Chưa tải</span>
+        <button class="btn-plan-clear" data-plan-clear="Row" type="button" title="Xoá Plan Row">✕</button>
+      </div>
+      <div class="plan-item">
+        <button class="btn-plan" data-plan="FC" type="button">Plan FC</button>
+        <input type="file" class="plan-file-input" data-plan="FC" accept=".xlsx,.xls,.csv,.tsv,.txt" style="display:none">
+        <span class="plan-status" data-plan-status="FC">Chưa tải</span>
+        <button class="btn-plan-clear" data-plan-clear="FC" type="button" title="Xoá Plan FC">✕</button>
+      </div>
+      <div class="plan-item">
+        <button class="btn-plan" data-plan="HCP" type="button">Plan HCP</button>
+        <input type="file" class="plan-file-input" data-plan="HCP" accept=".xlsx,.xls,.csv,.tsv,.txt" style="display:none">
+        <span class="plan-status" data-plan-status="HCP">Chưa tải</span>
+        <button class="btn-plan-clear" data-plan-clear="HCP" type="button" title="Xoá Plan HCP">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel row3" id="cont-picking-overview" style="display:none; margin-bottom:16px;">
+    <h2><span class="tag" style="background:var(--teal)">PICK</span>Thống kê Container theo Picking Status</h2>
+    <div class="desc">Gộp theo từng container trong các Plan đã tải · 0% = Chưa pick · trên 0% dưới 100% = Đang pick · 100% = Pick xong</div>
+    <div style="margin:8px 0 4px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <button type="button" class="btn-export-excel" id="btn-cont-ship-upload" style="white-space:nowrap;" title="Tải file Transaction (cùng định dạng với trang Transaction) — chỉ đọc riêng các dòng Transaction Type = Ship (nhóm theo Item No. + Reference), so khớp Reference với CR của từng container để đổi cột Trạng thái thành 'Đang Load'/'Đã Load Xong'. KHÔNG ảnh hưởng tới số liệu KPI phía trên (vẫn tính Pick xong theo Picking Status như cũ).">
+        🚚 Cập nhật Transaction (Ship)
+      </button>
+      <input type="file" id="cont-ship-file-input" accept=".xlsx,.xls,.csv,.tsv,.txt" style="display:none">
+      <span id="cont-ship-updated-line" style="font-size:12px; color:var(--muted); white-space:nowrap;"></span>
+      <span class="upload-status" id="cont-ship-status" style="display:none;"></span>
+    </div>
+    <div class="kpis" id="cont-picking-kpi-strip" style="margin-bottom:0;"></div>
+    <div id="cont-picking-hidden-bar"></div>
+    <div class="plan-table-wrap" id="cont-picking-detail-wrap" style="margin-top:14px; display:none;">
+      <table class="plan-detail-table cpt-table">
+        <thead>
+          <tr>
+            <th><div class="cpt-th"><span>Plan</span><button class="cpt-sort-btn" data-sort="type" type="button">⇅</button><button class="cpt-filter-btn" data-col="type" type="button" title="Lọc theo giá trị"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg></button></div></th>
+            <th><div class="cpt-th"><span>Cont</span><button class="cpt-sort-btn" data-sort="cNo" type="button">⇅</button><button class="cpt-filter-btn" data-col="cNo" type="button" title="Lọc theo giá trị"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg></button></div></th>
+            <th><div class="cpt-th"><span>Ngày Load</span><button class="cpt-sort-btn" data-sort="loadDate" type="button">⇅</button><button class="cpt-filter-btn" data-col="loadDate" type="button" title="Lọc theo giá trị"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg></button></div></th>
+            <th><div class="cpt-th"><span>Giờ Plan</span><button class="cpt-sort-btn" data-sort="planTime" type="button">⇅</button><button class="cpt-filter-btn" data-col="planTime" type="button" title="Lọc theo giá trị"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg></button></div></th>
+            <th><div class="cpt-th"><span>Invoice</span><button class="cpt-sort-btn" data-sort="invoice" type="button">⇅</button><button class="cpt-filter-btn" data-col="invoice" type="button" title="Lọc theo giá trị"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg></button></div></th>
+            <th><div class="cpt-th"><span>CR</span><button class="cpt-sort-btn" data-sort="csr" type="button">⇅</button><button class="cpt-filter-btn" data-col="csr" type="button" title="Lọc theo giá trị"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg></button></div></th>
+            <th><div class="cpt-th"><span>Kho</span><button class="cpt-sort-btn" data-sort="topKho" type="button">⇅</button><button class="cpt-filter-btn" data-col="topKho" type="button" title="Lọc theo giá trị"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg></button></div></th>
+            <th style="text-align:right"><div class="cpt-th" style="justify-content:flex-end;"><span>Picking Status</span><button class="cpt-sort-btn" data-sort="pct" type="button">⇅</button></div></th>
+            <th><div class="cpt-th"><span>Trạng thái</span><button class="cpt-sort-btn" data-sort="status" type="button">⇅</button><button class="cpt-filter-btn" data-col="status" type="button" title="Lọc theo giá trị"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"></polygon></svg></button></div>
+            </th>
+            <th><div class="cpt-th"><span>Trạng thái Loading</span></div></th>
+            <th><div class="cpt-th"><span>Ghi chú</span></div></th>
+          </tr>
+        </thead>
+        <tbody id="cont-picking-detail-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel row3" id="plan-overview-row">
+      <h2><span class="tag" style="background:var(--violet)">PLAN</span>Kế hoạch xuất cont</h2>
+      <div class="desc">Chi tiết các Plan đã tải lên</div>
+      <div id="plan-cards"></div>
+    </div>
+
+    <div class="panel row3" id="plan-combined-row" style="display:none;">
+      <h2><span class="tag" style="background:var(--teal)">TỔNG HỢP</span>Tổng hợp 3 Plan — Đủ / Thiếu so với Tồn kho</h2>
+      <div class="desc">Gộp SL kế hoạch của các Plan đã tải (Row + FC + HCP) theo từng Mã hàng + Cust PO, so sánh với tồn kho hiện tại (PASS)</div>
+      <div class="kpis" id="plan-combined-kpi" style="margin-top:14px;"></div>
+      <div class="plan-card-chart-label compare-label-row">
+        <span id="plan-combined-summary-text"></span>
+      </div>
+      <div class="plan-table-wrap" id="plan-combined-table-wrap"></div>
+    </div>
+
+  </div>
+
+  </div>
+
+
+  <div class="wrap" id="page-search" style="display:none;">
+    <div class="search-page-head">
+      <div>
+        <div class="brand-eyebrow"><span class="dot"></span>TRA CỨU TỒN KHO</div>
+        <h1>Tìm mã hàng</h1>
+        <div class="sub">Tìm một hoặc nhiều mã hàng cùng lúc, quét trên cả 4 khu vực kho</div>
+      </div>
+    </div>
+
+    <div class="panel search-panel search-sticky-controls" id="search-sticky-controls">
+      <div class="kho-multi-wrap" style="padding:0 0 16px;">
+        <div class="kho-multi-label">
+          <span><span class="badge-multi">MULTI</span>&nbsp; Mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng (quét cả 4 kho). Trong cùng 1 dòng, gõ cách nhau bằng khoảng trắng để <b>kết hợp nhiều điều kiện</b> (VD: mã hàng + CSR/Ref) trên cùng 1 dòng dữ liệu.</span>
+          <button class="btn-clear-multi" id="btn-clear-multi" type="button">Xoá</button>
+        </div>
+        <textarea id="kho-multi-search" rows="2" placeholder="VD: 000123, 000456001DG9, 308398012 (mỗi dòng 1 lượt) — hoặc CR0163815 095079952 (kết hợp trên cùng 1 dòng)"></textarea>
+      </div>
+      <div class="kho-tabs" id="kho-tabs" style="padding:14px 0 0; border-top:1px solid var(--line); margin-top:2px;"></div>
+      <div class="kho-modal-toolbar" style="padding:14px 0 4px;">
+        <input type="text" class="kho-search" id="kho-search" placeholder="Tìm theo Item No., Cust PO hoặc Locator…">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div class="kho-summary" id="kho-summary">—</div>
+          <button type="button" class="tx-filter-clear-link" id="kho-clear-col-filters" style="display:none;">Xoá bộ lọc cột</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="kho-summary-panel" style="margin-top:16px;">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div>
+          <div class="brand-eyebrow"><span class="dot"></span>BẢNG TỔNG HỢP</div>
+          <div id="kho-summary-count" style="font-family:var(--mono); font-size:13px; color:var(--muted); margin-top:8px;"></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="cc-collapse-hint">Bấm để mở/thu gọn</span>
+          <span class="cc-collapse-chevron">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </span>
+        </div>
+      </div>
+      <div class="cc-collapse-body">
+      <div class="kho-modal-body" style="padding:14px 0 0; max-height:none;">
+        <table class="kho-detail-table" id="kho-detail-table">
+          <thead>
+            <tr>
+              <th data-key="kho" class="col-kho">Kho <span class="arrow">↕</span></th>
+              <th data-key="item">Item No. <span class="arrow">↕</span></th>
+              <th data-key="custpo">Cust PO <span class="arrow">↕</span></th>
+              <th data-key="locator">Locator <span class="arrow">↕</span></th>
+              <th data-key="oqc">OQC <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">SL tồn <span class="arrow">↕</span></th>
+              <th data-key="planRow" class="col-plan col-plan-row" style="text-align:right">Plan Row <span class="arrow">↕</span></th>
+              <th data-key="planFC" class="col-plan col-plan-fc" style="text-align:right">Plan FC <span class="arrow">↕</span></th>
+              <th data-key="planHCP" class="col-plan col-plan-hcp" style="text-align:right">Plan HCP <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="kho-detail-tbody"></tbody>
+        </table>
+        <div class="kho-empty" id="kho-empty" style="display:none;">Không có dòng nào khớp tìm kiếm</div>
+      </div>
+      </div>
+    </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="raw-detail-panel" style="margin-top:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
+        <div class="cc-collapse-head" data-collapse-toggle style="flex:1; min-width:220px; align-items:flex-start;">
+          <div>
+            <div class="brand-eyebrow"><span class="dot"></span>DỮ LIỆU GỐC THEO DÒNG</div>
+            <div style="display:flex; align-items:center; gap:12px; margin-top:8px;">
+              <div id="raw-summary" style="font-family:var(--mono); font-size:13px; color:var(--muted);"></div>
+              <button type="button" class="tx-filter-clear-link" id="raw-clear-col-filters" style="display:none;" onclick="event.stopPropagation();">Xoá bộ lọc cột</button>
+            </div>
+          </div>
+          <span class="cc-collapse-chevron" style="margin-top:2px;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </span>
+        </div>
+        <button class="btn-update" id="raw-export-excel" type="button" title="Xuất Excel đúng theo dữ liệu đang hiển thị, kèm cột mã QR (GI No.)" onclick="event.stopPropagation();">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m9 15 3 3 3-3"/><path d="M12 12v6"/></svg>
+          Xuất Excel
+        </button>
+      </div>
+      <div class="cc-collapse-body">
+      <div class="kho-modal-body" style="padding:14px 0 0; max-height:none; overflow-x:auto;">
+        <table class="kho-detail-table" id="raw-detail-table">
+          <thead>
+            <tr>
+              <th data-key="kho" class="col-kho">Kho <span class="arrow">↕</span></th>
+              <th data-key="item">Item No. <span class="arrow">↕</span></th>
+              <th data-key="custpo">Cust PO <span class="arrow">↕</span></th>
+              <th data-key="locator">Locator <span class="arrow">↕</span></th>
+              <th data-key="oqc">OQC <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">SL <span class="arrow">↕</span></th>
+              <th data-key="gi">GI No. <span class="arrow">↕</span></th>
+              <th data-key="lot">Lot No. <span class="arrow">↕</span></th>
+              <th data-key="pallet">Pallet <span class="arrow">↕</span></th>
+              <th data-key="dt">Ngày nhận <span class="arrow">↕</span></th>
+              <th data-key="buyer">Buyer <span class="arrow">↕</span></th>
+              <th data-key="ref">CSR/Ref <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="raw-detail-tbody"></tbody>
+        </table>
+        <div class="kho-empty" id="raw-empty" style="display:none;">Không có dòng nào khớp tìm kiếm</div>
+      </div>
+      </div>
+    </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="top-pallet-panel" style="margin-top:16px;">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div>
+          <div class="brand-eyebrow"><span class="dot"></span>TOP MÃ HÀNG NHIỀU PALLET NHẤT</div>
+          <div class="sub">Gộp theo Kho + Item No. — mỗi dòng dữ liệu gốc (GI No.) tính là 1 pallet, xếp hạng nhiều pallet nhất trước, riêng theo từng kho</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span class="cc-collapse-hint">Bấm để mở/thu gọn</span>
+          <span class="cc-collapse-chevron">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </span>
+        </div>
+      </div>
+      <div class="cc-collapse-body">
+      <div class="kho-modal-body" style="padding:14px 0 0; max-height:none;">
+        <div class="kho-modal-toolbar" style="padding:0 0 14px;" onclick="event.stopPropagation();">
+          <select id="top-pallet-kho-filter" class="kho-search" style="flex:0 0 160px;">
+            <option value="">Tất cả kho</option>
+          </select>
+          <input type="text" class="kho-search" id="top-pallet-item-search" placeholder="Tìm theo Item No.…">
+          <div class="kho-summary" id="top-pallet-summary">—</div>
+        </div>
+        <table class="kho-detail-table" id="top-pallet-table">
+          <thead>
+            <tr>
+              <th style="width:60px;">Hạng</th>
+              <th class="col-kho">Kho</th>
+              <th>Item No.</th>
+              <th style="text-align:right">Số pallet</th>
+              <th style="text-align:right">Số lượng</th>
+              <th style="width:50px;"></th>
+            </tr>
+          </thead>
+          <tbody id="top-pallet-tbody"></tbody>
+        </table>
+        <div class="kho-empty" id="top-pallet-empty" style="display:none;">Không có dòng nào khớp tìm kiếm</div>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <button type="button" id="search-fab-jump" class="search-fab" style="display:none;" title="Di chuyển nhanh giữa 2 bảng">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+    <span id="search-fab-label">Bảng chi tiết</span>
+  </button>
+
+  <div class="wrap" id="page-kiemton" style="display:none;">
+    <div class="search-page-head" style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:10px;">
+      <div>
+        <div class="brand-eyebrow"><span class="dot"></span>KIỂM TỒN KHO</div>
+        <h1>Kiểm tồn kho</h1>
+        <div class="sub">Tìm một hoặc nhiều mã hàng cùng lúc, quét trên cả 4 khu vực kho</div>
+      </div>
+      <button type="button" class="btn-export-excel" id="btn-open-qr-scan" style="white-space:nowrap;" title="Quét mã vạch/QR trên tem pallet (nội dung là GI No.) để tự tìm đúng vị trí và cộng số lượng vào ô kiểm thực tế">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+        📷 Quét mã
+      </button>
+      <button type="button" class="btn-export-excel" id="qr-gi-clear-btn" style="white-space:nowrap; display:none; border-color:var(--red); color:var(--red);" title="Xoá lịch sử các GI đã quét — cho phép quét lại các mã đã quét trước đó. LƯU Ý: nếu lỡ quét lại đúng pallet đã tính rồi, SL sẽ bị cộng thêm 1 lần nữa.">
+        🗑 Đã quét: <span id="qr-gi-clear-count">0</span> GI
+      </button>
+      <button type="button" class="btn-export-excel" id="btn-view-gi-log" style="white-space:nowrap; display:none;" title="Xem lại từng GI No. đã quét, gộp theo từng vị trí/mã hàng/PO — đối chiếu khi 1 locator bị thiếu pallet">
+        👁 Xem GI đã quét
+      </button>
+    </div>
+
+    <div class="panel search-panel" id="cc-suggest-panel" style="margin-bottom:16px; border-color:var(--teal);">
+      <div style="margin-bottom:14px; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--teal);box-shadow:0 0 8px var(--teal);"></span>ĐỀ XUẤT</div>
+          <h1 style="font-size:17px;">Đề xuất kiểm hôm nay</h1>
+          <div class="sub" style="margin-top:2px;">Chọn kiểu tính (Mã hàng / Locator / Pallet) và % muốn kiểm cho từng kho, bấm "Tạo danh sách" để xếp hạng theo: lâu chưa kiểm · vận động nhanh (Transaction) · từng lệch WMS-ERP · SL tồn bất thường so với lịch sử. Tự động loại các vị trí PICK, Loading và PROD (khu trung chuyển/sản xuất) và loại nhóm SPP — các Item No. không bắt đầu bằng số 0. Yếu tố "SL tồn bất thường" cần vài lần cập nhật dữ liệu (khác ngày) mới đủ lịch sử để tính.</div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+          <button type="button" class="btn-export-excel" id="btn-reset-kiemke-all" style="white-space:nowrap; border-color:var(--red); color:var(--red);" title="Xoá SẠCH toàn bộ dữ liệu còn sót của đợt kiểm kê trước — CẢ danh sách Đề xuất kiểm (cả 3 kho, ô KT= đang nhập dở, dòng quét QR sai vị trí, lịch sử GI đã quét) LẪN danh sách Đã xác nhận — rồi đồng bộ ngay lên Cloud. Dùng khi bắt đầu ca/đợt kiểm kê mới mà bảng vẫn còn hiện số liệu ca trước.">
+            🔄 Đặt lại toàn bộ
+          </button>
+          <button type="button" class="btn-export-excel" id="btn-export-combined-report" style="white-space:nowrap;" title="Gộp Tổng quan + Đề xuất kiểm + Đã xác nhận của các kho đã tạo danh sách vào 1 file Excel">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+            📊 Xuất báo cáo tổng hợp (3 kho)
+          </button>
+        </div>
+      </div>
+      <div class="cc-kho-grid" id="cc-kho-grid">
+        <div class="cc-kho-card" data-kho="Kho 2B" data-kho-code="2B" data-mode="locator">
+          <div class="cc-kho-card-head">
+            <span class="cc-kho-name">Kho 2B</span>
+            <span class="cc-kho-total" id="cc-total-2B">— </span>
+          </div>
+          <div class="cc-mode-tabs">
+            <button type="button" class="cc-mode-tab" data-mode="item" data-kho="Kho 2B">Mã hàng</button>
+            <button type="button" class="cc-mode-tab active" data-mode="locator" data-kho="Kho 2B">Locator</button>
+            <button type="button" class="cc-mode-tab" data-mode="pallet" data-kho="Kho 2B">Pallet</button>
+          </div>
+          <div class="cc-kho-slider-row">
+            <input type="range" min="1" max="100" value="20" step="1" class="cc-kho-slider" id="cc-slider-2B" data-kho="Kho 2B">
+            <span class="cc-kho-slider-label" id="cc-slider-label-2B">20%</span>
+          </div>
+          <button type="button" class="btn-update cc-gen-btn" data-kho="Kho 2B" style="width:100%; justify-content:center; margin-top:4px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4"/><path d="M12 15V3"/><path d="m8 7 4-4 4 4"/></svg>
+            Tạo danh sách
+          </button>
+          <button type="button" class="btn-update btn-ghost-outline cc-custom-btn" data-kho="Kho 2B" style="width:100%; justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Tự chọn…
+          </button>
+        </div>
+
+        <div class="cc-kho-card" data-kho="Kho 3A" data-kho-code="3A" data-mode="locator">
+          <div class="cc-kho-card-head">
+            <span class="cc-kho-name">Kho 3A</span>
+            <span class="cc-kho-total" id="cc-total-3A">— </span>
+          </div>
+          <div class="cc-mode-tabs">
+            <button type="button" class="cc-mode-tab" data-mode="item" data-kho="Kho 3A">Mã hàng</button>
+            <button type="button" class="cc-mode-tab active" data-mode="locator" data-kho="Kho 3A">Locator</button>
+            <button type="button" class="cc-mode-tab" data-mode="pallet" data-kho="Kho 3A">Pallet</button>
+          </div>
+          <div class="cc-kho-slider-row">
+            <input type="range" min="1" max="100" value="20" step="1" class="cc-kho-slider" id="cc-slider-3A" data-kho="Kho 3A">
+            <span class="cc-kho-slider-label" id="cc-slider-label-3A">20%</span>
+          </div>
+          <button type="button" class="btn-update cc-gen-btn" data-kho="Kho 3A" style="width:100%; justify-content:center; margin-top:4px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4"/><path d="M12 15V3"/><path d="m8 7 4-4 4 4"/></svg>
+            Tạo danh sách
+          </button>
+          <button type="button" class="btn-update btn-ghost-outline cc-custom-btn" data-kho="Kho 3A" style="width:100%; justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Tự chọn…
+          </button>
+        </div>
+
+        <div class="cc-kho-card" data-kho="Kho 3B" data-kho-code="3B" data-mode="locator">
+          <div class="cc-kho-card-head">
+            <span class="cc-kho-name">Kho 3B</span>
+            <span class="cc-kho-total" id="cc-total-3B">— </span>
+          </div>
+          <div class="cc-mode-tabs">
+            <button type="button" class="cc-mode-tab" data-mode="item" data-kho="Kho 3B">Mã hàng</button>
+            <button type="button" class="cc-mode-tab active" data-mode="locator" data-kho="Kho 3B">Locator</button>
+            <button type="button" class="cc-mode-tab" data-mode="pallet" data-kho="Kho 3B">Pallet</button>
+          </div>
+          <div class="cc-kho-slider-row">
+            <input type="range" min="1" max="100" value="20" step="1" class="cc-kho-slider" id="cc-slider-3B" data-kho="Kho 3B">
+            <span class="cc-kho-slider-label" id="cc-slider-label-3B">20%</span>
+          </div>
+          <button type="button" class="btn-update cc-gen-btn" data-kho="Kho 3B" style="width:100%; justify-content:center; margin-top:4px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4"/><path d="M12 15V3"/><path d="m8 7 4-4 4 4"/></svg>
+            Tạo danh sách
+          </button>
+          <button type="button" class="btn-update btn-ghost-outline cc-custom-btn" data-kho="Kho 3B" style="width:100%; justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Tự chọn…
+          </button>
+        </div>
+      </div>
+
+      <div class="cc-results-wrap" id="cc-results-wrap">
+        <div class="cc-result-block" id="cc-result-block-2B" style="display:none;">
+          <div class="cc-result-block-title">Kho 2B</div>
+          <div class="cc-kho-result" id="cc-result-2B" style="display:none;">
+            <div class="cc-kho-result-actions">
+              <span id="cc-result-count-2B"></span>
+              <div style="display:flex; gap:6px;">
+                <button type="button" class="cc-add-btn" data-cc-export-kho="Kho 2B" title="Xuất danh sách ra Excel để in">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;vertical-align:-1px;margin-right:3px;"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Xuất Excel
+                </button>
+                <button type="button" class="cc-add-btn cc-clear-list-btn" data-cc-clear-kho="Kho 2B" title="Xoá danh sách đã tạo cho kho này">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;vertical-align:-1px;margin-right:3px;"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Xoá danh sách
+                </button>
+              </div>
+            </div>
+            <div class="cc-kho-mini-wrap" id="cc-mini-wrap-2B"><table class="cc-kho-mini-table"><tbody id="cc-tbody-2B"></tbody></table></div>
+            <div class="cc-loc-cards" id="cc-loc-cards-2B" style="display:none;"></div>
+          </div>
+        </div>
+        <div class="cc-result-block" id="cc-result-block-3A" style="display:none;">
+          <div class="cc-result-block-title">Kho 3A</div>
+          <div class="cc-kho-result" id="cc-result-3A" style="display:none;">
+            <div class="cc-kho-result-actions">
+              <span id="cc-result-count-3A"></span>
+              <div style="display:flex; gap:6px;">
+                <button type="button" class="cc-add-btn" data-cc-export-kho="Kho 3A" title="Xuất danh sách ra Excel để in">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;vertical-align:-1px;margin-right:3px;"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Xuất Excel
+                </button>
+                <button type="button" class="cc-add-btn cc-clear-list-btn" data-cc-clear-kho="Kho 3A" title="Xoá danh sách đã tạo cho kho này">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;vertical-align:-1px;margin-right:3px;"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Xoá danh sách
+                </button>
+              </div>
+            </div>
+            <div class="cc-kho-mini-wrap" id="cc-mini-wrap-3A"><table class="cc-kho-mini-table"><tbody id="cc-tbody-3A"></tbody></table></div>
+            <div class="cc-loc-cards" id="cc-loc-cards-3A" style="display:none;"></div>
+          </div>
+        </div>
+        <div class="cc-result-block" id="cc-result-block-3B" style="display:none;">
+          <div class="cc-result-block-title">Kho 3B</div>
+          <div class="cc-kho-result" id="cc-result-3B" style="display:none;">
+            <div class="cc-kho-result-actions">
+              <span id="cc-result-count-3B"></span>
+              <div style="display:flex; gap:6px;">
+                <button type="button" class="cc-add-btn" data-cc-export-kho="Kho 3B" title="Xuất danh sách ra Excel để in">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;vertical-align:-1px;margin-right:3px;"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>Xuất Excel
+                </button>
+                <button type="button" class="cc-add-btn cc-clear-list-btn" data-cc-clear-kho="Kho 3B" title="Xoá danh sách đã tạo cho kho này">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;vertical-align:-1px;margin-right:3px;"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Xoá danh sách
+                </button>
+              </div>
+            </div>
+            <div class="cc-kho-mini-wrap" id="cc-mini-wrap-3B"><table class="cc-kho-mini-table"><tbody id="cc-tbody-3B"></tbody></table></div>
+            <div class="cc-loc-cards" id="cc-loc-cards-3B" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="kho-empty" id="cc-suggest-empty" style="display:none;">Chưa có dữ liệu tồn kho để tính đề xuất.</div>
+    </div>
+
+
+    <div class="panel search-panel" style="margin-top:16px; border-color:var(--violet);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--violet);box-shadow:0 0 8px var(--violet);"></span>KHO ĐÃ KIỂM</div>
+          <h1 style="font-size:19px;">Danh sách đã xác nhận</h1>
+          <div class="sub">Các dòng đã bấm nút "Xác nhận" sẽ được chuyển sang đây.</div>
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; position:relative;">
+          <button class="btn-update btn-danger" id="btn-reset-confirmed" type="button" style="font-size:12px; padding:8px 14px;" title="Xoá toàn bộ danh sách đã xác nhận, mở khoá lại các dòng ở bảng Kiểm tồn kho">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            Đặt lại
+          </button>
+          <button class="btn-update" id="btn-save-confirmed-history" type="button" style="font-size:12px; padding:8px 14px; background:var(--violet); border-color:var(--violet); color:#fff;" title="Lưu trữ toàn bộ danh sách hiện tại vào lịch sử theo ngày, rồi làm mới bảng để bắt đầu đợt kiểm mới">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
+            Lưu
+          </button>
+          <button class="btn-update btn-ghost-outline" id="btn-confirmed-history-toggle" type="button" style="font-size:12px; padding:8px 14px;" title="Xem lại các lần đã lưu trữ (5 ngày gần nhất)">
+            🕒 Lịch sử
+          </button>
+          <div id="confirmed-history-popup" class="confirmed-history-popup" style="display:none;"></div>
+          <div id="export-confirmed-btn-group" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+        </div>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:none; overflow-x:auto;">
+        <table class="kho-detail-table" id="confirmed-detail-table">
+          <thead>
+            <tr>
+              <th>Kho gốc</th>
+              <th>Item No.</th>
+              <th>Cust PO</th>
+              <th>Locator</th>
+              <th>OQC</th>
+              <th style="text-align:right">SL tồn</th>
+              <th style="text-align:center">Phép tính nhập</th>
+              <th style="text-align:right">Kết quả KT</th>
+              <th>Sai vị trí</th>
+              <th style="text-align:center">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="confirmed-detail-tbody"></tbody>
+        </table>
+        <div class="kho-empty" id="confirmed-empty" style="display:block;">Chưa có dòng nào được xác nhận.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="wrap" id="page-sodo3b" style="display:none;">
+
+    <div class="khogrid-lock-bar" id="khogrid-lock-bar">
+      <button type="button" class="khogrid-lock-toggle" id="khogrid-lock-toggle"></button>
+      <span class="khogrid-lock-note">Áp dụng chung cho cả 4 sơ đồ kho (3B / 3A / 2B / DG1) bên dưới — xem/tìm kiếm/xem chi tiết pallet vẫn dùng bình thường, chỉ chặn thêm/sửa/xoá/di chuyển vị trí.</span>
+    </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="sodo3b-panel">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div style="width:100%;">
+          <div class="brand-eyebrow"><span class="dot"></span>SƠ ĐỒ KHO</div>
+          <h1 style="font-size:19px;">Sơ đồ kho 3B</h1>
+          <div class="sub">Số pallet hiện có tại từng vị trí (locator) của Kho 3B — mỗi dòng GI No. trong dữ liệu tồn kho tính là 1 pallet. Sức chứa chuẩn mỗi vị trí: 26 pallet — số hiển thị là số pallet thực tế, thanh fill và màu sắc tính theo mức tối đa 26 (vượt quá vẫn tô đỏ/đầy như mức 26).</div>
+          <div class="wh3b-summary" id="wh3b-summary"></div>
+          <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
+            <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="sodo3b-heatmap-toggle" title="Đổi cách tô màu vị trí: Tắt (4 mức mặc định) / Mật độ lấp đầy / Tỉ lệ PASS-NG">🌡️ Heatmap: Tắt</button>
+          </div>
+        </div>
+        <span class="cc-collapse-chevron">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </span>
+      </div>
+      <div class="cc-collapse-body">
+        <div class="wh3b-search-row">
+          <textarea class="wh3b-search-input" id="sodo3b-search" rows="1" placeholder="Tìm theo Item No., Cust PO, Locator… (mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng — trong cùng 1 dòng, cách nhau bằng khoảng trắng để kết hợp nhiều điều kiện)"></textarea>
+          <div class="wh3b-oqc-toggle">
+            <label><input type="checkbox" id="sodo3b-oqc-pass" checked> PASS</label>
+            <label><input type="checkbox" id="sodo3b-oqc-ng" checked> NG</label>
+          </div>
+        </div>
+        <div class="wh3b-legend" id="sodo3b-legend">
+          <span><i style="background:var(--muted-2)"></i>Trống (0 pallet)</span>
+          <span><i style="background:var(--teal)"></i>Thấp (&lt; 50%)</span>
+          <span><i style="background:var(--amber-bright)"></i>Vừa (50–79%)</span>
+          <span><i style="background:var(--red)"></i>Đầy / gần đầy (≥ 80%)</span>
+        </div>
+        <div class="wh3b-grid" id="sodo3b-grid"></div>
+        <div class="wh3b-custom-grid-note" id="sodo3b-custom-grid-note" style="display:none;">Đang dùng danh sách vị trí TUỲ CHỈNH — bấm "Cài đặt lưới" (bánh răng) ở đầu mục này để xem/sửa lại.</div>
+        <div class="wh3b-custom-grid" id="sodo3b-custom-grid" style="display:none;"></div>
+        <div id="sodo3b-detail"></div>
+      </div>
+    </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="rack3a-panel" style="margin-top:16px;">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div style="width:100%;">
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--violet); box-shadow:0 0 8px var(--violet);"></span>SƠ ĐỒ RACK</div>
+          <h1 style="font-size:19px;">Sơ đồ 3A</h1>
+          <div class="wh3b-summary" id="rack3a-summary"></div>
+          <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
+            <button type="button" class="wh3b-grid-mode-btn" id="rack3a-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="rack3a-heatmap-toggle" title="Đổi cách tô màu vị trí: Tắt (4 mức mặc định) / Mật độ lấp đầy / Tỉ lệ PASS-NG">🌡️ Heatmap: Tắt</button>
+          </div>
+        </div>
+        <span class="cc-collapse-chevron">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </span>
+      </div>
+      <div class="cc-collapse-body">
+        <div class="wh3b-search-row">
+          <textarea class="wh3b-search-input" id="rack3a-search" rows="1" placeholder="Tìm theo Item No., Cust PO, Locator… (mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng — trong cùng 1 dòng, cách nhau bằng khoảng trắng để kết hợp nhiều điều kiện)"></textarea>
+          <div class="wh3b-oqc-toggle">
+            <label><input type="checkbox" id="rack3a-oqc-pass" checked> PASS</label>
+            <label><input type="checkbox" id="rack3a-oqc-ng" checked> NG</label>
+          </div>
+        </div>
+        <div class="wh3b-legend" id="rack3a-legend">
+          <span><i style="background:var(--muted-2)"></i>Trống (0 pallet)</span>
+          <span><i style="background:var(--teal)"></i>Thấp (&lt; 50%)</span>
+          <span><i style="background:var(--amber-bright)"></i>Vừa (50–79%)</span>
+          <span><i style="background:var(--red)"></i>Đầy / gần đầy (≥ 80%)</span>
+        </div>
+        <div class="wh3b-grid" id="rack3a-grid"></div>
+        <div class="wh3b-custom-grid-note" id="rack3a-custom-grid-note" style="display:none;">Đang dùng grid tuỳ chỉnh — kéo trực tiếp locator để di chuyển, bấm ⚙ để sửa, bấm "+" để thêm vị trí.</div>
+        <div class="wh3b-drag-hint" id="rack3a-drag-hint" style="display:none;">↔ Kéo locator để sắp xếp theo đúng vị trí thực tế. Khi di chuyển, ô sẽ tự tìm vị trí gần nhất và không cho chồng lên ô khác.</div>
+        <div class="wh3b-custom-grid" id="rack3a-custom-grid" style="display:none;"></div>
+        <div id="rack3a-detail"></div>
+      </div>
+    </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="sodo2b-panel" style="margin-top:16px;">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div style="width:100%;">
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--blue); box-shadow:0 0 8px var(--blue);"></span>SƠ ĐỒ KHO</div>
+          <h1 style="font-size:19px;">Sơ đồ 2B</h1>
+          <div class="wh3b-summary" id="sodo2b-summary"></div>
+          <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
+            <button type="button" class="wh3b-grid-mode-btn" id="sodo2b-grid-settings-btn" style="display:none;" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="sodo2b-heatmap-toggle" title="Đổi cách tô màu vị trí: Tắt (4 mức mặc định) / Mật độ lấp đầy / Tỉ lệ PASS-NG">🌡️ Heatmap: Tắt</button>
+          </div>
+        </div>
+        <span class="cc-collapse-chevron">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </span>
+      </div>
+      <div class="cc-collapse-body">
+        <div class="wh3b-search-row">
+          <textarea class="wh3b-search-input" id="sodo2b-search" rows="1" placeholder="Tìm theo Item No., Cust PO, Locator… (mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng — trong cùng 1 dòng, cách nhau bằng khoảng trắng để kết hợp nhiều điều kiện)"></textarea>
+          <div class="wh3b-oqc-toggle">
+            <label><input type="checkbox" id="sodo2b-oqc-pass" checked> PASS</label>
+            <label><input type="checkbox" id="sodo2b-oqc-ng" checked> NG</label>
+          </div>
+        </div>
+        <div class="wh3b-legend" id="sodo2b-legend">
+          <span><i style="background:var(--muted-2)"></i>Trống (0 pallet)</span>
+          <span><i style="background:var(--teal)"></i>Thấp (&lt; 50%)</span>
+          <span><i style="background:var(--amber-bright)"></i>Vừa (50–79%)</span>
+          <span><i style="background:var(--red)"></i>Đầy / gần đầy (≥ 80%)</span>
+        </div>
+        <div class="wh3b-grid" id="sodo2b-grid"></div>
+        <div class="wh3b-custom-grid-note" id="sodo2b-custom-grid-note" style="display:none;">Đang dùng grid tuỳ chỉnh — kéo trực tiếp locator để di chuyển, bấm ⚙ để sửa, bấm "+" để thêm vị trí.</div>
+        <div class="wh3b-drag-hint" id="sodo2b-drag-hint" style="display:none;">↔ Kéo locator để sắp xếp theo đúng vị trí thực tế. Khi di chuyển, ô sẽ tự tìm vị trí gần nhất và không cho chồng lên ô khác.</div>
+        <div class="wh3b-custom-grid" id="sodo2b-custom-grid" style="display:none;"></div>
+        <div id="sodo2b-detail"></div>
+      </div>
+    </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="dg1-panel" style="margin-top:16px;">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div style="width:100%;">
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--amber); box-shadow:0 0 8px var(--amber);"></span>SƠ ĐỒ KHO</div>
+          <h1 style="font-size:19px;">Sơ đồ DG1</h1>
+          <div class="sub">Kho DG1 chưa có sơ đồ mặc định — tự thêm từng vị trí (locator) vào lưới tuỳ chỉnh bằng nút "+".</div>
+          <div class="wh3b-summary" id="dg1-summary"></div>
+          <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
+            <button type="button" class="wh3b-grid-mode-btn" id="dg1-grid-settings-btn" title="Đổi số hàng/cột của lưới">⚙️ Cài đặt lưới</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="dg1-heatmap-toggle" title="Đổi cách tô màu vị trí: Tắt (4 mức mặc định) / Mật độ lấp đầy / Tỉ lệ PASS-NG">🌡️ Heatmap: Tắt</button>
+          </div>
+        </div>
+        <span class="cc-collapse-chevron">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </span>
+      </div>
+      <div class="cc-collapse-body">
+        <div class="wh3b-search-row">
+          <textarea class="wh3b-search-input" id="dg1-search" rows="1" placeholder="Tìm theo Item No., Cust PO, Locator… (mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng — trong cùng 1 dòng, cách nhau bằng khoảng trắng để kết hợp nhiều điều kiện)"></textarea>
+          <div class="wh3b-oqc-toggle">
+            <label><input type="checkbox" id="dg1-oqc-pass" checked> PASS</label>
+            <label><input type="checkbox" id="dg1-oqc-ng" checked> NG</label>
+          </div>
+        </div>
+        <div class="wh3b-legend" id="dg1-legend">
+          <span><i style="background:var(--muted-2)"></i>Trống (0 pallet)</span>
+          <span><i style="background:var(--teal)"></i>Thấp (&lt; 50%)</span>
+          <span><i style="background:var(--amber-bright)"></i>Vừa (50–79%)</span>
+          <span><i style="background:var(--red)"></i>Đầy / gần đầy (≥ 80%)</span>
+        </div>
+        <div class="wh3b-grid" id="dg1-grid" style="display:none;"></div>
+        <div class="wh3b-custom-grid-note" id="dg1-custom-grid-note">Đang dùng grid tuỳ chỉnh — kéo trực tiếp locator để di chuyển, bấm ⚙ để sửa, bấm "+" để thêm vị trí.</div>
+        <div class="wh3b-drag-hint" id="dg1-drag-hint">↔ Kéo locator để sắp xếp theo đúng vị trí thực tế. Khi di chuyển, ô sẽ tự tìm vị trí gần nhất và không cho chồng lên ô khác.</div>
+        <div class="wh3b-custom-grid" id="dg1-custom-grid"></div>
+        <div id="dg1-detail"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="wrap" id="page-transaction" style="display:none;">
+    <div class="search-page-head">
+      <div>
+        <div class="brand-eyebrow"><span class="dot"></span>TRANSACTION LOG</div>
+        <h1>Thống kê Transaction</h1>
+        <div class="sub">Tải file transaction (VD: fnd_gfm_XXXXXXXX.tsv) để thống kê Receive / Transfer / Picking — cùng logic với sheet "View" trong file Excel tổng hợp.</div>
+      </div>
+      <div class="header-right">
+        <div class="upload-wrap">
+          <div style="display:flex; gap:8px;">
+            <button class="btn-update" id="btn-update-transaction" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>
+              Cập nhật file Transaction
+            </button>
+            <button class="btn-update btn-danger" id="btn-reset-transaction" type="button" title="Xoá dữ liệu Transaction đã lưu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+              Xoá
+            </button>
+            <button class="btn-update btn-ghost-outline" id="btn-export-transaction" type="button" onclick="if(typeof txExportExcel!=='function'){alert('Chưa có hàm xuất Excel: file app.js trên web vẫn là bản cũ. Hãy upload app.js mới lên GitHub rồi tải lại cứng (Ctrl+F5).');}" title="Xuất toàn bộ trang Thống kê Transaction ra 1 file Excel: sheet Tổng quan (KPI, Grand Total theo kho, Receive / Transfer / Put Away / Rework / Lên-Xuống 3AFG / Picking) + các sheet chi tiết từng dòng">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+              Xuất Excel
+            </button>
+          </div>
+          <input type="file" id="transaction-file-input" accept=".tsv,.csv,.txt,.xlsx,.xls" style="display:none;">
+          <div class="upload-status" id="transaction-upload-status">Tải file .tsv / .csv / .xlsx transaction để thống kê</div>
+        </div>
+        <div class="snapshot">
+          TRANSACTION<br><b id="transaction-updated-at">Chưa có dữ liệu</b>
+          <div class="updated-at" id="transaction-file-line">File: —</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel search-panel" id="tx-panel-master" style="margin-bottom:16px;">
+      <div id="tx-master-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div id="tx-master-title-click" style="display:flex; align-items:center; gap:10px; flex:1; min-width:220px; cursor:pointer;">
+          <button type="button" id="tx-master-toggle" title="Ẩn/hiện bảng Master" style="border:none; background:var(--bg); border:1px solid var(--line); border-radius:8px; width:30px; height:30px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text); flex-shrink:0;">
+            <svg id="tx-master-chevron-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .25s ease;"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+          <div>
+            <div class="brand-eyebrow"><span class="dot" style="background:#d4a017;box-shadow:0 0 8px #d4a017;"></span>MASTER</div>
+            <h1 style="font-size:17px;">Bảng Master (User Name → Kho)</h1>
+            <div class="sub" style="margin-top:2px;">Bảng cũ dùng để đoán "Kho xuất" theo người thực hiện — nay hệ thống đã đọc thẳng Kho xuất từ dữ liệu tồn kho thực tế của Locator, nên bảng này không còn ảnh hưởng tới các bảng thống kê bên dưới. Giữ lại chỉ để tham khảo. Bấm để mở/thu gọn.</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;" id="tx-master-actions">
+          <button class="btn-update" id="btn-master-add" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            Thêm User
+          </button>
+          <button class="btn-update btn-danger" id="btn-master-reset" type="button" title="Khôi phục bảng Master về mặc định">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v6h6"/></svg>
+            Khôi phục mặc định
+          </button>
+        </div>
+      </div>
+      <div id="tx-master-collapsible" style="display:none; margin-top:14px;">
+        <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+          <input type="text" class="kho-search" id="tx-master-search" placeholder="Tìm theo User Name…">
+          <div class="kho-summary" id="tx-master-summary">—</div>
+        </div>
+        <div class="kho-modal-body" style="padding:0; max-height:360px; overflow:auto;">
+          <table class="kho-detail-table" id="tx-master-table">
+            <thead>
+              <tr>
+                <th style="width:55%;">User Name</th>
+                <th>Kho</th>
+                <th style="width:56px; text-align:center;"></th>
+              </tr>
+            </thead>
+            <tbody id="tx-master-tbody"></tbody>
+          </table>
+          <div class="kho-empty" id="tx-master-empty" style="display:none;">Chưa có user nào — bấm "Thêm User" để bắt đầu.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpis" id="transaction-kpi-strip"></div>
+
+    <div class="panel search-panel" id="tx-panel-chart" style="margin-top:16px; margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:#8a5cf6;box-shadow:0 0 8px #8a5cf6;"></span>BIỂU ĐỒ</div>
+          <h1 style="font-size:17px;">Grand Total theo bộ lọc hiện tại</h1>
+          <div class="sub" style="margin-top:2px;">Tự động cập nhật theo bộ lọc cột / ô tìm kiếm đang áp dụng trên 3 bảng bên dưới.</div>
+        </div>
+      </div>
+      <div id="tx-chart-body"></div>
+    </div>
+
+    <div class="panel search-panel" id="tx-panel-receive">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot"></span>RECEIVE</div>
+          <h1 style="font-size:17px;">Nhập kho (Receive)</h1>
+          <div class="sub" style="margin-top:2px;">Hàng nhập vào kho — tổng theo kho và theo người thao tác (toàn bộ file).</div>
+        </div>
+      </div>
+      <div class="tx-sum-grid" id="tx-receive-sumgrid"></div>
+      <details class="tx-detail-toggle">
+      <summary>Xem chi tiết từng dòng</summary>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-receive-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-receive-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-receive-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:420px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-receive-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho xuất <span class="arrow">↕</span></th>
+              <th data-key="transType">Transaction Type <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locator">Locator <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-receive-tbody"></tbody>
+          <tfoot id="tx-receive-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-receive-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+      </details>
+    </div>
+
+    <div class="panel search-panel" id="tx-panel-transfer" style="margin-top:16px; border-color:var(--blue);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--blue);box-shadow:0 0 8px var(--blue);"></span>TRANSFER</div>
+          <h1 style="font-size:17px;">Chuyển pallet (Transfer)</h1>
+          <div class="sub" style="margin-top:2px;">Chuyển hàng qua khu ITN — <b>Xuất</b>: Menu Name "ITN Transfer" (chuyển đi, tổng theo kho xuất); <b>Nhận</b>: Menu Name "ITN Receiving" (nhận về, tổng theo kho nhận) — tổng theo người thao tác tương ứng (toàn bộ file).</div>
+        </div>
+      </div>
+      <div class="tx-sum-subhead">↗ Xuất — ITN Transfer</div>
+      <div class="tx-sum-grid" id="tx-transfer-sumgrid"></div>
+      <div class="tx-sum-subhead" style="margin-top:14px;">↙ Nhận — ITN Receiving</div>
+      <div class="tx-sum-grid" id="tx-transfer-nhap-sumgrid"></div>
+      <details class="tx-detail-toggle">
+      <summary>Xem chi tiết từng dòng</summary>
+      <div class="tx-sum-subhead" style="margin-top:10px;">↗ Xuất — ITN Transfer (theo Chuyến, có tick đã kiểm)</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-transfer-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-transfer-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-transfer-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:420px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-transfer-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho xuất <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="chuyen">Chuyến <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+              <th style="text-align:center;width:40px;" title="Tự đánh dấu đã kiểm tra — giữ lại qua lần tải file Transaction mới">✓</th>
+            </tr>
+          </thead>
+          <tbody id="tx-transfer-tbody"></tbody>
+          <tfoot id="tx-transfer-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-transfer-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+
+      <div class="tx-sum-subhead" style="margin-top:18px;">↙ Nhận — ITN Receiving</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-transferNhap-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-transferNhap-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-transferNhap-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:420px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-transferNhap-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho nhận <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất (ITN) <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-transferNhap-tbody"></tbody>
+          <tfoot id="tx-transferNhap-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-transferNhap-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+      </details>
+    </div>
+
+    <div class="panel search-panel" id="tx-panel-putaway" style="margin-top:16px; border-color:var(--amber-bright);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--amber-bright);box-shadow:0 0 8px var(--amber-bright);"></span>PUT AWAY</div>
+          <h1 style="font-size:17px;">Cất hàng (Put Away)</h1>
+          <div class="sub" style="margin-top:2px;">Quét từ vị trí tạm/trung gian đến vị trí bất kỳ — Kho 3A/3B: locator hậu tố "FG-TG" (VD "D3B-FG-TG"); riêng Kho 2B: đúng locator "DG2-FG-ITN" hoặc "D2B-FG-ITN" — tổng theo kho (suy từ chính vị trí tạm) và theo người thao tác (toàn bộ file).</div>
+        </div>
+      </div>
+      <div class="tx-sum-grid" id="tx-putaway-sumgrid"></div>
+      <details class="tx-detail-toggle">
+      <summary>Xem chi tiết từng dòng</summary>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-putaway-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-putaway-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-putaway-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:420px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-putaway-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất (TG) <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-putaway-tbody"></tbody>
+          <tfoot id="tx-putaway-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-putaway-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+      </details>
+    </div>
+
+    <div class="panel search-panel" id="tx-panel-movePallet" style="margin-top:16px; border-color:var(--blue);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--blue);box-shadow:0 0 8px var(--blue);"></span>MOVE PALLET</div>
+          <h1 style="font-size:17px;">Chuyển pallet (Move Pallet)</h1>
+          <div class="sub" style="margin-top:2px;">Menu Name "Move Pallet": chuyển pallet từ 1 locator sang 1 locator khác (không tính các lượt thuộc Put Away, Lên/Xuống 3AFG, Lên/Xuống Rack), mỗi pallet (GI No.) chỉ tính 1 lượt — tổng theo kho (kho của locator xuất) và theo người thao tác (toàn bộ file).</div>
+        </div>
+      </div>
+      <div class="tx-sum-grid" id="tx-movePallet-sumgrid"></div>
+      <details class="tx-detail-toggle">
+      <summary>Xem chi tiết từng dòng</summary>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-movePallet-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-movePallet-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-movePallet-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:420px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-movePallet-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-movePallet-tbody"></tbody>
+          <tfoot id="tx-movePallet-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-movePallet-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+      </details>
+    </div>
+
+    <div class="panel search-panel" id="tx-panel-rework" style="margin-top:16px; border-color:var(--teal);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--teal);box-shadow:0 0 8px var(--teal);"></span>REWORK</div>
+          <h1 style="font-size:17px;">Hàng Rework — Có Xuất và Nhận</h1>
+          <div class="sub" style="margin-top:2px;">Chuyển pallet đi/về vị trí Rework (locator có hậu tố "PROD") — <b>Xuất</b>: từ vị trí bất kỳ đến vị trí PROD (trừ SL ở kho xuất, cộng SL ở PROD); <b>Nhập</b>: từ vị trí PROD về vị trí bất kỳ (trừ SL ở PROD, cộng SL ở kho nhận) — toàn bộ file.</div>
+        </div>
+      </div>
+      <div class="tx-sum-subhead">↗ Xuất — chuyển đến vị trí PROD</div>
+      <div class="tx-sum-grid" id="tx-rework-xuat-sumgrid"></div>
+      <div class="tx-sum-subhead" style="margin-top:14px;">↙ Nhập — chuyển từ vị trí PROD về</div>
+      <div class="tx-sum-grid" id="tx-rework-nhap-sumgrid"></div>
+      <details class="tx-detail-toggle" style="margin-top:6px;">
+      <summary>Xem chi tiết từng dòng</summary>
+      <div class="tx-sum-subhead" style="margin-top:10px;">↗ Xuất — chuyển đến vị trí PROD</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-reworkXuat-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-reworkXuat-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-reworkXuat-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:320px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-reworkXuat-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho xuất <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến (PROD) <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-reworkXuat-tbody"></tbody>
+          <tfoot id="tx-reworkXuat-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-reworkXuat-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+
+      <div class="tx-sum-subhead" style="margin-top:18px;">↙ Nhập — chuyển từ vị trí PROD về</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-reworkNhap-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-reworkNhap-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-reworkNhap-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:320px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-reworkNhap-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho nhận <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất (PROD) <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-reworkNhap-tbody"></tbody>
+          <tfoot id="tx-reworkNhap-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-reworkNhap-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+      </details>
+    </div>
+
+    <div class="panel search-panel" id="tx-panel-updown" style="margin-top:16px; border-color:var(--red);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--red);box-shadow:0 0 8px var(--red);"></span>MOVE PALLET UP/DOWN</div>
+          <h1 style="font-size:17px;">Chuyển pallet Lên/Xuống khu lầu (3AFG)</h1>
+          <div class="sub" style="margin-top:2px;">Chuyển pallet lên/xuống khu lầu M1/M2 Kho 3A (locator có tiền tố "3AFG") — <b>Lên</b>: từ vị trí bất kỳ đến vị trí 3AFG (trừ SL ở vị trí xuất, cộng SL ở 3AFG); <b>Xuống</b>: từ vị trí 3AFG về vị trí bất kỳ (trừ SL ở 3AFG, cộng SL ở vị trí nhận) — toàn bộ file.</div>
+        </div>
+      </div>
+      <div class="tx-sum-subhead">↑ Lên — chuyển đến khu lầu (3AFG)</div>
+      <div class="tx-sum-grid" id="tx-updown-up-sumgrid"></div>
+      <div class="tx-sum-subhead" style="margin-top:14px;">↓ Xuống — chuyển từ khu lầu (3AFG) về</div>
+      <div class="tx-sum-grid" id="tx-updown-down-sumgrid"></div>
+      <details class="tx-detail-toggle" style="margin-top:6px;">
+      <summary>Xem chi tiết từng dòng</summary>
+      <div class="tx-sum-subhead" style="margin-top:10px;">↑ Lên — chuyển đến khu lầu (3AFG)</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-updownUp-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-updownUp-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-updownUp-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:320px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-updownUp-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho xuất <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến (3AFG) <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-updownUp-tbody"></tbody>
+          <tfoot id="tx-updownUp-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-updownUp-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+
+      <div class="tx-sum-subhead" style="margin-top:18px;">↓ Xuống — chuyển từ khu lầu (3AFG) về</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-updownDown-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-updownDown-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-updownDown-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:320px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-updownDown-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho nhận <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất (3AFG) <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-updownDown-tbody"></tbody>
+          <tfoot id="tx-updownDown-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-updownDown-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+      </details>
+    </div>
+
+    <div class="panel search-panel" id="tx-panel-rack" style="margin-top:16px; border-color:var(--red);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--red);box-shadow:0 0 8px var(--red);"></span>MOVE PALLET UP/DOWN RACK</div>
+          <h1 style="font-size:17px;">Chuyển pallet Lên/Xuống Rack (3A)</h1>
+          <div class="sub" style="margin-top:2px;">Chuyển pallet lên/xuống Rack Kho 3A (locator dạng "3A-###-T#", VD 3A-A1-T1, 3A-A17-T1) — <b>Lên</b>: từ locator bất kỳ đến Rack; <b>Xuống</b>: từ Rack về locator bất kỳ — toàn bộ file.</div>
+        </div>
+      </div>
+      <div class="tx-sum-subhead">↑ Lên — chuyển đến Rack</div>
+      <div class="tx-sum-grid" id="tx-rack-up-sumgrid"></div>
+      <div class="tx-sum-subhead" style="margin-top:14px;">↓ Xuống — chuyển từ Rack về</div>
+      <div class="tx-sum-grid" id="tx-rack-down-sumgrid"></div>
+      <details class="tx-detail-toggle" style="margin-top:6px;">
+      <summary>Xem chi tiết từng dòng</summary>
+      <div class="tx-sum-subhead" style="margin-top:10px;">↑ Lên — chuyển đến Rack</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-rackUp-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-rackUp-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-rackUp-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:320px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-rackUp-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho xuất <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến (Rack) <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-rackUp-tbody"></tbody>
+          <tfoot id="tx-rackUp-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-rackUp-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+
+      <div class="tx-sum-subhead" style="margin-top:18px;">↓ Xuống — chuyển từ Rack về</div>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-rackDown-search" placeholder="Tìm theo Kho, Item, Locator, User…">
+        <div class="kho-summary" id="tx-rackDown-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-rackDown-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:320px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-rackDown-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho nhận <span class="arrow">↕</span></th>
+              <th data-key="menuName">Menu Name <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="locatorXuat">Locator xuất (Rack) <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="qty" style="text-align:right">Số lượng <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-rackDown-tbody"></tbody>
+          <tfoot id="tx-rackDown-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-rackDown-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+      </details>
+    </div>
+
+    <div class="panel search-panel" id="tx-panel-picking" style="margin-top:16px; border-color:var(--violet);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--violet);box-shadow:0 0 8px var(--violet);"></span>PICKING</div>
+          <h1 style="font-size:17px;">Pick cont (Pick Order)</h1>
+          <div class="sub" style="margin-top:2px;">Lấy hàng xuất container — tổng theo kho, theo người pick và theo từng container (mã CR trong Reference, toàn bộ file).</div>
+        </div>
+      </div>
+      <div class="tx-sum-grid" id="tx-picking-sumgrid"></div>
+      <details class="tx-detail-toggle">
+      <summary>Xem chi tiết từng dòng</summary>
+      <div class="kho-modal-toolbar" style="padding:0 0 12px;">
+        <input type="text" class="kho-search" id="tx-picking-search" placeholder="Tìm theo Kho, Locator, Item, User…">
+        <div class="kho-summary" id="tx-picking-summary">—</div>
+        <button type="button" class="tx-filter-clear-link" id="tx-picking-clear-filters">Xoá bộ lọc cột</button>
+      </div>
+      <div class="kho-modal-body" style="padding:0; max-height:420px; overflow:auto;">
+        <table class="kho-detail-table" id="tx-picking-table">
+          <thead>
+            <tr>
+              <th data-key="khoXuat">Kho xuất <span class="arrow">↕</span></th>
+              <th data-key="locatorDen">Locator đến <span class="arrow">↕</span></th>
+              <th data-key="item">Item <span class="arrow">↕</span></th>
+              <th data-key="user">User Name <span class="arrow">↕</span></th>
+              <th data-key="reference">Reference <span class="arrow">↕</span></th>
+              <th data-key="contCount" style="text-align:right">Số lượng cont <span class="arrow">↕</span></th>
+              <th data-key="total" class="tx-total-col" style="text-align:right">Total <span class="arrow">↕</span></th>
+            </tr>
+          </thead>
+          <tbody id="tx-picking-tbody"></tbody>
+          <tfoot id="tx-picking-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-picking-empty" style="display:none;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>
+      </div>
+      </details>
+    </div>
+
+    <div class="panel search-panel" id="tx-panel-itn" style="margin-top:16px; border-color:var(--amber);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" style="background:var(--amber);box-shadow:0 0 8px var(--amber);"></span>ITN</div>
+          <h1 style="font-size:17px;">Xe Trung Chuyển</h1>
+          <div class="sub" style="margin-top:2px;">2 bảng song song — bên trái là Menu Name "ITN Transfer" (Chuyển đi), bên phải là "ITN Receiving" (Nhận). Mỗi bảng gộp nhóm theo Item / Locator đến / Chuyến (các dòng cùng Reference tính là cùng 1 Chuyến) — chỉ giữ 1 cột vị trí ổn định (bãi ITN), bỏ cột vị trí lưu trữ lẻ tẻ hay đổi. Chuyến được đánh số dùng chung cho cả 2 bên (theo thời gian tăng dần) để dễ đối chiếu Chuyển đi khớp với Nhận.</div>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;" class="tx-xtc-grid">
+        <div>
+          <div style="font-weight:700; color:var(--red); margin-bottom:6px;">🚚 ITN Transfer — Chuyển đi</div>
+          <div class="kho-modal-toolbar" style="padding:0 0 10px;">
+            <input type="text" class="kho-search" id="tx-xtc-transfer-search" placeholder="Tìm theo Item, Locator, Chuyến…">
+            <div class="kho-summary" id="tx-xtc-transfer-summary">—</div>
+            <button type="button" class="tx-filter-clear-link" id="tx-xtc-transfer-clear-filters">Xoá bộ lọc cột</button>
+          </div>
+          <div class="kho-modal-body" style="padding:0; max-height:420px; overflow:auto;">
+            <table class="kho-detail-table" id="tx-xtc-transfer-table">
+              <thead>
+                <tr>
+                  <th data-key="item">Item</th>
+                  <th data-key="locator">Locator đến</th>
+                  <th>Chuyến</th>
+                  <th>Reference</th>
+                  <th data-key="user">User Name</th>
+                  <th style="text-align:right">SL</th>
+                  <th class="tx-total-col" style="text-align:right">Total</th>
+                </tr>
+              </thead>
+              <tbody id="tx-xtc-transfer-tbody"></tbody>
+              <tfoot id="tx-xtc-transfer-tfoot"></tfoot>
+            </table>
+            <div class="kho-empty" id="tx-xtc-transfer-empty" style="display:none;">Chưa có dữ liệu ITN Transfer.</div>
+          </div>
+        </div>
+        <div>
+          <div style="font-weight:700; color:var(--teal); margin-bottom:6px;">📥 ITN Receiving — Nhận</div>
+          <div class="kho-modal-toolbar" style="padding:0 0 10px;">
+            <input type="text" class="kho-search" id="tx-xtc-receiving-search" placeholder="Tìm theo Item, Locator, Chuyến…">
+            <div class="kho-summary" id="tx-xtc-receiving-summary">—</div>
+            <button type="button" class="tx-filter-clear-link" id="tx-xtc-receiving-clear-filters">Xoá bộ lọc cột</button>
+          </div>
+          <div class="kho-modal-body" style="padding:0; max-height:420px; overflow:auto;">
+            <table class="kho-detail-table" id="tx-xtc-receiving-table">
+              <thead>
+                <tr>
+                  <th data-key="item">Item</th>
+                  <th data-key="locator">Locator đến</th>
+                  <th>Chuyến</th>
+                  <th>Reference</th>
+                  <th data-key="user">User Name</th>
+                  <th style="text-align:right">SL</th>
+                  <th class="tx-total-col" style="text-align:right">Total</th>
+                </tr>
+              </thead>
+              <tbody id="tx-xtc-receiving-tbody"></tbody>
+              <tfoot id="tx-xtc-receiving-tfoot"></tfoot>
+            </table>
+            <div class="kho-empty" id="tx-xtc-receiving-empty" style="display:none;">Chưa có dữ liệu ITN Receiving.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="wrap" id="page-compare" style="display:none;">
+    <div class="search-page-head">
+      <div>
+        <div class="brand-eyebrow"><span class="dot"></span>SO SÁNH DỮ LIỆU</div>
+        <h1>So sánh WMS vs ERP</h1>
+        <div class="sub">So sánh Item No., Locator và Số lượng tồn giữa file ERP và file WMS, chia riêng theo 3 kho: 2B, 3A, 3B.</div>
+      </div>
+      <div class="header-right">
+        <div class="upload-wrap">
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn-update" id="btn-update-erp" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>
+              Tải file ERP
+            </button>
+            <button class="btn-update" id="btn-update-wms" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 8 5-5 5 5"/><path d="M5 21h14"/></svg>
+              Tải file WMS
+            </button>
+            <button class="btn-update btn-danger" id="btn-reset-compare" type="button" title="Xoá dữ liệu so sánh đã lưu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+              Xoá
+            </button>
+          </div>
+          <input type="file" id="erp-file-input" accept=".tsv,.csv,.txt,.xlsx,.xls" style="display:none;">
+          <input type="file" id="wms-file-input" accept=".tsv,.csv,.txt,.xlsx,.xls" style="display:none;">
+          <div class="upload-status" id="cmp-upload-status">Tải file ERP và file WMS (.tsv) để so sánh</div>
+        </div>
+        <div class="snapshot">
+          ERP<br><b id="cmp-erp-updated">Chưa có dữ liệu</b>
+          <div class="updated-at" id="cmp-erp-file">File: —</div>
+          <div style="margin-top:8px;">WMS<br><b id="cmp-wms-updated">Chưa có dữ liệu</b></div>
+          <div class="updated-at" id="cmp-wms-file">File: —</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel search-panel" style="margin-bottom:16px;">
+      <div class="cmp-legend" style="margin-top:0; padding-top:0; border-top:none;">
+        <span><i style="background:#2fa96b;"></i>Khớp số lượng</span>
+        <span><i style="background:#d6394b;"></i>Lệch số lượng</span>
+        <span><i style="background:#2C6FCB;"></i>Chỉ có ở ERP</span>
+        <span><i style="background:#8a5cf6;"></i>Chỉ có ở WMS</span>
+      </div>
+    </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="cmp-block-2B" style="margin-bottom:16px;">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div>
+          <div class="brand-eyebrow"><span class="dot"></span>KHO 2B</div>
+          <h1 style="font-size:17px;">So sánh Kho 2B</h1>
+          <div class="cmp-head-summary" id="cmp-head-summary-2B">Chưa có dữ liệu</div>
+        </div>
+        <span class="cc-collapse-chevron">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </span>
+      </div>
+      <div class="cc-collapse-body">
+        <div class="kpis" id="cmp-kpi-strip-2B"></div>
+        <div class="kho-modal-toolbar" style="padding:14px 0 0;">
+          <input type="text" class="kho-search" id="cmp-search-2B" placeholder="Tìm theo Item No. hoặc Locator…">
+          <div class="kho-summary" id="cmp-summary-2B">—</div>
+        </div>
+        <div class="cmp-grid" style="margin-top:14px;">
+          <div class="panel search-panel">
+            <div class="brand-eyebrow"><span class="dot" style="background:#2C6FCB;box-shadow:0 0 8px #2C6FCB;"></span>ERP</div>
+            <h1 style="font-size:15px; margin-bottom:10px;">Bảng ERP (Item + Locator chứa "2B")</h1>
+            <div class="cmp-table-scroll" id="cmp-erp-scroll-2B">
+              <table class="kho-detail-table" id="cmp-erp-table-2B">
+                <thead>
+                  <tr>
+                    <th>Item No.</th>
+                    <th>Locator</th>
+                    <th style="text-align:right">SL ERP</th>
+                  </tr>
+                </thead>
+                <tbody id="cmp-erp-tbody-2B"></tbody>
+              </table>
+              <div class="kho-empty" id="cmp-erp-empty-2B">Chưa có dữ liệu — hãy tải file ERP ở trên.</div>
+            </div>
+          </div>
+          <div class="panel search-panel">
+            <div class="brand-eyebrow"><span class="dot" style="background:#8a5cf6;box-shadow:0 0 8px #8a5cf6;"></span>WMS</div>
+            <h1 style="font-size:15px; margin-bottom:10px;">Bảng WMS (Item + Locator chứa "2B")</h1>
+            <div class="cmp-table-scroll" id="cmp-wms-scroll-2B">
+              <table class="kho-detail-table" id="cmp-wms-table-2B">
+                <thead>
+                  <tr>
+                    <th>Item No.</th>
+                    <th>Locator</th>
+                    <th style="text-align:right">SL WMS</th>
+                  </tr>
+                </thead>
+                <tbody id="cmp-wms-tbody-2B"></tbody>
+              </table>
+              <div class="kho-empty" id="cmp-wms-empty-2B">Chưa có dữ liệu — hãy tải file WMS ở trên.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="cmp-block-3A" style="margin-bottom:16px;">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div>
+          <div class="brand-eyebrow"><span class="dot"></span>KHO 3A</div>
+          <h1 style="font-size:17px;">So sánh Kho 3A</h1>
+          <div class="cmp-head-summary" id="cmp-head-summary-3A">Chưa có dữ liệu</div>
+        </div>
+        <span class="cc-collapse-chevron">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </span>
+      </div>
+      <div class="cc-collapse-body">
+        <div class="kpis" id="cmp-kpi-strip-3A"></div>
+        <div class="kho-modal-toolbar" style="padding:14px 0 0;">
+          <input type="text" class="kho-search" id="cmp-search-3A" placeholder="Tìm theo Item No. hoặc Locator…">
+          <div class="kho-summary" id="cmp-summary-3A">—</div>
+        </div>
+        <div class="cmp-grid" style="margin-top:14px;">
+          <div class="panel search-panel">
+            <div class="brand-eyebrow"><span class="dot" style="background:#2C6FCB;box-shadow:0 0 8px #2C6FCB;"></span>ERP</div>
+            <h1 style="font-size:15px; margin-bottom:10px;">Bảng ERP (Item + Locator chứa "3A")</h1>
+            <div class="cmp-table-scroll" id="cmp-erp-scroll-3A">
+              <table class="kho-detail-table" id="cmp-erp-table-3A">
+                <thead>
+                  <tr>
+                    <th>Item No.</th>
+                    <th>Locator</th>
+                    <th style="text-align:right">SL ERP</th>
+                  </tr>
+                </thead>
+                <tbody id="cmp-erp-tbody-3A"></tbody>
+              </table>
+              <div class="kho-empty" id="cmp-erp-empty-3A">Chưa có dữ liệu — hãy tải file ERP ở trên.</div>
+            </div>
+          </div>
+          <div class="panel search-panel">
+            <div class="brand-eyebrow"><span class="dot" style="background:#8a5cf6;box-shadow:0 0 8px #8a5cf6;"></span>WMS</div>
+            <h1 style="font-size:15px; margin-bottom:10px;">Bảng WMS (Item + Locator chứa "3A")</h1>
+            <div class="cmp-table-scroll" id="cmp-wms-scroll-3A">
+              <table class="kho-detail-table" id="cmp-wms-table-3A">
+                <thead>
+                  <tr>
+                    <th>Item No.</th>
+                    <th>Locator</th>
+                    <th style="text-align:right">SL WMS</th>
+                  </tr>
+                </thead>
+                <tbody id="cmp-wms-tbody-3A"></tbody>
+              </table>
+              <div class="kho-empty" id="cmp-wms-empty-3A">Chưa có dữ liệu — hãy tải file WMS ở trên.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel search-panel cc-collapse-panel" id="cmp-block-3B" style="margin-bottom:16px;">
+      <div class="cc-collapse-head" data-collapse-toggle>
+        <div>
+          <div class="brand-eyebrow"><span class="dot"></span>KHO 3B</div>
+          <h1 style="font-size:17px;">So sánh Kho 3B</h1>
+          <div class="cmp-head-summary" id="cmp-head-summary-3B">Chưa có dữ liệu</div>
+        </div>
+        <span class="cc-collapse-chevron">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </span>
+      </div>
+      <div class="cc-collapse-body">
+        <div class="kpis" id="cmp-kpi-strip-3B"></div>
+        <div class="kho-modal-toolbar" style="padding:14px 0 0;">
+          <input type="text" class="kho-search" id="cmp-search-3B" placeholder="Tìm theo Item No. hoặc Locator…">
+          <div class="kho-summary" id="cmp-summary-3B">—</div>
+        </div>
+        <div class="cmp-grid" style="margin-top:14px;">
+          <div class="panel search-panel">
+            <div class="brand-eyebrow"><span class="dot" style="background:#2C6FCB;box-shadow:0 0 8px #2C6FCB;"></span>ERP</div>
+            <h1 style="font-size:15px; margin-bottom:10px;">Bảng ERP (Item + Locator chứa "3B")</h1>
+            <div class="cmp-table-scroll" id="cmp-erp-scroll-3B">
+              <table class="kho-detail-table" id="cmp-erp-table-3B">
+                <thead>
+                  <tr>
+                    <th>Item No.</th>
+                    <th>Locator</th>
+                    <th style="text-align:right">SL ERP</th>
+                  </tr>
+                </thead>
+                <tbody id="cmp-erp-tbody-3B"></tbody>
+              </table>
+              <div class="kho-empty" id="cmp-erp-empty-3B">Chưa có dữ liệu — hãy tải file ERP ở trên.</div>
+            </div>
+          </div>
+          <div class="panel search-panel">
+            <div class="brand-eyebrow"><span class="dot" style="background:#8a5cf6;box-shadow:0 0 8px #8a5cf6;"></span>WMS</div>
+            <h1 style="font-size:15px; margin-bottom:10px;">Bảng WMS (Item + Locator chứa "3B")</h1>
+            <div class="cmp-table-scroll" id="cmp-wms-scroll-3B">
+              <table class="kho-detail-table" id="cmp-wms-table-3B">
+                <thead>
+                  <tr>
+                    <th>Item No.</th>
+                    <th>Locator</th>
+                    <th style="text-align:right">SL WMS</th>
+                  </tr>
+                </thead>
+                <tbody id="cmp-wms-tbody-3B"></tbody>
+              </table>
+              <div class="kho-empty" id="cmp-wms-empty-3B">Chưa có dữ liệu — hãy tải file WMS ở trên.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  </div>
+</div>
+
+<div class="pick-slip-overlay" id="pick-slip-overlay">
+  <div class="pick-slip-box">
+    <div class="pick-slip-toolbar">
+      <button type="button" class="btn-update btn-ghost-outline" id="pick-slip-toggle-view" title="Chuyển giữa xem theo Mã hàng và xem theo Locator">📍 Xem theo Locator</button>
+      <button type="button" class="btn-update btn-ghost-outline" id="pick-slip-close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        Đóng
+      </button>
+      <button type="button" class="btn-update" id="pick-slip-print">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        Xuất Excel
+      </button>
+    </div>
+    <div class="pick-slip-content" id="pick-slip-content"></div>
+  </div>
+</div>
+
+<div class="pick-slip-overlay" id="gi-log-overlay">
+  <div class="pick-slip-box">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;">GI No. đã quét — theo vị trí</div>
+      <button type="button" class="btn-update btn-ghost-outline" id="gi-log-recover-btn" title="Dùng khi ô 'Kiểm thực tế' bị mất/về 0 dù đã quét QR xong (do lỗi đồng bộ Cloud) — tính lại đúng theo nhật ký GI đã quét bên dưới, không cần quét lại">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        Khôi phục Kiểm thực tế
+      </button>
+      <button type="button" class="btn-update btn-ghost-outline" id="gi-log-close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        Đóng
+      </button>
+    </div>
+    <div class="pick-slip-content" id="gi-log-content"></div>
+  </div>
+</div>
+
+<div class="pick-slip-overlay" id="spp-plan-overlay">
+  <div class="pick-slip-box" style="width:min(1200px, 100%);">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;">Nhóm SPP — Đủ / Thiếu so với Tồn kho</div>
+      <button type="button" class="btn-update btn-ghost-outline" id="spp-plan-close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        Đóng
+      </button>
+    </div>
+    <div class="desc" style="padding:0 16px 10px;">Item No. không bắt đầu bằng số 0 — không có GI để hệ thống tự nhận Pick xong như hàng thường. Tick "Đủ hàng" khi đã pick xong thủ công (coi như đủ 100%) — tự cập nhật lại số Đủ/Thiếu ở ô KPI và bảng chính.</div>
+    <div class="pick-slip-content" id="spp-plan-content" style="overflow:auto;"></div>
+  </div>
+</div>
+
+<div class="pick-slip-overlay" id="kho-grid-settings-overlay">
+  <div class="pick-slip-box" style="width:min(420px, 100%);">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;">⚙️ Cài đặt lưới</div>
+      <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-settings-close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="pick-slip-content">
+      <div class="ps-note" style="margin-bottom:12px;">Kích thước lưới chỉ để đủ chỗ đặt ô — không giới hạn số vị trí thật, có thể đổi lại bất cứ lúc nào mà không mất các ô đã đặt (trừ khi ô đó nằm ngoài kích thước mới).</div>
+      <div style="display:flex; gap:10px; margin-bottom:14px;">
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Số hàng
+          <input type="number" id="kho-grid-rows-input" min="1" max="100" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Số cột
+          <input type="number" id="kho-grid-cols-input" min="1" max="30" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+      </div>
+      <button type="button" class="btn-update" id="kho-grid-apply-size" style="width:100%; margin-bottom:10px;">Áp dụng kích thước</button>
+
+      <div class="ps-note" style="margin:12px 0 8px;">Mở rộng/thu nhỏ lưới từ đầu (trên/trái) — các ô đã đặt tự dịch theo đúng vị trí cũ, không cần sửa lại toạ độ từng ô.</div>
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-expand-top" style="flex:1;">⬆️ +1 hàng trên</button>
+        <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-shrink-top" style="flex:1;">⬆️ −1 hàng trên</button>
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-expand-left" style="flex:1;">⬅️ +1 cột trái</button>
+        <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-shrink-left" style="flex:1;">⬅️ −1 cột trái</button>
+      </div>
+
+      <div class="ps-note" style="margin:14px 0 8px;">Đổi tên hàng loạt — CHỌN VÙNG cần đổi trên lưới trước (Ctrl+Click từng ô hoặc kéo chuột vẽ vùng chọn), rồi mới mở popup này: chỉ đổi tên các ô trong đúng vùng đã chọn (VD: chọn cả dãy "E", Tìm "-E", Thay bằng "-F"). Không đụng tới ô tiêu đề hay ô ngoài vùng chọn.</div>
+      <div class="ps-note" id="kho-grid-rename-sel-info" style="margin-bottom:8px; font-weight:700;"></div>
+      <div style="display:flex; gap:10px; margin-bottom:10px;">
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Tìm
+          <input type="text" id="kho-grid-rename-find" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px; font-family:var(--mono);" placeholder="-E">
+        </label>
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Thay bằng
+          <input type="text" id="kho-grid-rename-replace" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px; font-family:var(--mono);" placeholder="-F">
+        </label>
+      </div>
+      <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-rename-apply" style="width:100%; margin-bottom:14px;">🔤 Áp dụng đổi tên hàng loạt</button>
+
+      <div class="ps-note" style="margin:14px 0 8px;">Sửa sức chứa (capacity) hàng loạt — áp dụng cho đúng các vị trí đang chọn ở trên (xem lại số ô đang chọn phía trên). Để trống ô số = xoá sức chứa riêng, quay về mặc định.</div>
+      <label style="display:block; font-size:12px; color:var(--muted-2); margin-bottom:10px;">Sức chứa tối đa (pallet)
+        <input type="number" id="kho-grid-capacity-value" min="1" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;" placeholder="VD: 26 (để trống = xoá riêng, dùng mặc định)">
+      </label>
+      <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-capacity-apply" style="width:100%; margin-bottom:14px;">📦 Áp dụng sức chứa hàng loạt</button>
+
+      <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-reset-all" style="width:100%; border-color:var(--red); color:var(--red);">🗑 Xoá toàn bộ lưới tuỳ chỉnh</button>
+    </div>
+  </div>
+</div>
+
+<div class="pick-slip-overlay" id="kho-grid-cell-overlay">
+  <div class="pick-slip-box" style="width:min(420px, 100%);">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;" id="kho-grid-cell-title">Thêm vị trí vào lưới</div>
+      <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-cell-close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="pick-slip-content">
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <button type="button" class="wh3b-grid-mode-btn active" id="kho-grid-cell-type-locator" style="flex:1; padding:8px; text-align:center;">📍 Vị trí (locator)</button>
+        <button type="button" class="wh3b-grid-mode-btn" id="kho-grid-cell-type-label" style="flex:1; padding:8px; text-align:center;">🏷️ Ô tiêu đề</button>
+      </div>
+      <label style="display:block; font-size:12px; color:var(--muted-2); margin-bottom:14px;"><span id="kho-grid-cell-locator-hint">Mã Locator (phải gõ ĐÚNG tên có trong dữ liệu tồn kho/WMS — phân biệt HOA/thường)</span>
+        <input type="text" id="kho-grid-cell-locator" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px; font-family:var(--mono);" placeholder="D3B-FG-A01">
+      </label>
+      <div id="kho-grid-cell-label-style-row" style="display:none; gap:10px; margin-bottom:14px;">
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Cỡ chữ (px)
+          <input type="number" id="kho-grid-cell-fontsize" min="8" max="72" placeholder="Mặc định" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Màu chữ
+          <input type="color" id="kho-grid-cell-textcolor" style="width:100%; margin-top:4px; padding:2px; height:36px; border-radius:8px; border:1px solid var(--border); background:var(--panel); cursor:pointer;">
+        </label>
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Màu nền
+          <input type="color" id="kho-grid-cell-bgcolor" style="width:100%; margin-top:4px; padding:2px; height:36px; border-radius:8px; border:1px solid var(--border); background:var(--panel); cursor:pointer;">
+        </label>
+        <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-cell-style-reset" title="Bỏ cỡ chữ/màu tự chọn, dùng lại mặc định" style="flex:0 0 auto; align-self:flex-end; padding:8px 10px; font-size:12px;">Mặc định</button>
+      </div>
+      <div style="display:flex; gap:10px; margin-bottom:14px;">
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Hàng (từ 1)
+          <input type="number" id="kho-grid-cell-row" min="1" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Cột (từ 1)
+          <input type="number" id="kho-grid-cell-col" min="1" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+      </div>
+      <div style="display:flex; gap:10px; margin-bottom:16px;">
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Chiếm mấy hàng
+          <input type="number" id="kho-grid-cell-rowspan" min="1" value="1" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+        <label style="flex:1; font-size:12px; color:var(--muted-2);">Chiếm mấy cột
+          <input type="number" id="kho-grid-cell-colspan" min="1" value="1" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px;">
+        </label>
+      </div>
+      <button type="button" class="btn-update" id="kho-grid-cell-save" style="width:100%; margin-bottom:10px;">Lưu</button>
+      <button type="button" class="btn-update btn-ghost-outline" id="kho-grid-cell-delete" style="width:100%; border-color:var(--red); color:var(--red); display:none;">🗑 Xoá khỏi lưới</button>
+    </div>
+  </div>
+</div>
+
+<div class="pick-slip-overlay" id="item-cbm-conflict-overlay">
+  <div class="pick-slip-box">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;">⚖️ CBM khác với dữ liệu đã lưu</div>
+    </div>
+    <div class="pick-slip-content">
+      <div class="ps-note" id="item-cbm-conflict-note" style="margin-bottom:10px;"></div>
+      <div style="display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap;">
+        <button type="button" class="btn-export-excel" id="item-cbm-keep-all-old">Giữ tất cả bản CŨ</button>
+        <button type="button" class="btn-export-excel" id="item-cbm-keep-all-new">Giữ tất cả bản MỚI</button>
+      </div>
+      <div id="item-cbm-conflict-list"></div>
+    </div>
+    <div class="pick-slip-toolbar" style="border-top:0.5px solid var(--border); border-bottom:none;">
+      <button type="button" class="btn-update btn-ghost-outline" id="item-cbm-conflict-close" style="margin-left:auto;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        Xong (mã chưa chọn sẽ giữ bản cũ)
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="pick-slip-overlay" id="item-cbm-library-overlay">
+  <div class="pick-slip-box">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;">📦 Thư viện CBM theo mã hàng</div>
+      <button type="button" class="btn-export-excel" id="item-cbm-export-excel">↓ Xuất Excel</button>
+      <button type="button" class="btn-update btn-ghost-outline" id="item-cbm-library-close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        Đóng
+      </button>
+    </div>
+    <div class="pick-slip-content" id="item-cbm-library-content"></div>
+  </div>
+</div>
+
+<div class="pick-slip-overlay" id="top-pallet-locator-overlay">
+  <div class="pick-slip-box">
+    <div class="pick-slip-toolbar">
+      <div style="font-weight:800; font-size:15px; margin-right:auto;" id="top-pallet-locator-title">📍 Vị trí</div>
+      <button type="button" class="btn-update btn-ghost-outline" id="top-pallet-locator-close">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        Đóng
+      </button>
+    </div>
+    <div class="pick-slip-content" id="top-pallet-locator-content"></div>
+  </div>
+</div>
+
+<div id="kho-modal-overlay">
+  <div class="kho-modal" style="max-width:1120px; max-height:80vh;">
+    <div class="kho-modal-head">
+      <div>
+        <h2 id="tx-chart-popup-title">—</h2>
+        <div class="desc" id="tx-chart-popup-desc"></div>
+      </div>
+      <button type="button" class="btn-close" id="tx-chart-popup-close" title="Đóng">✕</button>
+    </div>
+    <div class="kho-modal-toolbar">
+      <input type="text" class="kho-search" id="tx-chart-popup-search" placeholder="Tìm theo Item, Locator, User…">
+      <div class="kho-summary" id="tx-chart-popup-summary">—</div>
+    </div>
+    <div class="kho-modal-body">
+      <table class="kho-detail-table" id="tx-chart-popup-table">
+        <thead id="tx-chart-popup-thead"></thead>
+        <tbody id="tx-chart-popup-tbody"></tbody>
+        <tfoot id="tx-chart-popup-tfoot"></tfoot>
+      </table>
+      <div class="kho-empty" id="tx-chart-popup-empty" style="display:none;">Không có dòng nào.</div>
+      <div id="tx-chart-popup-cont-wrap" style="display:none; margin-top:26px;">
+        <h3 id="tx-chart-popup-cont-title" style="font-family:var(--disp); font-size:15px; font-weight:600; margin:0 0 4px;">Xem theo cont (CR)</h3>
+        <div class="desc" style="font-size:12px; color:var(--muted); margin-bottom:10px;">Mỗi dòng là 1 cont (mã CR) — gộp mọi Item/User đã pick cho cont đó. Bảng bên trên là xem theo Người.</div>
+        <table class="kho-detail-table" id="tx-chart-popup-cont-table">
+          <thead id="tx-chart-popup-cont-thead"></thead>
+          <tbody id="tx-chart-popup-cont-tbody"></tbody>
+          <tfoot id="tx-chart-popup-cont-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-chart-popup-cont-empty" style="display:none;">Không có cont nào.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="gi-qr-overlay" id="gi-qr-overlay">
+  <div class="gi-qr-box">
+    <button type="button" class="gi-qr-close" id="gi-qr-close" title="Đóng">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+    </button>
+    <div class="gi-qr-title">Mã QR — GI No.</div>
+    <div class="gi-qr-value" id="gi-qr-value">—</div>
+    <div class="gi-qr-canvas-wrap" id="gi-qr-canvas"></div>
+    <div class="gi-qr-hint">Quét mã để lấy nhanh số GI No. này</div>
+  </div>
+</div>
+
+<div class="qr-scan-overlay" id="qr-scan-overlay">
+  <div class="qr-scan-box">
+    <div class="qr-scan-topbar">
+      <span style="display:flex; align-items:center; gap:8px; min-width:0;">
+        <span id="qr-scan-counter">Đã quét: 0 pallet</span>
+        <button type="button" class="qr-scan-clear-history-btn" id="qr-scan-clear-history-btn" title="Xoá lịch sử các GI đã quét trong phiên — cho phép quét lại các mã đã quét trước đó. LƯU Ý: nếu quét lại đúng pallet đã tính rồi, số lượng sẽ bị CỘNG THÊM 1 LẦN NỮA — chỉ dùng khi chắc chắn cần quét lại.">🗑 Xoá lịch sử quét</button>
+      </span>
+      <button type="button" class="btn-update btn-ghost-outline" id="qr-scan-close-btn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        Thoát
+      </button>
+    </div>
+    <div class="qr-scan-locator-row">
+      <span id="qr-scan-locator-badge" class="qr-scan-locator-badge">📍 Chưa xác lập vị trí — quét 1 mã bất kỳ để bắt đầu</span>
+      <button type="button" class="qr-scan-reset-loc-btn" id="qr-scan-reset-loc-btn" title="Bấm khi bạn đã di chuyển sang 1 vị trí thực tế khác, để hệ thống xác lập lại đúng mốc vị trí đang quét">🔁 Đổi vị trí</button>
+    </div>
+    <div class="qr-scan-locator-row">
+      <span id="qr-scan-item-lock-badge" class="qr-scan-locator-badge">🔓 Chưa khoá mã — quét lẫn nhiều mã hàng vẫn tính bình thường</span>
+      <button type="button" class="qr-scan-reset-loc-btn" id="qr-scan-item-lock-btn" title="Bật để CHỈ tính đúng 1 mã hàng: mã của lượt quét TIẾP THEO sẽ được khoá lại, các lượt quét sau nếu ra mã KHÁC sẽ bị bỏ qua (không tính) — dùng khi đang đếm riêng 1 mã, tránh lỡ tay quét lẫn mã khác vào">🔒 Khoá mã</button>
+    </div>
+    <div class="qr-scan-oqc-row">
+      <span class="qr-scan-oqc-label">OQC đang quét:</span>
+      <div class="qr-scan-oqc-btns" id="qr-scan-oqc-btns">
+        <button type="button" class="qr-scan-oqc-btn active" data-oqc="">Theo hệ thống</button>
+        <button type="button" class="qr-scan-oqc-btn" data-oqc="PASS">PASS</button>
+        <button type="button" class="qr-scan-oqc-btn" data-oqc="NG">NG</button>
+        <button type="button" class="qr-scan-oqc-btn" data-oqc="Khac">Khác</button>
+      </div>
+    </div>
+    <div class="qr-scan-video-wrap">
+      <video id="qr-scan-video" autoplay playsinline muted></video>
+      <div class="qr-scan-frame"></div>
+    </div>
+    <canvas id="qr-scan-canvas" style="display:none;"></canvas>
+    <div id="qr-scan-status" class="qr-scan-status">Đưa mã vạch/QR (tem pallet) vào khung để quét…</div>
+    <div class="qr-scan-manual-row">
+      <input type="text" id="qr-scan-manual-input" placeholder="Mã quá mờ? Gõ tay số GI No. tại đây…" autocomplete="off" autocapitalize="characters">
+      <button type="button" class="qr-scan-manual-btn" id="qr-scan-manual-btn">Nhập</button>
+    </div>
+    <div id="qr-scan-log" class="qr-scan-log"></div>
+  </div>
+</div>
+
+<div class="settings-overlay" id="settings-overlay">
+  <div class="settings-box">
+    <div class="settings-head">
+      <div>
+        <h2>Cài đặt lưu trữ &amp; đồng bộ</h2>
+        <div class="desc">Đồng bộ file trên máy, sao lưu/khôi phục JSON, và kết nối Cloud</div>
+      </div>
+      <button type="button" class="settings-close" id="settings-close" title="Đóng">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="settings-body">
+
+      <div class="settings-section">
+        <div class="settings-section-label">Dữ liệu tồn kho</div>
+        <div class="desc" style="margin-bottom:8px;">Bấm vào chữ "TN5" ở đầu sidebar để cập nhật file tồn kho mới. Nút bên dưới chỉ dùng khi cần xoá sạch để bắt đầu lại từ đầu.</div>
+        <div class="settings-btn-row">
+          <button class="btn-update btn-danger" id="btn-reset-data" type="button" title="Xoá dữ liệu đã lưu, quay lại dữ liệu mặc định">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            Đặt lại
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Đồng bộ file trên máy (không dùng bộ nhớ trình duyệt)</div>
+        <div class="settings-btn-row">
+          <button class="btn-update btn-ghost-outline" id="fv-choose-btn" type="button" title="Chọn 1 file .json ĐÃ CÓ SẴN trên máy (ví dụ file vừa 'Xuất JSON' trước đó) — đọc dữ liệu từ đó lên và bắt đầu tự đồng bộ mọi thay đổi vào file này">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            Chọn file đồng bộ
+          </button>
+          <button class="btn-update btn-ghost-outline" id="fv-create-btn" type="button" title="Tạo 1 file .json MỚI (trống) trên máy để bắt đầu tự đồng bộ — dùng khi chưa có file nào trước đó">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+            Tạo file mới
+          </button>
+          <button class="btn-update btn-ghost-outline" id="fv-reconnect-btn" type="button" title="Kết nối lại quyền truy cập file đồng bộ (khi trình duyệt yêu cầu cấp lại quyền, hoặc sau khi vừa mở trang)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Kết nối lại
+          </button>
+        </div>
+        <div class="settings-status-block">
+          <div class="upload-status" id="fv-status">Dự phòng cục bộ — chỉ cần chọn file khi chưa dùng Cloud ở mục bên dưới.</div>
+          <div class="autosave-note" id="autosave-note">Trạng thái tự đồng bộ vào file đã chọn trên máy — không dùng bộ nhớ trình duyệt (localStorage). Nếu đã kết nối Cloud bên dưới, hệ thống ưu tiên ghi lên Cloud; file trên máy chỉ được dùng làm phương án dự phòng khi Cloud mất kết nối.</div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Sao lưu / khôi phục JSON</div>
+        <div class="settings-btn-row">
+          <button class="btn-update btn-ghost-outline" id="btn-export-state" type="button" title="Tải toàn bộ dữ liệu (tồn kho, Plan, đã xác nhận, Transaction, So sánh...) ra 1 file JSON để backup hoặc chuyển sang máy khác">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+            Xuất JSON
+          </button>
+          <button class="btn-update btn-ghost-outline" id="btn-import-state" type="button" title="Nhập lại 1 file JSON trạng thái đã xuất trước đó — sẽ ghi đè toàn bộ dữ liệu hiện tại">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+            Nhập JSON
+          </button>
+          <input type="file" id="import-state-input" accept=".json" style="display:none;">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Cloud (Firebase Realtime Database) — chạy được cả trên Safari/iPhone</div>
+        <div class="settings-cloud-row">
+          <input type="text" id="cv-url-input" placeholder="Database URL (...firebasedatabase.app/)" autocomplete="off">
+          <input type="password" id="cv-token-input" placeholder="Database secret" autocomplete="off" style="flex:0 0 130px;">
+        </div>
+        <div class="settings-cloud-row" style="margin-top:6px;">
+          <input type="text" id="cv-apikey-input" placeholder="Web API Key (để bật đồng bộ realtime tức thời)" autocomplete="off">
+        </div>
+        <div class="settings-btn-row">
+          <button class="btn-update btn-ghost-outline" id="cv-connect-btn" type="button" title="Kết nối tới Firebase Realtime Database — nhập đủ Database URL + Database secret rồi bấm">Kết nối</button>
+          <button class="btn-update btn-ghost-outline" id="cv-disconnect-btn" type="button" title="Ngắt kết nối Cloud trên trình duyệt này">Ngắt</button>
+          <button class="btn-update btn-ghost-outline" id="cv-test-btn" type="button" title="Kiểm tra kết nối và báo rõ lỗi thật thay vì chỉ báo chung chung">Kiểm tra kết nối</button>
+        </div>
+        <div class="upload-status" id="cv-status">Chưa kết nối Cloud</div>
+        <div class="upload-status" id="cv-realtime-status" style="margin-top:4px;"></div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Dung lượng dữ liệu đang lưu</div>
+        <div class="desc" style="margin-bottom:8px;">Xem từng mục dữ liệu đang chiếm bao nhiêu dung lượng (tính trên đúng gói JSON sẽ gửi lên Cloud/file) — để biết chỗ nào đang phình to bất thường.</div>
+        <div class="settings-btn-row">
+          <button class="btn-update btn-ghost-outline" id="btn-storage-size" type="button" title="Tính lại dung lượng từng mục dữ liệu ngay lúc này">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            Xem dung lượng dữ liệu
+          </button>
+        </div>
+        <div id="storage-size-result" style="margin-top:8px;"></div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Mở khoá đầy đủ tính năng</div>
+        <div class="desc" style="margin-bottom:8px;">Mặc định chỉ hiện 4 tab: Picking Status, Tìm mã hàng, Kiểm tồn kho, Màn hình kho. Nhập đúng mật khẩu để hiện lại toàn bộ các tab trên sidebar.</div>
+        <div class="settings-cloud-row">
+          <input type="password" id="app-lock-password-input" placeholder="Nhập mật khẩu" autocomplete="off" style="flex:1;">
+        </div>
+        <div class="settings-btn-row">
+          <button class="btn-update btn-ghost-outline" id="app-lock-unlock-btn" type="button">Mở khoá</button>
+          <button class="btn-update btn-ghost-outline" id="app-lock-lock-btn" type="button">Khoá lại</button>
+        </div>
+        <div class="upload-status" id="app-lock-status"></div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-label">Phiên bản</div>
+        <div class="desc" style="margin-bottom:8px;">Xem đang chạy đúng bản mới nhất chưa — so với ngày bạn vừa cập nhật file, để biết trình duyệt/PWA đã tải bản mới hay còn đang dùng bản cache cũ.</div>
+        <div class="upload-status" id="app-version-status">—</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="cc-custom-overlay" id="cc-custom-overlay">
+  <div class="cc-custom-box">
+    <div class="settings-head">
+      <div>
+        <h2 id="cc-custom-title">Tự chọn danh sách kiểm</h2>
+        <div class="desc" id="cc-custom-desc">Chọn thủ công hoặc random Mã hàng / Locator cần kiểm</div>
+      </div>
+      <button type="button" class="settings-close" id="cc-custom-close" title="Đóng">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+      </button>
+    </div>
+
+    <div class="cc-custom-body">
+      <div class="cc-mode-tabs" id="cc-custom-tabs" style="flex-shrink:0;">
+        <button type="button" class="cc-mode-tab" data-cctab="item" id="cc-custom-tab-item">Mã hàng</button>
+        <button type="button" class="cc-mode-tab active" data-cctab="locator" id="cc-custom-tab-locator">Locator</button>
+      </div>
+
+      <input type="text" id="cc-custom-filter" class="cc-custom-filter-input" placeholder="Lọc theo mã hàng / locator…">
+
+      <div class="cc-custom-random-row">
+        <input type="range" id="cc-custom-random-slider" min="1" max="100" value="10" step="1">
+        <span class="cc-kho-slider-label" id="cc-custom-random-label">10 mục</span>
+      </div>
+      <div class="cc-custom-btn-row">
+        <button type="button" class="cc-add-btn" id="cc-custom-random-btn">🎲 Chọn random</button>
+        <button type="button" class="cc-add-btn" id="cc-custom-select-all-btn">Chọn tất cả (đã lọc)</button>
+        <button type="button" class="cc-add-btn" id="cc-custom-clear-btn">Bỏ chọn tất cả</button>
+      </div>
+
+      <div class="cc-custom-list" id="cc-custom-list"></div>
+    </div>
+
+    <div class="cc-custom-footer">
+      <span id="cc-custom-selected-count">Đã chọn: 0</span>
+      <button type="button" class="btn-update" id="cc-custom-build-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4"/><path d="M12 15V3"/><path d="m8 7 4-4 4 4"/></svg>
+        Tạo bảng
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+/* Nút "Chế độ máy tính" — ép trình duyệt render trang ở độ rộng desktop (1280px)
+   bằng cách đổi thẻ <meta viewport>, thay vì phụ thuộc tính năng "Request Desktop
+   Website" của trình duyệt (tính năng này thường không xuất hiện khi mở file HTML
+   cục bộ trên Safari/iPhone). Cách này hoạt động như nhau trên Android & iPhone. */
+(function(){
+  var DESKTOP_WIDTH = 1280;
+  var metaEl = document.getElementById('viewport-meta');
+  var btn = document.getElementById('desktop-mode-toggle');
+  var label = document.getElementById('desktop-mode-toggle-label');
+  var KEY = 'ktDashboardForceDesktop';
+
+  function apply(on){
+    if(on){
+      metaEl.setAttribute('content', 'width=' + DESKTOP_WIDTH + ', initial-scale=' + (window.innerWidth / DESKTOP_WIDTH));
+      btn.classList.add('on');
+      label.textContent = 'Về chế độ điện thoại';
+    } else {
+      metaEl.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover');
+      btn.classList.remove('on');
+      label.textContent = 'Chế độ máy tính';
+    }
+  }
+
+  var saved = localStorage.getItem(KEY) === '1';
+  apply(saved);
+
+  btn.addEventListener('click', function(){
+    var next = !btn.classList.contains('on');
+    localStorage.setItem(KEY, next ? '1' : '0');
+    apply(next);
+  });
+})();
+</script>
+<div id="app-toast" class="app-toast" style="display:none;"></div>
+<div id="pwa-update-banner" class="pwa-update-banner" style="display:none;">
+  🔄 Có bản cập nhật mới — <button type="button" id="pwa-update-reload-btn">Bấm để tải lại</button>
+</div>
+<script>
+// Đăng ký Service Worker để có thể "Cài đặt" thành app riêng (PWA) — cần chạy qua https:// hoặc
+// http://localhost, không hoạt động khi mở file trực tiếp (file:// hoặc content://).
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').then(function(reg){
+      // Chủ động kiểm tra ngay có bản sw.js mới không (không chỉ chờ trình duyệt tự kiểm tra định kỳ)
+      reg.update().catch(function(){});
+
+      // Có Service Worker MỚI đang cài (updatefound) -> theo dõi tới khi cài xong (installed).
+      reg.addEventListener('updatefound', function(){
+        const newWorker = reg.installing;
+        if(!newWorker) return;
+        newWorker.addEventListener('statechange', function(){
+          // "installed" + đã có controller từ trước = đây là bản CẬP NHẬT (không phải lần cài đầu
+          // tiên) -> báo cho người dùng biết, để họ chủ động bấm tải lại lấy bản mới.
+          if(newWorker.state === 'installed' && navigator.serviceWorker.controller){
+            const banner = document.getElementById('pwa-update-banner');
+            if(banner) banner.style.display = 'flex';
+          }
+        });
+      });
+    }).catch(function(err){
+      console.warn('Không đăng ký được Service Worker (PWA sẽ không cài đặt được):', err);
+    });
+  });
+  const reloadBtn = document.getElementById('pwa-update-reload-btn');
+  if(reloadBtn) reloadBtn.addEventListener('click', function(){ window.location.reload(); });
+}
+</script>
+</body>
+</html>
