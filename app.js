@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.61';
+const APP_VERSION = 'v3.62';
 const APP_VERSION_DATE = '06/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3085,17 +3085,42 @@ let _itemIndexCache = null, _itemIndexForData = null;
 // cho 1 container cụ thể (chính là dòng hiện "D3B-Loading (CR… - VNC…)") -> không còn là tồn khả dụng,
 // TRỪ ra khỏi tồn của So sánh Plan / Tổng hợp 3 Plan (cả bảng lẫn Excel/ảnh). Locator Loading chưa có CR
 // hoặc CR chưa có Invoice thì vẫn tính như cũ.
-function isLoadingCommittedStock(locator, ref, crInvMap){
+// NGOẠI LỆ (v3.62): CR thuộc container VẪN CÒN được tính SL Plan (chưa Pick xong — đang pick dở) thì
+// KHÔNG trừ — hàng đã ra Loading đó chính là để đáp ứng SL Plan của container ấy. Trừ đi thì vừa bớt
+// tồn vừa giữ nguyên SL Plan = trừ 2 lần, báo Thiếu sai (VD 095561004DG9: Row-4 đang pick, popup Đủ
+// dư 70 nhưng bảng báo Thiếu -56).
+function isLoadingCommittedStock(locator, ref, ctx){
   if(!/loading\s*$/i.test(String(locator || '').trim())) return false;
-  const crs = String(ref || '').match(/CR\d+/gi);
-  if(!crs) return false;
-  return crs.some(cr => { const set = crInvMap.get(cr.toUpperCase()); return !!(set && set.size); });
+  const crs = (String(ref || '').match(/CR\d+/gi) || []).map(c => c.toUpperCase());
+  if(!crs.length) return false;
+  if(crs.some(cr => ctx.activeCrs.has(cr))) return false;
+  return crs.some(cr => { const set = ctx.crInvMap.get(cr); return !!(set && set.size); });
 }
-// Cache 2 index bên dưới phải làm mới cả khi Plan đổi (bản đồ CR→Invoice đổi), không chỉ khi data đổi.
+// CR của các dòng Plan còn được tính SL Plan (container chưa xoá, chưa Pick xong) — cùng điều kiện
+// loại dòng như buildCombinedPlanCompareTable()/buildCompareTable().
+function buildActivePlanCrSet(){
+  const set = new Set();
+  try {
+    const doneContSet = new Set((contPickAllRows || [])
+      .filter(r => r.status === 'done' || r.status === 'manualDone').map(r => r.instanceKey));
+    PLAN_TYPES.forEach(type => {
+      for(const r of ((planData[type] && planData[type].detailRows) || [])){
+        const ld = r.loadDate ? fmtDate(r.loadDate) : '';
+        const pt = r.planTime || '';
+        if(isContainerHidden(type, r.containerNo, ld, pt)) continue;
+        if(r.containerNo && doneContSet.has(contInstanceKey(type, r.containerNo, ld, pt))) continue;
+        (String(r.csr || '').match(/CR\d+/gi) || []).forEach(c => set.add(c.toUpperCase()));
+      }
+    });
+  } catch(e){ /* Plan / danh sách container chưa sẵn sàng */ }
+  return set;
+}
+// Cache 2 index bên dưới phải làm mới cả khi Plan / trạng thái Pick xong đổi, không chỉ khi data đổi.
 function loadingCommittedCtx(){
   const crInvMap = txBuildCrInvoiceMap();
-  const sig = [...crInvMap.keys()].sort().join(',');
-  return { crInvMap, sig };
+  const activeCrs = buildActivePlanCrSet();
+  const sig = [...crInvMap.keys()].sort().join(',') + '|' + [...activeCrs].sort().join(',');
+  return { crInvMap, activeCrs, sig };
 }
 
 let _itemIndexSig = null, _itemCustPoIndexSig = null;
@@ -3108,7 +3133,7 @@ function buildItemIndex(data){
   for(const kho of Object.keys(data.kho_detail)){
     for(const [item, , locator, oqc, qty, ref] of data.kho_detail[kho]){
       if(PROD_LOCATOR_RE.test(locator || '')) continue; // loại vị trí "Prod" — không tính vào So sánh Plan / Tổng hợp 3 Plan
-      if(isLoadingCommittedStock(locator, ref, lc.crInvMap)) continue; // hàng đã gom ra Loading cho CR - VNC
+      if(isLoadingCommittedStock(locator, ref, lc)) continue; // hàng đã gom ra Loading cho CR - VNC
       const key = item.toLowerCase();
       idx[key] = idx[key] || { byKho: {}, pass: 0, ng: 0, other: 0 };
       idx[key].byKho[kho] = (idx[key].byKho[kho] || 0) + qty;
@@ -3133,7 +3158,7 @@ function buildItemCustPoIndex(data){
   for(const kho of Object.keys(data.kho_detail)){
     for(const [item, custpo, locator, oqc, qty, ref] of data.kho_detail[kho]){
       if(PROD_LOCATOR_RE.test(locator || '')) continue; // loại vị trí "Prod" — không tính vào So sánh Plan / Tổng hợp 3 Plan
-      if(isLoadingCommittedStock(locator, ref, lc.crInvMap)) continue; // hàng đã gom ra Loading cho CR - VNC
+      if(isLoadingCommittedStock(locator, ref, lc)) continue; // hàng đã gom ra Loading cho CR - VNC
       const key = item.toLowerCase() + '\u241F' + (custpo || '').toLowerCase();
       idx[key] = idx[key] || { byKho: {}, pass: 0, ng: 0, other: 0 };
       idx[key].byKho[kho] = (idx[key].byKho[kho] || 0) + qty;
@@ -5500,13 +5525,13 @@ async function exportCombinedPlanToExcel(mode){
   });
   itemHeaderParts.push('Tổng tồn (PASS+NG)', 'PASS', 'NG', 'SL Plan', 'CBM', 'Chênh lệch', 'Trạng thái');
   const itemHeaders = itemHeaderParts;
-  const crInvMap3A = txBuildCrInvoiceMap();
+  const loadingCtx3A = loadingCommittedCtx();
   const computeKho3AQty = (r) => {
     const locs = buildItemLocatorDetail(r.item, r.anyPO ? null : r.custpo, true);
     let treQty = 0, floorQty = 0, rackQty = 0;
     locs.forEach(l => {
       if(l.kho !== 'Kho 3A') return;
-      if(isLoadingCommittedStock(l.locator, l.ref, crInvMap3A)) return; // khớp cột tổng — đã trừ hàng Loading CR - VNC
+      if(isLoadingCommittedStock(l.locator, l.ref, loadingCtx3A)) return; // khớp cột tổng — đã trừ hàng Loading CR - VNC
       const loc = String(l.locator || '');
       const qty = l.qty || 0;
       if(/^3AFG-M[12]/i.test(loc)){ floorQty += qty; return; }
