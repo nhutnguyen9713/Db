@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.59';
+const APP_VERSION = 'v3.61';
 const APP_VERSION_DATE = '06/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3081,13 +3081,34 @@ const planCardsEl = document.getElementById('plan-cards');
 // tồn kho không hề đổi giữa các lần gọi đó. Tự làm mới khi data đổi tham chiếu (currentData luôn được
 // GÁN LẠI object mới khi có dữ liệu mới, không sửa tại chỗ, nên so sánh tham chiếu là đủ).
 let _itemIndexCache = null, _itemIndexForData = null;
+// Tồn ở locator hậu tố "Loading" có mã CR tra ra được Invoice (VNC) trong Plan = hàng đã gom ra khu load
+// cho 1 container cụ thể (chính là dòng hiện "D3B-Loading (CR… - VNC…)") -> không còn là tồn khả dụng,
+// TRỪ ra khỏi tồn của So sánh Plan / Tổng hợp 3 Plan (cả bảng lẫn Excel/ảnh). Locator Loading chưa có CR
+// hoặc CR chưa có Invoice thì vẫn tính như cũ.
+function isLoadingCommittedStock(locator, ref, crInvMap){
+  if(!/loading\s*$/i.test(String(locator || '').trim())) return false;
+  const crs = String(ref || '').match(/CR\d+/gi);
+  if(!crs) return false;
+  return crs.some(cr => { const set = crInvMap.get(cr.toUpperCase()); return !!(set && set.size); });
+}
+// Cache 2 index bên dưới phải làm mới cả khi Plan đổi (bản đồ CR→Invoice đổi), không chỉ khi data đổi.
+function loadingCommittedCtx(){
+  const crInvMap = txBuildCrInvoiceMap();
+  const sig = [...crInvMap.keys()].sort().join(',');
+  return { crInvMap, sig };
+}
+
+let _itemIndexSig = null, _itemCustPoIndexSig = null;
 function buildItemIndex(data){
-  if(_itemIndexForData === data && _itemIndexCache) return _itemIndexCache;
+  const lc = loadingCommittedCtx();
+  if(_itemIndexForData === data && _itemIndexCache && _itemIndexSig === lc.sig) return _itemIndexCache;
+  _itemIndexSig = lc.sig;
   const idx = {};
   if(!data || !data.kho_detail){ _itemIndexCache = idx; _itemIndexForData = data; return idx; }
   for(const kho of Object.keys(data.kho_detail)){
-    for(const [item, , locator, oqc, qty] of data.kho_detail[kho]){
+    for(const [item, , locator, oqc, qty, ref] of data.kho_detail[kho]){
       if(PROD_LOCATOR_RE.test(locator || '')) continue; // loại vị trí "Prod" — không tính vào So sánh Plan / Tổng hợp 3 Plan
+      if(isLoadingCommittedStock(locator, ref, lc.crInvMap)) continue; // hàng đã gom ra Loading cho CR - VNC
       const key = item.toLowerCase();
       idx[key] = idx[key] || { byKho: {}, pass: 0, ng: 0, other: 0 };
       idx[key].byKho[kho] = (idx[key].byKho[kho] || 0) + qty;
@@ -3104,12 +3125,15 @@ function buildItemIndex(data){
 
 let _itemCustPoIndexCache = null, _itemCustPoIndexForData = null;
 function buildItemCustPoIndex(data){
-  if(_itemCustPoIndexForData === data && _itemCustPoIndexCache) return _itemCustPoIndexCache;
+  const lc = loadingCommittedCtx();
+  if(_itemCustPoIndexForData === data && _itemCustPoIndexCache && _itemCustPoIndexSig === lc.sig) return _itemCustPoIndexCache;
+  _itemCustPoIndexSig = lc.sig;
   const idx = {};
   if(!data || !data.kho_detail){ _itemCustPoIndexCache = idx; _itemCustPoIndexForData = data; return idx; }
   for(const kho of Object.keys(data.kho_detail)){
-    for(const [item, custpo, locator, oqc, qty] of data.kho_detail[kho]){
+    for(const [item, custpo, locator, oqc, qty, ref] of data.kho_detail[kho]){
       if(PROD_LOCATOR_RE.test(locator || '')) continue; // loại vị trí "Prod" — không tính vào So sánh Plan / Tổng hợp 3 Plan
+      if(isLoadingCommittedStock(locator, ref, lc.crInvMap)) continue; // hàng đã gom ra Loading cho CR - VNC
       const key = item.toLowerCase() + '\u241F' + (custpo || '').toLowerCase();
       idx[key] = idx[key] || { byKho: {}, pass: 0, ng: 0, other: 0 };
       idx[key].byKho[kho] = (idx[key].byKho[kho] || 0) + qty;
@@ -5476,11 +5500,13 @@ async function exportCombinedPlanToExcel(mode){
   });
   itemHeaderParts.push('Tổng tồn (PASS+NG)', 'PASS', 'NG', 'SL Plan', 'CBM', 'Chênh lệch', 'Trạng thái');
   const itemHeaders = itemHeaderParts;
+  const crInvMap3A = txBuildCrInvoiceMap();
   const computeKho3AQty = (r) => {
     const locs = buildItemLocatorDetail(r.item, r.anyPO ? null : r.custpo, true);
     let treQty = 0, floorQty = 0, rackQty = 0;
     locs.forEach(l => {
       if(l.kho !== 'Kho 3A') return;
+      if(isLoadingCommittedStock(l.locator, l.ref, crInvMap3A)) return; // khớp cột tổng — đã trừ hàng Loading CR - VNC
       const loc = String(l.locator || '');
       const qty = l.qty || 0;
       if(/^3AFG-M[12]/i.test(loc)){ floorQty += qty; return; }
