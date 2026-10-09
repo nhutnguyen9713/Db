@@ -1,0 +1,409 @@
+<title>FGWH Dau Giay</title>
+<style>
+/* Layout: sticky header + 3 tabs, KPI strip then chart grid; ink-blue/amber warehouse palette */
+:root{--bg:#f4f5f7;--card:#fff;--ink:#14181f;--ink2:#4b5563;--mute:#8a93a1;--line:#e3e6ea;--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--good:#0f8a5f;--bad:#d1342f;--warn:#b7791f;--grid:#e8ebef}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1319;--card:#171c24;--ink:#f1f3f6;--ink2:#b5bdc9;--mute:#7d8796;--line:#262d38;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--good:#37c08c;--bad:#ee6a66;--warn:#e0a53a;--grid:#232a34;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0f1319;--card:#171c24;--ink:#f1f3f6;--ink2:#b5bdc9;--mute:#7d8796;--line:#262d38;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--good:#37c08c;--bad:#ee6a66;--warn:#e0a53a;--grid:#232a34;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 "IBM Plex Sans",system-ui,sans-serif;margin:0;padding-inline:16px;padding-block:0 32px}
+.wrap{max-width:1280px;margin:0 auto}
+header{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5;padding-block:14px 0;border-bottom:1px solid var(--line)}
+.top{display:flex;gap:12px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
+h1{font:600 20px/1.2 "IBM Plex Sans",sans-serif;margin:0;letter-spacing:-.01em}
+.sub{color:var(--mute);font-size:12px}
+nav{display:flex;gap:4px;margin-top:12px;overflow-x:auto}
+nav button{font:inherit;font-weight:500;background:none;border:0;border-bottom:2px solid transparent;color:var(--ink2);padding:10px 14px;cursor:pointer;white-space:nowrap}
+nav button[aria-selected=true]{color:var(--ink);border-color:var(--s1)}
+nav button:focus-visible,select:focus-visible{outline:2px solid var(--s1);outline-offset:-2px}
+main{padding-top:18px}
+.filters{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.filters label{font-size:12px;color:var(--mute);display:flex;gap:6px;align-items:center}
+select{font:inherit;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.kpi .l{font-size:12px;color:var(--ink2)}
+.kpi .v{font:600 26px/1.15 "IBM Plex Mono",monospace;margin-top:4px;font-variant-numeric:tabular-nums}
+.kpi .v small{font-size:12px;color:var(--mute);font-weight:400;margin-left:3px}
+.kpi .d{font-size:12px;margin-top:2px;color:var(--mute)}
+.up{color:var(--good)}.down{color:var(--bad)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0}
+.card h3{margin:0 0 2px;font-size:14px;font-weight:600}
+.card .n{font-size:12px;color:var(--mute);margin-bottom:8px}
+.cv{position:relative;height:230px}
+.cv.tall{height:280px}
+.cv.xl{height:360px}
+.tbl{overflow-x:auto;max-height:420px;overflow-y:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{position:sticky;top:0;background:var(--card);color:var(--ink2);font-weight:500;white-space:nowrap}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11.5px;border:1px solid var(--line);color:var(--ink2);white-space:nowrap}
+.pill.bad{color:var(--bad);border-color:var(--bad)}.pill.ok{color:var(--good);border-color:var(--good)}
+.note{display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}.note:last-child{border:0}
+.note b{white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:12px;color:var(--ink2)}
+.full{grid-column:1/-1}
+.thead{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px}
+.thead h3{margin:0}
+.q{font:inherit;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 10px;min-width:220px;max-width:100%}
+.q:focus-visible{outline:2px solid var(--s1);outline-offset:-1px}
+th.s{cursor:pointer;user-select:none}th.s:hover{color:var(--ink)}th.s[aria-sort=ascending]::after{content:" ▲";font-size:10px}th.s[aria-sort=descending]::after{content:" ▼";font-size:10px}
+.cnt{font-size:12px;color:var(--mute)}
+#p3 .grid{grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr))}
+.upl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{font:inherit;font-weight:500;background:var(--s1);color:#fff;border:0;border-radius:6px;padding:7px 12px;cursor:pointer}
+.btn.ghost{background:none;color:var(--ink2);border:1px solid var(--line)}
+.btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+#upmsg{font-size:12px;color:var(--mute)}#upmsg.err{color:var(--bad)}#upmsg.ok{color:var(--good)}
+.chk{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--ink2)}
+.range{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--mute)}
+.range input[type=date]{font:inherit;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+.heat{border-collapse:separate;border-spacing:2px;font-size:12.5px;width:100%}
+.heat th{position:static;background:none;padding:4px 6px;text-align:center;white-space:normal;font-size:11.5px}
+.heat th.r{text-align:left;white-space:nowrap}
+.heat td{text-align:center;padding:9px 6px;border:0;border-radius:4px;font-variant-numeric:tabular-nums;min-width:56px}
+.alerts{display:flex;flex-direction:column}
+.alert{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}.alert:last-child{border:0}
+.alert b{font:600 15px "IBM Plex Mono",monospace;white-space:nowrap}
+.alert.bad b{color:var(--bad)}.alert.ok b{color:var(--good)}
+.modal{position:fixed;inset:0;background:rgba(10,12,16,.7);z-index:20;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal .box{background:var(--card);border-radius:10px;max-width:min(1100px,100%);max-height:100%;display:flex;flex-direction:column;gap:10px;padding:14px;min-width:0}
+.modal .pic{overflow:auto;min-height:0;border:1px solid var(--line);border-radius:6px}.modal img{display:block;max-width:none;width:100%}
+.modal .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+[hidden]{display:none!important}
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<div class="wrap">
+<header>
+ <div class="top"><h1>FGWH Dau Giay</h1><div class="upl"><span class="sub" id="asof"></span>
+   <input type="file" id="xfile" accept=".xlsx,.xlsm,.xls" hidden>
+   <label class="chk" title="Gộp dữ liệu file mới vào dữ liệu đã có (theo ngày/container), thay vì thay thế"><input type="checkbox" id="merge" checked> Cộng dồn vào lịch sử</label>
+   <button class="btn" id="upbtn" type="button">Cập nhật file Excel</button>
+   <button class="btn ghost" id="snapbtn" type="button">Chụp ảnh trang</button>
+   <button class="btn ghost" id="clrbtn" type="button">Xóa lịch sử</button>
+</div></div>
+ <div id="upmsg" role="status"></div>
+ <div class="range" id="range" hidden>Lọc theo ngày: Từ <input type="date" id="d_from" aria-label="Từ ngày"> Đến <input type="date" id="d_to" aria-label="Đến ngày"> <button class="btn ghost" id="d_clr" type="button">Bỏ lọc</button> <span id="d_info"></span></div>
+ <nav role="tablist" id="tabs">
+  <button role="tab" data-t="p1" aria-selected="true">Daily Report KPIs</button>
+  <button role="tab" data-t="p2" aria-selected="false">Detention</button>
+  <button role="tab" data-t="p3" aria-selected="false">Customer Complaint</button>
+ </nav>
+</header>
+<main>
+<section id="empty" hidden><div class="card" style="text-align:center;padding:48px 16px"><h3 style="font-size:18px">Chưa có dữ liệu</h3><p class="sub" style="max-width:46ch;margin:8px auto 16px">Bấm "Cập nhật file Excel" rồi chọn file báo cáo (FGDG Daily Report) có đủ 3 sheet Report, Detention và Complaint. Dashboard sẽ tự tính toán cả 3 trang.</p><button class="btn" type="button" id="upbtn2">Chọn file Excel</button></div></section>
+<section id="p1">
+ <div class="kpis" id="k1"></div>
+ <div class="grid">
+  <div class="card"><h3>Tồn kho (On hand) &amp; Received</h3><div class="n">Conts 40'' · đường: On hand, cột: Received from Production</div><div class="cv"><canvas id="c_onhand"></canvas></div></div>
+  <div class="card"><h3>Sử dụng không gian kho</h3><div class="n">% WH space utilization</div><div class="cv"><canvas id="c_space"></canvas></div></div>
+  <div class="card"><h3>Shipped so với Shipment Plan</h3><div class="n">Conts 40''</div><div class="cv"><canvas id="c_ship"></canvas></div></div>
+  <div class="card"><h3>Truck Transfer</h3><div class="n">Số chuyến/ngày</div><div class="cv"><canvas id="c_truck"></canvas></div></div>
+  <div class="card"><h3>Truck Utilization</h3><div class="n">% (vạch = 100%)</div><div class="cv"><canvas id="c_tutil"></canvas></div></div>
+  <div class="card"><h3>Average Loading time</h3><div class="n">Giờ</div><div class="cv"><canvas id="c_load"></canvas></div></div>
+  <div class="card full"><div class="thead"><h3>Bảng KPI theo ngày <span class="cnt" id="t1_c"></span></h3><input class="q" id="t1_q" type="search" placeholder="Tìm kiếm…" aria-label="Tìm trong bảng KPI"></div><div class="tbl" id="t1"></div></div>
+  <div class="card full"><h3>Ghi chú &amp; vấn đề nổi bật</h3><div id="notes"></div></div>
+ </div>
+</section>
+
+<section id="p2" hidden>
+ <div class="filters">
+  <label>Khu vực <select id="f_region"><option value="">Tất cả</option></select></label>
+  <label>Trucker <select id="f_trucker"><option value="">Tất cả</option></select></label>
+  <label>Kho <select id="f_wh"><option value="">Tất cả</option></select></label>
+ </div>
+ <div class="kpis" id="k2"></div>
+ <div class="grid">
+  <div class="card"><h3>Số ca detention theo tháng</h3><div class="n">Số container</div><div class="cv"><canvas id="d_month"></canvas></div></div>
+  <div class="card"><h3>Chi phí detention theo tháng</h3><div class="n">Triệu VND</div><div class="cv"><canvas id="d_cost"></canvas></div></div>
+  <div class="card"><h3>Nhóm nguyên nhân</h3><div class="n">Số ca · "Chưa phân loại" là ca chưa điền nguyên nhân</div><div class="cv tall"><canvas id="d_group"></canvas></div></div>
+  <div class="card"><h3>Chi phí theo nhóm nguyên nhân</h3><div class="n">Triệu VND</div><div class="cv tall"><canvas id="d_groupcost"></canvas></div></div>
+  <div class="card"><h3>Theo Trucker</h3><div class="n">Số ca</div><div class="cv"><canvas id="d_trucker"></canvas></div></div>
+  <div class="card"><h3>Theo vị trí kho (WH Location)</h3><div class="n">Số ca</div><div class="cv"><canvas id="d_wh"></canvas></div></div>
+  <div class="card"><h3>Pareto chi phí theo nguyên nhân</h3><div class="n">Cột: triệu VND · đường: % cộng dồn (nhóm nào chiếm 80% chi phí)</div><div class="cv tall"><canvas id="d_pareto"></canvas></div></div>
+  <div class="card"><h3>Cần chú ý</h3><div class="n">Chất lượng dữ liệu và ca vượt chuẩn</div><div class="alerts" id="alerts"></div><h3 style="margin-top:14px">So sánh tháng</h3><div class="n" id="mom_n"></div><div class="kpis" id="mom" style="margin:0;grid-template-columns:repeat(auto-fill,minmax(130px,1fr))"></div></div>
+  <div class="card full"><h3>Heatmap: kho × nhóm nguyên nhân</h3><div class="n">Số ca. Ca ghi nhiều kho (ví dụ 3A-2B) được tính cho từng kho.</div><div class="tbl" id="heat"></div></div>
+  <div class="card full"><div class="thead"><h3>Chi tiết các ca detention <span class="cnt" id="t2_c"></span></h3><input class="q" id="t2_q" type="search" placeholder="Tìm kiếm…" aria-label="Tìm trong bảng detention"></div><div class="tbl" id="t2"></div></div>
+ </div>
+</section>
+
+<section id="p3" hidden>
+ <div class="filters">
+  <label>Loại <select id="g_type"><option value="">Tất cả</option></select></label>
+  <label>Trách nhiệm <select id="g_owner"><option value="">Tất cả</option></select></label>
+ </div>
+ <div class="kpis" id="k3"></div>
+ <div class="grid">
+  <div class="card"><h3>FGDG Customer Complaint 2026 By Customer</h3><div class="n">Số ca theo Customer Name, chia theo trách nhiệm (Issues)</div><div class="cv xl"><canvas id="m_cust"></canvas></div></div>
+  <div class="card"><h3>FGDG Customer Complaint 2026 By Classification</h3><div class="n">Số ca theo tháng nhận, chia theo trách nhiệm (Issues)</div><div class="cv xl"><canvas id="m_owner"></canvas></div></div>
+  <div class="card"><h3>FGDG Customer Complaint 2026 By Month/Customer</h3><div class="n">Số ca theo tháng nhận, chia theo Customer Name</div><div class="cv xl"><canvas id="m_mcust"></canvas></div></div>
+  <div class="card"><h3>FGDG Customer Complaint 2026 By Month/Issues</h3><div class="n">Số ca theo tháng nhận, chia theo Issue Category</div><div class="cv xl"><canvas id="m_month"></canvas></div></div>
+  <div class="card"><h3>Tỷ lệ khiếu nại liên quan WH theo tháng</h3><div class="n">% số ca có trách nhiệm WH (WH Issues hoặc Prod &amp; WH)</div><div class="cv"><canvas id="m_whpct"></canvas></div></div>
+  <div class="card"><h3>Khiếu nại theo tháng nhận</h3><div class="n">Số ca</div><div class="cv"><canvas id="o_month"></canvas></div></div>
+  <div class="card"><h3>Loại vấn đề</h3><div class="n">Số ca</div><div class="cv"><canvas id="o_cat"></canvas></div></div>
+  <div class="card"><h3>Trách nhiệm (Issues)</h3><div class="n">WH Issues / Not WH issues / Prod &amp; WH</div><div class="cv"><canvas id="o_owner"></canvas></div></div>
+  <div class="card"><h3>Theo khách hàng</h3><div class="n">Customer Name · số ca</div><div class="cv"><canvas id="o_cust"></canvas></div></div>
+  <div class="card full"><div class="thead"><h3>Chi tiết khiếu nại <span class="cnt" id="t3_c"></span></h3><input class="q" id="t3_q" type="search" placeholder="Tìm kiếm…" aria-label="Tìm trong bảng khiếu nại"></div><div class="tbl" id="t3"></div></div>
+ </div>
+</section>
+</main>
+<div class="modal" id="modal" hidden role="dialog" aria-label="Ảnh trang"><div class="box"><div class="bar"><button class="btn" id="m_dl" type="button">Tải ảnh</button><button class="btn ghost" id="m_cp" type="button">Sao chép ảnh</button><button class="btn ghost" id="m_x" type="button">Đóng</button><span class="sub" id="m_msg">Nếu nút tải không chạy, bấm chuột phải vào ảnh để lưu hoặc sao chép.</span></div><div class="pic"><img id="m_img" alt="Ảnh chụp trang"></div></div></div>
+</div>
+<script>
+const EMPTY={daily:[],det:[],cmp:[]};let FULL=EMPTY,DATA=EMPTY;
+const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt=(v,d=0)=>v==null?'–':Number(v).toLocaleString('en-US',{maximumFractionDigits:d,minimumFractionDigits:d});
+const dd=s=>s?s.slice(8,10)+'/'+s.slice(5,7):'';
+const fdate=s=>s?s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4):'';
+const monthKey=m=>m; const monthLabel=m=>'T'+(+m.slice(-2))+'/'+m.slice(1,3).replace('Y','20');
+const sum=a=>a.reduce((x,y)=>x+(y||0),0);
+const count=(a,f)=>{const m={};a.forEach(x=>{const k=f(x)||'Chưa phân loại';m[k]=(m[k]||0)+1});return Object.entries(m).sort((a,b)=>b[1]-a[1])};
+const sumBy=(a,f,g)=>{const m={};a.forEach(x=>{const k=f(x)||'Chưa phân loại';m[k]=(m[k]||0)+(g(x)||0)});return m};
+let charts={};
+function mk(id,cfg){
+  if(charts[id])charts[id].destroy();
+  const ink=css('--ink2'),grid=css('--grid');
+  cfg.options=Object.assign({responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false}},cfg.options||{});
+  const o=cfg.options; o.plugins=Object.assign({legend:{display:false}},o.plugins||{});
+  o.plugins.legend.labels=Object.assign({color:ink,boxWidth:10,boxHeight:10,font:{size:11}},o.plugins.legend.labels||{});
+  const horiz=o.indexAxis==='y';
+  o.scales=o.scales||{};
+  ['x','y'].forEach(a=>{o.scales[a]=Object.assign({ticks:{color:ink,font:{size:11}},grid:{color:grid,drawTicks:false},border:{display:false}},o.scales[a]||{});
+    o.scales[a].ticks=Object.assign({color:ink,font:{size:11}},o.scales[a].ticks||{});
+    o.scales[a].grid=Object.assign({color:grid},o.scales[a].grid||{});});
+  const cat=horiz?'y':'x'; o.scales[cat].grid={display:false};
+  charts[id]=new Chart($('#'+id),cfg);
+}
+const ds=(label,data,c,type,extra={})=>Object.assign({label,data,type,backgroundColor:css(c),borderColor:css(c),borderWidth:type==='line'?2:0,pointRadius:type==='line'?3:0,pointHoverRadius:5,tension:.25,borderRadius:type==='bar'?3:0,maxBarThickness:28},extra);
+function pill(t,cls){return `<span class="pill ${cls||''}">${esc(t)}</span>`}
+
+/* ---------- Sortable + searchable table ---------- */
+const TS={};
+function dtable(id,cols,rows,defSort,defDir){
+  const s=TS[id]||(TS[id]={k:defSort,dir:defDir||1,q:''});
+  s.cols=cols;s.rows=rows;
+  const q=$('#'+id+'_q');
+  if(!s.bound){s.bound=true;q.addEventListener('input',()=>{s.q=q.value;paint(id)});
+    $('#'+id).addEventListener('click',e=>{const th=e.target.closest('th.s');if(!th)return;const k=+th.dataset.k;s.dir=s.k===k?-s.dir:1;s.k=k;paint(id)})}
+  q.value=s.q;paint(id);
+}
+function paint(id){
+  const s=TS[id],cols=s.cols,qq=s.q.trim().toLowerCase();
+  let r=s.rows.map(x=>({x,t:cols.map(c=>c.text?c.text(x):String(c.v(x)??''))}));
+  if(qq)r=r.filter(o=>o.t.join(' ').toLowerCase().includes(qq));
+  if(s.k!=null){const c=cols[s.k];r.sort((a,b)=>{const va=c.v(a.x),vb=c.v(b.x);if(va==null||va==='')return vb==null||vb===''?0:1;if(vb==null||vb==='')return -1;
+    return s.dir*(typeof va==='number'&&typeof vb==='number'?va-vb:String(va).localeCompare(String(vb),'vi',{numeric:true,sensitivity:'base'}))})}
+  $('#'+id+'_c').textContent='('+r.length+(qq?' / '+s.rows.length:'')+' dòng)';
+  $('#'+id).innerHTML=`<table><thead><tr>${cols.map((c,i)=>`<th class="s${c.num?' num':''}" data-k="${i}" aria-sort="${s.k===i?(s.dir>0?'ascending':'descending'):'none'}" title="Bấm để sắp xếp A-Z / Z-A">${c.h}</th>`).join('')}</tr></thead><tbody>${r.length?r.map(o=>'<tr>'+cols.map(c=>`<td${c.num?' class="num"':''}>${c.html?c.html(o.x):esc(c.text?c.text(o.x):c.v(o.x)??'')}</td>`).join('')+'</tr>').join(''):`<tr><td colspan="${cols.length}" class="sub">Không có dòng nào khớp.</td></tr>`}</tbody></table>`;
+}
+
+/* ---------- Page 1 ---------- */
+let D,last,prev,L;
+function kpiTile(l,k,{pct,unit,dec=0,goodUp=true}={}){
+  const v=last[k],p=prev?prev[k]:null; let d='';
+  if(v!=null&&p!=null){const diff=v-p;const s=pct?(diff*100).toFixed(0)+' điểm %':fmt(diff,dec||1);
+    const good=diff===0?null:(diff>0)===goodUp;
+    d=`<span class="${good==null?'':good?'up':'down'}">${diff>0?'▲':diff<0?'▼':'■'} ${diff>0?'+':''}${s}</span> so với ${dd(prev.date)}`}
+  return `<div class="kpi"><div class="l">${l}</div><div class="v">${v==null?'–':pct?fmt(v*100,0)+'%':fmt(v,dec)}<small>${pct?'':unit||''}</small></div><div class="d">${d}</div></div>`}
+function initP1(){
+D=DATA.daily;last=D[D.length-1]||{};prev=D[D.length-2];L=D.map(x=>dd(x.date));
+$('#asof').textContent=D.length?'Dữ liệu đến '+fdate(last.date)+' · cut-off 9:00':'';
+$('#k1').innerHTML=[
+ kpiTile('On hand (tồn kho)','On hand by Volume',{unit:"conts",dec:1,goodUp:false}),
+ kpiTile('Space utilization','WH space utilization',{pct:1,goodUp:false}),
+ kpiTile('Received from Production','Received from Production',{unit:"conts",dec:1}),
+ kpiTile('Shipped','Shipped',{unit:"conts"}),
+ kpiTile('Shipment Plan','Shipment Plan today',{unit:"conts"}),
+ kpiTile('Truck Transfer','Truck Transfer',{unit:'chuyến'}),
+ kpiTile('Truck Utilization','Truck Utilization',{pct:1}),
+ kpiTile('Avg Loading time','Average Loading time',{unit:'giờ',dec:1,goodUp:false}),
+ kpiTile('Detention','Detention',{unit:'ca',goodUp:false}),
+ kpiTile('Nhân sự ca (HC)','Total HCs of Shift Worker',{unit:'người'})
+].join('');
+t1();notes();}
+const col=k=>D.map(x=>x[k]??null);
+const pctAx={ticks:{callback:v=>Math.round(v*100)+'%'}};
+const pctTip={callbacks:{label:c=>c.dataset.label+': '+Math.round(c.parsed.y*100)+'%'}};
+function drawP1(){
+ mk('c_onhand',{data:{labels:L,datasets:[ds('Received',col('Received from Production'),'--s4','bar',{yAxisID:'y1'}),ds('On hand',col('On hand by Volume'),'--s1','line',{yAxisID:'y'})]},options:{plugins:{legend:{display:true}},scales:{y:{position:'left',title:{display:true,text:'On hand',color:css('--mute')},suggestedMin:80},y1:{position:'right',grid:{display:false},suggestedMax:40,title:{display:true,text:'Received',color:css('--mute')}}}}});
+ mk('c_space',{type:'line',data:{labels:L,datasets:[ds('Space utilization',col('WH space utilization'),'--s2','line',{fill:true,backgroundColor:css('--s2')+'22'})]},options:{plugins:{tooltip:pctTip},scales:{y:Object.assign({min:.7,max:1},{ticks:pctAx.ticks})}}});
+ mk('c_ship',{data:{labels:L,datasets:[ds('Shipped',col('Shipped'),'--s1','bar'),ds('Plan',col('Shipment Plan today'),'--s4','line',{borderDash:[5,4]})]},options:{plugins:{legend:{display:true}}}});
+ mk('c_truck',{data:{labels:L,datasets:[ds('Truck Transfer',col('Truck Transfer'),'--s3','bar')]}});
+ mk('c_tutil',{data:{labels:L,datasets:[ds('Utilization',col('Truck Utilization'),'--s1','line'),ds('100%',D.map(()=>1),'--mute','line',{borderDash:[4,4],pointRadius:0,borderWidth:1})]},options:{plugins:{tooltip:pctTip},scales:{y:{min:0,ticks:pctAx.ticks}}}});
+ mk('c_load',{data:{labels:L,datasets:[ds('Avg loading (giờ)',col('Average Loading time'),'--s2','line')]},options:{scales:{y:{min:1.5}}}}); 
+}
+function t1(){const f=(k,d)=>({h:k[0],num:1,v:x=>x[k[1]]??null,text:x=>x[k[1]]==null?'':(k[2]?fmt(x[k[1]]*100)+'%':fmt(x[k[1]],d||0))});
+ dtable('t1',[{h:'Ngày',v:x=>x.date,text:x=>fdate(x.date)},f(['On hand','On hand by Volume'],1),f(['Space','WH space utilization',1]),f(['Received','Received from Production'],1),f(['Shipped','Shipped']),f(['Plan','Shipment Plan today']),f(['Truck trips','Truck Transfer']),f(['Truck util.','Truck Utilization',1]),f(['Load (h)','Average Loading time'],1),f(['Detention','Detention'])],D,0,-1)}
+function notes(){const nts=D.filter(x=>x.comment);
+$('#notes').innerHTML=nts.length?nts.map(x=>`<div class="note"><b>${fdate(x.date)}</b><span>${esc(x.comment)}</span></div>`).join(''):'<div class="sub">Không có ghi chú.</div>';}
+
+/* ---------- Page 2 ---------- */
+let DET,months;
+const uniq=(a,f)=>[...new Set(a.map(f).filter(Boolean))].sort();
+function fillSel(id,vals){const s=$(id);vals.forEach(v=>s.insertAdjacentHTML('beforeend',`<option>${esc(v)}</option>`))}
+function initP2(){DET=DATA.det;[['#f_region','region'],['#f_trucker','trucker'],['#f_wh','wh']].forEach(([s,k])=>{const e=$(s);e.innerHTML='<option value="">Tất cả</option>';fillSel(s,uniq(DET,x=>x[k]))});months=[...new Set(DET.map(x=>x.ym))].sort();}
+const hbar={indexAxis:'y',plugins:{tooltip:{}}};
+function drawP2(){
+ const r=$('#f_region').value,t=$('#f_trucker').value,w=$('#f_wh').value;
+ const A=DET.filter(x=>(!r||x.region===r)&&(!t||x.trucker===t)&&(!w||x.wh===w));
+ const cost=sum(A.map(x=>x.costVND)),usd=sum(A.map(x=>x.costUSD));
+ const hrs=A.map(x=>x.hours).filter(h=>h!=null),avg=hrs.length?sum(hrs)/hrs.length:null;
+ const g=count(A,x=>x.group), tc=count(A,x=>x.trucker);
+ const gm=sumBy(A,x=>x.group,x=>x.costVND);
+ const over4=hrs.filter(h=>h>4).length;
+ $('#k2').innerHTML=[
+  ['Tổng số ca',fmt(A.length),'container'],['Tổng chi phí',fmt(cost/1e6,1),'triệu VND'],['Quy đổi USD','$'+fmt(usd),''],
+  ['Chi phí TB / ca',fmt(A.length?cost/A.length/1e6:0,2),'triệu VND'],['Loading time TB',fmt(avg,1),'giờ'],['Ca loading > 4h',fmt(over4),'/ '+hrs.length+' ca']
+ ].map(([l,v,u])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}<small>${u}</small></div></div>`).join('');
+ const mc=months.map(m=>A.filter(x=>x.ym===m)), ml=months.map(monthLabel);
+ mk('d_month',{data:{labels:ml,datasets:[ds('Số ca',mc.map(a=>a.length),'--s1','bar')]}});
+ mk('d_cost',{data:{labels:ml,datasets:[ds('Triệu VND',mc.map(a=>+(sum(a.map(x=>x.costVND))/1e6).toFixed(1)),'--s2','bar')]}});
+ mk('d_group',{data:{labels:g.map(x=>x[0]),datasets:[ds('Số ca',g.map(x=>x[1]),'--s1','bar')]},options:hbar});
+ const gk=Object.entries(gm).sort((a,b)=>b[1]-a[1]);
+ mk('d_groupcost',{data:{labels:gk.map(x=>x[0]),datasets:[ds('Triệu VND',gk.map(x=>+(x[1]/1e6).toFixed(1)),'--s2','bar')]},options:hbar});
+ mk('d_trucker',{data:{labels:tc.map(x=>x[0]),datasets:[ds('Số ca',tc.map(x=>x[1]),'--s3','bar')]}});
+ const wc=count(A,x=>x.wh);
+ mk('d_wh',{data:{labels:wc.map(x=>x[0]),datasets:[ds('Số ca',wc.map(x=>x[1]),'--s4','bar')]}});
+ const par=Object.entries(gm).sort((a,b)=>b[1]-a[1]);const tot=sum(par.map(x=>x[1]));let cu=0;
+ mk('d_pareto',{data:{labels:par.map(x=>x[0]),datasets:[ds('Triệu VND',par.map(x=>+(x[1]/1e6).toFixed(1)),'--s2','bar',{yAxisID:'y'}),ds('% cộng dồn',par.map(x=>{cu+=x[1];return tot?+(cu/tot*100).toFixed(1):0}),'--s1','line',{yAxisID:'y1'})]},options:{plugins:{legend:{display:true}},scales:{y:{beginAtZero:true},y1:{position:'right',min:0,max:100,grid:{display:false},ticks:{callback:v=>v+'%'}},x:{ticks:{maxRotation:40,autoSkip:false}}}}});
+ const hexA=(h,a)=>{const n=parseInt(h.slice(1),16);return `rgba(${n>>16},${n>>8&255},${n&255},${a.toFixed(2)})`};
+ const whOf=x=>{const v=(x.wh||'').split(/[-/]/).map(s=>s.trim()).filter(Boolean);return v.length?v:['Chưa ghi']};
+ const whs=[...new Set(A.flatMap(whOf))].sort(),grs=g.map(x=>x[0]);
+ const cell=(w,gr)=>A.filter(x=>whOf(x).includes(w)&&(x.group||'Chưa phân loại')===gr).length;
+ const mx=Math.max(1,...whs.flatMap(w=>grs.map(gr=>cell(w,gr))));
+ $('#heat').innerHTML=`<table class="heat"><thead><tr><th></th>${grs.map(x=>`<th>${esc(x)}</th>`).join('')}<th>Tổng</th></tr></thead><tbody>${whs.map(w=>`<tr><th class="r">${esc(w)}</th>${grs.map(gr=>{const v=cell(w,gr);return `<td style="background:${v?hexA(css('--s2'),(12+75*v/mx)/100):'transparent'}">${v||''}</td>`}).join('')}<td><b>${A.filter(x=>whOf(x).includes(w)).length}</b></td></tr>`).join('')}</tbody></table>`;
+ const un=A.filter(x=>!x.group).length,noCost=A.filter(x=>x.costVND==null).length,noAct=A.filter(x=>!x.action).length;
+ const al=(n,txt,bad)=>`<div class="alert ${n&&bad?'bad':'ok'}"><span>${txt}</span><b>${n}</b></div>`;
+ $('#alerts').innerHTML=al(un,'Ca chưa điền nguyên nhân (Chưa phân loại)',1)+al(over4,'Ca loading hơn 4 giờ (trong '+hrs.length+' ca có giờ loading)',1)+al(noAct,'Ca chưa có hành động khắc phục',1)+al(noCost,'Ca thiếu chi phí',1);
+ const mm=months.filter(m=>A.some(x=>x.ym===m)),lm=mm[mm.length-1],pm=mm[mm.length-2],pk=mm.map(m=>[m,A.filter(x=>x.ym===m).length]).sort((a,b)=>b[1]-a[1])[0];
+ const mt=(l,v,p,u,d=0)=>`<div class="kpi"><div class="l">${l}</div><div class="v">${fmt(v,d)}<small>${u}</small></div><div class="d">${p==null?'':`<span class="${v>p?'down':v<p?'up':''}">${v>p?'▲ +':v<p?'▼ ':'■ '}${fmt(v-p,d)}</span> so với ${monthLabel(pm)}`}</div></div>`;
+ if(lm){const c1=A.filter(x=>x.ym===lm),c0=pm?A.filter(x=>x.ym===pm):null;
+  $('#mom_n').textContent='Tháng gần nhất '+monthLabel(lm)+(pm?' so với '+monthLabel(pm):'')+(pk?' · tháng nhiều ca nhất: '+monthLabel(pk[0])+' ('+pk[1]+' ca)':'');
+  $('#mom').innerHTML=mt('Số ca',c1.length,c0?c0.length:null,'ca')+mt('Chi phí',sum(c1.map(x=>x.costVND))/1e6,c0?sum(c0.map(x=>x.costVND))/1e6:null,'triệu',1)}
+ else{$('#mom_n').textContent='';$('#mom').innerHTML=''}
+ dtable('t2',[{h:'Ngày load',v:x=>x.date,text:x=>fdate(x.date)},{h:'Container',v:x=>x.cont},{h:'Trucker',v:x=>x.trucker},{h:'Customer',v:x=>x.customer},{h:'Kho',v:x=>x.wh},{h:'Chi phí (VND)',num:1,v:x=>x.costVND,text:x=>x.costVND==null?'':fmt(x.costVND)},{h:'Load (h)',num:1,v:x=>x.hours,text:x=>x.hours==null?'':fmt(x.hours,1)},{h:'Nguyên nhân',v:x=>x.group||'',html:x=>pill(x.group||'Chưa phân loại'),text:x=>x.group||'Chưa phân loại'},{h:'Chi tiết',v:x=>x.detail},{h:'Hành động chính',v:x=>x.action},{h:'Lý do / ghi chú',v:x=>x.reason}],A,5,-1);
+}
+['#f_region','#f_trucker','#f_wh'].forEach(s=>$(s).addEventListener('change',drawP2));
+
+/* ---------- Page 3 ---------- */
+let CMP;
+function initP3(){CMP=DATA.cmp;[['#g_type','type'],['#g_owner','owner']].forEach(([s,k])=>{$(s).innerHTML='<option value="">Tất cả</option>';fillSel(s,uniq(CMP,x=>x[k]))});}
+function drawP3(){
+ const ty=$('#g_type').value,ow=$('#g_owner').value;
+ const A=CMP.filter(x=>(!ty||x.type===ty)&&(!ow||x.owner===ow));
+ const wh=A.filter(x=>x.owner!=='Not WH issues').length;
+ const short=A.filter(x=>x.cat==='Shortage'||x.cat==='Surplus').length;
+ const lag=A.map(x=>x.received&&x.loading?(new Date(x.received)-new Date(x.loading))/864e5:null).filter(v=>v!=null);
+ $('#k3').innerHTML=[['Tổng khiếu nại',A.length,'ca'],['Liên quan WH',wh,'ca ('+(A.length?Math.round(wh/A.length*100):0)+'%)'],['Thiếu / thừa hàng',short,'ca'],['TB từ load đến nhận khiếu nại',fmt(lag.length?sum(lag)/lag.length:null),'ngày']]
+  .map(([l,v,u])=>`<div class="kpi"><div class="l">${l}</div><div class="v">${v}<small>${u}</small></div></div>`).join('');
+ const ms=[...new Set(CMP.map(x=>x.ym))].sort(), ml=ms;
+ const OWN={'WH Issues':'--s2','Prod & WH Issues':'--s4','Not WH issues':'--s1'};
+ const ownOrder=['WH Issues','Prod & WH Issues','Not WH issues'];
+ const keysOf=f=>count(CMP,f).map(x=>x[0]);
+ const stack=(id,labels,keys,colorOf,inLabel,inKey)=>{
+  const dsets=keys.map((k,i)=>({label:k,data:labels.map(l=>A.filter(x=>inLabel(x)===l&&(inKey(x)||'Chưa phân loại')===k).length),backgroundColor:colorOf(k,i),borderColor:css('--card'),borderWidth:1.5,borderRadius:0,maxBarThickness:36,stack:'s'}));
+  mk(id,{type:'bar',data:{labels,datasets:dsets},options:{plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:10,boxHeight:10,font:{size:11}}},tooltip:{filter:i=>i.parsed.y>0}},scales:{x:{stacked:true,ticks:{maxRotation:60,minRotation:0,autoSkip:false}},y:{stacked:true,beginAtZero:true,ticks:{precision:0}}}}});};
+ const pal=['--s1','--s2','--s3','--s4','#e87ba4','#8a63d2','#17a2b8','#8c6d46','#e34948','#6b7c93','#9ab34a','#d98cd0'].map(c=>c[0]==='#'?c:css(c));
+ const ownerColor=k=>css(OWN[k]||'--mute');
+ const custs=keysOf(x=>x.cname), cats=keysOf(x=>x.cat), cl=[...new Set(CMP.map(x=>x.cname||'Chưa phân loại'))];
+ const custLabels=count(A,x=>x.cname).map(x=>x[0]);
+ stack('m_cust',custLabels,ownOrder,ownerColor,x=>x.cname||'Chưa phân loại',x=>x.owner);
+ stack('m_owner',ms,ownOrder,ownerColor,x=>x.ym,x=>x.owner);
+ const m2=(id,keys,inKey)=>stack(id,ms,keys,(k,i)=>pal[i%pal.length],x=>x.ym,inKey);
+ m2('m_mcust',custs,x=>x.cname);
+ m2('m_month',cats,x=>x.cat);
+ [charts.m_owner,charts.m_mcust,charts.m_month].forEach(c=>{c.data.labels=ml;c.update()});
+ mk('o_month',{data:{labels:ms,datasets:[ds('Số ca',ms.map(m=>A.filter(x=>x.ym===m).length),'--s1','bar')]},options:{scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+ const oc=count(A,x=>x.cat);
+ mk('o_cat',{data:{labels:oc.map(x=>x[0]),datasets:[ds('Số ca',oc.map(x=>x[1]),'--s2','bar')]},options:{indexAxis:'y'}});
+ const oo=count(A,x=>x.owner);
+ mk('o_owner',{data:{labels:oo.map(x=>x[0]),datasets:[ds('Số ca',oo.map(x=>x[1]),'--s3','bar')]}});
+ const ou=count(A,x=>x.cname);
+ mk('o_cust',{data:{labels:ou.map(x=>x[0]),datasets:[ds('Số ca',ou.map(x=>x[1]),'--s4','bar')]},options:{indexAxis:'y'}});
+ const wp=ms.map(m=>{const a=A.filter(x=>x.ym===m);return a.length?+(a.filter(x=>x.owner!=='Not WH issues').length/a.length*100).toFixed(0):null});
+ mk('m_whpct',{data:{labels:ms,datasets:[ds('% liên quan WH',wp,'--s2','line',{spanGaps:true})]},options:{plugins:{tooltip:{callbacks:{afterLabel:c=>{const a=A.filter(x=>x.ym===ms[c.dataIndex]);return a.length+' ca trong tháng'}}}},scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%'}}}}});
+ dtable('t3',[{h:'Ngày nhận',v:x=>x.received,text:x=>fdate(x.received)},{h:'Loại',v:x=>x.type},{h:'Container',v:x=>x.cont},{h:'Trucker',v:x=>x.trucker},{h:'Khách hàng',v:x=>x.cname},{h:'Vấn đề',v:x=>x.cat},{h:'Trách nhiệm',v:x=>x.owner,html:x=>pill(x.owner,x.owner==='Not WH issues'?'ok':'bad'),text:x=>x.owner||''},{h:'Chi tiết',v:x=>x.detail}],A,0,-1);
+}
+['#g_type','#g_owner'].forEach(s=>$(s).addEventListener('change',drawP3));
+
+/* ---------- Tabs ---------- */
+const draw={p1:drawP1,p2:drawP2,p3:drawP3};let cur='p1';
+function show(t){cur=t;const has=FULL.daily.length>0;$('#empty').hidden=has;$('#tabs').hidden=!has;['p1','p2','p3'].forEach(p=>{$('#'+p).hidden=!has||p!==t});if(!has)return;document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===t));
+ try{history.replaceState(null,'','#'+t)}catch(e){} draw[t]()}
+document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>show(b.dataset.t)));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>draw[cur]());
+new MutationObserver(()=>draw[cur]()).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---------- Upload Excel ---------- */
+const msg=(t,c)=>{const m=$('#upmsg');m.textContent=t;m.className=c||''};
+const iso=v=>{if(v==null||v==='')return null;if(v instanceof Date)return isNaN(v)?null:v.toISOString().slice(0,10);
+  if(typeof v==='number'){const d=new Date(Math.round((v-25569)*864e5));return d.getUTCFullYear()>2000?d.toISOString().slice(0,10):null}
+  const d=new Date(v);return isNaN(d)?null:d.toISOString().slice(0,10)};
+const num=v=>{if(v==null||v==='')return null;const n=typeof v==='number'?v:parseFloat(String(v).replace(/,/g,''));return isNaN(n)?null:n};
+const str=v=>v==null||v===''?null:String(v).trim();
+function sheetRows(wb,name){const k=wb.SheetNames.find(n=>n.trim().toLowerCase()===name.toLowerCase());if(!k)throw new Error('Thiếu sheet "'+name+'"');return XLSX.utils.sheet_to_json(wb.Sheets[k],{header:1,raw:true,defval:null})}
+function parseWb(wb){
+  const R=sheetRows(wb,'Report'),hi=R.findIndex(r=>r&&r.some(c=>String(c).trim()==='KPI/Key Value'));
+  if(hi<0)throw new Error('Sheet Report không có cột "KPI/Key Value"');
+  const h=R[hi].map(c=>str(c)),ci=n=>h.indexOf(n),map={};
+  for(const r of R.slice(hi+1)){const d=iso(r[ci('Date')]),k=str(r[ci('KPI/Key Value')]);if(!d||!k)continue;
+    const e=map[d]||(map[d]={date:d}),v=num(r[ci('Value')]),c=str(r[ci('Comments')]);
+    if(v!=null&&!/Highlight|Higlight|^Comments$/.test(k))e[k]=v;if(c)e.comment=c}
+  const daily=Object.values(map).filter(e=>Object.keys(e).filter(k=>k!=='date'&&k!=='comment').length>0).sort((a,b)=>a.date.localeCompare(b.date));
+  const Dn=sheetRows(wb,'Detention'),dh0=Dn.findIndex(r=>r&&r.map(c=>str(c)).includes('Container No.'));
+  if(dh0<0)throw new Error('Sheet Detention không có cột "Container No."');
+  const dh=Dn[dh0].map(c=>{const s=str(c);return s&&s.replace(/\s+/g,' ')}),g=n=>dh.indexOf(n),g2=n=>dh.lastIndexOf(n);
+  const det=Dn.slice(dh0+1).filter(r=>str(r[g('Container No.')])).map(r=>({ym:str(r[g('Y/M')]),date:iso(r[g('Loading Date/Date')]),cont:str(r[g('Container No.')]),trucker:str(r[g('Trucker')]),customer:str(r[g('Customer')]),factory:str(r[g('Factory')]),region:str(r[g('US / ROW')]),category:str(r[g('Issues Category')]),costVND:num(r[g('Detention cost')]),costUSD:num(r[g('Detention cost By Person $')]),wh:str(r[g('WH Location')]),pic:str(r[g('PIC 1')]),hours:num(r[g('Actual Loading time (hours)')]),detail:str(r[g('Issues details')]),group:str(r[g2('Issues Category')]),root:str(r[g('Root cause Category')]),action:str(r[g('Main Actions Category')]),reason:str(r[g('Comment Reason')])}));
+  const Cn=sheetRows(wb,'Complaint'),ch0=Cn.findIndex(r=>r&&r.map(c=>str(c)).includes('Container No.'));
+  if(ch0<0)throw new Error('Sheet Complaint không có cột "Container No."');
+  const chh=Cn[ch0].slice(0,16).map(c=>str(c)),c=n=>chh.indexOf(n);
+  const cmp=Cn.slice(ch0+1).filter(r=>str(r[c('Container No.')])).map(r=>({ym:str(r[c('Received Month')]),type:str(r[c('Issues Category')]),received:iso(r[c('Reived Date')]),loading:iso(r[c('Loading Date/Date')]),cont:str(r[c('Container No.')]),trucker:str(r[c('Trucker')]),customer:str(r[c('Customer')]),cname:str(r[c('Customer Name')]),model:str(r[c('Model')]),dest:str(r[c('Destination')]),owner:str(r[c('Issues')]),cat:str(r[c('Issue Category')]),detail:str(r[c('Issues details')])}));
+  if(!daily.length)throw new Error('Không đọc được dòng KPI nào trong sheet Report');
+  return {daily,det,cmp};
+}
+const keyDet=x=>x.cont+'|'+x.date+'|'+(x.detail||''),keyCmp=x=>x.cont+'|'+x.received+'|'+(x.cat||''),keyDay=x=>x.date;
+const mergeBy=(old,nw,k)=>{const m=new Map(old.map(x=>[k(x),x]));nw.forEach(x=>m.set(k(x),x));return [...m.values()]};
+const mergeData=(o,n)=>({daily:mergeBy(o.daily,n.daily,keyDay).sort((a,b)=>a.date.localeCompare(b.date)),det:mergeBy(o.det,n.det,keyDet),cmp:mergeBy(o.cmp,n.cmp,keyCmp)});
+function inR(d,f,t){return !d||((!f||d>=f)&&(!t||d<=t))}
+function refilter(){
+  const f=$('#d_from').value,t=$('#d_to').value;
+  DATA={daily:FULL.daily.filter(x=>inR(x.date,f,t)),det:FULL.det.filter(x=>inR(x.date,f,t)),cmp:FULL.cmp.filter(x=>inR(x.received,f,t))};
+  $('#d_info').textContent=(f||t)?'Đang lọc: '+DATA.daily.length+' ngày KPI, '+DATA.det.length+' ca detention, '+DATA.cmp.length+' khiếu nại':'';
+  $('#range').hidden=FULL.daily.length===0;
+  if(FULL.daily.length){initP1();initP2();initP3()}show(cur)}
+function setFull(full,label){FULL=full;
+  const all=[...full.daily.map(x=>x.date),...full.det.map(x=>x.date),...full.cmp.map(x=>x.received)].filter(Boolean).sort();
+  ['#d_from','#d_to'].forEach(s=>{$(s).min=all[0]||'';$(s).max=all[all.length-1]||''});
+  refilter();
+  msg(label?label+': tổng '+full.daily.length+' ngày KPI, '+full.det.length+' ca detention, '+full.cmp.length+' khiếu nại':'','ok')}
+['#d_from','#d_to'].forEach(s=>$(s).addEventListener('change',refilter));
+$('#d_clr').addEventListener('click',()=>{$('#d_from').value='';$('#d_to').value='';refilter()});
+$('#clrbtn').addEventListener('click',()=>{try{localStorage.removeItem('fgdg_data')}catch(_){}setFull(EMPTY,'');$('#d_from').value='';$('#d_to').value='';msg('Đã xóa lịch sử đã lưu trên trình duyệt này.','ok')});
+/* snapshot */
+$('#snapbtn').addEventListener('click',async()=>{
+  if(typeof html2canvas==='undefined'){msg('Chưa tải được thư viện chụp ảnh, kiểm tra kết nối mạng.','err');return}
+  if(!FULL.daily.length){msg('Chưa có dữ liệu để chụp.','err');return}
+  msg('Đang chụp ảnh…');
+  try{const el=document.querySelector('#p1:not([hidden]),#p2:not([hidden]),#p3:not([hidden])');
+    const cv=await html2canvas(el,{backgroundColor:css('--bg'),scale:2,useCORS:true,windowWidth:Math.max(1100,document.documentElement.clientWidth)});
+    $('#m_img').src=cv.toDataURL('image/png');$('#modal').hidden=false;msg('','');$('#modal').dataset.name='FGWH-'+cur+'-'+new Date().toISOString().slice(0,10)+'.png'}
+  catch(e){msg('Không chụp được ảnh: '+e.message,'err')}});
+$('#m_x').addEventListener('click',()=>{$('#modal').hidden=true});
+$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')$('#modal').hidden=true});
+$('#m_dl').addEventListener('click',()=>{const a=document.createElement('a');a.href=$('#m_img').src;a.download=$('#modal').dataset.name||'dashboard.png';document.body.appendChild(a);a.click();a.remove()});
+$('#m_cp').addEventListener('click',async()=>{const m=$('#m_msg');try{const b=await (await fetch($('#m_img').src)).blob();await navigator.clipboard.write([new ClipboardItem({'image/png':b})]);m.textContent='Đã sao chép ảnh.'}catch(_){m.textContent='Không sao chép được tự động, bấm chuột phải vào ảnh để sao chép.'}});
+$('#upbtn').addEventListener('click',()=>$('#xfile').click());
+$('#upbtn2').addEventListener('click',()=>$('#xfile').click());
+$('#xfile').addEventListener('change',async e=>{
+  const f=e.target.files[0];if(!f)return;msg('Đang đọc '+f.name+'…');
+  try{if(typeof XLSX==='undefined')throw new Error('Chưa tải được thư viện đọc Excel, kiểm tra kết nối mạng.');
+    const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});const dt=parseWb(wb),merged=$('#merge').checked&&FULL.daily.length?mergeData(FULL,dt):dt;setFull(merged,'Đã '+($('#merge').checked&&FULL!==merged&&merged!==dt?'cộng dồn':'cập nhật')+' từ '+f.name);try{localStorage.setItem('fgdg_data',JSON.stringify({name:f.name,dt:merged}))}catch(_){}}
+  catch(err){msg('Không cập nhật được: '+err.message,'err')}
+  e.target.value=''});
+try{const s=JSON.parse(localStorage.getItem('fgdg_data')||'null');if(s&&s.dt&&s.dt.daily&&s.dt.daily.length){setFull(s.dt,'');msg('Đang hiển thị dữ liệu từ '+s.name+' (lần upload trước)','ok')}}catch(_){}
+const h=location.hash.slice(1);show(draw[h]?h:'p1');
+</script>
