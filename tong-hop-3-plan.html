@@ -383,7 +383,9 @@
     });
     return groups;
   };
-  var phGroupBodyHtml = function(item, po, qty, cbm, locs, uidPrefix, khoMeta){
+  var phGroupBodyHtml = function(item, po, qty, cbm, locs, uidPrefix, khoMeta, ebPo){
+    // Hiện kèm End Buyer PO: "4500307323 (52155219)"
+    var poLabel = po ? (ebPo && ebPo !== po ? po + ' (' + ebPo + ')' : po) : '—';
     var groups = phKhoGroups(locs, khoMeta.khoLabels);
     var totalCols = 4 + khoMeta.khoLabels.length;
     var khoTds = khoMeta.khoLabels.map(function(label, i){
@@ -399,9 +401,9 @@
       if(!g.qty) return '';
       var detailId = uidPrefix + '-' + i;
       var body = g.locs.map(function(l){ return '<tr><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
-      return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(po || '—') + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button><button class="ph-shot-btn" data-share="1" type="button" title="Chia sẻ ảnh bảng này sang Zalo/Telegram...">📤 Chia sẻ</button></div><div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></div></td></tr>';
+      return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(poLabel) + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button><button class="ph-shot-btn" data-share="1" type="button" title="Chia sẻ ảnh bảng này sang Zalo/Telegram...">📤 Chia sẻ</button></div><div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></div></td></tr>';
     }).join('');
-    return '<tr><td><span class="ph-td-label">Item No.</span>' + phEsc(item) + '</td><td><span class="ph-td-label">Cust PO</span>' + phEsc(po || '—') + '</td><td class="ph-num"><span class="ph-td-label">SL Plan</span>' + phFmt(qty) + '</td><td class="ph-num"><span class="ph-td-label">CBM</span>' + phFmtDec(cbm, 2) + '</td>' + khoTds + '</tr>' + detailRows;
+    return '<tr><td><span class="ph-td-label">Item No.</span>' + phEsc(item) + '</td><td><span class="ph-td-label">Cust PO</span>' + phEsc(poLabel) + '</td><td class="ph-num"><span class="ph-td-label">SL Plan</span>' + phFmt(qty) + '</td><td class="ph-num"><span class="ph-td-label">CBM</span>' + phFmtDec(cbm, 2) + '</td>' + khoTds + '</tr>' + detailRows;
   };
 
   var phBuildContainers = function(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx, manualKho){
@@ -434,7 +436,8 @@
         if(r.invoice && entry.invoices.indexOf(r.invoice) === -1) entry.invoices.push(r.invoice);
         if(r.csr && entry.csrs.indexOf(r.csr) === -1) entry.csrs.push(r.csr);
         var itemPoKey = r.item + '||' + (r.custPo || '');
-        if(!entry.items[itemPoKey]) entry.items[itemPoKey] = { item: r.item, po: r.custPo || '', qty: 0, cbm: 0 };
+        if(!entry.items[itemPoKey]) entry.items[itemPoKey] = { item: r.item, po: r.custPo || '', ebPo: '', qty: 0, cbm: 0 };
+        if(!entry.items[itemPoKey].ebPo && r.endBuyerPo) entry.items[itemPoKey].ebPo = String(r.endBuyerPo).trim();
         entry.items[itemPoKey].qty += planQty;
         entry.items[itemPoKey].cbm += (parseFloat(r.cbm) || 0);
       });
@@ -455,7 +458,7 @@
 
       var items = Object.keys(entry.items).map(function(k){
         var it = entry.items[k];
-        return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, locs: phLocatorDetail(invIdx, it.item, it.po) };
+        return { item: it.item, po: it.po, ebPo: it.ebPo, qty: it.qty, cbm: it.cbm, locs: phLocatorDetail(invIdx, it.item, it.po) };
       });
 
       var manualKhoVal = manualKho && manualKho[instanceKey];
@@ -493,7 +496,7 @@
     var khoTh = khoMeta.khoLabels.map(function(label){ return '<th style="background:' + khoMeta.khoColors[label] + '; text-align:right;">' + phEsc(label) + '</th>'; }).join('');
     var itemsHtml = row.items.map(function(it){
       var uidPrefix = 'k' + (uidState.n++);
-      return '<tbody class="ph-item-group">' + phGroupBodyHtml(it.item, it.po, it.qty, it.cbm, it.locs, uidPrefix, khoMeta) + '</tbody>';
+      return '<tbody class="ph-item-group">' + phGroupBodyHtml(it.item, it.po, it.qty, it.cbm, it.locs, uidPrefix, khoMeta, it.ebPo) + '</tbody>';
     }).join('');
     return '<tr class="ph-cont-row" data-target="' + detailId + '" style="background:' + rowBg + '; border-color:' + cardBorder + ';">' +
         '<td class="ph-arrow-cell" style="border-left:4px solid ' + contColor + ';"><span class="ph-arrow">▸</span></td>' +
