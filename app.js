@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.63';
+const APP_VERSION = 'v3.64';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -2865,6 +2865,10 @@ function aggregatePlanRows(rows, planType){
   const colWH          = findCol(headers, ['wh', 'warehouse', 'kho xuat']);
   const colLoadDate    = findCol(headers, ['loading date', 'ngay xuat', 'etd', 'ship date', 'ngay', 'date']);
   const colCustomerPO  = findCol(headers, ['customer po', 'cust po', 'endbuyer po', 'endbyer po', 'po']);
+  // End Buyer PO (cột "ENDBUYER PO" của Plan) — chỉ để HIỂN THỊ kèm Cust PO dạng "4500307323 (52155219)"
+  // ở Excel/3P, KHÔNG dùng để so tồn kho. Bỏ qua nếu trùng đúng cột đã lấy làm Customer PO.
+  let colEndBuyerPO    = findCol(headers, ['endbuyer po', 'end buyer po', 'endbyer po', 'end-buyer po']);
+  if(colEndBuyerPO === colCustomerPO) colEndBuyerPO = -1;
   const colPlanTime    = findCol(headers, ['plan time', 'gio load', 'thoi gian', 'time']);
   const colCTN         = findCol(headers, ['ctn', 'carton', 'qty (ctr)', 'ctr', 'thung can', 'thung']);
   const colCBM         = findCol(headers, ['cbm']);
@@ -2872,7 +2876,7 @@ function aggregatePlanRows(rows, planType){
   const colInvoice     = findCol(headers, ['invoice#', 'invoice', 'inv']);
   const colCSR         = planType === 'Row' ? findCol(headers, ['ui']) : findCol(headers, ['csr#', 'csr', 'cr']);
 
-  const usedCols = new Set([colItem, colQty, colContainer, colDC, colWH, colLoadDate, colCustomerPO, colPlanTime, colCTN, colCBM, colType, colInvoice, colCSR].filter(i => i !== -1));
+  const usedCols = new Set([colItem, colQty, colContainer, colDC, colWH, colLoadDate, colCustomerPO, colEndBuyerPO, colPlanTime, colCTN, colCBM, colType, colInvoice, colCSR].filter(i => i !== -1));
   const maxKnownIdx = usedCols.size ? Math.max(...usedCols) : -1;
   const locationCols = headers
     .map((h, i) => ({ idx: i, name: (h || '').toString().trim() }))
@@ -2938,6 +2942,7 @@ function aggregatePlanRows(rows, planType){
       planTime: colPlanTime !== -1 ? formatTimeCell(r[colPlanTime]) : '',
       item: normalizeItemCode(r[colItem]),
       custPo: colCustomerPO !== -1 && r[colCustomerPO] != null ? String(r[colCustomerPO]).trim() : '',
+      endBuyerPo: colEndBuyerPO !== -1 && r[colEndBuyerPO] != null ? String(r[colEndBuyerPO]).trim() : '',
       qty,
       ctn: colCTN !== -1 ? r[colCTN] : null,
       cbm: colCBM !== -1 ? r[colCBM] : null,
@@ -4911,7 +4916,7 @@ function buildPlanEditRowCellsHtml(r, locCols){
     <td><input type="text" class="plan-edit-input plan-edit-loaddate" value="${escAttr(loadDateStr)}" placeholder="dd/mm/yyyy"></td>
     <td><input type="text" class="plan-edit-input plan-edit-plantime" value="${escAttr(r.planTime || '')}" placeholder="hh:mm"></td>
     <td><input type="text" class="plan-edit-input plan-edit-item" value="${escAttr(r.item || '')}" placeholder="Item No."></td>
-    <td><input type="text" class="plan-edit-input plan-edit-custpo" value="${escAttr(r.custPo || '')}"></td>
+    <td><input type="text" class="plan-edit-input plan-edit-custpo" value="${escAttr(r.custPo || '')}" data-end-buyer-po="${escAttr(r.endBuyerPo || '')}"></td>
     <td><input type="number" class="plan-edit-input plan-edit-qty" value="${r.qty === null || r.qty === undefined ? '' : r.qty}"></td>
     <td><input type="number" class="plan-edit-input plan-edit-ctn" value="${r.ctn === null || r.ctn === undefined ? '' : r.ctn}"></td>
     <td><input type="number" step="0.01" class="plan-edit-input plan-edit-cbm" value="${r.cbm === null || r.cbm === undefined ? '' : r.cbm}"></td>${locCells}
@@ -4942,6 +4947,7 @@ function collectPlanEditRows(cardEl){
       planTime: val('.plan-edit-plantime'),
       item: normalizeItemCode(itemVal),
       custPo: val('.plan-edit-custpo'),
+      endBuyerPo: tr.querySelector('.plan-edit-custpo')?.dataset.endBuyerPo || '',
       qty: parseNumber(val('.plan-edit-qty')),
       ctn: ctnVal === '' ? null : parseNumber(ctnVal),
       cbm: cbmVal === '' ? null : parseNumber(cbmVal),
@@ -5469,6 +5475,24 @@ function renderCombinedPlanPanel(){
 // trường hợp còn lại (Pick xong tự động theo GI hoặc đánh dấu tay) — khiến các container đó vẫn bị
 // xuất ra trong Excel dù trên giao diện đã hiện rõ "Pick xong". Gộp theo groupKey (type|cNo|loadDate|
 // planTime) để lọc trực tiếp danh sách container của từng mã.
+// Cust PO -> End Buyer PO (lấy từ cột "ENDBUYER PO" của các Plan đã tải). Dùng để hiện "CustPO (EndBuyerPO)".
+function buildEndBuyerPoMap(){
+  const map = new Map();
+  PLAN_TYPES.forEach(type => {
+    ((planData[type] && planData[type].detailRows) || []).forEach(r => {
+      const po = String(r.custPo || '').trim().toLowerCase();
+      const eb = String(r.endBuyerPo || '').trim();
+      if(po && eb && !map.has(po)) map.set(po, eb);
+    });
+  });
+  return map;
+}
+function poWithEndBuyer(custpo, map){
+  const po = String(custpo || '').trim();
+  const eb = po && map ? map.get(po.toLowerCase()) : '';
+  return eb && eb !== po ? `${po} (${eb})` : po;
+}
+
 function computeLoadedDoneContainerKeys(){
   const keys = new Set();
   contPickAllRows.forEach(row => {
@@ -5587,6 +5611,7 @@ async function exportCombinedPlanToExcel(mode){
   // MỌI container đều đã Load Xong thì bỏ HẲN (không rơi vào nhóm "không có container" — 2 trường hợp
   // khác nghĩa nhau: 1 bên là chưa gán container, 1 bên là container đã xong việc).
   const exportEntries = [];
+  const endBuyerMap = buildEndBuyerPoMap();
   combined.rows.forEach(r => {
     const allContainers = buildItemContainerList(r.item, r.anyPO ? '' : r.custpo);
     const containers = allContainers.filter(c => !loadedDoneContainerKeys.has(`${c.type}|${c.cNo}|${c.loadDate}|${c.planTime}`));
@@ -5612,7 +5637,7 @@ async function exportCombinedPlanToExcel(mode){
     const kho3A = computeKho3AQty(r);
     const itemValues = [
       r.item,
-      r.anyPO ? 'Bất kỳ PO' : r.custpo + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
+      r.anyPO ? 'Bất kỳ PO' : poWithEndBuyer(r.custpo, endBuyerMap) + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
     ];
     (r.khoQtys || []).forEach((qty, i) => {
       if(khoHeaderLabels[i] === '3A') itemValues.push(kho3A.treQty, kho3A.floorQty, kho3A.rackQty);
