@@ -96,6 +96,8 @@
   .ph-locs th,.ph-locs td{padding:6px 10px; border-top:1px solid #eef0f3; text-align:left; white-space:nowrap;}
   .ph-locs th{background:#fafbfc; color:#8a97ac; font-weight:600; font-size:10.5px; text-transform:uppercase;}
   .ph-locs td.ph-num{text-align:right; font-family:ui-monospace,monospace; padding-right:14px;}
+  .ph-locs tr.ph-loc-picked td{color:#9aa3b2; background:#f6f7f9;}
+  .ph-picked-tag{display:inline-block; margin-left:6px; padding:1px 6px; border-radius:6px; font-size:10.5px; font-weight:600; color:#0f8f76; background:#e3f5f0;}
   .ph-empty-note{color:#8a97ac; font-size:13px; padding:20px 0;}
   .ph-td-label{display:none;}
 
@@ -293,19 +295,20 @@
     var parts = crs.map(function(cr){ var inv = phCrInvMap[cr]; return inv && inv.length ? cr + ' - ' + inv.join(', ') : cr; });
     return base + ' (' + parts.join(' | ') + ')';
   };
-  // excludePicked: bỏ tồn ở locator "...Loading" có mã CR (hàng ĐÃ PICK cho 1 container) — khớp cách tính
-  // tồn của TN5 Dashboard (v3.71).
-  var phLocatorDetail = function(idx, item, po, excludePicked){
+  // markPicked: tồn ở locator "...Loading" có mã CR = hàng ĐÃ PICK cho 1 container -> gắn cờ picked:true.
+  // Dòng picked vẫn HIỆN trong bảng chi tiết nhưng KHÔNG cộng vào tồn — khớp cách tính của TN5 (v3.71).
+  var phIsPickedLoc = function(l){ return phIsLoadingLocator(l.locator) && phLoadingCrCodes(l.ref).length > 0; };
+  var phLocatorDetail = function(idx, item, po, markPicked){
     var entries = idx[String(item || '').toLowerCase()] || [];
     var poLower = po ? String(po).trim().toLowerCase() : '';
     var rows = [];
     entries.forEach(function(e){
       if(poLower && String(e.custpo || '').trim().toLowerCase() !== poLower) return;
       if(/prod/i.test(e.locator || '')) return;
-      if(excludePicked && phIsLoadingLocator(e.locator) && phLoadingCrCodes(e.ref).length) return;
+      if(markPicked && phIsPickedLoc(e)){ rows.push(Object.assign({}, e, { picked: true })); return; }
       rows.push(e);
     });
-    rows.sort(function(a,b){ return (b.qty||0) - (a.qty||0); });
+    rows.sort(function(a,b){ return ((a.picked ? 1 : 0) - (b.picked ? 1 : 0)) || ((b.qty||0) - (a.qty||0)); });
     return rows;
   };
   var phBuildPickingIndex = function(khoDetail){
@@ -335,7 +338,7 @@
   };
   var phTopKho = function(items){
     var qtyByKho = {};
-    items.forEach(function(it){ (it.locs || []).forEach(function(l){ qtyByKho[l.kho] = (qtyByKho[l.kho] || 0) + (l.qty || 0); }); });
+    items.forEach(function(it){ (it.locs || []).forEach(function(l){ if(l.picked) return; qtyByKho[l.kho] = (qtyByKho[l.kho] || 0) + (l.qty || 0); }); });
     var topKho = null, topQty = 0;
     Object.keys(qtyByKho).forEach(function(k){ if(qtyByKho[k] > topQty){ topKho = k; topQty = qtyByKho[k]; } });
     return topKho;
@@ -381,7 +384,7 @@
     locs.forEach(function(l){
       var key = phEntryKhoLabel(l);
       if(!(key in groups)) return;
-      groups[key].qty += (l.qty || 0);
+      if(!l.picked) groups[key].qty += (l.qty || 0);
       groups[key].locs.push(l);
     });
     return groups;
@@ -395,15 +398,18 @@
       var g = groups[label];
       var bg = 'background:' + khoMeta.khoColors[label] + ';';
       var lbl = '<span class="ph-td-label">' + phEsc(label) + '</span>';
-      if(!g.qty) return '<td class="ph-num" style="' + bg + '">' + lbl + '0</td>';
+      if(!g.locs.length) return '<td class="ph-num" style="' + bg + '">' + lbl + '0</td>';
       var detailId = uidPrefix + '-' + i;
       return '<td class="ph-num ph-kho-cell" data-target="' + detailId + '" style="' + bg + '" title="Bấm để xem Locator/OQC/SL tồn">' + lbl + phFmt(g.qty) + '</td>';
     }).join('');
     var detailRows = khoMeta.khoLabels.map(function(label, i){
       var g = groups[label];
-      if(!g.qty) return '';
+      if(!g.locs.length) return '';
       var detailId = uidPrefix + '-' + i;
-      var body = g.locs.map(function(l){ return '<tr><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
+      var body = g.locs.map(function(l){
+        if(l.picked) return '<tr class="ph-loc-picked" title="Đã scan pick cho container — không tính vào tồn"><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + ' <span class="ph-picked-tag">✓ Đã pick</span></td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">(' + phFmt(l.qty) + ')</td></tr>';
+        return '<tr><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>';
+      }).join('');
       return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(poLabel) + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button><button class="ph-shot-btn" data-share="1" type="button" title="Chia sẻ ảnh bảng này sang Zalo/Telegram...">📤 Chia sẻ</button></div><div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></div></td></tr>';
     }).join('');
     return '<tr><td><span class="ph-td-label">Item No.</span>' + phEsc(item) + '</td><td><span class="ph-td-label">Cust PO</span>' + phEsc(poLabel) + '</td><td class="ph-num"><span class="ph-td-label">SL Plan</span>' + phFmt(qty) + '</td><td class="ph-num"><span class="ph-td-label">CBM</span>' + phFmtDec(cbm, 2) + '</td>' + khoTds + '</tr>' + detailRows;
