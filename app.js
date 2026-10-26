@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.77';
+const APP_VERSION = 'v3.78';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4298,22 +4298,28 @@ function renderContainerPickingOverview(){
    ============================================================ */
 const CONT_KPI_TITLES = { all: 'Tổng container', notStarted: 'Chưa pick', inProgress: 'Đang pick', done: 'Pick xong' };
 let contKpiActive = 'all';
-// CR -> danh sách người pick (User Name ở các dòng Picking của file Transaction có mã CR đó trong Reference).
+// CR -> danh sách người pick, đọc thẳng TOÀN BỘ dòng của file Transaction (txState.records) có mã CR trong
+// Reference. Ưu tiên người scan bằng Menu Pick(...)/Pick Order (kể cả nhân sự đánh dấu SHIP — bảng thống kê
+// Pick cont loại họ ra, nhưng ở đây cần biết AI đã scan cont này); CR không có dòng Pick nào thì lấy người
+// của MỌI dòng khác có CR đó (VD scan chuyển ra Loading bằng menu khác).
 function contKpiPickerMap(){
-  const map = new Map();
-  ((typeof txState !== 'undefined' && txState && txState.picking) || []).forEach(r => {
-    if(!r.user) return;
-    (r.contCodes || []).forEach(c => {
-      const cr = String(c || '').toUpperCase();
-      if(!cr) return;
-      if(!map.has(cr)) map.set(cr, new Set());
-      map.get(cr).add(r.user);
-    });
+  const pick = new Map(), other = new Map();
+  const add = (m, cr, u) => { if(!m.has(cr)) m.set(cr, new Set()); m.get(cr).add(u); };
+  ((typeof txState !== 'undefined' && txState && txState.records) || []).forEach(r => {
+    const user = String(r.user || '').trim();
+    if(!user) return;
+    const crs = String(r.reference || '').match(/CR\d+/gi);
+    if(!crs) return;
+    const menu = String(r.menuName || '').toLowerCase();
+    const isPick = menu.startsWith('pick(') || menu === 'pick order';
+    crs.forEach(c => add(isPick ? pick : other, c.toUpperCase(), user));
   });
-  return map;
+  other.forEach((users, cr) => { if(!pick.has(cr)) pick.set(cr, users); });
+  return pick;
 }
 function contKpiRows(kind){
   const pickerMap = contKpiPickerMap();
+  const txHasRecords = !!(typeof txState !== 'undefined' && txState && txState.records && txState.records.length);
   return (contPickAllRows || [])
     .filter(r => kind === 'all' ? true
       : kind === 'done' ? (r.status === 'done' || r.status === 'manualDone')
@@ -4323,7 +4329,7 @@ function contKpiRows(kind){
       const pickers = new Set();
       (String(r.csr || '').match(/CR\d+/gi) || []).forEach(cr => (pickerMap.get(cr.toUpperCase()) || []).forEach(u => pickers.add(u)));
       return {
-        pickers: [...pickers].sort().join(', ') || '—',
+        pickers: [...pickers].sort().join(', ') || (txHasRecords ? 'Không có trong file Transaction' : 'Chưa tải file Transaction'),
         type: r.type, cNo: r.cNo, loadDate: r.loadDate, planTime: r.planTime, invoice: r.invoice, csr: r.csr,
         kho: r.topKho ? String(r.topKho).replace('Kho ', '') : '—', planQty: r.planQty || 0, picked,
         pct: Math.round((r.pct || 0) * 100) / 100, statusLabel: CONT_PICK_STATUS_LABEL[r.status] || r.status, status: r.status,
