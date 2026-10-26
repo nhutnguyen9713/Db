@@ -1860,3 +1860,6 @@
     88%{opacity:1; transform:translate(-50%,0);}
     100%{opacity:0; transform:translate(-50%,-12px);}
   }
+
+  .cont-kpi-tile{cursor:pointer; transition:filter .15s;}
+  .cont-kpi-tile:hover{filter:brightness(0.96);}
