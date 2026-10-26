@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.78';
+const APP_VERSION = 'v3.79';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4329,7 +4329,9 @@ function contKpiRows(kind){
       const pickers = new Set();
       (String(r.csr || '').match(/CR\d+/gi) || []).forEach(cr => (pickerMap.get(cr.toUpperCase()) || []).forEach(u => pickers.add(u)));
       return {
-        pickers: [...pickers].sort().join(', ') || (txHasRecords ? 'Không có trong file Transaction' : 'Chưa tải file Transaction'),
+        // CR không có trong file Transaction đang tải: đã có SL pick -> pick từ ca trước (ngoài khung giờ của file);
+        // chưa pick gì -> "—".
+        pickers: [...pickers].sort().join(', ') || (!txHasRecords ? 'Chưa tải file Transaction' : (picked > 0 || r.status === 'done' || r.status === 'manualDone') ? 'Pick Từ Ca Trước' : '—'),
         type: r.type, cNo: r.cNo, loadDate: r.loadDate, planTime: r.planTime, invoice: r.invoice, csr: r.csr,
         kho: r.topKho ? String(r.topKho).replace('Kho ', '') : '—', planQty: r.planQty || 0, picked,
         pct: Math.round((r.pct || 0) * 100) / 100, statusLabel: CONT_PICK_STATUS_LABEL[r.status] || r.status, status: r.status,
