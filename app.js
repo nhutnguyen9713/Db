@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.69';
+const APP_VERSION = 'v3.70';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4751,12 +4751,19 @@ function buildItemLocatorPopoverHtml(item, po){
     return `<div class="cpt-item-head"><b>${escHtml(item)}</b>${poNote}</div><div class="cpt-empty">Không có container nào đóng mã hàng này (trong Plan xuất cont đã tải)</div>`;
   }
   const totalQty = conts.reduce((s, c) => s + c.qty, 0);
+  const totalPicked = conts.reduce((s, c) => s + (c.picked || 0), 0);
+  const remainingQty = totalQty - totalPicked; // SL kế hoạch còn phải pick
   // SỬA (lỗi thật đã gặp — popover báo "Đủ" trong khi bảng so sánh chính báo "Thiếu" cho ĐÚNG mã này):
   // trước đây cộng TẤT CẢ OQC (PASS+NG+khác) làm "Tổng tồn hiện có", trong khi bảng so sánh chính
   // (buildCombinedPlanCompareTable) VÀ mọi chỗ khác tính "Thiếu hàng" trong dashboard chỉ tính đúng
   // hàng PASS là tồn khả dụng (hàng NG không xuất được) — 2 cách tính khác nhau cho cùng 1 mã hàng
   // dẫn tới kết luận Đủ/Thiếu trái ngược nhau. Lọc lại đúng PASS để khớp quy ước chung.
-  const locs = buildItemLocatorDetail(item, po, true).filter(l => l.oqc === 'PASS'); // loại vị trí "Prod" + chỉ tính PASS là tồn khả dụng để pick
+  const allPassLocs = buildItemLocatorDetail(item, po, true).filter(l => l.oqc === 'PASS'); // loại vị trí "Prod" + chỉ tính PASS là tồn khả dụng để pick
+  // Trừ hàng ĐÃ PICK (đã ra locator "...Loading" có mã CR) khỏi tồn — đã thuộc về 1 container, không còn để
+  // pick nữa. Vì vậy so với SL kế hoạch CÒN PHẢI PICK (đã trừ phần đã pick), không phải tổng kế hoạch.
+  const isPickedLoc = l => LOADING_LOCATOR_RE.test(String(l.locator || '').trim()) && /CR\d+/i.test(String(l.ref || ''));
+  const locs = allPassLocs.filter(l => !isPickedLoc(l));
+  const pickedOnHand = allPassLocs.reduce((s, l) => s + (isPickedLoc(l) ? l.qty : 0), 0);
   const totalOnHand = locs.reduce((s, l) => s + l.qty, 0);
   const khoTotals = new Map();
   locs.forEach(l => khoTotals.set(l.kho, (khoTotals.get(l.kho)||0) + l.qty));
@@ -4765,7 +4772,7 @@ function buildItemLocatorPopoverHtml(item, po){
     .filter(kho => khoTotals.has(kho))
     .map(kho => `<div class="cpt-loc-row"><span>${escHtml(kho.replace('Kho ', ''))}</span><b>${fmt(khoTotals.get(kho))}</b></div>`)
     .join('');
-  const diff = totalOnHand - totalQty;
+  const diff = totalOnHand - remainingQty;
   const isSpp = ccIsSppItem(item);
   const manualOk = isSpp && !!sppManualOk[sppOkKey(item, po)];
   const diffHtml = manualOk
@@ -4780,8 +4787,8 @@ function buildItemLocatorPopoverHtml(item, po){
   }).join('');
   return `<div class="cpt-item-head"><b>${escHtml(item)}</b>${poNote}</div>
     <div class="cpt-locs">${rowsHtml}</div>
-    <div class="cpt-total">Tổng ${fmt(conts.length)} container: <b>${fmt(totalQty)}</b> Pcs</div>
-    <div class="cpt-total" style="color:var(--muted); font-weight:600; margin-top:6px;">Tổng tồn PASS hiện có: <b style="color:var(--text);">${fmt(totalOnHand)}</b> Pcs</div>
+    <div class="cpt-total">Tổng ${fmt(conts.length)} container: <b>${fmt(totalQty)}</b> Pcs${totalPicked ? ` · đã pick ${fmt(totalPicked)} · còn cần <b>${fmt(remainingQty)}</b>` : ''}</div>
+    <div class="cpt-total" style="color:var(--muted); font-weight:600; margin-top:6px;">Tổng tồn PASS hiện có: <b style="color:var(--text);">${fmt(totalOnHand)}</b> Pcs${pickedOnHand ? ` <span style="font-weight:500;">(đã trừ ${fmt(pickedOnHand)} đã pick có CR)</span>` : ''}</div>
     <div class="cpt-locs">${khoRowsHtml || '<div class="cpt-empty">Không có tồn kho</div>'}</div>
     ${diffHtml}`;
 }
