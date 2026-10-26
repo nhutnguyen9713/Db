@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.82';
+const APP_VERSION = 'v3.83';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4835,13 +4835,23 @@ function buildContPickTooltipHtml(items){
   if(!items || !items.length) return '<div class="cpt-empty">Không có mã hàng</div>';
   const crInvMap = txBuildCrInvoiceMap();
   return items.map(it => {
+    // Tính tồn giống popup "Tổng N container" (v3.83, Drak: "tính như hình 2 mới đúng"): chỉ cộng tồn PASS,
+    // trừ hàng đã pick (Loading có CR). Các dòng không cộng vẫn hiện nhưng tô mờ + ghi chú lý do.
+    const isPickedLoc = l => isLoadingCommittedStock(l.locator, l.ref);
+    const counted = l => !isPickedLoc(l) && l.oqc === 'PASS';
+    const pickedQty = it.locs.reduce((s, l) => s + (isPickedLoc(l) ? l.qty : 0), 0);
+    const passQty = it.locs.reduce((s, l) => s + (counted(l) ? l.qty : 0), 0);
     const locsHtml = it.locs.length
-      ? `<div class="cpt-locs">${it.locs.map(l => `<div class="cpt-loc-row"><span style="white-space:nowrap">${escHtml(l.locator)}${loadingRefHtml(l, crInvMap)}</span><b>${fmt(l.qty)}</b></div>`).join('')}</div>`
+      ? `<div class="cpt-locs">${it.locs.map(l => {
+          const note = isPickedLoc(l) ? ' <span style="font-size:11px; color:var(--amber-bright);">· đã pick</span>'
+            : l.oqc !== 'PASS' ? ` <span style="font-size:11px; color:var(--muted-2);">· ${escHtml(l.oqc || 'chưa OQC')}</span>` : '';
+          return `<div class="cpt-loc-row"${counted(l) ? '' : ' style="opacity:.55;"'}><span style="white-space:nowrap">${escHtml(l.locator)}${loadingRefHtml(l, crInvMap)}${note}</span><b>${fmt(l.qty)}</b></div>`;
+        }).join('')}</div>`
       : `<div class="cpt-empty">Không có tồn kho</div>`;
     // Gộp thêm tổng tồn theo TỪNG KHO (3B/3A/2B/DG1...) cho mã hàng này — bên cạnh chi tiết theo
     // từng Locator ở trên, để biết ngay kho nào đang giữ bao nhiêu mà không cần cộng tay từng dòng.
     const khoTotals = new Map();
-    it.locs.forEach(l => khoTotals.set(l.kho, (khoTotals.get(l.kho) || 0) + l.qty));
+    it.locs.forEach(l => { if(counted(l)) khoTotals.set(l.kho, (khoTotals.get(l.kho) || 0) + l.qty); });
     const khoOrder = [...new Set([...CPT_KHO_ORDER, ...khoTotals.keys()])];
     const khoRowsHtml = khoOrder
       .filter(kho => khoTotals.has(kho))
@@ -4854,7 +4864,7 @@ function buildContPickTooltipHtml(items){
       <div class="cpt-item-head"><b>${escHtml(it.item)}</b>${it.po ? ` <span class="cpt-po">(PO ${escHtml(it.po)})</span>` : ''} <span class="cpt-kh">— KH ${fmt(it.qty)} Pcs</span></div>
       ${locsHtml}
       ${khoBlockHtml}
-      <div class="cpt-total">Tổng tồn hiện có: <b>${fmt(it.totalOnHand)}</b> Pcs</div>
+      <div class="cpt-total">Tổng tồn PASS hiện có: <b>${fmt(passQty)}</b> Pcs${pickedQty ? ` <span style="color:var(--muted-2); font-weight:400;">(đã trừ ${fmt(pickedQty)} đã pick có CR)</span>` : ''}</div>
     </div>`;
   }).join('');
 }
