@@ -4,7 +4,7 @@
   "short_name": "TN5",
   "description": "Dashboard quản lý kho TN5 — Picking Status, Kiểm tồn kho, Tìm mã hàng, Transaction",
   "start_url": "./index.html",
-  "scope": "./",
+  "scope": "./index.html",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#f4f5f7",
