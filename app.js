@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.76';
+const APP_VERSION = 'v3.77';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4298,14 +4298,32 @@ function renderContainerPickingOverview(){
    ============================================================ */
 const CONT_KPI_TITLES = { all: 'Tổng container', notStarted: 'Chưa pick', inProgress: 'Đang pick', done: 'Pick xong' };
 let contKpiActive = 'all';
+// CR -> danh sách người pick (User Name ở các dòng Picking của file Transaction có mã CR đó trong Reference).
+function contKpiPickerMap(){
+  const map = new Map();
+  ((typeof txState !== 'undefined' && txState && txState.picking) || []).forEach(r => {
+    if(!r.user) return;
+    (r.contCodes || []).forEach(c => {
+      const cr = String(c || '').toUpperCase();
+      if(!cr) return;
+      if(!map.has(cr)) map.set(cr, new Set());
+      map.get(cr).add(r.user);
+    });
+  });
+  return map;
+}
 function contKpiRows(kind){
+  const pickerMap = contKpiPickerMap();
   return (contPickAllRows || [])
     .filter(r => kind === 'all' ? true
       : kind === 'done' ? (r.status === 'done' || r.status === 'manualDone')
       : r.status === kind)
     .map(r => {
       const picked = (r.items || []).reduce((s, it) => s + (it.picked || 0), 0);
+      const pickers = new Set();
+      (String(r.csr || '').match(/CR\d+/gi) || []).forEach(cr => (pickerMap.get(cr.toUpperCase()) || []).forEach(u => pickers.add(u)));
       return {
+        pickers: [...pickers].sort().join(', ') || '—',
         type: r.type, cNo: r.cNo, loadDate: r.loadDate, planTime: r.planTime, invoice: r.invoice, csr: r.csr,
         kho: r.topKho ? String(r.topKho).replace('Kho ', '') : '—', planQty: r.planQty || 0, picked,
         pct: Math.round((r.pct || 0) * 100) / 100, statusLabel: CONT_PICK_STATUS_LABEL[r.status] || r.status, status: r.status,
@@ -4325,14 +4343,15 @@ function renderContKpiPopup(kind){
   const totalPlan = rows.reduce((s, r) => s + r.planQty, 0), totalPicked = rows.reduce((s, r) => s + r.picked, 0);
   content.innerHTML = `<table class="plan-detail-table"><thead><tr>
       <th>#</th><th>Loại</th><th>Cont</th><th>Ngày Load</th><th>Giờ Plan</th><th>Invoice</th><th>CR</th><th>Kho</th>
-      <th style="text-align:right">SL Plan</th><th style="text-align:right">Đã pick</th><th style="text-align:right">%</th><th>Trạng thái</th>
+      <th style="text-align:right">SL Plan</th><th style="text-align:right">Đã pick</th><th style="text-align:right">%</th><th>Trạng thái</th><th>Người pick</th>
     </tr></thead><tbody>${rows.map((r, i) => `<tr>
       <td>${i + 1}</td><td>${escHtml(r.type)}</td><td>${escHtml(String(r.cNo))}</td><td>${escHtml(r.loadDate)}</td><td>${escHtml(r.planTime)}</td>
       <td>${escHtml(r.invoice)}</td><td>${escHtml(r.csr)}</td><td>${escHtml(r.kho)}</td>
       <td class="num">${fmt(r.planQty)}</td><td class="num">${fmt(r.picked)}</td><td class="num">${r.pct}%</td>
       <td style="color:${CONT_PICK_STATUS_COLOR[r.status]}; font-weight:600;">${escHtml(r.statusLabel)}</td>
+      <td style="white-space:normal; min-width:140px;">${escHtml(r.pickers)}</td>
     </tr>`).join('')}</tbody>
-    <tfoot><tr style="font-weight:700;"><td colspan="8">Tổng</td><td class="num">${fmt(totalPlan)}</td><td class="num">${fmt(totalPicked)}</td><td colspan="2"></td></tr></tfoot></table>`;
+    <tfoot><tr style="font-weight:700;"><td colspan="8">Tổng</td><td class="num">${fmt(totalPlan)}</td><td class="num">${fmt(totalPicked)}</td><td colspan="3"></td></tr></tfoot></table>`;
 }
 async function exportContKpiExcel(){
   if(!LIB_EXCELJS_OK){ alert('Không tải được thư viện xuất Excel (cần Internet). Vui lòng thử lại.'); return; }
@@ -4342,17 +4361,17 @@ async function exportContKpiExcel(){
   workbook.creator = 'TN5 Dashboard';
   workbook.created = new Date();
   const ws = workbook.addWorksheet((CONT_KPI_TITLES[kind] || 'Container').slice(0, 31));
-  const headers = ['#', 'Loại', 'Cont', 'Ngày Load', 'Giờ Plan', 'Invoice', 'CR', 'Kho', 'SL Plan', 'Đã pick', '%', 'Trạng thái'];
+  const headers = ['#', 'Loại', 'Cont', 'Ngày Load', 'Giờ Plan', 'Invoice', 'CR', 'Kho', 'SL Plan', 'Đã pick', '%', 'Trạng thái', 'Người pick'];
   ws.addRow(headers);
-  rows.forEach((r, i) => ws.addRow([i + 1, r.type, r.cNo, r.loadDate, r.planTime, r.invoice, r.csr, r.kho, r.planQty, r.picked, r.pct / 100, r.statusLabel]));
-  ws.addRow(['', 'Tổng', '', '', '', '', '', '', rows.reduce((s, r) => s + r.planQty, 0), rows.reduce((s, r) => s + r.picked, 0), '', '']).font = { bold: true };
+  rows.forEach((r, i) => ws.addRow([i + 1, r.type, r.cNo, r.loadDate, r.planTime, r.invoice, r.csr, r.kho, r.planQty, r.picked, r.pct / 100, r.statusLabel, r.pickers]));
+  ws.addRow(['', 'Tổng', '', '', '', '', '', '', rows.reduce((s, r) => s + r.planQty, 0), rows.reduce((s, r) => s + r.picked, 0), '', '', '']).font = { bold: true };
   const thin = { style:'thin', color:{ argb:'FFAAAAAA' } };
   ws.eachRow(row => row.eachCell({ includeEmpty: true }, cell => { cell.border = { top:thin, bottom:thin, left:thin, right:thin }; }));
   const head = ws.getRow(1);
   head.font = { bold: true, color:{ argb:'FFFFFFFF' } };
   head.eachCell(cell => { cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF1F2937' } }; });
   ws.getColumn(11).numFmt = '0.00%';
-  [5, 7, 7, 12, 10, 12, 18, 7, 10, 10, 9, 12].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  [5, 7, 7, 12, 10, 12, 18, 7, 10, 10, 9, 12, 30].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   ws.views = [{ state:'frozen', ySplit:1 }];
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
