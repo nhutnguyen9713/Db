@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.67';
+const APP_VERSION = 'v3.68';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4775,7 +4775,7 @@ function buildItemLocatorPopoverHtml(item, po){
   const rowsHtml = conts.map(c => {
     const dateTimeParts = [c.loadDate, c.planTime].filter(v => v && v !== '—');
     const subLine = dateTimeParts.length ? `<div class="cpt-loc-sub">${escHtml(dateTimeParts.join(' · '))}</div>` : '';
-    return `<div class="cpt-loc-row"><span>${escHtml(c.type)}-${escHtml(String(c.cNo))} <span style="color:${CONT_PICK_STATUS_COLOR[c.status]}; font-weight:600;">(${CONT_PICK_STATUS_LABEL[c.status]})</span></span><b>${fmt(c.qty)}</b></div>${subLine}`;
+    return `<div class="cpt-loc-row"><span>${escHtml(c.type)}-${escHtml(String(c.cNo))}${c.invoice ? ` <span style="color:var(--text); font-weight:600;">· ${escHtml(c.invoice)}</span>` : ''} <span style="color:${CONT_PICK_STATUS_COLOR[c.status]}; font-weight:600;">(${CONT_PICK_STATUS_LABEL[c.status]})</span></span><b>${fmt(c.qty)}</b></div>${subLine}`;
   }).join('');
   return `<div class="cpt-item-head"><b>${escHtml(item)}</b>${poNote}</div>
     <div class="cpt-locs">${rowsHtml}</div>
