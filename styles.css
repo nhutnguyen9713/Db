@@ -1863,3 +1863,5 @@
 
   .cont-kpi-tile{cursor:pointer; transition:filter .15s;}
   .cont-kpi-tile:hover{filter:brightness(0.96);}
+  /* Dòng container đã Load xong trong popup KPI: nền xanh. */
+  .plan-detail-table tr.cont-kpi-loaded td{background:color-mix(in srgb, var(--teal) 16%, transparent);}

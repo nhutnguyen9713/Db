@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.81';
+const APP_VERSION = 'v3.82';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4367,7 +4367,7 @@ function renderContKpiPopup(kind){
   content.innerHTML = `<table class="plan-detail-table"><thead><tr>
       <th>#</th><th>Loại</th><th>Cont</th><th>Ngày Load</th><th>Giờ Plan</th><th>Invoice</th><th>CR</th><th>Kho</th>
       <th style="text-align:right">SL Plan</th><th style="text-align:right">Đã pick</th><th style="text-align:right">%</th><th>Trạng thái</th><th>Người pick</th><th>Trạng thái Load</th>
-    </tr></thead><tbody>${rows.map((r, i) => `<tr>
+    </tr></thead><tbody>${rows.map((r, i) => `<tr${r.loadKey === 'done' ? ' class="cont-kpi-loaded"' : ''}>
       <td>${i + 1}</td><td>${escHtml(r.type)}</td><td>${escHtml(String(r.cNo))}</td><td>${escHtml(r.loadDate)}</td><td>${escHtml(r.planTime)}</td>
       <td>${escHtml(r.invoice)}</td><td>${escHtml(r.csr)}</td><td>${escHtml(r.kho)}</td>
       <td class="num">${fmt(r.planQty)}</td><td class="num">${fmt(r.picked)}</td><td class="num">${r.pct}%</td>
@@ -4387,7 +4387,11 @@ async function exportContKpiExcel(){
   const ws = workbook.addWorksheet((CONT_KPI_TITLES[kind] || 'Container').slice(0, 31));
   const headers = ['#', 'Loại', 'Cont', 'Ngày Load', 'Giờ Plan', 'Invoice', 'CR', 'Kho', 'SL Plan', 'Đã pick', '%', 'Trạng thái', 'Người pick', 'Trạng thái Load'];
   ws.addRow(headers);
-  rows.forEach((r, i) => ws.addRow([i + 1, r.type, r.cNo, r.loadDate, r.planTime, r.invoice, r.csr, r.kho, r.planQty, r.picked, r.pct / 100, r.statusLabel, r.pickers, r.loadStatus]));
+  rows.forEach((r, i) => {
+    const row = ws.addRow([i + 1, r.type, r.cNo, r.loadDate, r.planTime, r.invoice, r.csr, r.kho, r.planQty, r.picked, r.pct / 100, r.statusLabel, r.pickers, r.loadStatus]);
+    // Tô xanh cả dòng container đã Load xong (giống popup).
+    if(r.loadKey === 'done') row.eachCell({ includeEmpty: true }, cell => { cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFC6EFCE' } }; });
+  });
   ws.addRow(['', 'Tổng', '', '', '', '', '', '', rows.reduce((s, r) => s + r.planQty, 0), rows.reduce((s, r) => s + r.picked, 0), '', '', '', '']).font = { bold: true };
   const thin = { style:'thin', color:{ argb:'FFAAAAAA' } };
   ws.eachRow(row => row.eachCell({ includeEmpty: true }, cell => { cell.border = { top:thin, bottom:thin, left:thin, right:thin }; }));
