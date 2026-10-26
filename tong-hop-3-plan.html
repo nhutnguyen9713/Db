@@ -293,13 +293,16 @@
     var parts = crs.map(function(cr){ var inv = phCrInvMap[cr]; return inv && inv.length ? cr + ' - ' + inv.join(', ') : cr; });
     return base + ' (' + parts.join(' | ') + ')';
   };
-  var phLocatorDetail = function(idx, item, po){
+  // excludePicked: bỏ tồn ở locator "...Loading" có mã CR (hàng ĐÃ PICK cho 1 container) — khớp cách tính
+  // tồn của TN5 Dashboard (v3.71).
+  var phLocatorDetail = function(idx, item, po, excludePicked){
     var entries = idx[String(item || '').toLowerCase()] || [];
     var poLower = po ? String(po).trim().toLowerCase() : '';
     var rows = [];
     entries.forEach(function(e){
       if(poLower && String(e.custpo || '').trim().toLowerCase() !== poLower) return;
       if(/prod/i.test(e.locator || '')) return;
+      if(excludePicked && phIsLoadingLocator(e.locator) && phLoadingCrCodes(e.ref).length) return;
       rows.push(e);
     });
     rows.sort(function(a,b){ return (b.qty||0) - (a.qty||0); });
@@ -458,7 +461,7 @@
 
       var items = Object.keys(entry.items).map(function(k){
         var it = entry.items[k];
-        return { item: it.item, po: it.po, ebPo: it.ebPo, qty: it.qty, cbm: it.cbm, locs: phLocatorDetail(invIdx, it.item, it.po) };
+        return { item: it.item, po: it.po, ebPo: it.ebPo, qty: it.qty, cbm: it.cbm, locs: phLocatorDetail(invIdx, it.item, it.po, true) };
       });
 
       var manualKhoVal = manualKho && manualKho[instanceKey];
