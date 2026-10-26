@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.68';
+const APP_VERSION = 'v3.69';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4128,8 +4128,9 @@ function renderContainerPickingOverview(){
       if(r.loadDate) entry.loadDates.add(fmtDate(r.loadDate));
       if(r.planTime) entry.planTimes.add(r.planTime);
       const itemPoKey = r.item + '||' + (r.custPo || '');
-      if(!entry.items.has(itemPoKey)) entry.items.set(itemPoKey, { item: r.item, po: r.custPo || '', qty: 0, cbm: 0 });
+      if(!entry.items.has(itemPoKey)) entry.items.set(itemPoKey, { item: r.item, po: r.custPo || '', qty: 0, cbm: 0, picked: 0 });
       entry.items.get(itemPoKey).qty += planQty;
+      entry.items.get(itemPoKey).picked += contribution; // SL đã scan pick theo CR (tối đa = SL kế hoạch)
       entry.items.get(itemPoKey).cbm += (parseFloat(r.cbm) || 0);
     });
   });
@@ -4174,7 +4175,7 @@ function renderContainerPickingOverview(){
       const locs = buildItemLocatorDetail(it.item, it.po, true);
       const totalOnHand = locs.reduce((s, l) => s + l.qty, 0);
       const passOnHand = locs.reduce((s, l) => s + (l.oqc === 'PASS' ? l.qty : 0), 0);
-      return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, locs, totalOnHand, passOnHand };
+      return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, picked: it.picked, locs, totalOnHand, passOnHand };
     });
 
     // Mã hàng nào "Thiếu" TÍNH RIÊNG cho container này (không gộp với container khác dùng chung mã):
@@ -4730,7 +4731,7 @@ function buildItemContainerList(item, po){
       if(String(it.item||'').trim().toLowerCase() !== itemKey) return;
       if(String(it.po||'').trim().toLowerCase() !== poKey) return;
       result.push({
-        type: row.type, cNo: row.cNo, qty: it.qty, cbm: it.cbm,
+        type: row.type, cNo: row.cNo, qty: it.qty, cbm: it.cbm, picked: it.picked || 0,
         loadDate: row.loadDate, planTime: row.planTime,
         invoice: row.invoice, csr: row.csr,
         status: row.status
@@ -4775,7 +4776,7 @@ function buildItemLocatorPopoverHtml(item, po){
   const rowsHtml = conts.map(c => {
     const dateTimeParts = [c.loadDate, c.planTime].filter(v => v && v !== '—');
     const subLine = dateTimeParts.length ? `<div class="cpt-loc-sub">${escHtml(dateTimeParts.join(' · '))}</div>` : '';
-    return `<div class="cpt-loc-row"><span>${escHtml(c.type)}-${escHtml(String(c.cNo))}${c.invoice ? ` <span style="color:var(--text); font-weight:600;">· ${escHtml(c.invoice)}</span>` : ''} <span style="color:${CONT_PICK_STATUS_COLOR[c.status]}; font-weight:600;">(${CONT_PICK_STATUS_LABEL[c.status]})</span></span><b>${fmt(c.qty)}</b></div>${subLine}`;
+    return `<div class="cpt-loc-row"><span>${escHtml(c.type)}-${escHtml(String(c.cNo))}${c.invoice ? ` <span style="color:var(--text); font-weight:600;">· ${escHtml(c.invoice)}</span>` : ''} <span style="color:${CONT_PICK_STATUS_COLOR[c.status]}; font-weight:600;">(${CONT_PICK_STATUS_LABEL[c.status]})</span></span><b title="Đã scan pick (CR) / SL kế hoạch">${fmt(c.picked)}/${fmt(c.qty)}</b></div>${subLine}`;
   }).join('');
   return `<div class="cpt-item-head"><b>${escHtml(item)}</b>${poNote}</div>
     <div class="cpt-locs">${rowsHtml}</div>
