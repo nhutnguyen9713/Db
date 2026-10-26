@@ -98,6 +98,7 @@
   .ph-locs td.ph-num{text-align:right; font-family:ui-monospace,monospace; padding-right:14px;}
   .ph-locs tr.ph-loc-picked td{color:#9aa3b2; background:#f6f7f9;}
   .ph-picked-tag{display:inline-block; margin-left:6px; padding:1px 6px; border-radius:6px; font-size:10.5px; font-weight:600; color:#0f8f76; background:#e3f5f0;}
+  .ph-picked-tag.ph-picking-tag{color:#9a6700; background:#fff4cc;}
   .ph-empty-note{color:#8a97ac; font-size:13px; padding:20px 0;}
   .ph-td-label{display:none;}
 
@@ -297,6 +298,12 @@
   };
   // markPicked: tồn ở locator "...Loading" có mã CR = hàng ĐÃ PICK cho 1 container -> gắn cờ picked:true.
   // Dòng picked vẫn HIỆN trong bảng chi tiết nhưng KHÔNG cộng vào tồn — khớp cách tính của TN5 (v3.71).
+  var phCrStatus = {}; // CR -> trạng thái pick của container chứa CR đó (dựng lại mỗi lần phBuildContainers)
+  // Nhãn của dòng Loading có CR: cont còn đang pick -> "Đang pick" (vàng); cont Pick xong / CR không thấy trong Plan -> "Đã pick" (xanh).
+  var phPickedTagHtml = function(ref){
+    var inProgress = phLoadingCrCodes(ref).some(function(cr){ var st = phCrStatus[cr]; return st && st !== 'done' && st !== 'manualDone'; });
+    return inProgress ? '<span class="ph-picked-tag ph-picking-tag">⏳ Đang pick</span>' : '<span class="ph-picked-tag">✓ Đã pick</span>';
+  };
   var phIsPickedLoc = function(l){ return phIsLoadingLocator(l.locator) && phLoadingCrCodes(l.ref).length > 0; };
   var phLocatorDetail = function(idx, item, po, markPicked){
     var entries = idx[String(item || '').toLowerCase()] || [];
@@ -407,7 +414,7 @@
       if(!g.locs.length) return '';
       var detailId = uidPrefix + '-' + i;
       var body = g.locs.map(function(l){
-        if(l.picked) return '<tr class="ph-loc-picked" title="Đã scan pick cho container — không tính vào tồn"><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + ' <span class="ph-picked-tag">✓ Đã pick</span></td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">(' + phFmt(l.qty) + ')</td></tr>';
+        if(l.picked) return '<tr class="ph-loc-picked" title="Đã scan pick (CR) cho container — không tính vào tồn"><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + ' ' + phPickedTagHtml(l.ref) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">(' + phFmt(l.qty) + ')</td></tr>';
         return '<tr><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>';
       }).join('');
       return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(poLabel) + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button><button class="ph-shot-btn" data-share="1" type="button" title="Chia sẻ ảnh bảng này sang Zalo/Telegram...">📤 Chia sẻ</button></div><div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></div></td></tr>';
@@ -453,6 +460,7 @@
     });
 
     var rows = [];
+    phCrStatus = {};
     Object.keys(contMap).forEach(function(key){
       var entry = contMap[key];
       if(entry.planQty <= 0) return;
@@ -463,6 +471,8 @@
       var isManualUser = !!(manualPicked && manualPicked[instanceKey]);
       var isShipDone = !isManualUser && phShipIsFullyLoaded(contShipByRef, entry.csrs, entry.planQty);
       var status = (isManualUser || isShipDone) ? 'manualDone' : autoStatus;
+      // Ghi trạng thái pick theo từng CR — để dòng tồn Loading của CR đó hiện đúng nhãn "Đang pick"/"Đã pick".
+      entry.csrs.forEach(function(csr){ phLoadingCrCodes(csr).forEach(function(cr){ phCrStatus[cr] = status; }); });
       if(status === 'done' || status === 'manualDone') return; // Pick xong -> loại khỏi danh sách
 
       var items = Object.keys(entry.items).map(function(k){
