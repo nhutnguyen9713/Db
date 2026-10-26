@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.79';
+const APP_VERSION = 'v3.80';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3754,7 +3754,8 @@ function contShipSerialize(data){
     fileName: data.fileName, updatedAtText: data.updatedAtText,
     byRef: Object.fromEntries(data.byRef),
     byRefItem: Object.fromEntries([...data.byRefItem].map(([k, v]) => [k, Object.fromEntries(v)])),
-    byRefLocators: Object.fromEntries([...(data.byRefLocators || new Map())].map(([k, v]) => [k, [...v]]))
+    byRefLocators: Object.fromEntries([...(data.byRefLocators || new Map())].map(([k, v]) => [k, [...v]])),
+    byRefUsers: Object.fromEntries([...(data.byRefUsers || new Map())].map(([k, v]) => [k, [...v]]))
   };
 }
 function contShipDeserialize(obj){
@@ -3763,7 +3764,8 @@ function contShipDeserialize(obj){
     fileName: obj.fileName, updatedAtText: obj.updatedAtText,
     byRef: new Map(Object.entries(obj.byRef || {})),
     byRefItem: new Map(Object.entries(obj.byRefItem || {}).map(([k, v]) => [k, new Map(Object.entries(v))])),
-    byRefLocators: new Map(Object.entries(obj.byRefLocators || {}).map(([k, v]) => [k, new Set(v)]))
+    byRefLocators: new Map(Object.entries(obj.byRefLocators || {}).map(([k, v]) => [k, new Set(v)])),
+    byRefUsers: new Map(Object.entries(obj.byRefUsers || {}).map(([k, v]) => [k, new Set(v)]))
   };
 }
 
@@ -3771,6 +3773,7 @@ function contShipBuildFromRecords(records){
   const byRef = new Map();
   const byRefItem = new Map();
   const byRefLocators = new Map(); // ref -> Set(locator) — để suy ra Kho nào đang/đã Load
+  const byRefUsers = new Map(); // ref -> Set(user) — nhân sự đã scan Ship (load) cho CR này
   records.forEach(r => {
     if(String(r.transType || '').trim().toUpperCase() !== 'SHIP') return;
     // Chuẩn hoá Reference: cắt khoảng trắng 2 đầu + bỏ dấu câu thừa ở CUỐI (dấu ; , . thấy xuất hiện
@@ -3790,8 +3793,13 @@ function contShipBuildFromRecords(records){
       if(!byRefLocators.has(ref)) byRefLocators.set(ref, new Set());
       byRefLocators.get(ref).add(r.locator);
     }
+    const user = String(r.user || '').trim();
+    if(user){
+      if(!byRefUsers.has(ref)) byRefUsers.set(ref, new Set());
+      byRefUsers.get(ref).add(user);
+    }
   });
-  return { byRef, byRefItem, byRefLocators };
+  return { byRef, byRefItem, byRefLocators, byRefUsers };
 }
 
 // Suy ra danh sách Kho (VD: "Kho 2B", "Kho 2B + Kho 3A") từ tập hợp Locator Name gom được của các
@@ -4310,6 +4318,7 @@ function contKpiPickerMap(){
     if(!user) return;
     const crs = String(r.reference || '').match(/CR\d+/gi);
     if(!crs) return;
+    if(String(r.transType || '').trim().toUpperCase() === 'SHIP') return; // dòng Ship là người load, không phải người pick
     const menu = String(r.menuName || '').toLowerCase();
     const isPick = menu.startsWith('pick(') || menu === 'pick order';
     crs.forEach(c => add(isPick ? pick : other, c.toUpperCase(), user));
@@ -4317,9 +4326,37 @@ function contKpiPickerMap(){
   other.forEach((users, cr) => { if(!pick.has(cr)) pick.set(cr, users); });
   return pick;
 }
+// Trạng thái Load + nhân sự Ship của 1 container — cùng cách tính với cột Loading của bảng Picking Status
+// (SL Ship khớp CR / SL Plan). Tên nhân sự lấy từ file Ship; dữ liệu Ship lưu từ bản cũ chưa có tên thì lấy
+// thêm từ các dòng Transaction Type = Ship của file Transaction đang tải.
+function contKpiShipInfo(csr, planQty, txShipUsers){
+  const refs = String(csr || '').split(',').map(s => s.trim().toUpperCase().replace(/[;,.\s]+$/, '')).filter(Boolean);
+  const users = new Set();
+  refs.forEach(ref => {
+    ((contShipData && contShipData.byRefUsers && contShipData.byRefUsers.get(ref)) || []).forEach(u => users.add(u));
+    (txShipUsers.get(ref) || []).forEach(u => users.add(u));
+  });
+  const shipUsers = [...users].sort().join(', ') || '—';
+  if(!contShipData || !contShipData.byRef || !contShipData.byRef.size) return { loadStatus: 'Chưa tải file Ship', loadKey: 'none', shipUsers };
+  const shipQty = refs.reduce((s, ref) => s + (contShipData.byRef.get(ref) || 0), 0);
+  const shipPct = planQty > 0 ? shipQty / planQty * 100 : 0;
+  if(shipQty > 0 && shipPct >= 99.995) return { loadStatus: 'Load xong', loadKey: 'done', shipUsers };
+  if(shipQty > 0) return { loadStatus: `Đang load (${shipPct.toFixed(0)}%)`, loadKey: 'inProgress', shipUsers };
+  return { loadStatus: 'Chưa load', loadKey: 'notStarted', shipUsers };
+}
+const CONT_KPI_LOAD_COLOR = { done: 'var(--teal)', inProgress: 'var(--amber-bright)', notStarted: 'var(--muted-2)', none: 'var(--muted-2)' };
 function contKpiRows(kind){
   const pickerMap = contKpiPickerMap();
   const txHasRecords = !!(typeof txState !== 'undefined' && txState && txState.records && txState.records.length);
+  const txShipUsers = new Map();
+  if(txHasRecords) txState.records.forEach(r => {
+    if(String(r.transType || '').trim().toUpperCase() !== 'SHIP') return;
+    const ref = String(r.reference || '').trim().toUpperCase().replace(/[;,.\s]+$/, '');
+    const user = String(r.user || '').trim();
+    if(!ref || !user) return;
+    if(!txShipUsers.has(ref)) txShipUsers.set(ref, new Set());
+    txShipUsers.get(ref).add(user);
+  });
   return (contPickAllRows || [])
     .filter(r => kind === 'all' ? true
       : kind === 'done' ? (r.status === 'done' || r.status === 'manualDone')
@@ -4328,7 +4365,9 @@ function contKpiRows(kind){
       const picked = (r.items || []).reduce((s, it) => s + (it.picked || 0), 0);
       const pickers = new Set();
       (String(r.csr || '').match(/CR\d+/gi) || []).forEach(cr => (pickerMap.get(cr.toUpperCase()) || []).forEach(u => pickers.add(u)));
+      const ship = contKpiShipInfo(r.csr, r.planQty || 0, txShipUsers);
       return {
+        loadStatus: ship.loadStatus, loadKey: ship.loadKey, shipUsers: ship.shipUsers,
         // CR không có trong file Transaction đang tải: đã có SL pick -> pick từ ca trước (ngoài khung giờ của file);
         // chưa pick gì -> "—".
         pickers: [...pickers].sort().join(', ') || (!txHasRecords ? 'Chưa tải file Transaction' : (picked > 0 || r.status === 'done' || r.status === 'manualDone') ? 'Pick Từ Ca Trước' : '—'),
@@ -4351,15 +4390,17 @@ function renderContKpiPopup(kind){
   const totalPlan = rows.reduce((s, r) => s + r.planQty, 0), totalPicked = rows.reduce((s, r) => s + r.picked, 0);
   content.innerHTML = `<table class="plan-detail-table"><thead><tr>
       <th>#</th><th>Loại</th><th>Cont</th><th>Ngày Load</th><th>Giờ Plan</th><th>Invoice</th><th>CR</th><th>Kho</th>
-      <th style="text-align:right">SL Plan</th><th style="text-align:right">Đã pick</th><th style="text-align:right">%</th><th>Trạng thái</th><th>Người pick</th>
+      <th style="text-align:right">SL Plan</th><th style="text-align:right">Đã pick</th><th style="text-align:right">%</th><th>Trạng thái</th><th>Người pick</th><th>Trạng thái Load</th><th>Nhân sự Ship</th>
     </tr></thead><tbody>${rows.map((r, i) => `<tr>
       <td>${i + 1}</td><td>${escHtml(r.type)}</td><td>${escHtml(String(r.cNo))}</td><td>${escHtml(r.loadDate)}</td><td>${escHtml(r.planTime)}</td>
       <td>${escHtml(r.invoice)}</td><td>${escHtml(r.csr)}</td><td>${escHtml(r.kho)}</td>
       <td class="num">${fmt(r.planQty)}</td><td class="num">${fmt(r.picked)}</td><td class="num">${r.pct}%</td>
       <td style="color:${CONT_PICK_STATUS_COLOR[r.status]}; font-weight:600;">${escHtml(r.statusLabel)}</td>
       <td style="white-space:normal; min-width:140px;">${escHtml(r.pickers)}</td>
+      <td style="color:${CONT_KPI_LOAD_COLOR[r.loadKey]}; font-weight:600;">${escHtml(r.loadStatus)}</td>
+      <td style="white-space:normal; min-width:140px;">${escHtml(r.shipUsers)}</td>
     </tr>`).join('')}</tbody>
-    <tfoot><tr style="font-weight:700;"><td colspan="8">Tổng</td><td class="num">${fmt(totalPlan)}</td><td class="num">${fmt(totalPicked)}</td><td colspan="3"></td></tr></tfoot></table>`;
+    <tfoot><tr style="font-weight:700;"><td colspan="8">Tổng</td><td class="num">${fmt(totalPlan)}</td><td class="num">${fmt(totalPicked)}</td><td colspan="5"></td></tr></tfoot></table>`;
 }
 async function exportContKpiExcel(){
   if(!LIB_EXCELJS_OK){ alert('Không tải được thư viện xuất Excel (cần Internet). Vui lòng thử lại.'); return; }
@@ -4369,17 +4410,17 @@ async function exportContKpiExcel(){
   workbook.creator = 'TN5 Dashboard';
   workbook.created = new Date();
   const ws = workbook.addWorksheet((CONT_KPI_TITLES[kind] || 'Container').slice(0, 31));
-  const headers = ['#', 'Loại', 'Cont', 'Ngày Load', 'Giờ Plan', 'Invoice', 'CR', 'Kho', 'SL Plan', 'Đã pick', '%', 'Trạng thái', 'Người pick'];
+  const headers = ['#', 'Loại', 'Cont', 'Ngày Load', 'Giờ Plan', 'Invoice', 'CR', 'Kho', 'SL Plan', 'Đã pick', '%', 'Trạng thái', 'Người pick', 'Trạng thái Load', 'Nhân sự Ship'];
   ws.addRow(headers);
-  rows.forEach((r, i) => ws.addRow([i + 1, r.type, r.cNo, r.loadDate, r.planTime, r.invoice, r.csr, r.kho, r.planQty, r.picked, r.pct / 100, r.statusLabel, r.pickers]));
-  ws.addRow(['', 'Tổng', '', '', '', '', '', '', rows.reduce((s, r) => s + r.planQty, 0), rows.reduce((s, r) => s + r.picked, 0), '', '', '']).font = { bold: true };
+  rows.forEach((r, i) => ws.addRow([i + 1, r.type, r.cNo, r.loadDate, r.planTime, r.invoice, r.csr, r.kho, r.planQty, r.picked, r.pct / 100, r.statusLabel, r.pickers, r.loadStatus, r.shipUsers]));
+  ws.addRow(['', 'Tổng', '', '', '', '', '', '', rows.reduce((s, r) => s + r.planQty, 0), rows.reduce((s, r) => s + r.picked, 0), '', '', '', '', '']).font = { bold: true };
   const thin = { style:'thin', color:{ argb:'FFAAAAAA' } };
   ws.eachRow(row => row.eachCell({ includeEmpty: true }, cell => { cell.border = { top:thin, bottom:thin, left:thin, right:thin }; }));
   const head = ws.getRow(1);
   head.font = { bold: true, color:{ argb:'FFFFFFFF' } };
   head.eachCell(cell => { cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF1F2937' } }; });
   ws.getColumn(11).numFmt = '0.00%';
-  [5, 7, 7, 12, 10, 12, 18, 7, 10, 10, 9, 12, 30].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  [5, 7, 7, 12, 10, 12, 18, 7, 10, 10, 9, 12, 30, 16, 30].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   ws.views = [{ state:'frozen', ySplit:1 }];
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -15620,9 +15661,9 @@ if(contShipFileInput){
     try{
       const rows = await txReadFileAsRows(file);
       const records = txParseTransactionRecords(rows);
-      const { byRef, byRefItem, byRefLocators } = contShipBuildFromRecords(records);
+      const { byRef, byRefItem, byRefLocators, byRefUsers } = contShipBuildFromRecords(records);
       if(!byRef.size) throw new Error('Không tìm thấy dòng nào có Transaction Type = Ship trong file này.');
-      contShipData = { byRef, byRefItem, byRefLocators, fileName: file.name, updatedAtText: `Cập nhật lúc ${fmtDateTime(new Date())}` };
+      contShipData = { byRef, byRefItem, byRefLocators, byRefUsers, fileName: file.name, updatedAtText: `Cập nhật lúc ${fmtDateTime(new Date())}` };
       _localShipDirty = true;
       renderContShipUpdatedLine();
       // Gọi lại renderPlanPanel() (không chỉ renderContainerPickingOverview()) — vì "Tổng hợp 3 Plan"
