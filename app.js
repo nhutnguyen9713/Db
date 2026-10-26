@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.70';
+const APP_VERSION = 'v3.71';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3096,12 +3096,32 @@ let _itemIndexCache = null, _itemIndexForData = null;
 // KHÔNG trừ — hàng đã ra Loading đó chính là để đáp ứng SL Plan của container ấy. Trừ đi thì vừa bớt
 // tồn vừa giữ nguyên SL Plan = trừ 2 lần, báo Thiếu sai (VD 095561004DG9: Row-4 đang pick, popup Đủ
 // dư 70 nhưng bảng báo Thiếu -56).
+// v3.71 (Drak: "bảng tính giống popup"): MỌI tồn ở locator Loading có mã CR = hàng ĐÃ PICK -> luôn trừ
+// khỏi tồn; đổi lại SL Plan cũng trừ phần đã pick của container đang pick dở (xem
+// buildActivePickedByItemPo()) nên không còn bị trừ 2 lần như lỗi v3.62 nữa.
 function isLoadingCommittedStock(locator, ref, ctx){
   if(!/loading\s*$/i.test(String(locator || '').trim())) return false;
-  const crs = (String(ref || '').match(/CR\d+/gi) || []).map(c => c.toUpperCase());
-  if(!crs.length) return false;
-  if(crs.some(cr => ctx.activeCrs.has(cr))) return false;
-  return crs.some(cr => { const set = ctx.crInvMap.get(cr); return !!(set && set.size); });
+  return /CR\d+/i.test(String(ref || ''));
+}
+// SL đã scan pick (theo CR) của các container CHƯA Pick xong — gom theo Item + Cust PO (và theo loại Plan).
+// Trừ khỏi SL Plan còn cần, đi cùng việc trừ hàng đã pick (Loading có CR) khỏi tồn. Container Pick xong
+// đã bị bỏ hẳn khỏi SL Plan nên không tính ở đây.
+function buildActivePickedByItemPo(){
+  const map = new Map(); // key item␟po (lower, PO rỗng = '(khong co)') -> { total, byType }
+  (contPickAllRows || []).forEach(row => {
+    if(row.status === 'done' || row.status === 'manualDone') return;
+    (row.items || []).forEach(it => {
+      const picked = it.picked || 0;
+      if(!picked) return;
+      const po = (it.po && String(it.po).trim()) ? String(it.po).trim() : '(Khong co)';
+      const key = String(it.item || '').toLowerCase() + '\u241F' + po.toLowerCase();
+      let e = map.get(key);
+      if(!e){ e = { total: 0, byType: {} }; map.set(key, e); }
+      e.total += picked;
+      e.byType[row.type] = (e.byType[row.type] || 0) + picked;
+    });
+  });
+  return map;
 }
 // CR của các dòng Plan còn được tính SL Plan (container chưa xoá, chưa Pick xong) — cùng điều kiện
 // loại dòng như buildCombinedPlanCompareTable()/buildCompareTable().
@@ -3205,6 +3225,12 @@ function buildCompareTable(type){
     if(isDone) continue;
     planPairs[key].qty += r.qty;
   }
+  // Trừ phần đã pick (có CR) của container đang pick dở — khớp cách tính của popup container.
+  const pickedMap = buildActivePickedByItemPo();
+  Object.keys(planPairs).forEach(key => {
+    const e = pickedMap.get(key);
+    if(e && e.byType[type]) planPairs[key].qty = Math.max(0, planPairs[key].qty - e.byType[type]);
+  });
 
   const rows = Object.values(planPairs).map(p => {
     const anyPO = p.custpo === '(Khong co)';
@@ -4752,7 +4778,8 @@ function buildItemLocatorPopoverHtml(item, po){
   }
   const totalQty = conts.reduce((s, c) => s + c.qty, 0);
   const totalPicked = conts.reduce((s, c) => s + (c.picked || 0), 0);
-  const remainingQty = totalQty - totalPicked; // SL kế hoạch còn phải pick
+  // SL kế hoạch còn phải pick — container Pick xong (tự động/tay/Load xong) coi như không còn cần gì.
+  const remainingQty = conts.reduce((s, c) => s + ((c.status === 'done' || c.status === 'manualDone') ? 0 : Math.max(0, c.qty - (c.picked || 0))), 0);
   // SỬA (lỗi thật đã gặp — popover báo "Đủ" trong khi bảng so sánh chính báo "Thiếu" cho ĐÚNG mã này):
   // trước đây cộng TẤT CẢ OQC (PASS+NG+khác) làm "Tổng tồn hiện có", trong khi bảng so sánh chính
   // (buildCombinedPlanCompareTable) VÀ mọi chỗ khác tính "Thiếu hàng" trong dashboard chỉ tính đúng
@@ -5260,6 +5287,19 @@ function buildCombinedPlanCompareTable(){
       planPairs[key].qtyByType[type] = (planPairs[key].qtyByType[type] || 0) + r.qty;
       planPairs[key].totalPlanQty += r.qty;
     }
+  });
+  // Trừ phần đã pick (có CR) của container đang pick dở — khớp cách tính của popup container.
+  const pickedMap = buildActivePickedByItemPo();
+  Object.keys(planPairs).forEach(key => {
+    const e = pickedMap.get(key);
+    if(!e) return;
+    const p = planPairs[key];
+    Object.keys(e.byType).forEach(t => {
+      if(p.qtyByType[t] === undefined) return;
+      const sub = Math.min(p.qtyByType[t], e.byType[t]);
+      p.qtyByType[t] -= sub;
+      p.totalPlanQty -= sub;
+    });
   });
 
   const rows = Object.values(planPairs).map(p => {
