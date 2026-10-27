@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.86';
+const APP_VERSION = 'v3.87';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -14181,15 +14181,16 @@ const TX_CHART_ITEMS = [
   // Kho 2B không có nghiệp vụ Receive thật (không nhận hàng trực tiếp vào 2B) -> ẩn cột này riêng ở
   // khung Kho 2B (excludeKho), các khung kho khác vẫn hiện bình thường.
   { key:'receive', label:'Receive', color:'#0E8F76', excludeKho:'2B' },
+  // Kho 3A: tách Put Away thành 2 thanh — Floor (đến mọi locator KHÔNG phải rack) / Rack (đến locator
+  // rack 3A-<Chữ><Số>-T<Số>, xem txLocatorIsRack()). Kho khác không có rack nên giữ 1 cột như cũ.
+  // Thứ tự cột (v3.87, Drak): Receive -> Put Away (Floor/Rack) -> Xuất/Nhận Transfer -> ...
+  { key:'putaway', label:'Put Away', color:'#F5A623', excludeKho:'3A' },
+  { key:'putawaySplit', label:'Put Away', onlyKho:'3A',
+    split:{ top:{ key:'putawayFloor', color:'#F5A623', label:'Floor' }, bottom:{ key:'putawayRack', color:'#B26A00', label:'Rack' } } },
   // 1 cột gộp Xuất/Nhận Transfer (2 thanh cạnh nhau) — Xuất lấy từ Menu Name "ITN Transfer"
   // (txState.transfer, đã có sẵn), Nhận lấy từ "ITN Receiving" (txState.transferNhap).
   { key:'transferSplit', label:'Xuất/Nhận Transfer',
     split:{ top:{ key:'transfer', color:'#2C6FCB', label:'Xuất' }, bottom:{ key:'transferNhap', color:'#00A3C4', label:'Nhận' } } },
-  // Kho 3A: tách Put Away thành 2 thanh — Floor (đến mọi locator KHÔNG phải rack) / Rack (đến locator
-  // rack 3A-<Chữ><Số>-T<Số>, xem txLocatorIsRack()). Kho khác không có rack nên giữ 1 cột như cũ.
-  { key:'putaway', label:'Put Away', color:'#F5A623', excludeKho:'3A' },
-  { key:'putawaySplit', label:'Put Away', onlyKho:'3A',
-    split:{ top:{ key:'putawayFloor', color:'#F5A623', label:'Floor' }, bottom:{ key:'putawayRack', color:'#B26A00', label:'Rack' } } },
   { key:'movePallet', label:'Move Pallet', color:'#7CB342' },
   // showContCount: thêm hiện số CONTAINER (CR#) riêng biệt đã pick, cạnh số LƯỢT pick — xem
   // txKhoPickingContCount() (đếm theo tập hợp CR# duy nhất, không phải cộng dồn contCount từng dòng vì
