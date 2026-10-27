@@ -397,6 +397,8 @@
   .plan-dc-row b{color:var(--violet);}
 
   .plan-table-wrap{max-height:360px; overflow:auto; border:1px solid var(--line); border-radius:7px;}
+  /* Bảng Thống kê Container theo Picking Status: hiện khoảng 20 dòng (mỗi dòng ~38px + dòng tiêu đề) trước khi cuộn. */
+  #cont-picking-detail-wrap{max-height:min(800px, 85vh);}
   .plan-detail-table{width:100%; border-collapse:collapse; font-size:12px; white-space:nowrap;}
   .plan-detail-table thead th{
     position:sticky; top:0; background:var(--panel); text-align:left; font-family:var(--mono);
