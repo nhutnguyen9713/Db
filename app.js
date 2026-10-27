@@ -122,6 +122,38 @@ const _mem = {};
 // duyệt này, và được nạp lại làm bản nền NGAY khi mở trang (trước khi Cloud/File kịp phản hồi) — nếu
 // Cloud đọc lỗi/chậm, người dùng vẫn thấy đúng dữ liệu gần nhất máy này từng có, không bị trắng trơn.
 const TN5_LOCAL_BACKUP_PREFIX = 'tn5_local_';
+// LỖI THẬT ĐÃ GẶP (v3.91 — Transaction: tải file mới + bấm Lưu, F5 lại ra file CŨ): file Transaction lớn
+// vượt dung lượng localStorage -> ghi bản sao lưu cục bộ thất bại (bị nuốt lỗi), localStorage vẫn giữ bản
+// CŨ của key đó, trong khi mốc _meta_updatedAt (nhỏ) vẫn ghi được bản MỚI. Lần mở sau: nạp bản cũ + mốc
+// khớp Cloud -> tưởng cache đúng, không tải lại -> hiện dữ liệu cũ. Giờ: ghi lỗi thì XOÁ bản cũ của key đó
+// và ghi tên key vào danh sách dưới đây; còn key nào trong danh sách thì không tin mốc cục bộ khi mở trang
+// (bắt buộc tải đủ từ Cloud), không có Cloud thì key thiếu sẽ được phục hồi từ IndexedDB (xem bên dưới).
+const TN5_LOCAL_BACKUP_FAILED_KEY = 'tn5_backup_failed_keys';
+function tn5LocalBackupFailedKeys(){
+  try{ return JSON.parse(localStorage.getItem(TN5_LOCAL_BACKUP_FAILED_KEY) || '[]') || []; }catch(e){ return []; }
+}
+function tn5LocalBackupMarkFailed(k, failed){
+  try{
+    const set = new Set(tn5LocalBackupFailedKeys());
+    if(failed === set.has(k)) return;
+    if(failed) set.add(k); else set.delete(k);
+    if(set.size) localStorage.setItem(TN5_LOCAL_BACKUP_FAILED_KEY, JSON.stringify([...set]));
+    else localStorage.removeItem(TN5_LOCAL_BACKUP_FAILED_KEY);
+  }catch(e){}
+}
+// Ghi 1 key vào bản sao lưu localStorage; trả về false nếu không ghi được (đã dọn bản cũ + đánh dấu).
+function tn5LocalBackupSet(k, v){
+  try{
+    localStorage.setItem(TN5_LOCAL_BACKUP_PREFIX + k, v);
+    tn5LocalBackupMarkFailed(k, false);
+    return true;
+  }catch(e){
+    try{ localStorage.removeItem(TN5_LOCAL_BACKUP_PREFIX + k); }catch(e2){}
+    tn5LocalBackupMarkFailed(k, true);
+    console.warn('Không ghi được bản sao lưu cục bộ cho khoá ' + k + ' (có thể do đầy dung lượng) — lần mở sau sẽ tải lại từ Cloud/IndexedDB:', e);
+    return false;
+  }
+}
 function tn5SeedMemFromLocalBackup(){
   try{
     for(let i = 0; i < localStorage.length; i++){
@@ -131,13 +163,12 @@ function tn5SeedMemFromLocalBackup(){
       }
     }
   }catch(e){ console.warn('Không đọc được bản sao lưu cục bộ trong trình duyệt:', e); }
+  // Bản sao lưu cục bộ đang thiếu key (ghi lỗi ở phiên trước) -> bỏ mốc cục bộ để CloudVault tải đủ từ Cloud.
+  if(tn5LocalBackupFailedKeys().length) delete _mem[STORAGE_KEY_META_STAMP];
 }
 function tn5PersistMemToLocalBackup(){
   // Mỗi key 1 try riêng: 1 key quá lớn/đầy dung lượng không còn làm bỏ qua mọi key phía sau.
-  Object.keys(_mem).forEach(k => {
-    try{ localStorage.setItem(TN5_LOCAL_BACKUP_PREFIX + k, _mem[k]); }
-    catch(e){ console.warn('Không ghi được bản sao lưu cục bộ cho khoá ' + k + ' (có thể do đầy dung lượng):', e); }
-  });
+  Object.keys(_mem).forEach(k => tn5LocalBackupSet(k, _mem[k]));
   // Bản sao lưu IndexedDB (không giới hạn nhỏ như localStorage) — ghi bất đồng bộ, không chặn luồng
   // chính; lỗi (nếu có) đã được nuốt bên trong scIdbSetKey.
   Object.keys(_mem).forEach(k => scIdbSetKey(k, _mem[k]));
@@ -279,7 +310,7 @@ const LS = {
     // mở/tải lại trang. Chỉ thực sự ghi + báo khi nội dung khác trước.
     if(tn5ValuesEqual(_mem[k], strV)) return;
     _mem[k] = strV;
-    try{ localStorage.setItem(TN5_LOCAL_BACKUP_PREFIX + k, strV); }catch(e){}
+    tn5LocalBackupSet(k, strV);
     scIdbSetKey(k, strV); // bản sao lưu IndexedDB — bổ sung, không giới hạn nhỏ như localStorage
     markUnsavedChanges(k);
   },
@@ -1393,8 +1424,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.90';
-const APP_VERSION_DATE = '27/10/2026';
+const APP_VERSION = 'v3.91';
+const APP_VERSION_DATE = '28/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -13997,7 +14028,11 @@ function txReadFileAsRows(file){
 function txSaveToStorage(){
   if(!STORAGE_OK || !txState) return;
   try{
-    LS.setItem(TX_STORAGE_KEY, JSON.stringify(txState));
+    // Không lưu các mảng TÍNH LẠI ĐƯỢC từ records (txEnsureDerived() dựng lại mỗi lần render) — giảm
+    // dung lượng, đỡ vượt giới hạn localStorage/Cloud với file Transaction lớn.
+    const { reworkXuat, reworkNhap, updownUp, updownDown, rackUp, rackDown, putaway, putawayFloor, putawayRack,
+            pickingFloor, pickingRack, movePallet, transferNhap, ...toSave } = txState;
+    LS.setItem(TX_STORAGE_KEY, JSON.stringify(toSave));
   }catch(err){
     console.warn('Không lưu được dữ liệu Transaction:', err);
   }
