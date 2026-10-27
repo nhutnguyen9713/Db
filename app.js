@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.84';
+const APP_VERSION = 'v3.85';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5684,10 +5684,10 @@ function buildEndBuyerPoMap(){
   });
   return map;
 }
-function poWithEndBuyer(custpo, map){
+function endBuyerPoFor(custpo, map){
   const po = String(custpo || '').trim();
-  const eb = po && map ? map.get(po.toLowerCase()) : '';
-  return eb && eb !== po ? `${po} (${eb})` : po;
+  const eb = po && map ? (map.get(po.toLowerCase()) || '') : '';
+  return eb && eb !== po ? eb : '';
 }
 
 function computeLoadedDoneContainerKeys(){
@@ -5743,7 +5743,7 @@ async function exportCombinedPlanToExcel(mode){
   // dãy/kệ rồi tới "T" + số tầng kệ) là hàng Rack.
   // Cột "Picking" (v3.84) ngay sau Cust PO: SL đã pick / SL Plan của mã trong container đó + locator Loading
   // đang giữ hàng đã pick (dòng tồn Loading có mã CR thuộc container), VD "500/700 DG3-Loading".
-  const itemHeaderParts = ['Item No.', 'Cust PO', 'Picking'];
+  const itemHeaderParts = ['Item No.', 'Cust PO', 'End Buyer PO', 'Picking'];
   khoHeaderLabels.forEach(label => {
     if(label === '3A') itemHeaderParts.push('3A trệt', '3A lầu', '3A Rack');
     else itemHeaderParts.push(label);
@@ -5845,7 +5845,8 @@ async function exportCombinedPlanToExcel(mode){
     }
     const itemValues = [
       r.item,
-      r.anyPO ? 'Bất kỳ PO' : poWithEndBuyer(r.custpo, endBuyerMap) + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
+      r.anyPO ? 'Bất kỳ PO' : r.custpo + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
+      r.anyPO ? '' : endBuyerPoFor(r.custpo, endBuyerMap),
       pickingText,
     ];
     (r.khoQtys || []).forEach((qty, i) => {
@@ -5859,7 +5860,7 @@ async function exportCombinedPlanToExcel(mode){
     if(isGroupFirst) groupIndex++;
     prevGroupKey = groupKey;
     const fillColor = groupIndex % 2 === 0 ? FILL_A : FILL_B;
-    const leftAlignCols = new Set([contHeaders.length + 1, contHeaders.length + 2, contHeaders.length + 3]); // Item No./Cust PO/Picking
+    const leftAlignCols = new Set([contHeaders.length + 1, contHeaders.length + 2, contHeaders.length + 4]); // Item No./Cust PO/Picking
     const row = ws1.addRow(rowValues);
     imgRows.push({ values: rowValues, fill: fillColor, first: isGroupFirst });
     row.eachCell((cell, colNumber) => {
@@ -5880,7 +5881,7 @@ async function exportCombinedPlanToExcel(mode){
     return;
   }
 
-  const colCapsByHeader1 = { 'Item No.': [14,16], 'Cust PO': [16,26], 'Picking': [12,30], 'Invoice': [10,14], 'CSR': [10,14] };
+  const colCapsByHeader1 = { 'Item No.': [14,16], 'Cust PO': [16,26], 'End Buyer PO': [12,14], 'Picking': [12,30], 'Invoice': [10,14], 'CSR': [10,14] };
   headers1.forEach((h,i) => {
     const [minW, maxW] = colCapsByHeader1[h] || [8,14];
     ws1.getColumn(i+1).width = Math.min(Math.max(colMaxLen1[i] + 2, minW), maxW);
