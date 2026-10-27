@@ -1743,6 +1743,8 @@
   .tx-chart-bar-half{width:19px;}
   .tx-chart-bar-label{margin-top:12px; font-family:var(--mono); font-size:12.5px; color:var(--text); text-align:center; font-weight:700;}
   .tx-chart-bar-sub{font-family:var(--mono); font-size:10.5px; color:var(--muted-2); margin-top:2px; font-weight:400;}
+  /* Mỗi cụm "số + chữ" (VD "55 Floor", "4 cont") nằm gọn 1 dòng riêng, không bị ngắt giữa số và chữ. */
+  .tx-chart-bar-sub > span{display:block; white-space:nowrap;}
   /* Bấm vào cột/thanh biểu đồ để xem popup chi tiết từng dòng — xem txOpenChartPopup() */
   .tx-chart-bar-col.tx-chart-clickable{cursor:pointer; border-radius:8px; transition:background .15s ease; padding:4px; margin:-4px;}
   .tx-chart-bar-col.tx-chart-clickable:hover{background:var(--panel-2);}

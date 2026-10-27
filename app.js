@@ -1424,7 +1424,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.91';
+const APP_VERSION = 'v3.92';
 const APP_VERSION_DATE = '28/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -14305,7 +14305,7 @@ function txChartGroupHtml(label, items, kho){
             <div class="tx-chart-bar tx-chart-bar-half tx-chart-clickable" data-chart-kind="${top.key}" data-chart-kho="${escHtml(kho)}" style="height:${pctTop}%; background:${top.color};" title="Bấm để xem chi tiết từng dòng"></div>
             <div class="tx-chart-bar tx-chart-bar-half tx-chart-clickable" data-chart-kind="${bottom.key}" data-chart-kho="${escHtml(kho)}" style="height:${pctBottom}%; background:${bottom.color};" title="Bấm để xem chi tiết từng dòng"></div>
           </div>
-          <div class="tx-chart-bar-label">${it.label}<div class="tx-chart-bar-sub">${fmt(top.rowsCount)} ${top.label} · ${fmt(bottom.rowsCount)} ${bottom.label}${it.contCount !== undefined ? ` · ${fmt(it.contCount)} cont` : ''}</div></div>
+          <div class="tx-chart-bar-label">${it.label}<div class="tx-chart-bar-sub"><span>${fmt(top.rowsCount)} ${top.label}</span><span>${fmt(bottom.rowsCount)} ${bottom.label}</span>${it.contCount !== undefined ? `<span>${fmt(it.contCount)} cont</span>` : ''}</div></div>
         </div>`;
       }
       const contCountHtml = it.contCount !== undefined
@@ -14313,7 +14313,7 @@ function txChartGroupHtml(label, items, kho){
       return `<div class="tx-chart-bar-col tx-chart-clickable" data-chart-kind="${it.key}" data-chart-kho="${escHtml(kho)}" title="Bấm để xem chi tiết từng dòng">
         <div class="tx-chart-bar-value" style="color:${it.color}; white-space:nowrap;">${fmt(it.total)}${contCountHtml}</div>
         <div class="tx-chart-bar-track"><div class="tx-chart-bar" style="height:${pct}%; background:${it.color};"></div></div>
-        <div class="tx-chart-bar-label">${it.label}<div class="tx-chart-bar-sub">${fmt(it.rowsCount)} dòng đang hiển thị</div></div>
+        <div class="tx-chart-bar-label">${it.label}<div class="tx-chart-bar-sub"><span>${fmt(it.rowsCount)} dòng</span><span>đang hiển thị</span></div></div>
       </div>`;
     }).join('')}</div>
   </div>`;
