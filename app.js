@@ -1424,7 +1424,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.92';
+const APP_VERSION = 'v3.93';
 const APP_VERSION_DATE = '28/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -14233,7 +14233,7 @@ const TX_CHART_ITEMS = [
   // 1 cột gộp chung Lên/Xuống 3AFG (thay vì 2 cột riêng) để biểu đồ đều cột giữa các khung kho — cột
   // được tô 2 nửa màu khác nhau (đỏ/vàng đất) theo tỉ lệ Lên/Xuống, chỉ hiện ở khung Kho 3A (xem
   // onlyKho) vì khu lầu 3AFG chỉ thuộc Kho 3A.
-  { key:'updownSplit', label:'Lên/Xuống 3A M1/M2', onlyKho:'3A',
+  { key:'updownSplit', label:'Lên/Xuống M1/M2', onlyKho:'3A',
     split:{ top:{ key:'updownUp', color:'#D6394B', label:'Lên' }, bottom:{ key:'updownDown', color:'#8D5A00', label:'Xuống' } } },
   // 1 cột gộp Xuất/Nhận Transfer (2 thanh cạnh nhau) — Xuất lấy từ Menu Name "ITN Transfer"
   // (txState.transfer, đã có sẵn), Nhận lấy từ "ITN Receiving" (txState.transferNhap).
