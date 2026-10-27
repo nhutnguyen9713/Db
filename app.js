@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.87';
+const APP_VERSION = 'v3.88';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -14195,7 +14195,11 @@ const TX_CHART_ITEMS = [
   // showContCount: thêm hiện số CONTAINER (CR#) riêng biệt đã pick, cạnh số LƯỢT pick — xem
   // txKhoPickingContCount() (đếm theo tập hợp CR# duy nhất, không phải cộng dồn contCount từng dòng vì
   // 1 container có thể rải trên nhiều dòng khác nhau, cộng dồn sẽ đếm trùng).
-  { key:'picking', label:'Picking', color:'#6E4FE0', showContCount:true },
+  { key:'picking', label:'Picking', color:'#6E4FE0', showContCount:true, excludeKho:'3A' },
+  // Kho 3A: tách Picking theo Locator XUẤT (nơi lấy hàng) — Floor (mọi locator không phải rack) / Rack
+  // (3A-<Chữ><Số>-T<Số>), cùng quy ước với cột Put Away Floor/Rack. Xem txBuildPickingFloorRackRows().
+  { key:'pickingSplit', label:'Picking', onlyKho:'3A', showContCount:true,
+    split:{ top:{ key:'pickingFloor', color:'#6E4FE0', label:'Floor' }, bottom:{ key:'pickingRack', color:'#B39DFF', label:'Rack' } } },
   // 1 cột gộp Xuất/Nhận RW (2 thanh cạnh nhau, giống cột Lên/Xuống 3AFG bên dưới) — hiện ở MỌI khung
   // kho (không giới hạn onlyKho) vì hàng Rework có thể xuất/nhận ở bất kỳ kho nào.
   { key:'reworkSplit', label:'Xuất/Nhận RW',
@@ -14266,7 +14270,7 @@ function txChartGroupHtml(label, items, kho){
             <div class="tx-chart-bar tx-chart-bar-half tx-chart-clickable" data-chart-kind="${top.key}" data-chart-kho="${escHtml(kho)}" style="height:${pctTop}%; background:${top.color};" title="Bấm để xem chi tiết từng dòng"></div>
             <div class="tx-chart-bar tx-chart-bar-half tx-chart-clickable" data-chart-kind="${bottom.key}" data-chart-kho="${escHtml(kho)}" style="height:${pctBottom}%; background:${bottom.color};" title="Bấm để xem chi tiết từng dòng"></div>
           </div>
-          <div class="tx-chart-bar-label">${it.label}<div class="tx-chart-bar-sub">${fmt(top.rowsCount)} ${top.label} · ${fmt(bottom.rowsCount)} ${bottom.label}</div></div>
+          <div class="tx-chart-bar-label">${it.label}<div class="tx-chart-bar-sub">${fmt(top.rowsCount)} ${top.label} · ${fmt(bottom.rowsCount)} ${bottom.label}${it.contCount !== undefined ? ` · ${fmt(it.contCount)} cont` : ''}</div></div>
         </div>`;
       }
       const contCountHtml = it.contCount !== undefined
@@ -14294,7 +14298,9 @@ function renderTxChart(){
         if(it.split){
           const top = { ...it.split.top, ...txKhoTotalFor(it.split.top.key, kho) };
           const bottom = { ...it.split.bottom, ...txKhoTotalFor(it.split.bottom.key, kho) };
-          return { ...it, split:{ top, bottom }, total: top.total + bottom.total, rowsCount: top.rowsCount + bottom.rowsCount };
+          const res = { ...it, split:{ top, bottom }, total: top.total + bottom.total, rowsCount: top.rowsCount + bottom.rowsCount };
+          if(it.showContCount) res.contCount = txKhoPickingContCount(kho);
+          return res;
         }
         const base = { ...it, ...txKhoTotalFor(it.key, kho) };
         if(it.showContCount) base.contCount = txKhoPickingContCount(kho);
@@ -14321,6 +14327,8 @@ const TX_CHART_POPUP_TITLES = {
   putaway: 'Put Away',
   putawayFloor: 'Put Away — Floor',
   putawayRack: 'Put Away — Rack (3A)',
+  pickingFloor: 'Picking — Floor',
+  pickingRack: 'Picking — Rack (3A)',
   movePallet: 'Move Pallet',
   picking: 'Picking',
   reworkXuat: 'Rework — Xuất',
@@ -14393,6 +14401,9 @@ const TX_CHART_POPUP_COLS = {
 };
 TX_CHART_POPUP_COLS.putawayFloor = TX_CHART_POPUP_COLS.putaway;
 TX_CHART_POPUP_COLS.putawayRack = TX_CHART_POPUP_COLS.putaway;
+TX_CHART_POPUP_COLS.pickingFloor = TX_CHART_POPUP_COLS.pickingRack = [
+  { key:'locatorXuat', label:'Locator xuất' }, ...TX_CHART_POPUP_COLS.picking
+];
 let txChartPopupRows = []; // toàn bộ dòng (chưa lọc tìm kiếm) của popup đang mở — ô tìm kiếm lọc lại trên tập này
 let txChartPopupCols = [];
 function txChartPopupRenderRows(rows){
@@ -14536,7 +14547,7 @@ function txOpenChartPopup(kind, kho){
   // Picking: thêm cột Invoice (VNC) — tra theo từng mã CR trong Reference (1 dòng có thể gộp nhiều CR,
   // VD "CR0167271, CR0167276"), dùng CHUNG txBuildCrInvoiceMap()/txInvoiceForCr() với bảng "Theo
   // container (CR)" để luôn khớp số liệu giữa 2 nơi.
-  if(kind === 'picking'){
+  if(kind === 'picking' || kind === 'pickingFloor' || kind === 'pickingRack'){
     const crInvMap = txBuildCrInvoiceMap();
     rows = rows.map(r => {
       const crCodes = String(r.reference || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -14602,6 +14613,9 @@ function txEnsureDerived(){
   txState.putaway = txBuildPutAwayDetailRows(txState.records, txMasterMap);
   txState.putawayFloor = txState.putaway.filter(r => !txLocatorIsRack(r.locatorDen));
   txState.putawayRack = txState.putaway.filter(r => txLocatorIsRack(r.locatorDen));
+  const pk = txBuildPickingFloorRackRows(txState.records, txMasterMap);
+  txState.pickingFloor = pk.floor;
+  txState.pickingRack = pk.rack;
   txState.movePallet = txBuildMovePalletDetailRows(txState.records, txMasterMap);
   txState.transferNhap = txBuildTransferNhapDetailRows(txState.records);
 }
@@ -15045,6 +15059,28 @@ function renderTxUpDownSummaries(ids, collect){
 // LÊN = từ locator bất kỳ (không phải rack) đến rack; XUỐNG = từ rack về locator bất kỳ (không phải rack).
 function txLocatorIsRack(locator){
   return /^3A-[A-Z]+\d+-T\d+$/i.test(String(locator || '').trim());
+}
+// Picking tách Floor/Rack theo Locator xuất — đếm lượt y hệt txBuildStatsFromRecords() (1 lượt / Set ID, bỏ
+// nhân sự SHIP) nên Floor + Rack luôn bằng tổng cột Picking; gom dòng theo Kho / Locator xuất / Locator đến /
+// Item / User.
+function txBuildPickingFloorRackRows(records, masterMap){
+  const locatorKhoMap = buildLocatorKhoMap();
+  const maps = { floor: new Map(), rack: new Map() };
+  for(const group of txGroupBySetId(records || [])){
+    const d = txDescribeSet(group, locatorKhoMap);
+    if(d.kind !== 'picking') continue;
+    if(masterMap && masterMap[d.user] === 'SHIP') continue;
+    const m = txLocatorIsRack(d.locatorXuat) ? maps.rack : maps.floor;
+    const key = [d.kho, d.locatorXuat || '—', d.locatorDen || '—', d.item, d.user].join('||');
+    const cur = m.get(key);
+    if(cur){ cur.total++; d.crCodes.forEach(c => cur.contSet.add(c)); }
+    else m.set(key, { khoXuat: d.kho, locatorXuat: d.locatorXuat || '—', locatorDen: d.locatorDen || '—', item: d.item, user: d.user, total: 1, contSet: new Set(d.crCodes) });
+  }
+  const out = m => [...m.values()].map(({ contSet, ...rest }) => {
+    const contCodes = [...contSet].sort();
+    return { ...rest, contCodes, reference: contCodes.join(', '), contCount: contCodes.length };
+  });
+  return { floor: out(maps.floor), rack: out(maps.rack) };
 }
 function txCollectRackCandidates(records){
   const locatorKhoMap = buildLocatorKhoMap();
