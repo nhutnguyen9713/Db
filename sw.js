@@ -6,7 +6,7 @@
 // (2) bỏ query ?_t=... khỏi khoá cache (trước đây mỗi lần mở tạo thêm 1 mục không bao giờ bị dọn, và mở
 // offline không khớp được); (3) thêm doi-chieu.html / tong-hop-3-plan.html vào precache và
 // cài từng file riêng để 1 file lỗi không làm hỏng cả lô.
-const CACHE_NAME = 'tn5-dashboard-v4';
+const CACHE_NAME = 'tn5-dashboard-v5';
 const NETWORK_TIMEOUT_MS = 4000;
 const CORE_ASSETS = [
   './', './index.html', './app.js', './styles.css', './manifest.json', './icon-192.png', './icon-512.png',
@@ -47,7 +47,10 @@ self.addEventListener('fetch', (event) => {
   const key = cacheKeyFor(req);
   const fromCache = () => caches.open(CACHE_NAME).then((cache) => cache.match(key));
 
-  const network = fetch(req).then((res) => {
+  // cache:'no-cache' — luôn hỏi lại máy chủ (ETag, trả 304 rất nhẹ nếu không đổi) thay vì lấy bản trong
+  // HTTP cache của trình duyệt: GitHub Pages cho cache 10 phút, nên trước đây F5 vẫn ra app.js cũ dù đã
+  // cập nhật (chỉ Ctrl+Shift+R mới thấy bản mới).
+  const network = fetch(req, { cache: 'no-cache' }).then((res) => {
     if (res && res.ok) {
       const resClone = res.clone();
       caches.open(CACHE_NAME).then((cache) => cache.put(key, resClone)).catch(() => {});
