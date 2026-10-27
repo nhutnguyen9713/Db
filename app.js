@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.89';
+const APP_VERSION = 'v3.90';
 const APP_VERSION_DATE = '27/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -14183,15 +14183,10 @@ const TX_CHART_ITEMS = [
   { key:'receive', label:'Receive', color:'#0E8F76', excludeKho:'2B' },
   // Kho 3A: tách Put Away thành 2 thanh — Floor (đến mọi locator KHÔNG phải rack) / Rack (đến locator
   // rack 3A-<Chữ><Số>-T<Số>, xem txLocatorIsRack()). Kho khác không có rack nên giữ 1 cột như cũ.
-  // Thứ tự cột (v3.87, Drak): Receive -> Put Away (Floor/Rack) -> Xuất/Nhận Transfer -> ...
+  // Thứ tự cột (v3.90, Drak): Receive -> Put Away -> Picking -> Lên/Xuống M1/M2 -> Xuất/Nhận Transfer -> Move Pallet -> RW -> Rack.
   { key:'putaway', label:'Put Away', color:'#F5A623', excludeKho:'3A' },
   { key:'putawaySplit', label:'Put Away', onlyKho:'3A',
     split:{ top:{ key:'putawayFloor', color:'#F5A623', label:'Floor' }, bottom:{ key:'putawayRack', color:'#B26A00', label:'Rack' } } },
-  // 1 cột gộp Xuất/Nhận Transfer (2 thanh cạnh nhau) — Xuất lấy từ Menu Name "ITN Transfer"
-  // (txState.transfer, đã có sẵn), Nhận lấy từ "ITN Receiving" (txState.transferNhap).
-  { key:'transferSplit', label:'Xuất/Nhận Transfer',
-    split:{ top:{ key:'transfer', color:'#2C6FCB', label:'Xuất' }, bottom:{ key:'transferNhap', color:'#00A3C4', label:'Nhận' } } },
-  { key:'movePallet', label:'Move Pallet', color:'#7CB342' },
   // showContCount: thêm hiện số CONTAINER (CR#) riêng biệt đã pick, cạnh số LƯỢT pick — xem
   // txKhoPickingContCount() (đếm theo tập hợp CR# duy nhất, không phải cộng dồn contCount từng dòng vì
   // 1 container có thể rải trên nhiều dòng khác nhau, cộng dồn sẽ đếm trùng).
@@ -14200,15 +14195,20 @@ const TX_CHART_ITEMS = [
   // (3A-<Chữ><Số>-T<Số>), cùng quy ước với cột Put Away Floor/Rack. Xem txBuildPickingFloorRackRows().
   { key:'pickingSplit', label:'Picking', onlyKho:'3A', showContCount:true,
     split:{ top:{ key:'pickingFloor', color:'#6E4FE0', label:'Floor' }, bottom:{ key:'pickingRack', color:'#B39DFF', label:'Rack' } } },
-  // 1 cột gộp Xuất/Nhận RW (2 thanh cạnh nhau, giống cột Lên/Xuống 3AFG bên dưới) — hiện ở MỌI khung
+  // 1 cột gộp chung Lên/Xuống 3AFG (thay vì 2 cột riêng) để biểu đồ đều cột giữa các khung kho — cột
+  // được tô 2 nửa màu khác nhau (đỏ/vàng đất) theo tỉ lệ Lên/Xuống, chỉ hiện ở khung Kho 3A (xem
+  // onlyKho) vì khu lầu 3AFG chỉ thuộc Kho 3A.
+  { key:'updownSplit', label:'Lên/Xuống 3A M1/M2', onlyKho:'3A',
+    split:{ top:{ key:'updownUp', color:'#D6394B', label:'Lên' }, bottom:{ key:'updownDown', color:'#8D5A00', label:'Xuống' } } },
+  // 1 cột gộp Xuất/Nhận Transfer (2 thanh cạnh nhau) — Xuất lấy từ Menu Name "ITN Transfer"
+  // (txState.transfer, đã có sẵn), Nhận lấy từ "ITN Receiving" (txState.transferNhap).
+  { key:'transferSplit', label:'Xuất/Nhận Transfer',
+    split:{ top:{ key:'transfer', color:'#2C6FCB', label:'Xuất' }, bottom:{ key:'transferNhap', color:'#00A3C4', label:'Nhận' } } },
+  { key:'movePallet', label:'Move Pallet', color:'#7CB342' },
+  // 1 cột gộp Xuất/Nhận RW (2 thanh cạnh nhau, giống cột Lên/Xuống 3AFG) — hiện ở MỌI khung
   // kho (không giới hạn onlyKho) vì hàng Rework có thể xuất/nhận ở bất kỳ kho nào.
   { key:'reworkSplit', label:'Xuất/Nhận RW',
     split:{ top:{ key:'reworkXuat', color:'#C2185B', label:'Xuất' }, bottom:{ key:'reworkNhap', color:'#FF7043', label:'Nhận' } } },
-  // 1 cột gộp chung Lên/Xuống 3AFG (thay vì 2 cột riêng) để biểu đồ đều cột giữa các khung kho — cột
-  // được tô 2 nửa màu khác nhau (đỏ/vàng đất) theo tỉ lệ Lên/Xuống, chỉ hiện ở khung Kho 3A (xem
-  // onlyKho bên dưới) vì khu lầu 3AFG chỉ thuộc Kho 3A.
-  { key:'updownSplit', label:'Lên/Xuống 3A M1/M2', onlyKho:'3A',
-    split:{ top:{ key:'updownUp', color:'#D6394B', label:'Lên' }, bottom:{ key:'updownDown', color:'#8D5A00', label:'Xuống' } } },
   // Lên/Xuống Rack 3A (locator 3A-###-T#) — cũng chỉ thuộc Kho 3A, cùng kiểu cột gộp 2 nửa với Lên/Xuống 3AFG.
   { key:'rackSplit', label:'Lên/Xuống Rack', onlyKho:'3A',
     split:{ top:{ key:'rackUp', color:'#3949AB', label:'Lên' }, bottom:{ key:'rackDown', color:'#546E7A', label:'Xuống' } } }
