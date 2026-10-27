@@ -1393,7 +1393,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.85';
+const APP_VERSION = 'v3.86';
 const APP_VERSION_DATE = '22/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4343,7 +4343,7 @@ function contKpiRows(kind){
       (String(r.csr || '').match(/CR\d+/gi) || []).forEach(cr => (pickerMap.get(cr.toUpperCase()) || []).forEach(u => pickers.add(u)));
       const ship = contKpiLoadStatus(r.csr, r.planQty || 0);
       return {
-        loadStatus: ship.loadStatus, loadKey: ship.loadKey,
+        loadStatus: ship.loadStatus, loadKey: ship.loadKey, comment: r.comment || '',
         // CR không có trong file Transaction đang tải: đã có SL pick -> pick từ ca trước (ngoài khung giờ của file);
         // chưa pick gì -> "—".
         pickers: [...pickers].sort().join(', ') || (!txHasRecords ? 'Chưa tải file Transaction' : (picked > 0 || r.status === 'done' || r.status === 'manualDone') ? 'Pick Từ Ca Trước' : '—'),
@@ -4366,7 +4366,7 @@ function renderContKpiPopup(kind){
   const totalPlan = rows.reduce((s, r) => s + r.planQty, 0), totalPicked = rows.reduce((s, r) => s + r.picked, 0);
   content.innerHTML = `<table class="plan-detail-table"><thead><tr>
       <th>#</th><th>Loại</th><th>Cont</th><th>Ngày Load</th><th>Giờ Plan</th><th>Invoice</th><th>CR</th><th>Kho</th>
-      <th style="text-align:right">SL Plan</th><th style="text-align:right">Đã pick</th><th style="text-align:right">%</th><th>Trạng thái</th><th>Người pick</th><th>Trạng thái Load</th>
+      <th style="text-align:right">SL Plan</th><th style="text-align:right">Đã pick</th><th style="text-align:right">%</th><th>Trạng thái</th><th>Người pick</th><th>Trạng thái Load</th><th>Ghi chú</th>
     </tr></thead><tbody>${rows.map((r, i) => `<tr${r.loadKey === 'done' ? ' class="cont-kpi-loaded"' : ''}>
       <td>${i + 1}</td><td>${escHtml(r.type)}</td><td>${escHtml(String(r.cNo))}</td><td>${escHtml(r.loadDate)}</td><td>${escHtml(r.planTime)}</td>
       <td>${escHtml(r.invoice)}</td><td>${escHtml(r.csr)}</td><td>${escHtml(r.kho)}</td>
@@ -4374,8 +4374,9 @@ function renderContKpiPopup(kind){
       <td style="color:${CONT_PICK_STATUS_COLOR[r.status]}; font-weight:600;">${escHtml(r.statusLabel)}</td>
       <td style="white-space:normal; min-width:140px;">${escHtml(r.pickers)}</td>
       <td style="color:${CONT_KPI_LOAD_COLOR[r.loadKey]}; font-weight:600;">${escHtml(r.loadStatus)}</td>
+      <td style="white-space:normal; min-width:140px;">${escHtml(r.comment)}</td>
     </tr>`).join('')}</tbody>
-    <tfoot><tr style="font-weight:700;"><td colspan="8">Tổng</td><td class="num">${fmt(totalPlan)}</td><td class="num">${fmt(totalPicked)}</td><td colspan="4"></td></tr></tfoot></table>`;
+    <tfoot><tr style="font-weight:700;"><td colspan="8">Tổng</td><td class="num">${fmt(totalPlan)}</td><td class="num">${fmt(totalPicked)}</td><td colspan="5"></td></tr></tfoot></table>`;
 }
 async function exportContKpiExcel(){
   if(!LIB_EXCELJS_OK){ alert('Không tải được thư viện xuất Excel (cần Internet). Vui lòng thử lại.'); return; }
@@ -4385,21 +4386,21 @@ async function exportContKpiExcel(){
   workbook.creator = 'TN5 Dashboard';
   workbook.created = new Date();
   const ws = workbook.addWorksheet((CONT_KPI_TITLES[kind] || 'Container').slice(0, 31));
-  const headers = ['#', 'Loại', 'Cont', 'Ngày Load', 'Giờ Plan', 'Invoice', 'CR', 'Kho', 'SL Plan', 'Đã pick', '%', 'Trạng thái', 'Người pick', 'Trạng thái Load'];
+  const headers = ['#', 'Loại', 'Cont', 'Ngày Load', 'Giờ Plan', 'Invoice', 'CR', 'Kho', 'SL Plan', 'Đã pick', '%', 'Trạng thái', 'Người pick', 'Trạng thái Load', 'Ghi chú'];
   ws.addRow(headers);
   rows.forEach((r, i) => {
-    const row = ws.addRow([i + 1, r.type, r.cNo, r.loadDate, r.planTime, r.invoice, r.csr, r.kho, r.planQty, r.picked, r.pct / 100, r.statusLabel, r.pickers, r.loadStatus]);
+    const row = ws.addRow([i + 1, r.type, r.cNo, r.loadDate, r.planTime, r.invoice, r.csr, r.kho, r.planQty, r.picked, r.pct / 100, r.statusLabel, r.pickers, r.loadStatus, r.comment]);
     // Tô xanh cả dòng container đã Load xong (giống popup).
     if(r.loadKey === 'done') row.eachCell({ includeEmpty: true }, cell => { cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFC6EFCE' } }; });
   });
-  ws.addRow(['', 'Tổng', '', '', '', '', '', '', rows.reduce((s, r) => s + r.planQty, 0), rows.reduce((s, r) => s + r.picked, 0), '', '', '', '']).font = { bold: true };
+  ws.addRow(['', 'Tổng', '', '', '', '', '', '', rows.reduce((s, r) => s + r.planQty, 0), rows.reduce((s, r) => s + r.picked, 0), '', '', '', '', '']).font = { bold: true };
   const thin = { style:'thin', color:{ argb:'FFAAAAAA' } };
   ws.eachRow(row => row.eachCell({ includeEmpty: true }, cell => { cell.border = { top:thin, bottom:thin, left:thin, right:thin }; }));
   const head = ws.getRow(1);
   head.font = { bold: true, color:{ argb:'FFFFFFFF' } };
   head.eachCell(cell => { cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF1F2937' } }; });
   ws.getColumn(11).numFmt = '0.00%';
-  [5, 7, 7, 12, 10, 12, 18, 7, 10, 10, 9, 12, 30, 16].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  [5, 7, 7, 12, 10, 12, 18, 7, 10, 10, 9, 12, 30, 16, 30].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   ws.views = [{ state:'frozen', ySplit:1 }];
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
