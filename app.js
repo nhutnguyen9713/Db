@@ -1424,8 +1424,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.94';
-const APP_VERSION_DATE = '28/10/2026';
+const APP_VERSION = 'v3.95';
+const APP_VERSION_DATE = '29/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -13642,6 +13642,22 @@ function txDescribeSet(group, locatorKhoMap){
   return { first, transType, menuName, item, user, locatorXuat, locatorDen, dt, qty, reference, gi, kind, kho, crCodes };
 }
 
+// Nhân sự SHIP theo bảng Master — so khớp tên đã chuẩn hoá (Unicode NFC, bỏ khoảng trắng thừa, không phân
+// biệt hoa/thường) ở cả tên lẫn giá trị "SHIP": tên tiếng Việt trong file Transaction có thể ở dạng dấu tổ hợp
+// (NFD) khác với tên gõ tay trong Master (NFC) dù nhìn y hệt nhau, so === trực tiếp sẽ trượt.
+const _txShipNormCache = new WeakMap();
+function txNormUserName(u){ return String(u || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase(); }
+function txIsShipUser(user, masterMap){
+  if(!masterMap) return false;
+  let set = _txShipNormCache.get(masterMap);
+  if(!set || set._size !== Object.keys(masterMap).length || set._sig !== JSON.stringify(masterMap)){
+    set = new Set(Object.entries(masterMap).filter(([, v]) => String(v || '').trim().toUpperCase() === 'SHIP').map(([k]) => txNormUserName(k)));
+    set._size = Object.keys(masterMap).length; set._sig = JSON.stringify(masterMap);
+    _txShipNormCache.set(masterMap, set);
+  }
+  return set.has(txNormUserName(user));
+}
+
 function txBuildStatsFromRecords(records, masterMap){
   const locatorKhoMap = buildLocatorKhoMap();
   const receiveMap = new Map();
@@ -13687,7 +13703,7 @@ function txBuildStatsFromRecords(records, masterMap){
       // Nhân sự SHIP (đánh dấu "SHIP" thay vì 1 kho thật trong bảng Master) không tính vào Pick cont —
       // các dòng Pick(...) của họ không phải pick hàng thật từ kho để đóng container, loại khỏi MỌI
       // bảng/tổng của Pick cont (Theo kho/Theo người/Theo container/chi tiết từng dòng).
-      if(masterMap && masterMap[user] === 'SHIP') continue;
+      if(txIsShipUser(user, masterMap)) continue;
       countPicking++;
       const khoXuat = d.kho;
       // Bỏ Locator xuất khỏi tiêu chí nhóm — chỉ còn Kho xuất / Locator đến / Item / User.
@@ -14516,7 +14532,7 @@ function txBuildCrPlanTimeMap(){
   } catch(e){ /* Plan chưa sẵn sàng -> "—" */ }
   return map;
 }
-function txBuildPickingContRows(kho){
+function txBuildPickingContRows(kho, rackFilter){ // rackFilter: undefined = tất cả, 'floor' / 'rack' = chỉ lượt pick từ Floor / Rack
   if(!txState || !txState.records) return [];
   const locMap = buildLocatorKhoMap();
   const crInvMap = txBuildCrInvoiceMap();
@@ -14525,7 +14541,8 @@ function txBuildPickingContRows(kho){
   for(const group of txGroupBySetId(txState.records)){
     const d = txDescribeSet(group, locMap);
     if(d.kind !== 'picking' || d.kho !== kho) continue;
-    if(typeof txMasterMap !== 'undefined' && txMasterMap && txMasterMap[d.user] === 'SHIP') continue;
+    if(rackFilter && (rackFilter === 'rack') !== txLocatorIsRack(d.locatorXuat)) continue;
+    if(typeof txMasterMap !== 'undefined' && txIsShipUser(d.user, txMasterMap)) continue;
     const codes = d.crCodes.length ? d.crCodes : [TX_CONT_NO_CR];
     codes.forEach(cr => {
       let e = by.get(cr);
@@ -14599,9 +14616,10 @@ function txOpenChartPopup(kind, kho){
   searchInput.value = '';
   txChartPopupRenderRows(rows);
   const contWrap = document.getElementById('tx-chart-popup-cont-wrap');
-  txChartPopupContRows = kind === 'picking' ? txBuildPickingContRows(kho) : [];
-  if(contWrap) contWrap.style.display = kind === 'picking' ? '' : 'none';
-  if(kind === 'picking') txChartPopupRenderCont(txChartPopupContRows);
+  const isPickKind = kind === 'picking' || kind === 'pickingFloor' || kind === 'pickingRack';
+  txChartPopupContRows = isPickKind ? txBuildPickingContRows(kho, kind === 'pickingFloor' ? 'floor' : kind === 'pickingRack' ? 'rack' : undefined) : [];
+  if(contWrap) contWrap.style.display = isPickKind ? '' : 'none';
+  if(isPickKind) txChartPopupRenderCont(txChartPopupContRows);
   document.getElementById('kho-modal-overlay').classList.add('show');
   searchInput.focus();
 }
@@ -14712,7 +14730,7 @@ function txBuildSummaries(records, masterMap){
     const d = txDescribeSet(group, locatorKhoMap);
     if(!d.kind) continue;
     // Nhân sự SHIP không tính vào Pick cont — xem giải thích ở txBuildStatsFromRecords().
-    if(d.kind === 'picking' && masterMap && masterMap[d.user] === 'SHIP') continue;
+    if(d.kind === 'picking' && txIsShipUser(d.user, masterMap)) continue;
     const s = out[d.kind];
     bump(s.byKho, d.kho || '—', d.qty, d.user, null);
     bump(s.byUser, d.user || '—', d.qty, null, d.kho);
@@ -15104,7 +15122,7 @@ function txBuildPickingFloorRackRows(records, masterMap){
   for(const group of txGroupBySetId(records || [])){
     const d = txDescribeSet(group, locatorKhoMap);
     if(d.kind !== 'picking') continue;
-    if(masterMap && masterMap[d.user] === 'SHIP') continue;
+    if(txIsShipUser(d.user, masterMap)) continue;
     const m = txLocatorIsRack(d.locatorXuat) ? maps.rack : maps.floor;
     const key = [d.kho, d.locatorXuat || '—', d.locatorDen || '—', d.item, d.user].join('||');
     const cur = m.get(key);
@@ -15226,7 +15244,7 @@ function txCollectPutAwayCandidates(records, masterMap){
     if(!xuatIsStaging || denIsStaging) continue; // chỉ tính từ vị trí tạm -> vị trí thật (không tính tạm -> tạm hay chiều ngược lại)
     // Nhân sự SHIP (đánh dấu "SHIP" trong bảng Master) không tính vào Put Away — xem giải thích ở
     // txBuildStatsFromRecords() (áp dụng cùng quy ước với Pick cont).
-    if(masterMap && masterMap[d.user] === 'SHIP') continue;
+    if(txIsShipUser(d.user, masterMap)) continue;
     if(TX_PUTAWAY_EXCLUDED_MENU_NAMES.has(String(d.menuName || '').toLowerCase())) continue;
     out.push(d);
   }
@@ -15312,7 +15330,7 @@ function txCollectMovePalletCandidates(records, masterMap){
     // Đã thuộc logic Lên/Xuống khu lầu 3AFG hoặc Lên/Xuống Rack (1 đầu thuộc khu đó, đầu kia không) -> loại.
     if(txLocatorHasMezzaninePrefix(d.locatorXuat) !== txLocatorHasMezzaninePrefix(d.locatorDen)) continue;
     if(txLocatorIsRack(d.locatorXuat) !== txLocatorIsRack(d.locatorDen)) continue;
-    if(masterMap && masterMap[d.user] === 'SHIP') continue;
+    if(txIsShipUser(d.user, masterMap)) continue;
     out.push(d);
   }
   return txDedupeByGiEarliest(out);
