@@ -1424,7 +1424,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.95';
+const APP_VERSION = 'v3.96';
 const APP_VERSION_DATE = '29/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3527,6 +3527,11 @@ function pickPctLabel(p){
   return t.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1') + '%';
 }
 const CONT_PICK_STATUS_LABEL = { notStarted: 'Chưa pick', inProgress: 'Đang pick', done: 'Pick xong', manualDone: 'Pick xong' };
+// Nhãn trạng thái của 1 container — cont tự tính xong vì đã Load Xong theo dữ liệu Ship (màu tím) ghi "Load xong".
+function contPickStatusLabel(row){
+  if(row && row.isShipDone) return 'Load xong';
+  return CONT_PICK_STATUS_LABEL[row && row.status] || (row && row.status) || '';
+}
 const CONT_PICK_STATUS_COLOR = { notStarted: 'var(--red)', inProgress: 'var(--amber-bright)', done: 'var(--teal)', manualDone: 'var(--violet)' };
 const CONT_PICK_STATUS_ORDER = { notStarted: 0, inProgress: 1, done: 2, manualDone: 2 };
 
@@ -3890,7 +3895,7 @@ let contPickColFilters = {}; // col -> Set giá trị được chọn (không c�
 let contPickSort = { col: null, dir: 1 };
 
 function cptColLabel(row, col){
-  if(col === 'status') return CONT_PICK_STATUS_LABEL[row.status] || row.status;
+  if(col === 'status') return contPickStatusLabel(row);
   if(col === 'cNo') return String(row.cNo);
   return row[col] || '';
 }
@@ -3983,7 +3988,7 @@ function renderContPickTable(){
           </div>
         </td>
         <td>
-          <span style="color:${CONT_PICK_STATUS_COLOR[row.status]}; font-weight:600;">${CONT_PICK_STATUS_LABEL[row.status]}</span>
+          <span style="color:${CONT_PICK_STATUS_COLOR[row.status]}; font-weight:600;">${contPickStatusLabel(row)}</span>
           <button type="button" class="cpt-mark-btn${row.isManual ? ' marked' : ''}" data-mark-type="${escAttr(row.type)}" data-mark-cno="${escAttr(String(row.cNo))}" data-mark-loaddate="${escAttr(row.loadDateKey || '')}" data-mark-plantime="${escAttr(row.planTimeKey || '')}" title="${row.isManual ? 'Bỏ đánh dấu thủ công' : 'Đánh dấu thủ công là đã pick xong — không đụng tới số liệu tồn kho'}">${row.isManual ? '↺' : '✓'}</button>
           <button type="button" class="cpt-delete-btn" data-delete-type="${escAttr(row.type)}" data-delete-cno="${escAttr(String(row.cNo))}" data-delete-loaddate="${escAttr(row.loadDateKey || '')}" data-delete-plantime="${escAttr(row.planTimeKey || '')}" title="Xoá container này khỏi Plan (chỉ ẩn khỏi dashboard, không sửa file Excel gốc — sẽ hỏi xác nhận trước)">🗑</button>
         </td>
@@ -4279,7 +4284,7 @@ function renderContainerPickingOverview(){
     // tải file Plan) — instanceKey ở đây ĐÚNG bằng contInstanceKey() dùng để lưu cờ đó.
     const changeInfo = planContainerChangeInfo[instanceKey];
     detailRows.push({
-      type: entry.type, cNo: entry.cNo, pct, status, autoStatus, autoPct: pct, isManual,
+      type: entry.type, cNo: entry.cNo, pct, status, autoStatus, autoPct: pct, isManual, isShipDone,
       changeStatus: changeInfo ? changeInfo.status : null,
       comment: contPickComments[instanceKey] || '',
       instanceKey, planQty: entry.planQty,
@@ -4380,7 +4385,7 @@ function contKpiRows(kind){
         pickers: [...pickers].sort().join(', ') || (!txHasRecords ? 'Chưa tải file Transaction' : (picked > 0 || r.status === 'done' || r.status === 'manualDone') ? 'Pick Từ Ca Trước' : '—'),
         type: r.type, cNo: r.cNo, loadDate: r.loadDate, planTime: r.planTime, invoice: r.invoice, csr: r.csr,
         kho: r.topKho ? String(r.topKho).replace('Kho ', '') : '—', planQty: r.planQty || 0, picked,
-        pct: Math.round((r.pct || 0) * 100) / 100, statusLabel: CONT_PICK_STATUS_LABEL[r.status] || r.status, status: r.status,
+        pct: Math.round((r.pct || 0) * 100) / 100, statusLabel: contPickStatusLabel(r), status: r.status,
         sortKey: ovParseDateTimeSortKey(r.loadDateKey, r.planTimeKey)
       };
     })
@@ -4941,7 +4946,7 @@ function buildItemContainerList(item, po){
         type: row.type, cNo: row.cNo, qty: it.qty, cbm: it.cbm, picked: it.picked || 0,
         loadDate: row.loadDate, planTime: row.planTime,
         invoice: row.invoice, csr: row.csr,
-        status: row.status
+        status: row.status, isShipDone: !!row.isShipDone
       });
     });
   });
@@ -4991,7 +4996,7 @@ function buildItemLocatorPopoverHtml(item, po){
   const rowsHtml = conts.map(c => {
     const dateTimeParts = [c.loadDate, c.planTime].filter(v => v && v !== '—');
     const subLine = dateTimeParts.length ? `<div class="cpt-loc-sub">${escHtml(dateTimeParts.join(' · '))}</div>` : '';
-    return `<div class="cpt-loc-row"><span>${escHtml(c.type)}-${escHtml(String(c.cNo))}${c.invoice ? ` <span style="color:var(--text); font-weight:600;">· ${escHtml(c.invoice)}</span>` : ''} <span style="color:${CONT_PICK_STATUS_COLOR[c.status]}; font-weight:600;">(${CONT_PICK_STATUS_LABEL[c.status]})</span></span><b title="Đã scan pick (CR) / SL kế hoạch">${fmt(c.picked)}/${fmt(c.qty)}</b></div>${subLine}`;
+    return `<div class="cpt-loc-row"><span>${escHtml(c.type)}-${escHtml(String(c.cNo))}${c.invoice ? ` <span style="color:var(--text); font-weight:600;">· ${escHtml(c.invoice)}</span>` : ''} <span style="color:${CONT_PICK_STATUS_COLOR[c.status]}; font-weight:600;">(${contPickStatusLabel(c)})</span></span><b title="Đã scan pick (CR) / SL kế hoạch">${fmt(c.picked)}/${fmt(c.qty)}</b></div>${subLine}`;
   }).join('');
   return `<div class="cpt-item-head"><b>${escHtml(item)}</b>${poNote}</div>
     <div class="cpt-locs">${rowsHtml}</div>
