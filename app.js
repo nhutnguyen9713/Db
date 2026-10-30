@@ -1424,8 +1424,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.96';
-const APP_VERSION_DATE = '29/10/2026';
+const APP_VERSION = 'v3.97';
+const APP_VERSION_DATE = '30/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -2880,6 +2880,21 @@ function readTableFileAsRows(file, forPlan){
   });
 }
 
+// Dòng Plan chưa có số Cont (VD: Plan HCP mới có Invoice VNC / CR) trước đây bị bỏ qua ở mọi nơi
+// dùng containerNo → không hiện trong TN5. Dùng Invoice (hoặc CR nếu chưa có Invoice) làm mã cont tạm.
+function planFillMissingContNo(rows){
+  (rows || []).forEach(r => {
+    if(!r) return;
+    const c = String(r.containerNo || '').trim();
+    if(c && c !== '—' && !r.contNoMissing) return;
+    if(r.contNoMissing && c && c !== String(r.invoice || '').trim() && c !== String(r.csr || '').trim()){ delete r.contNoMissing; return; }
+    const inv = String(r.invoice || '').trim(), cr = String(r.csr || '').trim();
+    const fb = (inv && inv !== '—') ? inv : ((cr && cr !== '—') ? cr : '');
+    if(fb){ r.containerNo = fb; r.contNoMissing = true; }
+  });
+  return rows;
+}
+
 function aggregatePlanRows(rows, planType){
   if(!rows.length) throw new Error('File không có dữ liệu.');
   const headerIdx = locatePlanHeaderRow(rows);
@@ -2934,7 +2949,8 @@ function aggregatePlanRows(rows, planType){
     // cont đó. Dòng như vậy bắt đầu nhóm mới: xoá giá trị kế thừa để các dòng sau cũng không lấy nhầm.
     const cellFilled = v => v !== null && v !== undefined && String(v).trim() !== '';
     const differsFromLast = c => c !== -1 && cellFilled(r[c]) && lastValues[c] !== undefined && String(r[c]).trim() !== String(lastValues[c]).trim();
-    const startsNewSlot = contBlank && (differsFromLast(colLoadDate) || differsFromLast(colPlanTime));
+    // Dòng trống số Cont nhưng có Invoice/CR KHÁC dòng trước cũng là 1 cont mới (chưa có số cont).
+    const startsNewSlot = contBlank && (differsFromLast(colLoadDate) || differsFromLast(colPlanTime) || differsFromLast(colInvoice) || differsFromLast(colCSR));
     // SỬA TIẾP (CR bị lem qua cont sau): mỗi khi gặp dòng có SỐ CONT RIÊNG (không trống, VD: dòng đầu
     // của 1 cặp 2 dòng chung 1 cont/invoice như cont 5, 6 ở Plan HCP) là bắt đầu 1 nhóm cont MỚI —
     // PHẢI xoá hết giá trị kế thừa của nhóm cont TRƯỚC (kể cả cột CSR/CR) trước khi xét dòng này, nếu
@@ -2986,6 +3002,8 @@ function aggregatePlanRows(rows, planType){
     rowCount++; totalQty += qty;
   }
   if(!rowCount) throw new Error('Không đọc được dòng dữ liệu hợp lệ nào.');
+  planFillMissingContNo(detailRows);
+  detailRows.forEach(r => { if(r.contNoMissing && r.containerNo) containers.add(r.containerNo); });
 
   const topItems = Object.entries(byItem).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const topDC = Object.entries(byDC).sort((a,b)=>b[1]-a[1]).slice(0,8);
@@ -5186,7 +5204,7 @@ function collectPlanEditRows(cardEl){
 // sau khi detailRows bị SỬA TAY — y hệt phần tổng hợp trong aggregatePlanRows(), nhưng chạy trên
 // detailRows đã có sẵn thay vì đọc lại từ file Excel gốc.
 function recomputePlanAgg(type){
-  const rows = planData[type].detailRows || [];
+  const rows = planFillMissingContNo(planData[type].detailRows || []);
   const byItem = {};
   const containers = new Set();
   const locSet = new Set();
@@ -13109,7 +13127,7 @@ function initDashboard(){
       if(result && result.list && result.list.length) ccKhoResults[khoLabel] = result;
     });
   }
-  PLAN_TYPES.forEach(type => { planData[type] = (saved.plans && saved.plans[type]) ? saved.plans[type] : null; });
+  PLAN_TYPES.forEach(type => { planData[type] = (saved.plans && saved.plans[type]) ? saved.plans[type] : null; if(planData[type]) planFillMissingContNo(planData[type].detailRows); });
 
   if(saved.inv){
     // QUAN TRỌNG (giống lý do ở trên): khôi phục currentFileName/dòng "Cập nhật lúc" TRƯỚC khi gọi
