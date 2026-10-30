@@ -1424,7 +1424,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.97';
+const APP_VERSION = 'v3.98';
 const APP_VERSION_DATE = '30/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3529,8 +3529,8 @@ function buildPickingIndex(data){
   return idx;
 }
 
-function contDomId(type, cNo){
-  return (String(type) + '-' + String(cNo)).replace(/[^a-zA-Z0-9_-]+/g, '_');
+function contDomId(type, cNo, loadDate, planTime){
+  return (String(type) + '-' + String(cNo) + '-' + (loadDate || '') + '-' + (planTime || '')).replace(/[^a-zA-Z0-9_-]+/g, '_');
 }
 
 function combinedRowDomId(item, custpo){
@@ -3987,7 +3987,7 @@ function renderContPickTable(){
         }
       }
       return `
-      <tr class="cont-pick-row${row.isManual ? ' cpt-row-manual' : ''}" style="cursor:pointer;" data-row-idx="${idx}" data-cont-jump="${contDomId(row.type, row.cNo)}">
+      <tr class="cont-pick-row${row.isManual ? ' cpt-row-manual' : ''}" style="cursor:pointer;" data-row-idx="${idx}" data-cont-jump="${contDomId(row.type, row.cNo, row.loadDate, row.planTime)}">
         <td>${row.type}</td>
         <td>${changeBadge}${escHtml(String(row.cNo))}
           ${shortBadge}
@@ -5255,7 +5255,10 @@ function renderPlanPanel(){
     const rows = (planData[type].detailRows || []).filter(r => !isContainerHidden(type, r.containerNo, r.loadDate ? fmtDate(r.loadDate) : '', r.planTime || ''));
     const totalQtyDisplay = rows.reduce((s,r) => s + (r.qty || 0), 0);
     const itemCountDisplay = new Set(rows.map(r => (r.item || '').toLowerCase())).size;
-    const containerSetDisplay = new Set(rows.map(r => r.containerNo).filter(c => c && c !== '—'));
+    // Mỗi container = Số cont + Ngày Load + Giờ Plan (giống contInstanceKey) — Plan FC hay ghi cùng số
+    // cont "1" cho nhiều lượt xuất khác giờ/Invoice, không được gộp thành 1 cont.
+    const planContGroupKey = r => (r.containerNo || '—') + '|' + (r.loadDate ? fmtDate(r.loadDate) : '') + '|' + (r.planTime || '');
+    const containerSetDisplay = new Set(rows.filter(r => r.containerNo && r.containerNo !== '—').map(planContGroupKey));
     const locCols = planData[type].locationColumns || [];
     const detailColCount = 12 + locCols.length;
     if(isEditing){
@@ -5295,10 +5298,11 @@ function renderPlanPanel(){
     let lastContainer = null;
     const rowsHtml = rows.map(r => {
       const cNo = r.containerNo || '—';
-      const isNewGroup = cNo !== lastContainer;
-      lastContainer = cNo;
-      if(cNo !== '—' && !contColorMap.has(cNo)) contColorMap.set(cNo, CONT_COLOR_PALETTE[contColorMap.size % CONT_COLOR_PALETTE.length]);
-      const contColor = contColorMap.get(cNo) || '#8892A0';
+      const gKey = planContGroupKey(r);
+      const isNewGroup = gKey !== lastContainer;
+      lastContainer = gKey;
+      if(cNo !== '—' && !contColorMap.has(gKey)) contColorMap.set(gKey, CONT_COLOR_PALETTE[contColorMap.size % CONT_COLOR_PALETTE.length]);
+      const contColor = contColorMap.get(gKey) || '#8892A0';
       // SỬA (theo yêu cầu — "màu chưa phân ra rõ từng cont"): 0.07 quá nhạt, gần như không nhận ra khi
       // lướt mắt xuống bảng nhiều dòng. Tăng lên 0.16 cho rõ hẳn, đồng thời truyền màu container qua
       // biến CSS --cont-line để viền trên của dòng ĐẦU TIÊN mỗi container (xem .cont-group-first ở
@@ -5338,7 +5342,7 @@ function renderPlanPanel(){
         <span class="picking-bar-label">${pickPctLabel(pct)}</span>
       </div>`;
 
-      const rowId = isNewGroup ? ` id="plan-cont-row-${contDomId(type, cNo)}"` : '';
+      const rowId = isNewGroup ? ` id="plan-cont-row-${contDomId(type, cNo, r.loadDate ? fmtDate(r.loadDate) : '', r.planTime || '')}"` : '';
       return `
       <tr class="${groupCls}"${rowId} style="background:${rowBg}; --cont-line:${contColor};">
         <td class="cont-no-cell" style="border-left-color:${contColor};"><span class="cont-badge" style="background:${contColor}">${cNo}</span></td>
