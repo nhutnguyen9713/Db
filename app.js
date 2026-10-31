@@ -231,6 +231,7 @@ const STORAGE_KEY_LABELS = {
   tn5_dashboard_cont_ship_v1: 'Dữ liệu Transaction (Ship)',
   tn5_dashboard_item_cbm_v1: 'Thư viện CBM theo mã hàng',
   tn5_dashboard_kho_grid_v1: 'Lưới sơ đồ kho tuỳ chỉnh',
+  tn5_wh_cap_override_v1: 'Sức chứa vị trí (Sơ đồ kho)',
   tn5_dashboard_confirmed_history_v1: 'Lịch sử đã lưu theo ngày',
   _meta_updatedAt: 'Mốc đồng bộ (kiểm tra Cloud có gì mới trước khi tải)'
 };
@@ -6215,6 +6216,9 @@ function whLoadCapOverrides(){
 }
 function whSaveCapOverrides(obj){
   LS.setItem(WH_CAP_OVERRIDE_KEY, JSON.stringify(obj));
+  // Tự lưu lên Cloud ngay (giống khi sửa lưới sơ đồ kho) — trước đây sức chứa chỉ lên Cloud khi bấm
+  // "Lưu", nên trang Sơ đồ kho riêng (so-do-kho.html) và các máy khác không thấy số mới.
+  scheduleAutoSaveToCloud('capoverride', [WH_CAP_OVERRIDE_KEY], 'Sức chứa vị trí');
 }
 // Áp số ghi đè (nếu có) cho 1 locator lên trên 1 số sức chứa gốc/mặc định — dùng chung ở cả trang
 // "Sơ đồ kho" (nút bánh răng) lẫn các panel "Tổng quan sức chứa" ở trang Overview, để 2 nơi luôn

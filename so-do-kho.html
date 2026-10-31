@@ -1057,6 +1057,38 @@
       if(!state.inventory){ $('sdk-conn-error').textContent = '✗ Không tải được dữ liệu Cloud — ' + err.message; showConnect(); }
     });
   }
+  /* ============ Giữ liên kết với TN5 Dashboard ============
+     Lưới sơ đồ + sức chứa từng vị trí là gói nhỏ -> tự tải lại khi quay lại tab này, mỗi 60 giây, và ngay
+     khi dashboard (mở cùng trình duyệt) vừa sửa sơ đồ/sức chứa. Tồn kho (gói lớn) chỉ tải lại khi Cloud
+     báo có bản mới (meta đổi) hoặc bấm "Làm mới". */
+  var lightBusy = false;
+  function refreshLight(){
+    if(state.demo || !cloud.url || lightBusy || document.hidden) return;
+    lightBusy = true;
+    Promise.all([KEY_KHO_GRID, KEY_CAP_OVERRIDE, KEY_META].map(fetchKey)).then(function(r){
+      lightBusy = false;
+      var metaChanged = JSON.stringify(r[2] || {}) !== JSON.stringify(state.meta || {});
+      if(metaChanged){ load(); return; } // tồn kho mới -> tải đủ
+      var changed = JSON.stringify(r[0] || {}) !== JSON.stringify(state.grids || {}) || JSON.stringify(r[1] || {}) !== JSON.stringify(state.capOverride || {});
+      if(!changed) return;
+      state.grids = r[0] || {}; state.capOverride = r[1] || {};
+      buildByKho();
+      if(state.recv) runRecv(); else render();
+      setStatus('✓ Đồng bộ sơ đồ ' + new Date().toLocaleTimeString('vi-VN'));
+    }).catch(function(){ lightBusy = false; });
+  }
+  setInterval(refreshLight, 60000);
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) refreshLight(); });
+  window.addEventListener('focus', refreshLight);
+  // Dashboard mở ở tab khác cùng trình duyệt vừa sửa (bản sao cục bộ 'tn5_local_*' đổi) -> đợi dashboard
+  // tự lưu lên Cloud (~2 giây) rồi tải lại.
+  var storageTimer = null;
+  window.addEventListener('storage', function(e){
+    if(!e.key || !/tn5_local_(tn5_wh_cap_override_v1|tn5_dashboard_kho_grid_v1|tn5_dashboard_meta)/.test(e.key)) return;
+    clearTimeout(storageTimer);
+    storageTimer = setTimeout(refreshLight, 3500);
+  });
+
   function showApp(){ $('sdk-connect').style.display = 'none'; $('sdk-app').style.display = ''; }
   function showConnect(){ $('sdk-app').style.display = 'none'; $('sdk-connect').style.display = ''; setStatus(''); }
   function tryConnect(url, token, remember){
