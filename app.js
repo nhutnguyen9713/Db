@@ -1424,7 +1424,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.07';
+const APP_VERSION = 'v4.08';
 const APP_VERSION_DATE = '31/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -14757,6 +14757,21 @@ function txEnsureDerived(){
   txState.pickingRack = pk.rack;
   txState.movePallet = txBuildMovePalletDetailRows(txState.records, txMasterMap);
   txState.transferNhap = txBuildTransferNhapDetailRows(txState.records);
+  txState.putawayMenu = txCountPutAwayMenu(txState.records);
+}
+
+// Ô "PUT AWAY (MENU)" — đếm thẳng các giao dịch có Menu Name đúng "Put Away" trong file Transaction
+// (1 giao dịch = 1 nhóm Set ID, gồm dòng xuất + dòng nhập), KHÔNG qua logic vị trí tạm FG-TG như ô
+// PUT AWAY bên cạnh. SL = tổng SL dương (phần nhập) của các giao dịch đó.
+function txCountPutAwayMenu(records){
+  const recs = (records || []).filter(r => String(r.menuName || '').trim().toLowerCase() === 'put away');
+  let qty = 0;
+  const groups = txGroupBySetId(recs);
+  groups.forEach(g => {
+    const pos = g.find(r => r.qty > 0) || g[0];
+    qty += Math.abs((pos && pos.qty) || 0);
+  });
+  return { trans: groups.length, rows: recs.length, qty };
 }
 
 // Danh sách ô KPI của TOÀN BỘ các mục trong tab Transaction — dùng chung cho dải KPI trên màn hình và
@@ -14776,6 +14791,7 @@ function txKpiItems(){
     { label:'TRANSFER · XUẤT', value:k.transferTotal, foot:`${fmt(k.transferGroups)} dòng thống kê / ${fmt(k.countTransfer)} bản ghi ITN Transfer`, cls:'good' },
     { label:'TRANSFER · NHẬN', value:sumTotal(tn), foot:`${fmt(rowsOf(tn))} dòng thống kê · ITN Receiving`, cls:'good' },
     { label:'PUT AWAY', value:sumTotal(pa), foot:`${fmt(rowsOf(pa))} dòng thống kê · cất hàng từ FG-TG` },
+    { label:'PUT AWAY (MENU)', value:(txState.putawayMenu || {}).trans || 0, foot:`${fmt((txState.putawayMenu || {}).rows || 0)} dòng Menu Name "Put Away" · SL ${fmt((txState.putawayMenu || {}).qty || 0)}`, cls:'redbg' },
     { label:'PICKING', value:k.pickingTotal, foot:`${fmt(k.pickingGroups)} dòng thống kê / ${fmt(k.countPicking)} bản ghi Pick Order` },
     { label:'REWORK · XUẤT', value:sumTotal(rx), foot:`${fmt(rowsOf(rx))} dòng thống kê · chuyển đến PROD` },
     { label:'REWORK · NHẬP', value:sumTotal(rn), foot:`${fmt(rowsOf(rn))} dòng thống kê · chuyển từ PROD về` },
