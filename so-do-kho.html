@@ -482,7 +482,7 @@
     return '';
   }
   var stats = { locators:0, pallets:0, full:0 };
-  function boxHtml(kho, loc, posStyle, mini, fill){
+  function boxHtml(kho, loc, posStyle, mini){
     var rows = (state.byKho[kho] || {})[loc] || [];
     var s = boxStats(kho, loc, rows);
     stats.locators++; stats.pallets += s.count; if(s.level === 'full') stats.full++;
@@ -515,7 +515,7 @@
         '<span class="wh3b-box-count">' + fmt(s.count) + '<span class="wh3b-box-max">/' + fmt(s.maxPallet) + '</span>' + over + '</span>' +
         (isPallet ? '' : '<span class="wh3b-box-fill"><span class="wh3b-box-fill-bar" style="width:' + s.pct + '%"></span></span>') +
       '</button>' +
-      (isPallet ? slotsHtml(loc, rows, s.maxPallet, incomingN, wide, fill && !mini) : '') +
+      (isPallet ? slotsHtml(loc, rows, s.maxPallet, incomingN, wide, !wide) : '') +
       '</div>';
   }
 
@@ -563,7 +563,7 @@
         html += '<span class="sdk-slot" title="Chỗ trống"></span>';
       }
     }
-    // fill (dãy A/B/C, 1 locator / hàng): ô pallet cùng 1 cỡ vuông cố định, xếp ngang hết khung rồi mới xuống hàng.
+    // fill (mọi khung thường, trừ ô kệ thu nhỏ của Rack): ô pallet cùng 1 cỡ vuông cố định, xếp ngang hết khung rồi mới xuống hàng.
     var tpl = fill ? 'repeat(auto-fill, 18px)'
       : wide ? 'repeat(auto-fill, minmax(14px, 1fr))' : 'repeat(' + cols + ', minmax(9px, 18px))';
     return '<div class="sdk-slots' + (fill ? ' fill' : '') + '" style="grid-template-columns:' + tpl + ';">' + html + '</div>';
@@ -782,7 +782,7 @@
       }).join('');
       var nRows = Math.max.apply(null, abc.map(function(g){ return groups[g].length; }));
       var cells = '';
-      for(var i = 0; i < nRows; i++) abc.forEach(function(g){ var l = groups[g][i]; cells += l ? boxHtml(kho, l, '', false, true) : '<div></div>'; });
+      for(var i = 0; i < nRows; i++) abc.forEach(function(g){ var l = groups[g][i]; cells += l ? boxHtml(kho, l) : '<div></div>'; });
       out.push('<div class="sdk-group sdk-grid-scroll"><div class="sdk-abc sdk-abc-head" style="' + colTpl + '">' + heads + '</div>' +
         '<div class="sdk-abc sdk-abc-body" style="' + colTpl + '">' + cells + '</div></div>');
     });
