@@ -144,7 +144,10 @@
     display:flex; flex-direction:column; background:var(--panel); color:var(--text);
     border:1.5px solid var(--violet); border-radius:12px; box-shadow:0 14px 36px rgba(0,0,0,0.25); overflow:hidden;
   }
-  .sdk-pick-head{display:flex; align-items:flex-start; gap:10px; padding:12px 14px 10px; border-bottom:1px solid var(--line-soft);}
+  .sdk-pick-head{display:flex; align-items:flex-start; gap:10px; padding:12px 14px 10px; border-bottom:1px solid var(--line-soft); cursor:grab; touch-action:none; user-select:none;}
+  .sdk-pick.dragging{opacity:.92; box-shadow:0 18px 44px rgba(0,0,0,0.32);}
+  .sdk-pick.dragging .sdk-pick-head{cursor:grabbing;}
+  .sdk-pick-grip{font-size:12px; color:var(--muted-2); letter-spacing:-2px; margin-top:4px;}
   .sdk-pick-sw{width:22px; height:22px; border-radius:5px; flex-shrink:0; margin-top:2px;}
   .sdk-pick-title{flex:1; min-width:0;}
   .sdk-pick-item{font-family:var(--mono); font-weight:800; font-size:15px; word-break:break-all;}
@@ -955,7 +958,7 @@
       if(n) others.push('<b>' + esc(KHO[k].code) + '</b>: ' + fmt(n) + ' pallet');
     });
     box.innerHTML =
-      '<div class="sdk-pick-head"><span class="sdk-pick-sw" style="background:' + itemColor(pick.item) + '"></span>' +
+      '<div class="sdk-pick-head" title="Kéo để di chuyển khung"><span class="sdk-pick-grip">⋮⋮</span><span class="sdk-pick-sw" style="background:' + itemColor(pick.item) + '"></span>' +
         '<div class="sdk-pick-title"><div class="sdk-pick-item">' + esc(pick.item) + '</div><div class="sdk-pick-po">PO <b>' + esc(pick.po || '—') + '</b> · ' + esc(state.activeKho) + '</div></div>' +
         '<button type="button" class="sdk-pick-x" id="sdk-pick-close" title="Bỏ chọn (ESC)">ESC ✕</button></div>' +
       '<div class="sdk-pick-stats"><span><b>' + fmt(matched.length) + '</b>pallet</span><span><b>' + fmt(locs.length) + '</b>vị trí</span><span><b>' + fmt(qty) + '</b>tổng SL</span>' +
@@ -964,9 +967,48 @@
         return '<button type="button" class="sdk-pick-loc" data-goto="' + esc(l) + '"><b>' + esc(l) + '</b><span>' + fmt(matchedLocs[l]) + ' pallet →</span></button>';
       }).join('') : '<div class="wh3b-empty" style="padding:8px;">Không có pallet nào khớp (kiểm tra lọc PASS/NG).</div>') + '</div>' +
       (others.length ? '<div class="sdk-pick-other">Cùng mã + PO ở kho khác: ' + others.join(' · ') + '</div>' : '') +
-      '<div class="sdk-pick-hint">Bấm 1 vị trí để nhảy tới · ESC hoặc bấm lại ô pallet để bỏ chọn</div>';
+      '<div class="sdk-pick-hint">Kéo thanh trên để di chuyển · Bấm 1 vị trí để nhảy tới · ESC hoặc bấm ra ngoài để bỏ chọn</div>';
     box.style.display = '';
+    applyPickPos();
   }
+  /* Vị trí khung nổi — kéo thả bằng thanh tiêu đề, nhớ lại vị trí đã kéo trên máy này. */
+  var LS_PICK_POS = 'sdk_pick_pos';
+  var pickPos = null;
+  try{ pickPos = JSON.parse(localStorage.getItem(LS_PICK_POS) || 'null'); }catch(e){ pickPos = null; }
+  function applyPickPos(){
+    var box = $('sdk-pick');
+    if(!pickPos){ box.style.left = box.style.top = ''; box.style.right = box.style.bottom = ''; return; }
+    var w = box.offsetWidth || 340, h = box.offsetHeight || 200;
+    var x = Math.max(4, Math.min(window.innerWidth - w - 4, pickPos.x));
+    var y = Math.max(4, Math.min(window.innerHeight - Math.min(h, 60) - 4, pickPos.y));
+    box.style.left = x + 'px'; box.style.top = y + 'px'; box.style.right = 'auto'; box.style.bottom = 'auto';
+  }
+  (function(){
+    var drag = null;
+    $('sdk-pick').addEventListener('pointerdown', function(e){
+      var head = e.target.closest('.sdk-pick-head');
+      if(!head || e.target.closest('button')) return;
+      var box = $('sdk-pick'), r = box.getBoundingClientRect();
+      drag = { dx:e.clientX - r.left, dy:e.clientY - r.top, id:e.pointerId };
+      box.classList.add('dragging');
+      head.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    $('sdk-pick').addEventListener('pointermove', function(e){
+      if(!drag || e.pointerId !== drag.id) return;
+      pickPos = { x:e.clientX - drag.dx, y:e.clientY - drag.dy };
+      applyPickPos();
+    });
+    function end(e){
+      if(!drag || e.pointerId !== drag.id) return;
+      drag = null;
+      $('sdk-pick').classList.remove('dragging');
+      try{ localStorage.setItem(LS_PICK_POS, JSON.stringify(pickPos)); }catch(err){}
+    }
+    $('sdk-pick').addEventListener('pointerup', end);
+    $('sdk-pick').addEventListener('pointercancel', end);
+    window.addEventListener('resize', function(){ if(state.pick) applyPickPos(); });
+  })();
   function showLocatorDetail(){
     var detail = $('sdk-detail');
     var loc = state.activeLocator;
@@ -1135,6 +1177,13 @@
   $('sdk-pick').addEventListener('click', function(e){
     if(e.target.closest('#sdk-pick-close')){ setPick(null); return; }
     var b = e.target.closest('[data-goto]'); if(b) goToLocator(b.getAttribute('data-goto'));
+  });
+  // Bấm ra chỗ khác (ngoài khung nổi và ngoài ô pallet) -> bỏ chọn mã. Bấm ô pallet khác thì đã được xử lý
+  // ở handler của lưới (đổi sang mã + PO mới).
+  document.addEventListener('click', function(e){
+    if(!state.pick) return;
+    if(e.target.closest('#sdk-pick') || e.target.closest('.sdk-slot.filled')) return;
+    setPick(null);
   });
   document.addEventListener('keydown', function(e){
     if(e.key !== 'Escape') return;
