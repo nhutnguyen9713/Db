@@ -1253,6 +1253,8 @@
   document.addEventListener('click', function(e){
     if(!state.pick) return;
     if(e.target.closest('#sdk-pick') || e.target.closest('.sdk-slot.filled')) return;
+    // Chuyển khu (thẻ khu / nút khu / nút quay lại), đổi kho, đổi chế độ xem, heatmap: giữ nguyên mã đang chọn.
+    if(e.target.closest('[data-zone], .sdk-tab, #sdk-view-toggle, #sdk-heatmap-btn, #sdk-refresh-btn')) return;
     setPick(null);
   });
   document.addEventListener('keydown', function(e){
