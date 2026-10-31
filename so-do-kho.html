@@ -75,6 +75,60 @@
   .sdk-detail-close{all:unset; cursor:pointer; color:var(--muted); font-size:12px; margin-left:8px;}
   .sdk-detail-close:hover{color:var(--red);}
   .wh3b-box-main{cursor:pointer;}
+
+  /* ===== Chế độ "Từng pallet": mỗi ô nhỏ = 1 pallet, tô màu theo mã hàng ===== */
+  .sdk-grid-scroll{overflow-x:auto; padding-bottom:4px;}
+  .sdk-slots{display:grid; gap:3px; margin-top:8px;}
+  .sdk-slot{
+    aspect-ratio:1; min-width:9px; border-radius:3px; box-sizing:border-box; position:relative;
+    border:1px dashed var(--line); background:transparent; cursor:default;
+  }
+  .sdk-slot.filled{border:1px solid rgba(0,0,0,0.12); cursor:pointer;}
+  .sdk-slot.filled:hover{outline:2px solid var(--text); outline-offset:1px; z-index:2;}
+  .sdk-slot.ng::after{content:''; position:absolute; right:1px; top:1px; width:4px; height:4px; border-radius:50%; background:#fff; box-shadow:0 0 0 1.5px var(--red);}
+  .sdk-slot.over{box-shadow:0 0 0 1.5px var(--red);}
+  .sdk-slot.incoming{
+    border:1.5px solid var(--violet); animation:sdk-pulse 1.2s ease-in-out infinite;
+    background-image:repeating-linear-gradient(45deg, rgba(255,255,255,0.75) 0 2px, transparent 2px 5px) !important;
+  }
+  @keyframes sdk-pulse{50%{opacity:.35;}}
+  .sdk-slot.sdk-slot-dim{opacity:.15;}
+  .wh3b-box.sdk-plan{box-shadow:0 0 0 3px var(--violet), 0 6px 16px rgba(110,79,224,0.25); border-color:var(--violet); z-index:1;}
+  .wh3b-box.sdk-same{border-color:var(--violet); border-style:dashed;}
+  .sdk-plan-badge{display:inline-block; margin-left:5px; background:var(--violet); color:#fff; font-size:9px; font-weight:700; padding:1px 5px; border-radius:4px; vertical-align:middle;}
+  .sdk-view-toggle{display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden;}
+  .sdk-view-toggle button{all:unset; cursor:pointer; font-family:var(--mono); font-size:10.5px; font-weight:700; padding:5px 10px; color:var(--muted);}
+  .sdk-view-toggle button.active{background:var(--violet); color:#fff;}
+
+  /* ===== Nhận hàng — gợi ý chỗ cất cho xe nâng ===== */
+  .sdk-recv{border:1.5px solid rgba(110,79,224,0.35); background:rgba(110,79,224,0.06); border-radius:10px; padding:12px 14px; margin-bottom:14px;}
+  .sdk-recv-title{font-family:var(--disp); font-weight:700; font-size:14px; margin-bottom:8px; color:var(--text);}
+  .sdk-recv-row{display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .sdk-recv-row input{
+    padding:9px 11px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text);
+    font-family:var(--mono); font-size:13px; box-sizing:border-box;
+  }
+  #sdk-recv-item{flex:1 1 180px; min-width:150px;}
+  #sdk-recv-po{flex:1 1 140px; min-width:120px;}
+  #sdk-recv-qty{width:90px;}
+  .sdk-recv-btn{padding:9px 14px; border-radius:8px; border:none; background:var(--violet); color:#fff; font-weight:700; font-size:13px; cursor:pointer;}
+  .sdk-recv-clear{padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--muted); font-size:12.5px; cursor:pointer;}
+  .sdk-recv-result{margin-top:10px; font-size:13px; color:var(--text);}
+  .sdk-recv-summary{font-size:12.5px; color:var(--muted); margin-bottom:8px;}
+  .sdk-recv-summary b{color:var(--text);}
+  .sdk-plan-list{display:flex; flex-direction:column; gap:6px;}
+  .sdk-plan-item{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:9px 11px; border-radius:9px;
+    background:var(--panel); border:1px solid var(--line); cursor:pointer; text-align:left; font:inherit; color:inherit;
+  }
+  .sdk-plan-item:hover{border-color:var(--violet);}
+  .sdk-plan-step{width:24px; height:24px; border-radius:50%; background:var(--violet); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; flex-shrink:0;}
+  .sdk-plan-loc{font-family:var(--mono); font-weight:700; font-size:15px;}
+  .sdk-plan-n{font-family:var(--mono); font-weight:700; font-size:15px; color:var(--violet);}
+  .sdk-plan-why{font-size:11.5px; color:var(--muted); flex-basis:100%; padding-left:34px;}
+  .sdk-recv-warn{margin-top:8px; font-size:12px; color:var(--red);}
+  .sdk-item-chip{display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:11px;}
+  .sdk-item-chip i{width:11px; height:11px; border-radius:3px; display:inline-block;}
   @media (max-width:640px){
     body{padding:12px 10px 40px;}
     .sdk-tab{padding:8px 10px;}
@@ -132,12 +186,26 @@
           <div class="sdk-snapshot" id="sdk-snapshot"></div>
           <div class="wh3b-summary" id="sdk-summary" style="margin-top:12px;"></div>
           <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
+            <span class="sdk-view-toggle" id="sdk-view-toggle" title="Từng pallet: mỗi ô nhỏ = 1 pallet, tô màu theo mã hàng · Tổng hợp: chỉ số pallet + thanh lấp đầy">
+              <button type="button" data-view="pallet">🧱 Từng pallet</button><button type="button" data-view="summary">▦ Tổng hợp</button>
+            </span>
             <button type="button" class="wh3b-grid-mode-btn" id="sdk-heatmap-btn" title="Đổi cách tô màu vị trí: Tắt (4 mức mặc định) / Mật độ lấp đầy / Tỉ lệ PASS-NG">🌡️ Heatmap: Tắt</button>
           </div>
         </div>
       </div>
 
       <div style="margin-top:16px;">
+        <div class="sdk-recv" id="sdk-recv">
+          <div class="sdk-recv-title">📥 Nhận hàng — gợi ý chỗ cất cho xe nâng</div>
+          <div class="sdk-recv-row">
+            <input id="sdk-recv-item" type="text" placeholder="Mã hàng (Item No.)" autocapitalize="off" autocorrect="off" spellcheck="false">
+            <input id="sdk-recv-po" type="text" placeholder="Cust PO (không bắt buộc)" autocapitalize="off" autocorrect="off" spellcheck="false">
+            <input id="sdk-recv-qty" type="number" min="1" value="1" title="Số pallet nhận về">
+            <button type="button" class="sdk-recv-btn" id="sdk-recv-btn">Gợi ý vị trí</button>
+            <button type="button" class="sdk-recv-clear" id="sdk-recv-clear">Xoá</button>
+          </div>
+          <div class="sdk-recv-result" id="sdk-recv-result"></div>
+        </div>
         <div class="wh3b-search-row">
           <textarea class="wh3b-search-input" id="sdk-search" rows="1" placeholder="Tìm theo Item No., Cust PO, Locator… (mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng — trong cùng 1 dòng, cách nhau bằng khoảng trắng để kết hợp nhiều điều kiện)"></textarea>
           <div class="wh3b-oqc-toggle">
@@ -166,6 +234,9 @@
   var KEY_META = 'tn5_dashboard_meta_v1';
   var LS_HEATMAP = 'tn5_kho_heatmap_mode_v1';
   var LS_ACTIVE_KHO = 'sdk_active_kho';
+  var LS_VIEW = 'sdk_view_mode';
+  // Vị trí KHÔNG gợi ý để cất hàng nhận về: khu sản xuất, picking, loading, khu chờ (TG/ITN).
+  var NO_STORE_RE = /prod|pick|loading|-TG$|-ITN$/i;
   // Thứ tự ưu tiên lấy thông tin kết nối đã lưu trên máy: dashboard chính → trang 3 Plan → riêng trang này.
   var CRED_SOURCES = [
     ['tn5_cloud_gas_url', 'tn5_cloud_gas_token'],
@@ -203,10 +274,12 @@
   /* ============ Trạng thái ============ */
   var state = {
     inventory: null, grids: {}, capOverride: {}, meta: {},
-    activeKho: 'Kho 3B', heatmap: 'off', demo: false, byKho: {}, activeLocator: null
+    activeKho: 'Kho 3B', heatmap: 'off', demo: false, byKho: {}, activeLocator: null,
+    view: 'pallet', recv: null // recv = { item, po, qty, plan:[{kho, loc, n, same, samePo, free}], incoming:{kho:{loc:n}} }
   };
   var cloud = { url:'', token:'' };
   try{ var savedKho = localStorage.getItem(LS_ACTIVE_KHO); if(KHO[savedKho]) state.activeKho = savedKho; }catch(e){}
+  try{ var savedView = localStorage.getItem(LS_VIEW); if(savedView === 'summary' || savedView === 'pallet') state.view = savedView; }catch(e){}
   try{ var savedHeat = localStorage.getItem(LS_HEATMAP); if(['off','qty','oqc'].indexOf(savedHeat) !== -1) state.heatmap = savedHeat; }catch(e){}
 
   /* ============ Tiện ích ============ */
@@ -244,6 +317,13 @@
     var by = {};
     KHO_ORDER.forEach(function(k){ by[k] = {}; });
     Object.keys(B2_CAPACITY_MAP).forEach(function(loc){ by['Kho 2B'][loc] = []; });
+    'ABCDEF'.split('').forEach(function(r){ for(var c = 1; c <= 17; c++) for(var t = 1; t <= 5; t++) by['Kho 3A']['3A-' + r + c + '-T' + t] = []; });
+    for(var n = 1; n <= 33; n++) by['Kho 3B']['D3B-FG-A' + String(n).padStart(2, '0')] = [];
+    Object.keys(state.grids || {}).forEach(function(k){
+      var lay = state.grids[k];
+      if(!by[k] || !lay || !Array.isArray(lay.cells)) return;
+      lay.cells.forEach(function(c){ if(!c.isLabel && c.locator && !by[k][c.locator]) by[k][c.locator] = []; });
+    });
     getRawRows(state.inventory).forEach(function(row){
       var kho = row[RAW.kho];
       if(!by[kho]) return;
@@ -302,12 +382,149 @@
       ? loc + ' — SL: ' + fmt(s.qtyTotal) + ' (PASS ' + fmt(s.passQty) + ' / NG ' + fmt(s.ngQty) + ') · Bấm để xem chi tiết'
       : 'Bấm để xem chi tiết pallet tại ' + loc;
     var active = state.activeLocator === loc ? ' active' : '';
-    return '<div class="wh3b-box lvl-' + s.level + heatCls + active + '" data-locator="' + esc(loc) + '"' + (style ? ' style="' + style + '"' : '') + '>' +
+    var incomingN = (state.recv && state.recv.incoming[kho] && state.recv.incoming[kho][loc]) || 0;
+    var sameItem = state.recv && !incomingN && rows.some(function(r){ return String(r[RAW.item]).toLowerCase() === state.recv.itemLc; });
+    var planCls = incomingN ? ' sdk-plan' : (sameItem ? ' sdk-same' : '');
+    var planBadge = incomingN ? '<span class="sdk-plan-badge">+' + incomingN + ' CẤT VÀO</span>' : '';
+    var isPallet = state.view === 'pallet';
+    return '<div class="wh3b-box lvl-' + s.level + heatCls + active + planCls + '" data-locator="' + esc(loc) + '"' + (style ? ' style="' + style + '"' : '') + '>' +
       '<button type="button" class="wh3b-box-main" data-locator="' + esc(loc) + '" title="' + esc(title) + '">' +
-        '<span class="wh3b-box-name">' + esc(loc) + ng + '</span>' +
+        '<span class="wh3b-box-name">' + esc(loc) + ng + planBadge + '</span>' +
         '<span class="wh3b-box-count">' + fmt(s.count) + '<span class="wh3b-box-max">/' + fmt(s.maxPallet) + '</span>' + over + '</span>' +
-        '<span class="wh3b-box-fill"><span class="wh3b-box-fill-bar" style="width:' + s.pct + '%"></span></span>' +
-      '</button></div>';
+        (isPallet ? '' : '<span class="wh3b-box-fill"><span class="wh3b-box-fill-bar" style="width:' + s.pct + '%"></span></span>') +
+      '</button>' +
+      (isPallet ? slotsHtml(loc, rows, s.maxPallet, incomingN) : '') +
+      '</div>';
+  }
+
+  /* ============ Từng pallet: mỗi ô nhỏ = 1 pallet (1 dòng GI No.) ============ */
+  // Màu cố định theo mã hàng (băm chuỗi -> sắc độ) — cùng 1 mã luôn cùng 1 màu ở mọi vị trí/mọi kho,
+  // nhìn là thấy ngay mã đó đang nằm rải rác ở đâu.
+  var _colorCache = {};
+  function itemColor(item){
+    var key = String(item || '');
+    if(_colorCache[key]) return _colorCache[key];
+    var h = 2166136261;
+    for(var i = 0; i < key.length; i++){ h ^= key.charCodeAt(i); h = Math.imul(h, 16777619); }
+    h = h >>> 0;
+    var c = 'hsl(' + (h % 360) + ', ' + (55 + (h >> 9) % 25) + '%, ' + (42 + (h >> 17) % 18) + '%)';
+    _colorCache[key] = c;
+    return c;
+  }
+  function slotCols(cap){ return cap <= 4 ? Math.max(1, cap) : Math.min(13, Math.ceil(Math.sqrt(cap * 2))); }
+  // Xếp pallet trong 1 vị trí theo nhóm mã hàng (mã nhiều pallet nhất đứng trước) để các pallet cùng mã
+  // nằm liền nhau thành 1 khối màu.
+  function groupRows(rows){
+    var cnt = {};
+    rows.forEach(function(r){ var k = String(r[RAW.item]); cnt[k] = (cnt[k] || 0) + 1; });
+    return rows.slice().sort(function(a, b){
+      var ka = String(a[RAW.item]), kb = String(b[RAW.item]);
+      return (cnt[kb] - cnt[ka]) || ka.localeCompare(kb) || String(a[RAW.custpo] || '').localeCompare(String(b[RAW.custpo] || ''));
+    });
+  }
+  function slotsHtml(loc, rows, cap, incomingN){
+    var sorted = groupRows(rows);
+    var total = Math.max(cap, sorted.length + incomingN);
+    var cols = slotCols(Math.max(cap, total > cap ? cap : total));
+    var html = '';
+    for(var i = 0; i < total; i++){
+      if(i < sorted.length){
+        var r = sorted[i];
+        var isNg = String(r[RAW.oqc] || '').toUpperCase().indexOf('NG') !== -1;
+        var tip = 'Mã: ' + r[RAW.item] + '\nPO: ' + (r[RAW.custpo] || '—') + '\nOQC: ' + (r[RAW.oqc] || '—') + ' · SL: ' + fmt(r[RAW.qty]) +
+          '\nGI: ' + (r[RAW.gi] || '—') + ' · Lot: ' + (r[RAW.lot] || '—') + (i >= cap ? '\n⚠ Vượt sức chứa' : '') + '\n(Bấm để tìm mọi pallet cùng mã)';
+        html += '<span class="sdk-slot filled' + (isNg ? ' ng' : '') + (i >= cap ? ' over' : '') + '" style="background:' + itemColor(r[RAW.item]) + '"' +
+          ' data-item="' + esc(r[RAW.item]) + '" data-hay="' + esc((r[RAW.item] + ' ' + r[RAW.custpo] + ' ' + loc).toLowerCase()) + '" data-ng="' + (isNg ? 1 : 0) + '" title="' + esc(tip) + '"></span>';
+      } else if(i < sorted.length + incomingN){
+        html += '<span class="sdk-slot incoming" style="background:' + itemColor(state.recv.item) + '" title="Cất pallet mới nhận (' + esc(state.recv.item) + ') vào đây"></span>';
+      } else {
+        html += '<span class="sdk-slot" title="Chỗ trống"></span>';
+      }
+    }
+    return '<div class="sdk-slots" style="grid-template-columns:repeat(' + cols + ', minmax(9px, 18px));">' + html + '</div>';
+  }
+
+  /* ============ Nhận hàng: gợi ý vị trí cất để GOM cùng mã về 1 chỗ ============
+     Thứ tự ưu tiên:
+       1) Vị trí đang có CÙNG MÃ (cùng PO xếp trước) và còn chỗ — ưu tiên chỗ có nhiều pallet cùng mã nhất,
+          để hàng mới dồn về đúng khối đang có.
+       2) Hết chỗ cạnh hàng cùng mã -> vị trí TRỐNG HOÀN TOÀN (mở khối mới, không trộn mã khác), lớn trước.
+       3) Cuối cùng mới tới vị trí còn trống nhiều nhất (phải ở chung với mã khác).
+     Bỏ qua khu PROD/PICK/Loading/TG/ITN. Gợi ý trong kho đang xem; nếu mã đang nằm ở kho khác thì báo thêm. */
+  function computeRecvPlan(item, po, qty, kho){
+    var itemLc = item.toLowerCase(), poLc = po.toLowerCase();
+    var map = state.byKho[kho] || {};
+    var cands = Object.keys(map).filter(function(l){ return !NO_STORE_RE.test(l); }).map(function(loc){
+      var rows = map[loc], same = 0, samePo = 0;
+      rows.forEach(function(r){
+        if(String(r[RAW.item]).toLowerCase() === itemLc){ same++; if(poLc && String(r[RAW.custpo] || '').toLowerCase() === poLc) samePo++; }
+      });
+      var cap = capacityOf(kho, loc);
+      return { kho:kho, loc:loc, same:same, samePo:samePo, count:rows.length, cap:cap, free:Math.max(0, cap - rows.length) };
+    }).filter(function(c){ return c.free > 0; });
+    function tier(c){ return c.same > 0 ? 0 : (c.count === 0 ? 1 : 2); }
+    cands.sort(function(a, b){
+      return (tier(a) - tier(b)) || (b.samePo - a.samePo) || (b.same - a.same) || (b.free - a.free) || naturalCmp(a.loc, b.loc);
+    });
+    var plan = [], left = qty;
+    for(var i = 0; i < cands.length && left > 0; i++){
+      var n = Math.min(left, cands[i].free);
+      cands[i].n = n; cands[i].tier = tier(cands[i]);
+      plan.push(cands[i]); left -= n;
+    }
+    // Kho khác đang có mã này (để biết nếu muốn gom hẳn về kho đó).
+    var elsewhere = [];
+    KHO_ORDER.forEach(function(k){
+      if(k === kho) return;
+      var cnt = 0, m = state.byKho[k] || {};
+      Object.keys(m).forEach(function(l){ m[l].forEach(function(r){ if(String(r[RAW.item]).toLowerCase() === itemLc) cnt++; }); });
+      if(cnt) elsewhere.push({ kho:k, cnt:cnt });
+    });
+    var totalSame = 0;
+    Object.keys(map).forEach(function(l){ map[l].forEach(function(r){ if(String(r[RAW.item]).toLowerCase() === itemLc) totalSame++; }); });
+    return { plan:plan, short:left, elsewhere:elsewhere, totalSame:totalSame };
+  }
+  function runRecv(){
+    var item = $('sdk-recv-item').value.trim();
+    var po = $('sdk-recv-po').value.trim();
+    var qty = Math.max(1, parseInt($('sdk-recv-qty').value, 10) || 1);
+    if(!item){ state.recv = null; render(); return; }
+    var kho = state.activeKho;
+    var r = computeRecvPlan(item, po, qty, kho);
+    var incoming = {}; incoming[kho] = {};
+    r.plan.forEach(function(p){ incoming[kho][p.loc] = p.n; });
+    state.recv = { item:item, itemLc:item.toLowerCase(), po:po, qty:qty, kho:kho, plan:r.plan, short:r.short, elsewhere:r.elsewhere, totalSame:r.totalSame, incoming:incoming };
+    state.activeLocator = null;
+    render();
+    var first = r.plan[0];
+    if(first) scrollToLocator(first.loc);
+  }
+  function recvResultHtml(){
+    var rv = state.recv;
+    if(!rv) return '';
+    if(rv.kho !== state.activeKho) return '<div class="sdk-recv-summary">Gợi ý đang tính cho <b>' + esc(rv.kho) + '</b> — bấm "Gợi ý vị trí" lại để tính cho ' + esc(state.activeKho) + '.</div>';
+    var why = ['đang có hàng cùng mã — gom chung', 'vị trí trống — mở khối mới cho mã này', 'còn chỗ trống — phải để chung với mã khác'];
+    var html = '<div class="sdk-recv-summary"><span class="sdk-item-chip"><i style="background:' + itemColor(rv.item) + '"></i><b>' + esc(rv.item) + '</b></span>' +
+      (rv.po ? ' · PO <b>' + esc(rv.po) + '</b>' : '') + ' · nhận <b>' + fmt(rv.qty) + '</b> pallet · ' + esc(rv.kho) + ' đang có <b>' + fmt(rv.totalSame) + '</b> pallet cùng mã</div>';
+    if(!rv.plan.length){
+      html += '<div class="sdk-recv-warn">Không còn vị trí trống nào trong ' + esc(rv.kho) + ' để cất.</div>';
+    } else {
+      html += '<div class="sdk-plan-list">' + rv.plan.map(function(p, i){
+        var detail = p.tier === 0
+          ? 'Đang có ' + fmt(p.same) + ' pallet cùng mã' + (p.samePo ? ' (' + fmt(p.samePo) + ' cùng PO)' : '') + ', còn trống ' + fmt(p.free) + '/' + fmt(p.cap)
+          : 'Đang có ' + fmt(p.count) + '/' + fmt(p.cap) + ' pallet, còn trống ' + fmt(p.free);
+        return '<button type="button" class="sdk-plan-item" data-goto="' + esc(p.loc) + '"><span class="sdk-plan-step">' + (i + 1) + '</span>' +
+          '<span class="sdk-plan-loc">' + esc(p.loc) + '</span><span>→ cất</span><span class="sdk-plan-n">' + fmt(p.n) + ' pallet</span>' +
+          '<span class="sdk-plan-why">' + why[p.tier] + ' · ' + detail + '</span></button>';
+      }).join('') + '</div>';
+    }
+    if(rv.short > 0) html += '<div class="sdk-recv-warn">⚠ Còn ' + fmt(rv.short) + ' pallet chưa có chỗ — kho đã hết chỗ trống.</div>';
+    if(rv.elsewhere.length) html += '<div class="sdk-recv-summary" style="margin-top:8px;">Mã này còn nằm ở: ' + rv.elsewhere.map(function(e){ return '<b>' + esc(e.kho) + '</b> (' + fmt(e.cnt) + ' pallet)'; }).join(', ') + '</div>';
+    return html;
+  }
+  function scrollToLocator(loc){
+    var el = document.querySelector('#sdk-grid .wh3b-box[data-locator="' + (window.CSS && CSS.escape ? CSS.escape(loc) : loc) + '"]');
+    if(el) el.scrollIntoView({ behavior:'smooth', block:'center', inline:'center' });
   }
 
   /* ============ Bố cục ============ */
@@ -334,7 +551,8 @@
     for(var r = 1; r <= rowsN; r++) for(var k = 1; k <= colsN; k++){
       if(!occupied[r + ',' + k]) parts.push('<div class="sdk-empty-cell" style="grid-row:' + r + '; grid-column:' + k + ';">+</div>');
     }
-    return '<div class="wh3b-custom-grid wh3b-grid" style="grid-template-columns:repeat(' + colsN + ', minmax(72px, 1fr)); grid-template-rows:repeat(' + rowsN + ', minmax(90px, auto));">' + parts.join('') + '</div>';
+    var minCol = state.view === 'pallet' ? 150 : 72;
+    return '<div class="sdk-grid-scroll"><div class="wh3b-custom-grid wh3b-grid" style="grid-template-columns:repeat(' + colsN + ', minmax(' + minCol + 'px, 1fr)); grid-template-rows:repeat(' + rowsN + ', minmax(90px, auto));">' + parts.join('') + '</div></div>';
   }
   // 2) Kho 3B chưa có lưới tuỳ chỉnh -> bố cục thực tế mặc định (PROD / A01→A33 so le / Picking / Loading).
   function renderDefault3B(kho){
@@ -364,7 +582,8 @@
   function renderDefaultList(kho){
     var locs = Object.keys(state.byKho[kho] || {}).sort(naturalCmp);
     if(!locs.length) return '<div class="wh3b-empty">Không có dữ liệu tồn kho cho ' + esc(kho) + ' trong dữ liệu hiện tại.</div>';
-    return '<div class="wh3b-grid">' + locs.map(function(l){ return boxHtml(kho, l); }).join('') + '</div>';
+    var minW = state.view === 'pallet' ? (kho === 'Kho 3A' ? 110 : 170) : 126;
+    return '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fill, minmax(' + minW + 'px, 1fr));">' + locs.map(function(l){ return boxHtml(kho, l); }).join('') + '</div>';
   }
 
   function legendHtml(){
@@ -387,7 +606,11 @@
     $('sdk-eyebrow-dot').style.boxShadow = '0 0 8px ' + cfg.dot;
     $('sdk-title').textContent = cfg.title;
     $('sdk-sub').textContent = cfg.sub;
-    $('sdk-legend').innerHTML = legendHtml();
+    $('sdk-legend').innerHTML = legendHtml() + (state.view === 'pallet'
+      ? '<span style="flex-basis:100%;">🧱 Mỗi ô nhỏ = 1 pallet, màu = mã hàng (cùng mã cùng màu) · <span class="sdk-slot ng filled" style="display:inline-block; width:12px; background:var(--muted-2); vertical-align:middle;"></span> chấm = NG · viền đỏ = vượt sức chứa · ô nét đứt = chỗ trống · bấm 1 ô pallet để sáng mọi pallet cùng mã</span>'
+      : '');
+    document.querySelectorAll('#sdk-view-toggle button').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-view') === state.view); });
+    $('sdk-recv-result').innerHTML = recvResultHtml();
     var hb = $('sdk-heatmap-btn');
     hb.textContent = state.heatmap === 'qty' ? '🌡️ Heatmap: Mật độ' : state.heatmap === 'oqc' ? '🌡️ Heatmap: PASS/NG' : '🌡️ Heatmap: Tắt';
     hb.classList.toggle('active', state.heatmap !== 'off');
@@ -443,7 +666,7 @@
     var matched = [], matchedLocs = {};
     document.querySelectorAll('#sdk-grid .wh3b-box[data-locator]').forEach(function(el){
       el.classList.remove('wh3b-dim', 'wh3b-highlight');
-      if(!filtering) return;
+      if(!filtering){ el.querySelectorAll('.sdk-slot-dim').forEach(function(sl){ sl.classList.remove('sdk-slot-dim'); }); return; }
       var loc = el.getAttribute('data-locator');
       var hits = (map[loc] || []).filter(function(r){
         var isNg = String(r[RAW.oqc] || '').toUpperCase().indexOf('NG') !== -1;
@@ -452,10 +675,15 @@
         if(!query) return true;
         return multiGroupMatch(groups, (r[RAW.item] + ' ' + r[RAW.custpo] + ' ' + r[RAW.locator]).toLowerCase());
       });
+      el.querySelectorAll('.sdk-slot.filled').forEach(function(sl){
+        var isNg = sl.getAttribute('data-ng') === '1';
+        var ok = (isNg ? showNg : showPass) && (!query || multiGroupMatch(groups, sl.getAttribute('data-hay')));
+        sl.classList.toggle('sdk-slot-dim', !ok);
+      });
       if(hits.length){
         el.classList.add('wh3b-highlight');
         if(!matchedLocs[loc]){ matchedLocs[loc] = 1; hits.forEach(function(h){ matched.push(h); }); }
-      } else el.classList.add('wh3b-dim');
+      } else if(!el.classList.contains('sdk-plan')) el.classList.add('wh3b-dim'); // vị trí đang gợi ý cất thì luôn hiện rõ
     });
     var detail = $('sdk-detail');
     if(filtering){
@@ -501,7 +729,7 @@
       state.capOverride = r[2] || {};
       state.meta = r[3] || {};
       buildByKho();
-      render();
+      if(state.recv) runRecv(); else render();
       btn.disabled = false;
       setStatus('✓ ' + new Date().toLocaleTimeString('vi-VN'));
     }).catch(function(err){
@@ -534,11 +762,15 @@
   /* ============ Dữ liệu mẫu — chỉ để xem thử giao diện khi chưa có Cloud ============ */
   function buildDemo(){
     var seed = 7; function rnd(){ seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
-    var rows = [], gi = 100000;
+    var rows = [], gi = 100000, items = [];
+    for(var q = 0; q < 30; q++) items.push('0950' + String(Math.floor(rnd() * 90000) + 10000));
+    // Mỗi vị trí thường chỉ có 1–3 mã (giống kho thật), mỗi mã 1–2 PO.
     function add(kho, loc, n){
+      var mine = [items[Math.floor(rnd() * 30)], items[Math.floor(rnd() * 30)], items[Math.floor(rnd() * 30)]].slice(0, 1 + Math.floor(rnd() * 3));
       for(var i = 0; i < n; i++){
-        var ng = rnd() < 0.12;
-        rows.push([kho, '0950' + String(Math.floor(rnd() * 90000) + 10000), 'PO' + (4500000 + Math.floor(rnd() * 9999)), loc, ng ? 'NG' : 'PASS', Math.floor(rnd() * 400) + 20, 'GI' + (gi++), 'L' + Math.floor(rnd() * 900 + 100), '', '', '', '']);
+        var ng = rnd() < 0.08;
+        var it = mine[Math.floor(rnd() * mine.length)];
+        rows.push([kho, it, 'PO' + (4500000 + (it.charCodeAt(6) % 2)), loc, ng ? 'NG' : 'PASS', Math.floor(rnd() * 400) + 20, 'GI' + (gi++), 'L' + Math.floor(rnd() * 900 + 100), '', '', '', '']);
       }
     }
     add('Kho 3B', 'D3B-FG-PROD', 37);
@@ -567,9 +799,17 @@
     state.activeKho = b.getAttribute('data-kho');
     state.activeLocator = null;
     try{ localStorage.setItem(LS_ACTIVE_KHO, state.activeKho); }catch(err){}
-    render();
+    if(state.recv) runRecv(); else render(); // đang gợi ý nhận hàng -> tính lại cho kho vừa chọn
   });
   $('sdk-grid').addEventListener('click', function(e){
+    var slot = e.target.closest('.sdk-slot.filled');
+    if(slot){
+      // Bấm 1 pallet -> tìm theo đúng mã đó: mọi pallet cùng mã sáng lên, còn lại mờ đi.
+      var it = slot.getAttribute('data-item');
+      $('sdk-search').value = $('sdk-search').value.trim().toLowerCase() === String(it).toLowerCase() ? '' : it;
+      applyFilter();
+      return;
+    }
     var b = e.target.closest('.wh3b-box-main'); if(!b) return;
     var loc = b.getAttribute('data-locator');
     if($('sdk-search').value.trim() || !$('sdk-oqc-pass').checked || !$('sdk-oqc-ng').checked){
@@ -599,6 +839,24 @@
     render();
   });
   $('sdk-refresh-btn').addEventListener('click', load);
+  $('sdk-view-toggle').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-view]'); if(!b) return;
+    state.view = b.getAttribute('data-view');
+    try{ localStorage.setItem(LS_VIEW, state.view); }catch(err){}
+    render();
+  });
+  $('sdk-recv-btn').addEventListener('click', runRecv);
+  ['sdk-recv-item', 'sdk-recv-po', 'sdk-recv-qty'].forEach(function(id){
+    $(id).addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); runRecv(); } });
+  });
+  $('sdk-recv-clear').addEventListener('click', function(){
+    $('sdk-recv-item').value = ''; $('sdk-recv-po').value = ''; $('sdk-recv-qty').value = '1';
+    state.recv = null; render();
+  });
+  $('sdk-recv-result').addEventListener('click', function(e){
+    var b = e.target.closest('[data-goto]'); if(!b) return;
+    scrollToLocator(b.getAttribute('data-goto'));
+  });
   function syncThemeBtn(){ $('sdk-theme-btn').textContent = document.body.getAttribute('data-theme') === 'dark' ? '🌙' : '☀️'; }
   $('sdk-theme-btn').addEventListener('click', function(){
     var dark = document.body.getAttribute('data-theme') !== 'dark';
