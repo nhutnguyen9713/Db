@@ -1424,7 +1424,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.06';
+const APP_VERSION = 'v4.07';
 const APP_VERSION_DATE = '31/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5953,9 +5953,19 @@ async function exportCombinedPlanToExcel(mode){
     const leftAlignCols = new Set([contHeaders.length + 1, contHeaders.length + 2, contHeaders.length + 4]); // Item No./Cust PO/Picking
     const row = ws1.addRow(rowValues);
     imgRows.push({ values: rowValues, fill: fillColor, first: isGroupFirst, done: !!doneFill });
+    const pickingColNo = contHeaders.length + 4;
     row.eachCell((cell, colNumber) => {
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: doneFill || highlightColorByCol.get(colNumber) || fillColor } };
       cell.alignment = { vertical:'middle', horizontal: leftAlignCols.has(colNumber) ? 'left' : 'center' };
+      // Cột Picking: phần số "xx/xx" căn TRÁI, locator Loading căn PHẢI trong CÙNG 1 ô — ô chỉ giữ phần
+      // số, locator đưa vào định dạng số dạng  @* "DG3-Loading"  (dấu * = lấp đầy khoảng trống ở giữa).
+      if(mode === 'excel' && colNumber === pickingColNo){
+        const sp = splitPickingText(cell.value);
+        if(sp.loc){
+          cell.value = sp.num;
+          cell.numFmt = '@* "' + sp.loc.replace(/"/g, '') + '"';
+        }
+      }
       cell.border = {
         top: isGroupFirst ? thick : thin,
         bottom: thin,
@@ -6021,6 +6031,13 @@ if(btnCombinedPlanImg) btnCombinedPlanImg.addEventListener('click', () => export
 const btnCombinedPlanShare = document.getElementById('btn-combined-plan-share');
 if(btnCombinedPlanShare) btnCombinedPlanShare.addEventListener('click', () => exportCombinedPlanToExcel('image-share'));
 
+// Tách chữ cột Picking "500/700 DG3-Loading, D3B-Loading" -> { num:'500/700', loc:'DG3-Loading, D3B-Loading' }.
+function splitPickingText(v){
+  const t = String(v == null ? '' : v).trim();
+  const m = t.match(/^(\S+)\s+(.+)$/);
+  return m ? { num: m[1], loc: m[2] } : { num: t, loc: '' };
+}
+
 // Vẽ bảng "Tổng hợp 3 Plan" thành ảnh PNG giống file Excel (nền xen kẽ theo container, cột màu theo kho,
 // viền đậm giữa các container). share=true → mở bảng chia sẻ của điện thoại, không hỗ trợ thì tải file.
 function drawCombinedPlanImage(headers, rows, colorByCol, nContCols, share){
@@ -6033,7 +6050,7 @@ function drawCombinedPlanImage(headers, rows, colorByCol, nContCols, share){
     meas.font = font;
     rows.forEach(r => { w = Math.max(w, meas.measureText(String(r.values[i] == null ? '' : r.values[i])).width); });
     meas.font = fontB;
-    return Math.ceil(Math.min(w, 220)) + padX * 2;
+    return Math.ceil(Math.min(w, 220)) + padX * 2 + (i === nContCols + 3 ? 14 : 0); // Picking: chừa khoảng giữa số và locator
   });
   const W = widths.reduce((a,b) => a + b, 0) + 2, H = headH + rows.length * rowH + 2;
   const cv = document.createElement('canvas');
@@ -6047,13 +6064,19 @@ function drawCombinedPlanImage(headers, rows, colorByCol, nContCols, share){
     g.fillStyle = bg; g.fillRect(xs[i], y, widths[i], h);
     g.strokeStyle = '#AAAAAA'; g.lineWidth = 1; g.strokeRect(xs[i] + .5, y + .5, widths[i] - 1, h - 1);
     g.fillStyle = '#111'; g.font = bold ? fontB : font;
-    if(left){ g.textAlign = 'left'; g.fillText(text, xs[i] + padX, y + h / 2); }
+    if(left === 'split'){
+      // Cột Picking: số "xx/xx" sát trái, locator Loading sát phải
+      const sp = splitPickingText(text);
+      g.textAlign = 'left'; g.fillText(sp.num, xs[i] + padX, y + h / 2);
+      if(sp.loc){ g.textAlign = 'right'; g.fillText(sp.loc, xs[i] + widths[i] - padX, y + h / 2); }
+    }
+    else if(left){ g.textAlign = 'left'; g.fillText(text, xs[i] + padX, y + h / 2); }
     else { g.textAlign = 'center'; g.fillText(text, xs[i] + widths[i] / 2, y + h / 2); }
   };
   headers.forEach((h,i) => cell(i, 1, headH, colorByCol.has(i+1) ? argb(colorByCol.get(i+1)) : '#EFEFEF', h, true, false));
   rows.forEach((r, ri) => {
     const y = 1 + headH + ri * rowH;
-    r.values.forEach((v,i) => cell(i, y, rowH, (!r.done && colorByCol.has(i+1)) ? argb(colorByCol.get(i+1)) : argb(r.fill), String(v == null ? '' : v), false, i === nContCols || i === nContCols + 1));
+    r.values.forEach((v,i) => cell(i, y, rowH, (!r.done && colorByCol.has(i+1)) ? argb(colorByCol.get(i+1)) : argb(r.fill), String(v == null ? '' : v), false, i === nContCols + 3 ? 'split' : (i === nContCols || i === nContCols + 1)));
     if(r.first){ g.strokeStyle = '#222'; g.lineWidth = 2; g.beginPath(); g.moveTo(1, y); g.lineTo(W - 1, y); g.stroke(); }
   });
   g.strokeStyle = '#222'; g.lineWidth = 2;
