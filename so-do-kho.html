@@ -700,15 +700,33 @@
     var rowsN = Math.max(1, Number(layout.rows) || 5), colsN = Math.max(1, Number(layout.cols) || 5);
     var R = remap('row', 'rowSpan', rowsN), C = remap('col', 'colSpan', colsN);
     function span(m, a, n){ var cnt = 0; for(var i = a; i < a + n; i++) if(m.used[i]) cnt++; return Math.max(1, cnt); }
-    return {
-      rows:R.count, cols:C.count, hideEmpty:true,
-      cells:cells.map(function(c){
-        var r0 = Number(c.row) || 1, c0 = Number(c.col) || 1, rs = Number(c.rowSpan) || 1, cs = Number(c.colSpan) || 1;
-        var o = {}; for(var k in c) o[k] = c[k];
-        o.row = R.map[r0] || 1; o.col = C.map[c0] || 1; o.rowSpan = span(R, r0, rs); o.colSpan = span(C, c0, cs);
-        return o;
-      })
-    };
+    var out = cells.map(function(c){
+      var r0 = Number(c.row) || 1, c0 = Number(c.col) || 1, rs = Number(c.rowSpan) || 1, cs = Number(c.colSpan) || 1;
+      var o = {}; for(var k in c) o[k] = c[k];
+      o.row = R.map[r0] || 1; o.col = C.map[c0] || 1; o.rowSpan = span(R, r0, rs); o.colSpan = span(C, c0, cs);
+      // Nhân đôi độ phân giải cột để chia đôi khoảng trống giữa 2 khung.
+      o.col = o.col * 2 - 1; o.colSpan = o.colSpan * 2;
+      return o;
+    });
+    // Lấp khoảng trống: trong mỗi hàng, khung giãn ngang sang ô trống kề bên — trống giữa 2 khung thì chia đôi,
+    // trống ở đầu/cuối hàng thì khung sát đó lấy hết. Khung trải nhiều hàng lấy phần nhỏ nhất của các hàng.
+    var W = C.count * 2;
+    out.forEach(function(c){ c._l = Infinity; c._r = Infinity; });
+    for(var r = 1; r <= R.count; r++){
+      var inRow = out.filter(function(c){ return r >= c.row && r < c.row + c.rowSpan; }).sort(function(a, b){ return a.col - b.col; });
+      inRow.forEach(function(c, i){
+        var prev = inRow[i - 1], next = inRow[i + 1];
+        var gl = c.col - (prev ? prev.col + prev.colSpan : 1);
+        var gr = (next ? next.col : W + 1) - (c.col + c.colSpan);
+        c._l = Math.min(c._l, prev ? Math.floor(gl / 2) : gl);
+        c._r = Math.min(c._r, next ? Math.ceil(gr / 2) : gr);
+      });
+    }
+    out.forEach(function(c){
+      var l = isFinite(c._l) ? Math.max(0, c._l) : 0, r = isFinite(c._r) ? Math.max(0, c._r) : 0;
+      c.col -= l; c.colSpan += l + r; delete c._l; delete c._r;
+    });
+    return { rows:R.count, cols:W, hideEmpty:true, halfCols:true, cells:out };
   }
   function renderCustomGrid(kho, layout){
     layout = compactLayout(kho, layout);
@@ -734,6 +752,7 @@
       if(!occupied[r + ',' + k]) parts.push(layout.hideEmpty ? '<div style="grid-row:' + r + '; grid-column:' + k + ';"></div>' : '<div class="sdk-empty-cell" style="grid-row:' + r + '; grid-column:' + k + ';">+</div>');
     }
     var minCol = state.view === 'pallet' ? 150 : 72;
+    if(layout.halfCols) minCol = Math.round(minCol / 2);
     return '<div class="sdk-grid-scroll"><div class="wh3b-custom-grid wh3b-grid" style="grid-template-columns:repeat(' + colsN + ', minmax(' + minCol + 'px, 1fr)); grid-template-rows:repeat(' + rowsN + ', minmax(90px, 1fr));">' + parts.join('') + '</div></div>';
   }
   // 2) Kho 3B chưa có lưới tuỳ chỉnh -> bố cục thực tế mặc định (PROD / A01→A33 so le / Picking / Loading).
