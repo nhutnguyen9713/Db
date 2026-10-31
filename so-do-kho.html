@@ -739,10 +739,16 @@
     }).join('') + '</div>';
   }
   function groupKeyOf(loc){ return String(loc).replace(/\d+$/, '').replace(/[-_]+$/, '') || loc; }
-  function renderGroups(kho, locs){
+  // Thứ tự khu Tầng Trệt theo đường đi thực tế: FG-TG → dãy A → B → C → ITN → Loading → Aging, các khu khác (Pick…) để cuối.
+  var TRET_ORDER = [/-TG$/i, /FG-A$/i, /FG-B$/i, /FG-C$/i, /ITN/i, /LOADING/i, /AGING/i];
+  function tretRank(g){
+    for(var i = 0; i < TRET_ORDER.length; i++) if(TRET_ORDER[i].test(g)) return i;
+    return TRET_ORDER.length;
+  }
+  function renderGroups(kho, locs, zone){
     var groups = {}, order = [];
     locs.forEach(function(l){ var g = groupKeyOf(l); if(!groups[g]){ groups[g] = []; order.push(g); } groups[g].push(l); });
-    order.sort(naturalCmp);
+    order.sort(function(a, b){ return (zone === 'tret' ? tretRank(a) - tretRank(b) : 0) || naturalCmp(a, b); });
     var minW = state.view === 'pallet' ? 170 : 126;
     return order.map(function(g){
       var st = locStats(kho, groups[g]);
@@ -782,7 +788,7 @@
     var bar = '<div class="sdk-zone-bar"><button type="button" class="sdk-back" data-zone="">← 3 khu vực</button>' +
       ZONES_3A.map(function(x){ return '<button type="button" class="sdk-zone-pill' + (x.id === zone ? ' active' : '') + '" data-zone="' + x.id + '">' + x.icon + ' ' + esc(x.name) + '</button>'; }).join('') + '</div>';
     if(!locs.length) return bar + '<div class="wh3b-empty">Khu ' + esc(z.name) + ' chưa có vị trí nào trong dữ liệu tồn kho.</div>';
-    return bar + (zone === 'rack' ? renderRack(kho, locs) : renderGroups(kho, locs));
+    return bar + (zone === 'rack' ? renderRack(kho, locs) : renderGroups(kho, locs, zone));
   }
 
   // 3) Kho khác chưa có lưới tuỳ chỉnh -> liệt kê mọi locator đang có (sắp tự nhiên).
