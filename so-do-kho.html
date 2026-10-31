@@ -359,14 +359,14 @@
   var RACK_RE = /^3A-([A-Z]+)(\d+)-T(\d+)$/i;
   var FLOOR_3A_RE = /^DG3-FG-([ABC])(\d+)$/i;
   function zone3A(loc){
-    if(/^3AFG-M/i.test(loc)) return 'lau';
+    if(/^3AFG-M/i.test(loc) || /AGING/i.test(loc)) return 'lau'; // khu Aging xếp chung Tầng Lầu (dưới cùng)
     if(RACK_RE.test(loc)) return 'rack';
     return 'tret';
   }
   var ZONES_3A = [
     { id:'tret', name:'Tầng Trệt', icon:'🟫', desc:'Sàn DG3-FG dãy A/B/C và các vị trí sàn khác (TG, ITN, Loading…)' },
     { id:'rack', name:'Rack', icon:'🗄️', desc:'Kệ 3A-<dãy><bay>-T<tầng> — 2 pallet/ô kệ' },
-    { id:'lau', name:'Tầng Lầu', icon:'🏢', desc:'Khu lầu M1/M2 (3AFG-M1 / 3AFG-M2)' }
+    { id:'lau', name:'Tầng Lầu', icon:'🏢', desc:'Khu lầu M2/M1 (3AFG-M2 / 3AFG-M1) và khu Aging' }
   ];
   // Sức chứa mặc định — y hệt ovLocatorDefaultCapacity() của dashboard cho Kho 3A.
   function cap3A(loc){
@@ -759,8 +759,15 @@
     }).join('') + '</div>';
   }
   function groupKeyOf(loc){ return String(loc).replace(/\d+$/, '').replace(/[-_]+$/, '') || loc; }
-  // Thứ tự khu Tầng Trệt theo đường đi thực tế: FG-TG → dãy A → B → C → ITN → Pick → Loading → Aging, các khu khác để cuối.
-  var TRET_ORDER = [/-TG$/i, /FG-A$/i, /FG-B$/i, /FG-C$/i, /ITN/i, /PICK/i, /LOADING/i, /AGING/i];
+  // Thứ tự khu Tầng Trệt theo đường đi thực tế: FG-TG → dãy A → B → C → ITN → Pick → Loading, các khu khác để cuối.
+  var TRET_ORDER = [/-TG$/i, /FG-A$/i, /FG-B$/i, /FG-C$/i, /ITN/i, /PICK/i, /LOADING/i];
+  // Tầng Lầu: M2 trên, M1 dưới, khu khác, Aging dưới cùng.
+  var LAU_ORDER = [/^3AFG-M2/i, /^3AFG-M1/i];
+  function lauRank(g){
+    if(/AGING/i.test(g)) return LAU_ORDER.length + 1;
+    for(var i = 0; i < LAU_ORDER.length; i++) if(LAU_ORDER[i].test(g)) return i;
+    return LAU_ORDER.length;
+  }
   function tretRank(g){
     for(var i = 0; i < TRET_ORDER.length; i++) if(TRET_ORDER[i].test(g)) return i;
     return TRET_ORDER.length;
@@ -768,12 +775,16 @@
   function renderGroups(kho, locs, zone){
     var groups = {}, order = [];
     locs.forEach(function(l){ var g = groupKeyOf(l); if(!groups[g]){ groups[g] = []; order.push(g); } groups[g].push(l); });
-    order.sort(function(a, b){ return (zone === 'tret' ? tretRank(a) - tretRank(b) : 0) || naturalCmp(a, b); });
+    order.sort(function(a, b){ return (zone === 'tret' ? tretRank(a) - tretRank(b) : zone === 'lau' ? lauRank(a) - lauRank(b) : 0) || naturalCmp(a, b); });
     var minW = state.view === 'pallet' ? 170 : 126;
     function groupHtml(g){
       var st = locStats(kho, groups[g]);
       return '<div class="sdk-group"><div class="sdk-group-head">' + esc(g) + '<span>' + fmt(groups[g].length) + ' vị trí · ' + fmt(st.pallets) + '/' + fmt(st.cap) + ' pallet</span></div>' +
-        '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fit, minmax(' + minW + 'px, 1fr));">' + groups[g].map(function(l){ return boxHtml(kho, l); }).join('') + '</div></div>';
+        // Tầng Lầu: cả tầng (10 locator) nằm trên 1 hàng ngang, ô pallet dài xuống dưới; màn hẹp thì cuộn ngang.
+        (zone === 'lau'
+          ? '<div class="sdk-grid-scroll"><div class="wh3b-grid" style="grid-template-columns:repeat(' + groups[g].length + ', minmax(112px, 1fr));">'
+          : '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fit, minmax(' + minW + 'px, 1fr));">') +
+        groups[g].map(function(l){ return boxHtml(kho, l); }).join('') + '</div>' + (zone === 'lau' ? '</div>' : '') + '</div>';
     }
     // Tầng Trệt: dãy A/B/C đứng cạnh nhau như mặt bằng thực tế — C bên trái, B ở giữa, A bên phải; mỗi dãy 1 locator / hàng.
     var abc = zone === 'tret' ? ['C', 'B', 'A'].map(function(k){
