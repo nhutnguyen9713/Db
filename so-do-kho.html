@@ -368,6 +368,28 @@
     { id:'rack', name:'Rack', icon:'🗄️', desc:'Kệ 3A-<dãy><bay>-T<tầng> — 2 pallet/ô kệ' },
     { id:'lau', name:'Tầng Lầu', icon:'🏢', desc:'Khu lầu M2/M1 (3AFG-M2 / 3AFG-M1) và khu Aging' }
   ];
+  /* ============ Kho 3B / 2B — cùng kiểu chia khu như 3A ============
+     - 3B: Sàn FG A01–A33 (2 cột thẳng hàng: A01→A15 | A33→A16, như mặt bằng thực tế) + khu Prod / Pick / Loading.
+     - 2B: Sàn FG dãy A–F (6 cột thẳng hàng, mỗi dãy 01→12) + khu G, H (khu chờ) và vị trí khác. */
+  var FLOOR_3B_RE = /^D3B-FG-A(\d+)$/i;
+  var FLOOR_2B_RE = /^D2B-FG-([A-F])(\d+)$/i;
+  var ZONES = {
+    'Kho 3A': ZONES_3A,
+    'Kho 3B': [
+      { id:'san', name:'Sàn FG', icon:'🟫', desc:'Sàn D3B-FG A01–A33 — 2 dãy đứng cạnh nhau như mặt bằng thực tế' },
+      { id:'khac', name:'Prod · Pick · Loading', icon:'📦', desc:'Khu Prod, Picking (3B-PICK) và Loading' }
+    ],
+    'Kho 2B': [
+      { id:'san', name:'Sàn FG dãy A–F', icon:'🟫', desc:'Sàn D2B-FG dãy A, B, C, D, E, F — 6 dãy thẳng hàng, mỗi dãy 01→12' },
+      { id:'khac', name:'Khu G · H & khác', icon:'📦', desc:'Dãy G, khu H (khu chờ lớn) và các vị trí khác của 2B' }
+    ]
+  };
+  function zoneOf(kho, loc){
+    if(kho === 'Kho 3A') return zone3A(loc);
+    if(kho === 'Kho 3B') return FLOOR_3B_RE.test(loc) ? 'san' : 'khac';
+    if(kho === 'Kho 2B') return FLOOR_2B_RE.test(loc) ? 'san' : 'khac';
+    return null;
+  }
   // Sức chứa mặc định — y hệt ovLocatorDefaultCapacity() của dashboard cho Kho 3A.
   function cap3A(loc){
     if(RACK_RE.test(loc)) return 2;
@@ -386,7 +408,7 @@
   /* ============ Trạng thái ============ */
   var state = {
     inventory: null, grids: {}, capOverride: {}, meta: {},
-    zone3A: null,
+    zone: null,
     pick: null, // { item, po } — pallet đang chọn (bấm 1 ô pallet), lọc đúng mã + PO; ESC để bỏ chọn
  // null = màn hình 3 khu vực; 'tret' | 'rack' | 'lau' = đang mở chi tiết 1 khu
     activeKho: 'Kho 3B', heatmap: 'off', demo: false, byKho: {}, activeLocator: null,
@@ -657,9 +679,9 @@
     return html;
   }
   function goToLocator(loc){
-    if(state.activeKho === 'Kho 3A'){
-      var z = zone3A(loc);
-      if(state.zone3A !== z){ state.zone3A = z; render(); }
+    if(ZONES[state.activeKho]){
+      var z = zoneOf(state.activeKho, loc);
+      if(state.zone !== z){ state.zone = z; render(); }
     }
     scrollToLocator(loc);
   }
@@ -695,30 +717,6 @@
     var minCol = state.view === 'pallet' ? 150 : 72;
     return '<div class="sdk-grid-scroll"><div class="wh3b-custom-grid wh3b-grid" style="grid-template-columns:repeat(' + colsN + ', minmax(' + minCol + 'px, 1fr)); grid-template-rows:repeat(' + rowsN + ', minmax(90px, auto));">' + parts.join('') + '</div></div>';
   }
-  // 2) Kho 3B chưa có lưới tuỳ chỉnh -> bố cục thực tế mặc định (PROD / A01→A33 so le / Picking / Loading).
-  function renderDefault3B(kho){
-    var map = state.byKho[kho] || {};
-    var left = [], right = [], pick = [];
-    for(var n = 1; n <= 15; n++) left.push('D3B-FG-A' + String(n).padStart(2, '0'));
-    for(n = 33; n >= 16; n--) right.push('D3B-FG-A' + String(n).padStart(2, '0'));
-    for(n = 1; n <= 5; n++) pick.push('3B-PICK-' + String(n).padStart(2, '0'));
-    var rowCount = Math.max(left.length, right.length), off = rowCount - left.length;
-    var main = '';
-    for(var i = 0; i < rowCount; i++){
-      var l = i >= off ? left[i - off] : null, rr = right[i] || null;
-      main += l ? boxHtml(kho, l) : '<div class="wh3b-box-blank"></div>';
-      main += rr ? boxHtml(kho, rr) : '<div class="wh3b-box-blank"></div>';
-    }
-    var known = {}; ['D3B-FG-PROD', 'D3B-Loading'].concat(left, right, pick).forEach(function(x){ known[x] = 1; });
-    var others = Object.keys(map).filter(function(x){ return !known[x]; }).sort(naturalCmp);
-    return '<div class="wh3b-grid" style="grid-template-columns:1fr; gap:12px;">' +
-      '<div class="wh3b-block wh3b-block-prod"><div class="wh3b-subgrid wh3b-subgrid-1col">' + boxHtml(kho, 'D3B-FG-PROD') + '</div></div>' +
-      '<div class="wh3b-block wh3b-block-main"><div class="wh3b-subgrid wh3b-subgrid-2col">' + main + '</div></div>' +
-      '<div class="wh3b-block wh3b-block-pick"><div class="wh3b-subgrid wh3b-subgrid-5col">' + pick.map(function(p){ return boxHtml(kho, p); }).join('') + '</div></div>' +
-      '<div class="wh3b-block wh3b-block-loading"><div class="wh3b-subgrid wh3b-subgrid-1col">' + boxHtml(kho, 'D3B-Loading') + '</div></div>' +
-      (others.length ? '<div class="wh3b-block"><div class="wh3b-subgrid" style="grid-template-columns:repeat(auto-fill, minmax(126px, 1fr));">' + others.map(function(o){ return boxHtml(kho, o); }).join('') + '</div></div>' : '') +
-      '</div>';
-  }
   // 4) Kho 3A: màn hình 3 khu vực -> bấm 1 khu mở chi tiết.
   function locStats(kho, locs){
     var st = { locators:locs.length, pallets:0, cap:0, full:0, ng:0, empty:0, items:{} , incoming:0 };
@@ -738,12 +736,13 @@
     return st;
   }
   function zoneLocs(zone){
-    return Object.keys(state.byKho['Kho 3A'] || {}).filter(function(l){ return zone3A(l) === zone; }).sort(naturalCmp);
+    var kho = state.activeKho;
+    return Object.keys(state.byKho[kho] || {}).filter(function(l){ return zoneOf(kho, l) === zone; }).sort(naturalCmp);
   }
   // active: đang xem chi tiết 1 khu -> 3 thẻ thu gọn làm tiêu đề (thẻ khu đang xem tô đậm, bấm thẻ khác để chuyển khu).
-  function renderZones3A(active){
-    var kho = 'Kho 3A';
-    return '<div class="sdk-zones' + (active ? ' compact' : '') + '">' + ZONES_3A.map(function(z){
+  function renderZones(active){
+    var kho = state.activeKho;
+    return '<div class="sdk-zones' + (active ? ' compact' : '') + '">' + ZONES[kho].map(function(z){
       var locs = zoneLocs(z.id), st = locStats(kho, locs);
       var pct = st.cap ? Math.round(Math.min(st.pallets, st.cap) / st.cap * 100) : 0;
       var top = Object.keys(st.items).sort(function(a, b){ return st.items[b] - st.items[a]; });
@@ -763,6 +762,13 @@
   var TRET_ORDER = [/-TG$/i, /FG-A$/i, /FG-B$/i, /FG-C$/i, /ITN/i, /PICK/i, /LOADING/i];
   // Tầng Lầu: M2 trên, M1 dưới, khu khác, Aging dưới cùng.
   var LAU_ORDER = [/^3AFG-M2/i, /^3AFG-M1/i];
+  // Khu "khác" của 3B / 2B: thứ tự theo đường đi.
+  var KHAC_ORDER = { 'Kho 3B':[/PROD/i, /PICK/i, /LOADING/i], 'Kho 2B':[/FG-G$/i, /FG-H$/i, /PICK/i, /LOADING/i] };
+  function khacRank(kho, g){
+    var o = KHAC_ORDER[kho] || [];
+    for(var i = 0; i < o.length; i++) if(o[i].test(g)) return i;
+    return o.length;
+  }
   function lauRank(g){
     if(/AGING/i.test(g)) return LAU_ORDER.length + 1;
     for(var i = 0; i < LAU_ORDER.length; i++) if(LAU_ORDER[i].test(g)) return i;
@@ -775,7 +781,7 @@
   function renderGroups(kho, locs, zone){
     var groups = {}, order = [];
     locs.forEach(function(l){ var g = groupKeyOf(l); if(!groups[g]){ groups[g] = []; order.push(g); } groups[g].push(l); });
-    order.sort(function(a, b){ return (zone === 'tret' ? tretRank(a) - tretRank(b) : zone === 'lau' ? lauRank(a) - lauRank(b) : 0) || naturalCmp(a, b); });
+    order.sort(function(a, b){ return (zone === 'tret' ? tretRank(a) - tretRank(b) : zone === 'lau' ? lauRank(a) - lauRank(b) : zone === 'khac' ? khacRank(kho, a) - khacRank(kho, b) : 0) || naturalCmp(a, b); });
     var minW = state.view === 'pallet' ? 170 : 126;
     function groupHtml(g){
       var st = locStats(kho, groups[g]);
@@ -835,12 +841,50 @@
         '<div class="sdk-grid-scroll"><div class="sdk-rack" style="grid-template-columns:30px repeat(' + bays.length + ', minmax(52px, 1fr));">' + html + '</div></div></div>';
     }).join('');
   }
-  function renderZone3A(zone){
-    var kho = 'Kho 3A', z = ZONES_3A.filter(function(x){ return x.id === zone; })[0];
+  function renderZone(zone){
+    var kho = state.activeKho, zs = ZONES[kho], z = zs.filter(function(x){ return x.id === zone; })[0];
+    if(!z){ state.zone = null; return renderZones(); }
     var locs = zoneLocs(zone);
-    var bar = '<div class="sdk-zone-bar"><button type="button" class="sdk-back" data-zone="">← 3 khu vực</button></div>' + renderZones3A(zone);
+    var bar = '<div class="sdk-zone-bar"><button type="button" class="sdk-back" data-zone="">← ' + zs.length + ' khu vực</button></div>' + renderZones(zone);
     if(!locs.length) return bar + '<div class="wh3b-empty">Khu ' + esc(z.name) + ' chưa có vị trí nào trong dữ liệu tồn kho.</div>';
-    return bar + (zone === 'rack' ? renderRack(kho, locs) : renderGroups(kho, locs, zone));
+    if(kho === 'Kho 3A' && zone === 'rack') return bar + renderRack(kho, locs);
+    if(kho === 'Kho 3B' && zone === 'san') return bar + renderFloor3B(kho);
+    if(kho === 'Kho 2B' && zone === 'san') return bar + renderFloor2B(kho, locs);
+    return bar + renderGroups(kho, locs, zone);
+  }
+  // Lưới thẳng hàng dùng chung: mỗi cột = 1 dãy, hàng thứ i của mọi cột cùng cao (khung cùng cỡ, thẳng hàng nhau).
+  // columns: [{ title, locs:[locator | null (ô trống)] }]
+  function alignedHtml(kho, columns, minW){
+    var colTpl = 'grid-template-columns:repeat(' + columns.length + ', minmax(' + minW + 'px, 1fr));';
+    var heads = columns.map(function(c){
+      var real = c.locs.filter(Boolean), st = locStats(kho, real);
+      return '<div class="sdk-group-head" style="margin-bottom:0">' + esc(c.title) + '<span>' + fmt(real.length) + ' vị trí · ' + fmt(st.pallets) + '/' + fmt(st.cap) + ' pallet</span></div>';
+    }).join('');
+    var nRows = Math.max.apply(null, columns.map(function(c){ return c.locs.length; }));
+    var cells = '';
+    for(var i = 0; i < nRows; i++) columns.forEach(function(c){ var l = c.locs[i]; cells += l ? boxHtml(kho, l) : '<div></div>'; });
+    return '<div class="sdk-group sdk-grid-scroll"><div class="sdk-abc sdk-abc-head" style="' + colTpl + '">' + heads + '</div>' +
+      '<div class="sdk-abc sdk-abc-body" style="' + colTpl + '">' + cells + '</div></div>';
+  }
+  // 3B: cột trái A01→A15 (canh đáy), cột phải A33→A16 — giữ đúng bố cục so le của sơ đồ 3B cũ.
+  function renderFloor3B(kho){
+    var left = [], right = [];
+    for(var n = 1; n <= 15; n++) left.push('D3B-FG-A' + String(n).padStart(2, '0'));
+    for(n = 33; n >= 16; n--) right.push('D3B-FG-A' + String(n).padStart(2, '0'));
+    while(left.length < right.length) left.unshift(null);
+    var minW = state.view === 'pallet' ? 260 : 150;
+    return alignedHtml(kho, [{ title:'Dãy A01–A15', locs:left }, { title:'Dãy A33–A16', locs:right }], minW);
+  }
+  // 2B: 6 dãy A–F cạnh nhau, mỗi dãy 01→12 từ trên xuống.
+  function renderFloor2B(kho, locs){
+    var lanes = {};
+    locs.forEach(function(l){ var m = l.match(FLOOR_2B_RE); if(m) (lanes[m[1].toUpperCase()] = lanes[m[1].toUpperCase()] || {})[Number(m[2])] = l; });
+    var cols = Object.keys(lanes).sort().map(function(k){
+      var nums = Object.keys(lanes[k]).map(Number), max = Math.max.apply(null, nums), arr = [];
+      for(var i = 1; i <= max; i++) arr.push(lanes[k][i] || null);
+      return { title:'Dãy ' + k, locs:arr };
+    });
+    return alignedHtml(kho, cols, state.view === 'pallet' ? 170 : 110);
   }
 
   // 3) Kho khác chưa có lưới tuỳ chỉnh -> liệt kê mọi locator đang có (sắp tự nhiên).
@@ -894,23 +938,24 @@
     if(!state.inventory){
       html = '<div class="wh3b-empty">Chưa có dữ liệu tồn kho trên Cloud — hãy tải file tồn kho trên TN5 Dashboard rồi bấm "Làm mới".</div>';
       note.style.display = 'none';
-    } else if(kho === 'Kho 3A'){
-      html = state.zone3A ? renderZone3A(state.zone3A) : renderZones3A();
+    } else if(ZONES[kho]){
+      var nz = ZONES[kho].length;
+      html = state.zone ? renderZone(state.zone) : renderZones();
       note.style.display = '';
-      note.textContent = state.zone3A
-        ? 'Đang xem chi tiết 1 khu — bấm "← 3 khu vực" để quay lại tổng quan.'
-        : 'Kho 3A chia 3 khu chính — bấm vào 1 khu để mở chi tiết từng vị trí / từng pallet.';
+      note.textContent = state.zone
+        ? 'Đang xem chi tiết 1 khu — bấm "← ' + nz + ' khu vực" để quay lại tổng quan.'
+        : kho + ' chia ' + nz + ' khu chính — bấm vào 1 khu để mở chi tiết từng vị trí / từng pallet.';
     } else if(hasCustom){
       html = renderCustomGrid(kho, layout);
       note.style.display = '';
       note.textContent = 'Đang dùng lưới sơ đồ TUỲ CHỈNH lưu trên Cloud — sửa bố cục ở trang Sơ đồ kho của TN5 Dashboard.';
     } else {
-      html = kho === 'Kho 3B' ? renderDefault3B(kho) : renderDefaultList(kho);
+      html = renderDefaultList(kho);
       note.style.display = '';
       note.textContent = 'Chưa có lưới tuỳ chỉnh cho ' + kho + ' trên Cloud — đang hiện bố cục mặc định.';
     }
     $('sdk-grid').innerHTML = html;
-    if(kho === 'Kho 3A' && state.inventory){
+    if(ZONES[kho] && state.inventory){
       var all3A = locStats(kho, Object.keys(state.byKho[kho] || {}));
       stats = { locators:all3A.locators, pallets:all3A.pallets, full:all3A.full };
     }
@@ -973,7 +1018,7 @@
     });
     document.querySelectorAll('#sdk-grid .sdk-zone-card').forEach(function(card){
       var z = card.getAttribute('data-zone'), n = 0, nl = 0;
-      Object.keys(matchedLocs).forEach(function(l){ if(zone3A(l) === z){ n += matchedLocs[l]; nl++; } });
+      Object.keys(matchedLocs).forEach(function(l){ if(zoneOf(state.activeKho, l) === z){ n += matchedLocs[l]; nl++; } });
       card.classList.remove('wh3b-dim', 'wh3b-highlight');
       var tag = card.querySelector('[data-zone-match]');
       if(tag) tag.textContent = filtering && n ? '🔍 ' + fmt(n) + ' pallet khớp ở ' + fmt(nl) + ' vị trí' : '';
@@ -1205,14 +1250,14 @@
     var b = e.target.closest('.sdk-tab'); if(!b) return;
     state.activeKho = b.getAttribute('data-kho');
     state.activeLocator = null;
-    state.zone3A = null;
+    state.zone = null;
     try{ localStorage.setItem(LS_ACTIVE_KHO, state.activeKho); }catch(err){}
     if(state.recv) runRecv(); else render(); // đang gợi ý nhận hàng -> tính lại cho kho vừa chọn
   });
   $('sdk-grid').addEventListener('click', function(e){
     var zb = e.target.closest('[data-zone]');
     if(zb && !e.target.closest('.wh3b-box')){
-      state.zone3A = zb.getAttribute('data-zone') || null;
+      state.zone = zb.getAttribute('data-zone') || null;
       state.activeLocator = null;
       render();
       $('sdk-grid').scrollIntoView({ behavior:'smooth', block:'start' });
