@@ -343,7 +343,7 @@
       html += '<div>' + (gi ? '<span class="ph-gi-link" data-gi="' + phEsc(gi) + '" title="Bấm để xem mã QR">' + phEsc(gi) + '</span>' : '—') + '</div>' +
         '<div class="ph-gi-lot">' + phEsc(r[7] || '—') + '</div>' +
         '<div class="ph-gi-n">' + phEsc(r[8] || '—') + '</div>' +
-        '<div>' + phEsc(r[9] || '—') + '</div>' +
+        '<div>' + phEsc(r[9] ? r[9] + (r[12] ? ' ' + r[12] : '') : '—') + '</div>' +
         '<div class="ph-gi-n">' + phFmt(Number(r[5]) || 0) + '</div>';
     });
     return '<div class="ph-gi-wrap"><div class="ph-gi-list">' + html + '</div></div>';
