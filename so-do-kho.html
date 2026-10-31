@@ -138,6 +138,32 @@
   .wh3b-box.sdk-mini.lvl-empty .sdk-mini-count{color:var(--muted-2);}
   .wh3b-box.sdk-mini .sdk-slots{margin-top:3px; gap:2px;}
 
+  /* ===== Khung nổi: pallet đang chọn (mã + PO) ===== */
+  .sdk-pick{
+    position:fixed; right:18px; bottom:18px; z-index:900; width:340px; max-width:calc(100vw - 24px); max-height:60vh;
+    display:flex; flex-direction:column; background:var(--panel); color:var(--text);
+    border:1.5px solid var(--violet); border-radius:12px; box-shadow:0 14px 36px rgba(0,0,0,0.25); overflow:hidden;
+  }
+  .sdk-pick-head{display:flex; align-items:flex-start; gap:10px; padding:12px 14px 10px; border-bottom:1px solid var(--line-soft);}
+  .sdk-pick-sw{width:22px; height:22px; border-radius:5px; flex-shrink:0; margin-top:2px;}
+  .sdk-pick-title{flex:1; min-width:0;}
+  .sdk-pick-item{font-family:var(--mono); font-weight:800; font-size:15px; word-break:break-all;}
+  .sdk-pick-po{font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:2px;}
+  .sdk-pick-po b{color:var(--text);}
+  .sdk-pick-x{all:unset; cursor:pointer; font-family:var(--mono); font-size:11px; font-weight:700; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:3px 7px; white-space:nowrap;}
+  .sdk-pick-x:hover{color:var(--red); border-color:var(--red);}
+  .sdk-pick-stats{display:flex; gap:14px; flex-wrap:wrap; padding:10px 14px; font-family:var(--mono); font-size:11px; color:var(--muted); border-bottom:1px solid var(--line-soft);}
+  .sdk-pick-stats b{display:block; font-size:16px; color:var(--text);}
+  .sdk-pick-list{overflow:auto; padding:6px 8px 10px;}
+  .sdk-pick-loc{all:unset; box-sizing:border-box; cursor:pointer; display:flex; justify-content:space-between; gap:8px; width:100%; padding:6px 8px; border-radius:7px; font-family:var(--mono); font-size:12px;}
+  .sdk-pick-loc:hover{background:var(--panel-2);}
+  .sdk-pick-loc b{font-weight:700;}
+  .sdk-pick-loc span{color:var(--muted);}
+  .sdk-pick-other{padding:0 14px 10px; font-size:11.5px; color:var(--muted);}
+  .sdk-pick-other b{color:var(--text);}
+  .sdk-pick-hint{padding:6px 14px 8px; font-size:10.5px; color:var(--muted-2); font-family:var(--mono); border-top:1px solid var(--line-soft);}
+  .sdk-slot.sdk-picked{outline:2px solid var(--text); outline-offset:1px; z-index:1;}
+
   /* ===== Nhận hàng — gợi ý chỗ cất cho xe nâng ===== */
   .sdk-recv{border:1.5px solid rgba(110,79,224,0.35); background:rgba(110,79,224,0.06); border-radius:10px; padding:12px 14px; margin-bottom:14px;}
   .sdk-recv-title{font-family:var(--disp); font-weight:700; font-size:14px; margin-bottom:8px; color:var(--text);}
@@ -255,6 +281,7 @@
         <div class="wh3b-custom-grid-note" id="sdk-grid-note" style="display:none;"></div>
         <div id="sdk-grid"></div>
         <div id="sdk-detail"></div>
+        <div class="sdk-pick" id="sdk-pick" style="display:none;"></div>
       </div>
     </div>
   </div>
@@ -343,7 +370,9 @@
   /* ============ Trạng thái ============ */
   var state = {
     inventory: null, grids: {}, capOverride: {}, meta: {},
-    zone3A: null, // null = màn hình 3 khu vực; 'tret' | 'rack' | 'lau' = đang mở chi tiết 1 khu
+    zone3A: null,
+    pick: null, // { item, po } — pallet đang chọn (bấm 1 ô pallet), lọc đúng mã + PO; ESC để bỏ chọn
+ // null = màn hình 3 khu vực; 'tret' | 'rack' | 'lau' = đang mở chi tiết 1 khu
     activeKho: 'Kho 3B', heatmap: 'off', demo: false, byKho: {}, activeLocator: null,
     view: 'pallet', recv: null // recv = { item, po, qty, plan:[{kho, loc, n, same, samePo, free}], incoming:{kho:{loc:n}} }
   };
@@ -515,9 +544,9 @@
         var r = sorted[i];
         var isNg = String(r[RAW.oqc] || '').toUpperCase().indexOf('NG') !== -1;
         var tip = 'Mã: ' + r[RAW.item] + '\nPO: ' + (r[RAW.custpo] || '—') + '\nOQC: ' + (r[RAW.oqc] || '—') + ' · SL: ' + fmt(r[RAW.qty]) +
-          '\nGI: ' + (r[RAW.gi] || '—') + ' · Lot: ' + (r[RAW.lot] || '—') + (i >= cap ? '\n⚠ Vượt sức chứa' : '') + '\n(Bấm để tìm mọi pallet cùng mã)';
+          '\nGI: ' + (r[RAW.gi] || '—') + ' · Lot: ' + (r[RAW.lot] || '—') + (i >= cap ? '\n⚠ Vượt sức chứa' : '') + '\n(Bấm để chọn — sáng mọi pallet cùng mã + PO)';
         html += '<span class="sdk-slot filled' + (isNg ? ' ng' : '') + (i >= cap ? ' over' : '') + '" style="background:' + itemColor(r[RAW.item]) + '"' +
-          ' data-item="' + esc(r[RAW.item]) + '" data-hay="' + esc((r[RAW.item] + ' ' + r[RAW.custpo] + ' ' + loc).toLowerCase()) + '" data-ng="' + (isNg ? 1 : 0) + '" title="' + esc(tip) + '"></span>';
+          ' data-item="' + esc(r[RAW.item]) + '" data-po="' + esc(r[RAW.custpo] || '') + '" data-hay="' + esc((r[RAW.item] + ' ' + r[RAW.custpo] + ' ' + loc).toLowerCase()) + '" data-ng="' + (isNg ? 1 : 0) + '" title="' + esc(tip) + '"></span>';
       } else if(i < sorted.length + incomingN){
         html += '<span class="sdk-slot incoming" style="background:' + itemColor(state.recv.item) + '" title="Cất pallet mới nhận (' + esc(state.recv.item) + ') vào đây"></span>';
       } else {
@@ -782,7 +811,7 @@
     $('sdk-title').textContent = cfg.title;
     $('sdk-sub').textContent = cfg.sub;
     $('sdk-legend').innerHTML = legendHtml() + (state.view === 'pallet'
-      ? '<span style="flex-basis:100%;">🧱 Mỗi ô nhỏ = 1 pallet, màu = mã hàng (cùng mã cùng màu) · <span class="sdk-slot ng filled" style="display:inline-block; width:12px; background:var(--muted-2); vertical-align:middle;"></span> chấm = NG · viền đỏ = vượt sức chứa · ô nét đứt = chỗ trống · bấm 1 ô pallet để sáng mọi pallet cùng mã</span>'
+      ? '<span style="flex-basis:100%;">🧱 Mỗi ô nhỏ = 1 pallet, màu = mã hàng (cùng mã cùng màu) · <span class="sdk-slot ng filled" style="display:inline-block; width:12px; background:var(--muted-2); vertical-align:middle;"></span> chấm = NG · viền đỏ = vượt sức chứa · ô nét đứt = chỗ trống · bấm 1 ô pallet để chọn đúng mã + PO đó (ESC để bỏ chọn)</span>'
       : '');
     document.querySelectorAll('#sdk-view-toggle button').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-view') === state.view); });
     $('sdk-recv-result').innerHTML = recvResultHtml();
@@ -845,8 +874,13 @@
   function applyFilter(){
     var query = $('sdk-search').value.trim();
     var showPass = $('sdk-oqc-pass').checked, showNg = $('sdk-oqc-ng').checked;
-    var filtering = !!query || !showPass || !showNg;
+    var pick = state.pick;
+    if(pick) query = ''; // đang chọn 1 mã + PO -> chỉ lọc đúng mã + PO đó (ô tìm kiếm tạm bỏ qua)
+    var filtering = !!pick || !!query || !showPass || !showNg;
     var groups = query ? parseMultiCodes(query) : [];
+    function isPicked(item, po){
+      return String(item).toLowerCase() === pick.itemLc && String(po || '').toLowerCase() === pick.poLc;
+    }
     var map = state.byKho[state.activeKho] || {};
     var matched = [], matchedLocs = {};
     // Tính khớp trên TOÀN BỘ vị trí của kho (kể cả khu 3A chưa mở) — để màn hình 3 khu vực vẫn báo được
@@ -856,6 +890,7 @@
         var isNg = String(r[RAW.oqc] || '').toUpperCase().indexOf('NG') !== -1;
         if(isNg && !showNg) return false;
         if(!isNg && !showPass) return false;
+        if(pick) return isPicked(r[RAW.item], r[RAW.custpo]);
         if(!query) return true;
         return multiGroupMatch(groups, (r[RAW.item] + ' ' + r[RAW.custpo] + ' ' + r[RAW.locator]).toLowerCase());
       });
@@ -867,8 +902,10 @@
       var loc = el.getAttribute('data-locator');
       el.querySelectorAll('.sdk-slot.filled').forEach(function(sl){
         var isNg = sl.getAttribute('data-ng') === '1';
-        var ok = (isNg ? showNg : showPass) && (!query || multiGroupMatch(groups, sl.getAttribute('data-hay')));
+        var ok = (isNg ? showNg : showPass) &&
+          (pick ? isPicked(sl.getAttribute('data-item'), sl.getAttribute('data-po')) : (!query || multiGroupMatch(groups, sl.getAttribute('data-hay'))));
         sl.classList.toggle('sdk-slot-dim', !ok);
+        sl.classList.toggle('sdk-picked', !!pick && ok);
       });
       if(matchedLocs[loc]) el.classList.add('wh3b-highlight');
       else if(!el.classList.contains('sdk-plan')) el.classList.add('wh3b-dim'); // vị trí đang gợi ý cất thì luôn hiện rõ
@@ -882,15 +919,53 @@
       if(filtering) card.classList.add(n ? 'wh3b-highlight' : 'wh3b-dim');
     });
     var detail = $('sdk-detail');
+    renderPickPanel(matched, matchedLocs);
     if(filtering){
       state.activeLocator = null;
       document.querySelectorAll('#sdk-grid .wh3b-box.active').forEach(function(b){ b.classList.remove('active'); });
       detail.innerHTML = matched.length
-        ? '<div class="wh3b-detail-title">Kết quả tìm/lọc — <b>' + fmt(Object.keys(matchedLocs).length) + '</b> vị trí, ' + fmt(matched.length) + ' pallet (dòng GI No.)</div>' + detailTable(sortRows(matched))
+        ? '<div class="wh3b-detail-title">' + (pick ? 'Đang chọn mã <b>' + esc(pick.item) + '</b> · PO <b>' + esc(pick.po || '—') + '</b> — ' : 'Kết quả tìm/lọc — ') + '<b>' + fmt(Object.keys(matchedLocs).length) + '</b> vị trí, ' + fmt(matched.length) + ' pallet (dòng GI No.)</div>' + detailTable(sortRows(matched))
         : '<div class="wh3b-empty">Không có dòng nào khớp tìm kiếm/lọc.</div>';
       return;
     }
     showLocatorDetail();
+  }
+  function setPick(item, po){
+    state.pick = item == null ? null : { item:String(item), po:String(po || ''), itemLc:String(item).toLowerCase(), poLc:String(po || '').toLowerCase() };
+    applyFilter();
+  }
+  function renderPickPanel(matched, matchedLocs){
+    var box = $('sdk-pick');
+    var pick = state.pick;
+    if(!pick){ box.style.display = 'none'; box.innerHTML = ''; return; }
+    var qty = 0, pass = 0, ng = 0;
+    matched.forEach(function(r){
+      qty += Number(r[RAW.qty]) || 0;
+      if(String(r[RAW.oqc] || '').toUpperCase().indexOf('NG') !== -1) ng++; else pass++;
+    });
+    var locs = Object.keys(matchedLocs).sort(naturalCmp);
+    // Cùng mã + PO đang nằm ở kho khác.
+    var others = [];
+    KHO_ORDER.forEach(function(k){
+      if(k === state.activeKho) return;
+      var n = 0, m = state.byKho[k] || {};
+      Object.keys(m).forEach(function(l){ m[l].forEach(function(r){
+        if(String(r[RAW.item]).toLowerCase() === pick.itemLc && String(r[RAW.custpo] || '').toLowerCase() === pick.poLc) n++;
+      }); });
+      if(n) others.push('<b>' + esc(KHO[k].code) + '</b>: ' + fmt(n) + ' pallet');
+    });
+    box.innerHTML =
+      '<div class="sdk-pick-head"><span class="sdk-pick-sw" style="background:' + itemColor(pick.item) + '"></span>' +
+        '<div class="sdk-pick-title"><div class="sdk-pick-item">' + esc(pick.item) + '</div><div class="sdk-pick-po">PO <b>' + esc(pick.po || '—') + '</b> · ' + esc(state.activeKho) + '</div></div>' +
+        '<button type="button" class="sdk-pick-x" id="sdk-pick-close" title="Bỏ chọn (ESC)">ESC ✕</button></div>' +
+      '<div class="sdk-pick-stats"><span><b>' + fmt(matched.length) + '</b>pallet</span><span><b>' + fmt(locs.length) + '</b>vị trí</span><span><b>' + fmt(qty) + '</b>tổng SL</span>' +
+        '<span><b style="color:var(--teal)">' + fmt(pass) + '</b>PASS</span>' + (ng ? '<span><b style="color:var(--red)">' + fmt(ng) + '</b>NG</span>' : '') + '</div>' +
+      '<div class="sdk-pick-list">' + (locs.length ? locs.map(function(l){
+        return '<button type="button" class="sdk-pick-loc" data-goto="' + esc(l) + '"><b>' + esc(l) + '</b><span>' + fmt(matchedLocs[l]) + ' pallet →</span></button>';
+      }).join('') : '<div class="wh3b-empty" style="padding:8px;">Không có pallet nào khớp (kiểm tra lọc PASS/NG).</div>') + '</div>' +
+      (others.length ? '<div class="sdk-pick-other">Cùng mã + PO ở kho khác: ' + others.join(' · ') + '</div>' : '') +
+      '<div class="sdk-pick-hint">Bấm 1 vị trí để nhảy tới · ESC hoặc bấm lại ô pallet để bỏ chọn</div>';
+    box.style.display = '';
   }
   function showLocatorDetail(){
     var detail = $('sdk-detail');
@@ -1013,15 +1088,17 @@
     }
     var slot = e.target.closest('.sdk-slot.filled');
     if(slot){
-      // Bấm 1 pallet -> tìm theo đúng mã đó: mọi pallet cùng mã sáng lên, còn lại mờ đi.
-      var it = slot.getAttribute('data-item');
-      $('sdk-search').value = $('sdk-search').value.trim().toLowerCase() === String(it).toLowerCase() ? '' : it;
-      applyFilter();
+      // Bấm 1 pallet -> chọn đúng MÃ + PO của pallet đó: mọi pallet cùng mã + PO sáng lên, còn lại mờ đi.
+      // Bấm lại đúng mã + PO đang chọn thì bỏ chọn.
+      var it = slot.getAttribute('data-item'), po = slot.getAttribute('data-po') || '';
+      var same = state.pick && state.pick.itemLc === it.toLowerCase() && state.pick.poLc === po.toLowerCase();
+      setPick(same ? null : it, po);
       return;
     }
     var b = e.target.closest('.wh3b-box-main'); if(!b) return;
     var loc = b.getAttribute('data-locator');
-    if($('sdk-search').value.trim() || !$('sdk-oqc-pass').checked || !$('sdk-oqc-ng').checked){
+    if(state.pick || $('sdk-search').value.trim() || !$('sdk-oqc-pass').checked || !$('sdk-oqc-ng').checked){
+      state.pick = null;
       // Đang lọc -> bỏ lọc để xem đúng vị trí vừa bấm.
       $('sdk-search').value = ''; $('sdk-oqc-pass').checked = true; $('sdk-oqc-ng').checked = true;
       applyFilter();
@@ -1038,7 +1115,7 @@
     showLocatorDetail();
   });
   var searchTimer = null;
-  $('sdk-search').addEventListener('input', function(){ clearTimeout(searchTimer); searchTimer = setTimeout(applyFilter, 150); });
+  $('sdk-search').addEventListener('input', function(){ state.pick = null; clearTimeout(searchTimer); searchTimer = setTimeout(applyFilter, 150); });
   $('sdk-oqc-pass').addEventListener('change', applyFilter);
   $('sdk-oqc-ng').addEventListener('change', applyFilter);
   $('sdk-heatmap-btn').addEventListener('click', function(){
@@ -1055,6 +1132,19 @@
     render();
   });
   $('sdk-recv-btn').addEventListener('click', runRecv);
+  $('sdk-pick').addEventListener('click', function(e){
+    if(e.target.closest('#sdk-pick-close')){ setPick(null); return; }
+    var b = e.target.closest('[data-goto]'); if(b) goToLocator(b.getAttribute('data-goto'));
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key !== 'Escape') return;
+    if(state.pick){ setPick(null); return; }
+    if(state.activeLocator){
+      state.activeLocator = null;
+      document.querySelectorAll('#sdk-grid .wh3b-box.active').forEach(function(el){ el.classList.remove('active'); });
+      showLocatorDetail();
+    }
+  });
   ['sdk-recv-item', 'sdk-recv-po', 'sdk-recv-qty'].forEach(function(id){
     $(id).addEventListener('keydown', function(e){ if(e.key === 'Enter'){ e.preventDefault(); runRecv(); } });
   });
