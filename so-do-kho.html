@@ -130,8 +130,8 @@
   .sdk-group-head{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--violet); margin-bottom:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:baseline;}
   .sdk-group-head span{color:var(--muted); font-weight:500; font-size:11px;}
   .sdk-rack{display:grid; gap:4px; min-width:max-content;}
-  .sdk-rack-h{font-family:var(--mono); font-size:10px; color:var(--muted-2); text-align:center; align-self:end;}
-  .sdk-rack-t{font-family:var(--mono); font-size:10px; font-weight:700; color:var(--muted); display:flex; align-items:center;}
+  .sdk-rack-h{font-family:var(--mono); font-size:12px; font-weight:800; color:var(--text); text-align:center; align-self:end;}
+  .sdk-rack-t{font-family:var(--mono); font-size:12px; font-weight:800; color:var(--text); display:flex; align-items:center;}
   .wh3b-box.sdk-mini{padding:4px 5px 5px; border-radius:6px; min-width:46px;}
   .wh3b-box.sdk-mini .wh3b-box-main{padding-right:0; gap:0;}
   .sdk-mini-count{font-family:var(--mono); font-size:10px; font-weight:700; color:var(--text);}
@@ -718,7 +718,7 @@
         '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fill, minmax(' + minW + 'px, 1fr));">' + groups[g].map(function(l){ return boxHtml(kho, l); }).join('') + '</div></div>';
     }).join('');
   }
-  // Rack: mỗi dãy là 1 mặt kệ nhìn thẳng — cột = bay (1→n), hàng = tầng (T5 trên cùng → T1 dưới cùng).
+  // Rack: mỗi dãy là 1 mặt kệ nhìn thẳng — cột = bay (n→1, bay 1 nằm bên phải), hàng = tầng (T5 trên cùng → T1 dưới cùng).
   function renderRack(kho, locs){
     var rows = {};
     locs.forEach(function(l){
@@ -729,7 +729,7 @@
     });
     return Object.keys(rows).sort().map(function(d){
       var r = rows[d];
-      var bays = Object.keys(r.bays).map(Number).sort(function(a, b){ return a - b; });
+      var bays = Object.keys(r.bays).map(Number).sort(function(a, b){ return b - a; }); // bay lớn bên trái → bay 1 bên phải, đúng hướng nhìn thực tế
       var tiers = Object.keys(r.tiers).map(Number).sort(function(a, b){ return b - a; });
       var st = locStats(kho, r.locs);
       var html = '<div class="sdk-rack-h"></div>' + bays.map(function(b){ return '<div class="sdk-rack-h">' + b + '</div>'; }).join('');
