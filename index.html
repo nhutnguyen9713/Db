@@ -1364,9 +1364,15 @@
           <div class="sub" style="margin-top:2px;">Chuyển hàng qua khu ITN — <b>Xuất</b>: Menu Name "ITN Transfer" (chuyển đi, tổng theo kho xuất); <b>Nhận</b>: Menu Name "ITN Receiving" (nhận về, tổng theo kho nhận) — tổng theo người thao tác tương ứng (toàn bộ file).</div>
         </div>
       </div>
-      <div class="tx-sum-subhead">↗ Xuất — ITN Transfer</div>
+      <div class="tx-transfer-src" style="display:flex; flex-wrap:wrap; align-items:center; gap:14px; margin:0 0 12px; padding:8px 12px; border:1px dashed var(--line); border-radius:8px; font-size:13px;">
+        <b style="font-size:12px; color:var(--muted);">TÍNH TRANSFER THEO:</b>
+        <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" data-tx-transfer-src="itn" checked> ITN (ITN Transfer / ITN Receiving)</label>
+        <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" data-tx-transfer-src="move"> Move Pallet (vào / ra khu ITN)</label>
+        <span style="font-size:11.5px; color:var(--muted-2);">Tick cả 2 = cộng gộp · áp dụng cho bảng, KPI và biểu đồ</span>
+      </div>
+      <div class="tx-sum-subhead" id="tx-transfer-xuat-subhead">↗ Xuất — ITN Transfer</div>
       <div class="tx-sum-grid" id="tx-transfer-sumgrid"></div>
-      <div class="tx-sum-subhead" style="margin-top:14px;">↙ Nhận — ITN Receiving</div>
+      <div class="tx-sum-subhead" id="tx-transfer-nhap-subhead" style="margin-top:14px;">↙ Nhận — ITN Receiving</div>
       <div class="tx-sum-grid" id="tx-transfer-nhap-sumgrid"></div>
       <details class="tx-detail-toggle">
       <summary>Xem chi tiết từng dòng</summary>
