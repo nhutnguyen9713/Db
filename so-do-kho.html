@@ -100,6 +100,44 @@
   .sdk-view-toggle button{all:unset; cursor:pointer; font-family:var(--mono); font-size:10.5px; font-weight:700; padding:5px 10px; color:var(--muted);}
   .sdk-view-toggle button.active{background:var(--violet); color:#fff;}
 
+  /* ===== Kho 3A: 3 khu vực chính (Tầng Trệt / Rack / Tầng Lầu) ===== */
+  .sdk-zones{display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:14px;}
+  .sdk-zone-card{
+    all:unset; box-sizing:border-box; cursor:pointer; display:flex; flex-direction:column; gap:10px;
+    padding:16px; border-radius:12px; border:1.5px solid var(--line); background:var(--panel-2); position:relative;
+    transition:border-color .15s ease, transform .1s ease;
+  }
+  .sdk-zone-card:hover{border-color:var(--violet); transform:translateY(-1px);}
+  .sdk-zone-card.sdk-plan{box-shadow:0 0 0 3px var(--violet); border-color:var(--violet);}
+  .sdk-zone-card.wh3b-dim{opacity:.35;}
+  .sdk-zone-card.wh3b-highlight{box-shadow:0 0 0 3px rgba(245,166,35,0.6); border-color:var(--amber-bright);}
+  .sdk-zone-name{font-family:var(--disp); font-size:18px; font-weight:700; color:var(--text);}
+  .sdk-zone-desc{font-size:11.5px; color:var(--muted); margin-top:-6px;}
+  .sdk-zone-big{font-family:var(--mono); font-size:22px; font-weight:700; color:var(--text);}
+  .sdk-zone-big span{font-size:12px; color:var(--muted-2); font-weight:600;}
+  .sdk-zone-meta{display:flex; gap:12px; flex-wrap:wrap; font-family:var(--mono); font-size:10.5px; color:var(--muted);}
+  .sdk-zone-meta b{color:var(--text);}
+  .sdk-zone-strip{display:flex; height:10px; border-radius:5px; overflow:hidden; background:var(--line-soft);}
+  .sdk-zone-strip i{display:block; height:100%;}
+  .sdk-zone-open{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--violet);}
+  .sdk-zone-match{font-family:var(--mono); font-size:11px; font-weight:700; color:var(--amber);}
+  .sdk-zone-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:14px;}
+  .sdk-back{all:unset; cursor:pointer; font-family:var(--mono); font-size:12px; font-weight:700; padding:7px 12px; border-radius:8px; border:1px solid var(--line); color:var(--text); background:var(--panel-2);}
+  .sdk-back:hover{border-color:var(--violet); color:var(--violet);}
+  .sdk-zone-pill{all:unset; cursor:pointer; font-family:var(--mono); font-size:11.5px; font-weight:700; padding:7px 12px; border-radius:8px; border:1px solid var(--line); color:var(--muted);}
+  .sdk-zone-pill.active{background:var(--violet); border-color:var(--violet); color:#fff;}
+  .sdk-group{margin-bottom:16px; border:1px solid var(--line); border-radius:11px; padding:12px; background:var(--panel);}
+  .sdk-group-head{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--violet); margin-bottom:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:baseline;}
+  .sdk-group-head span{color:var(--muted); font-weight:500; font-size:11px;}
+  .sdk-rack{display:grid; gap:4px; min-width:max-content;}
+  .sdk-rack-h{font-family:var(--mono); font-size:10px; color:var(--muted-2); text-align:center; align-self:end;}
+  .sdk-rack-t{font-family:var(--mono); font-size:10px; font-weight:700; color:var(--muted); display:flex; align-items:center;}
+  .wh3b-box.sdk-mini{padding:4px 5px 5px; border-radius:6px; min-width:46px;}
+  .wh3b-box.sdk-mini .wh3b-box-main{padding-right:0; gap:0;}
+  .sdk-mini-count{font-family:var(--mono); font-size:10px; font-weight:700; color:var(--text);}
+  .wh3b-box.sdk-mini.lvl-empty .sdk-mini-count{color:var(--muted-2);}
+  .wh3b-box.sdk-mini .sdk-slots{margin-top:3px; gap:2px;}
+
   /* ===== Nhận hàng — gợi ý chỗ cất cho xe nâng ===== */
   .sdk-recv{border:1.5px solid rgba(110,79,224,0.35); background:rgba(110,79,224,0.06); border-radius:10px; padding:12px 14px; margin-bottom:14px;}
   .sdk-recv-title{font-family:var(--disp); font-weight:700; font-size:14px; margin-bottom:8px; color:var(--text);}
@@ -254,9 +292,9 @@
       capacity:function(){ return 26; }, skipProd:false
     },
     'Kho 3A': {
-      code:'3A', eyebrow:'SƠ ĐỒ RACK', title:'Sơ đồ 3A', dot:'var(--violet)', defaultMax:2,
-      sub:'Số pallet tại từng vị trí Rack của Kho 3A — sức chứa chuẩn 2 pallet/vị trí (không tính khu Prod).',
-      capacity:function(){ return 2; }, skipProd:true
+      code:'3A', eyebrow:'SƠ ĐỒ KHO', title:'Sơ đồ kho 3A', dot:'var(--violet)', defaultMax:2,
+      sub:'Kho 3A chia 3 khu chính: Tầng Trệt (sàn DG3-FG), Rack (2 pallet/ô kệ) và Tầng Lầu (3AFG-M1/M2). Sức chứa theo đúng quy ước của dashboard (sàn A01–04: 10, A05–15/B: 20, C: 22, M1: 14), không tính khu Prod.',
+      capacity:function(loc){ return cap3A(loc); }, skipProd:true
     },
     'Kho 2B': {
       code:'2B', eyebrow:'SƠ ĐỒ KHO', title:'Sơ đồ kho 2B', dot:'var(--blue)', defaultMax:24,
@@ -271,9 +309,41 @@
   };
   var KHO_ORDER = ['Kho 3B', 'Kho 3A', 'Kho 2B', 'Kho DG1'];
 
+  /* ============ Kho 3A — 3 khu vực, cùng quy ước với app.js (cột "3A trệt / 3A lầu / 3A Rack") ============
+     - Tầng Lầu: locator bắt đầu "3AFG-M1"/"3AFG-M2" (khu lầu M1/M2)
+     - Rack:     "3A-<dãy><bay>-T<tầng>" (VD 3A-F3-T5)
+     - Tầng Trệt: mọi locator 3A còn lại (sàn DG3-FG-A/B/C, TG, ITN, Loading…) */
+  var RACK_RE = /^3A-([A-Z]+)(\d+)-T(\d+)$/i;
+  var FLOOR_3A_RE = /^DG3-FG-([ABC])(\d+)$/i;
+  function zone3A(loc){
+    if(/^3AFG-M/i.test(loc)) return 'lau';
+    if(RACK_RE.test(loc)) return 'rack';
+    return 'tret';
+  }
+  var ZONES_3A = [
+    { id:'tret', name:'Tầng Trệt', icon:'🟫', desc:'Sàn DG3-FG dãy A/B/C và các vị trí sàn khác (TG, ITN, Loading…)' },
+    { id:'rack', name:'Rack', icon:'🗄️', desc:'Kệ 3A-<dãy><bay>-T<tầng> — 2 pallet/ô kệ' },
+    { id:'lau', name:'Tầng Lầu', icon:'🏢', desc:'Khu lầu M1/M2 (3AFG-M1 / 3AFG-M2)' }
+  ];
+  // Sức chứa mặc định — y hệt ovLocatorDefaultCapacity() của dashboard cho Kho 3A.
+  function cap3A(loc){
+    if(RACK_RE.test(loc)) return 2;
+    var m = String(loc || '').match(FLOOR_3A_RE);
+    if(m){
+      var lane = m[1].toUpperCase(), num = Number(m[2]);
+      if(lane === 'A' && num >= 1 && num <= 4) return 10;
+      if(lane === 'A' && num >= 5 && num <= 15) return 20;
+      if(lane === 'B' && num >= 1 && num <= 15) return 20;
+      if(lane === 'C' && num >= 1 && num <= 15) return 22;
+    }
+    if(/^3AFG-M1-A\d+$/i.test(loc)) return 14;
+    return 2;
+  }
+
   /* ============ Trạng thái ============ */
   var state = {
     inventory: null, grids: {}, capOverride: {}, meta: {},
+    zone3A: null, // null = màn hình 3 khu vực; 'tret' | 'rack' | 'lau' = đang mở chi tiết 1 khu
     activeKho: 'Kho 3B', heatmap: 'off', demo: false, byKho: {}, activeLocator: null,
     view: 'pallet', recv: null // recv = { item, po, qty, plan:[{kho, loc, n, same, samePo, free}], incoming:{kho:{loc:n}} }
   };
@@ -324,7 +394,13 @@
       if(!by[k] || !lay || !Array.isArray(lay.cells)) return;
       lay.cells.forEach(function(c){ if(!c.isLabel && c.locator && !by[k][c.locator]) by[k][c.locator] = []; });
     });
-    getRawRows(state.inventory).forEach(function(row){
+    var rawRows = getRawRows(state.inventory);
+    // Sàn 3A (DG3-FG-A/B/C 01–15) — chỉ tự thêm vị trí trống khi dữ liệu/lưới chưa có vị trí sàn nào
+    // (tránh tạo trùng nếu tên thật đặt khác kiểu, VD không có số 0 đứng trước).
+    var hasFloor = Object.keys(by['Kho 3A']).some(function(l){ return FLOOR_3A_RE.test(l); }) ||
+      rawRows.some(function(r){ return r[RAW.kho] === 'Kho 3A' && FLOOR_3A_RE.test(String(r[RAW.locator] || '')); });
+    if(!hasFloor) ['A', 'B', 'C'].forEach(function(lane){ for(var k = 1; k <= 15; k++) by['Kho 3A']['DG3-FG-' + lane + String(k).padStart(2, '0')] = []; });
+    rawRows.forEach(function(row){
       var kho = row[RAW.kho];
       if(!by[kho]) return;
       var loc = String(row[RAW.locator] || '').trim();
@@ -370,7 +446,7 @@
     return '';
   }
   var stats = { locators:0, pallets:0, full:0 };
-  function boxHtml(kho, loc, posStyle){
+  function boxHtml(kho, loc, posStyle, mini){
     var rows = (state.byKho[kho] || {})[loc] || [];
     var s = boxStats(kho, loc, rows);
     stats.locators++; stats.pallets += s.count; if(s.level === 'full') stats.full++;
@@ -387,6 +463,13 @@
     var planCls = incomingN ? ' sdk-plan' : (sameItem ? ' sdk-same' : '');
     var planBadge = incomingN ? '<span class="sdk-plan-badge">+' + incomingN + ' CẤT VÀO</span>' : '';
     var isPallet = state.view === 'pallet';
+    if(mini){
+      // Ô kệ thu nhỏ (ma trận Rack): chỉ số pallet + ô pallet, tên vị trí nằm ở tooltip / hàng-cột.
+      return '<div class="wh3b-box sdk-mini lvl-' + s.level + heatCls + active + planCls + '" data-locator="' + esc(loc) + '"' + (style ? ' style="' + style + '"' : '') + '>' +
+        '<button type="button" class="wh3b-box-main" data-locator="' + esc(loc) + '" title="' + esc(title) + '">' +
+          '<span class="sdk-mini-count">' + fmt(s.count) + '/' + fmt(s.maxPallet) + (s.hasNG ? ' <span style="color:var(--red)">NG</span>' : '') + (incomingN ? ' <span style="color:var(--violet)">+' + incomingN + '</span>' : '') + '</span>' +
+        '</button>' + slotsHtml(loc, rows, s.maxPallet, incomingN) + '</div>';
+    }
     return '<div class="wh3b-box lvl-' + s.level + heatCls + active + planCls + '" data-locator="' + esc(loc) + '"' + (style ? ' style="' + style + '"' : '') + '>' +
       '<button type="button" class="wh3b-box-main" data-locator="' + esc(loc) + '" title="' + esc(title) + '">' +
         '<span class="wh3b-box-name">' + esc(loc) + ng + planBadge + '</span>' +
@@ -497,7 +580,7 @@
     state.activeLocator = null;
     render();
     var first = r.plan[0];
-    if(first) scrollToLocator(first.loc);
+    if(first) goToLocator(first.loc);
   }
   function recvResultHtml(){
     var rv = state.recv;
@@ -521,6 +604,13 @@
     if(rv.short > 0) html += '<div class="sdk-recv-warn">⚠ Còn ' + fmt(rv.short) + ' pallet chưa có chỗ — kho đã hết chỗ trống.</div>';
     if(rv.elsewhere.length) html += '<div class="sdk-recv-summary" style="margin-top:8px;">Mã này còn nằm ở: ' + rv.elsewhere.map(function(e){ return '<b>' + esc(e.kho) + '</b> (' + fmt(e.cnt) + ' pallet)'; }).join(', ') + '</div>';
     return html;
+  }
+  function goToLocator(loc){
+    if(state.activeKho === 'Kho 3A'){
+      var z = zone3A(loc);
+      if(state.zone3A !== z){ state.zone3A = z; render(); }
+    }
+    scrollToLocator(loc);
   }
   function scrollToLocator(loc){
     var el = document.querySelector('#sdk-grid .wh3b-box[data-locator="' + (window.CSS && CSS.escape ? CSS.escape(loc) : loc) + '"]');
@@ -578,6 +668,91 @@
       (others.length ? '<div class="wh3b-block"><div class="wh3b-subgrid" style="grid-template-columns:repeat(auto-fill, minmax(126px, 1fr));">' + others.map(function(o){ return boxHtml(kho, o); }).join('') + '</div></div>' : '') +
       '</div>';
   }
+  // 4) Kho 3A: màn hình 3 khu vực -> bấm 1 khu mở chi tiết.
+  function locStats(kho, locs){
+    var st = { locators:locs.length, pallets:0, cap:0, full:0, ng:0, empty:0, items:{} , incoming:0 };
+    var inc = (state.recv && state.recv.incoming[kho]) || {};
+    locs.forEach(function(l){
+      var rows = state.byKho[kho][l] || [];
+      var cap = capacityOf(kho, l);
+      st.pallets += rows.length; st.cap += cap;
+      if(rows.length === 0) st.empty++;
+      if(Math.min(rows.length, cap) >= cap * 0.8) st.full++;
+      st.incoming += inc[l] || 0;
+      rows.forEach(function(r){
+        if(String(r[RAW.oqc] || '').toUpperCase().indexOf('NG') !== -1) st.ng++;
+        var k = String(r[RAW.item]); st.items[k] = (st.items[k] || 0) + 1;
+      });
+    });
+    return st;
+  }
+  function zoneLocs(zone){
+    return Object.keys(state.byKho['Kho 3A'] || {}).filter(function(l){ return zone3A(l) === zone; }).sort(naturalCmp);
+  }
+  function renderZones3A(){
+    var kho = 'Kho 3A';
+    return '<div class="sdk-zones">' + ZONES_3A.map(function(z){
+      var locs = zoneLocs(z.id), st = locStats(kho, locs);
+      var pct = st.cap ? Math.round(Math.min(st.pallets, st.cap) / st.cap * 100) : 0;
+      var top = Object.keys(st.items).sort(function(a, b){ return st.items[b] - st.items[a]; });
+      var strip = top.slice(0, 12).map(function(it){ return '<i title="' + esc(it) + ': ' + st.items[it] + ' pallet" style="width:' + (st.items[it] / Math.max(1, st.cap) * 100) + '%; background:' + itemColor(it) + '"></i>'; }).join('');
+      return '<button type="button" class="sdk-zone-card' + (st.incoming ? ' sdk-plan' : '') + '" data-zone="' + z.id + '">' +
+        '<div class="sdk-zone-name">' + z.icon + ' ' + esc(z.name) + (st.incoming ? ' <span class="sdk-plan-badge">+' + st.incoming + ' CẤT VÀO</span>' : '') + '</div>' +
+        '<div class="sdk-zone-desc">' + esc(z.desc) + '</div>' +
+        '<div class="sdk-zone-big">' + fmt(st.pallets) + ' <span>/ ' + fmt(st.cap) + ' pallet · ' + pct + '%</span></div>' +
+        '<div class="sdk-zone-strip" title="Mỗi màu = 1 mã hàng (12 mã nhiều pallet nhất)">' + strip + '</div>' +
+        '<div class="sdk-zone-meta"><span><b>' + fmt(st.locators) + '</b> vị trí</span><span><b>' + fmt(st.empty) + '</b> trống</span><span><b>' + fmt(st.full) + '</b> đầy ≥80%</span><span><b>' + fmt(top.length) + '</b> mã hàng</span>' + (st.ng ? '<span style="color:var(--red)"><b style="color:var(--red)">' + fmt(st.ng) + '</b> pallet NG</span>' : '') + '</div>' +
+        '<div style="display:flex; justify-content:space-between; gap:8px;"><span class="sdk-zone-match" data-zone-match="' + z.id + '"></span><span class="sdk-zone-open">Mở chi tiết →</span></div>' +
+        '</button>';
+    }).join('') + '</div>';
+  }
+  function groupKeyOf(loc){ return String(loc).replace(/\d+$/, '').replace(/[-_]+$/, '') || loc; }
+  function renderGroups(kho, locs){
+    var groups = {}, order = [];
+    locs.forEach(function(l){ var g = groupKeyOf(l); if(!groups[g]){ groups[g] = []; order.push(g); } groups[g].push(l); });
+    order.sort(naturalCmp);
+    var minW = state.view === 'pallet' ? 170 : 126;
+    return order.map(function(g){
+      var st = locStats(kho, groups[g]);
+      return '<div class="sdk-group"><div class="sdk-group-head">' + esc(g) + '<span>' + fmt(groups[g].length) + ' vị trí · ' + fmt(st.pallets) + '/' + fmt(st.cap) + ' pallet</span></div>' +
+        '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fill, minmax(' + minW + 'px, 1fr));">' + groups[g].map(function(l){ return boxHtml(kho, l); }).join('') + '</div></div>';
+    }).join('');
+  }
+  // Rack: mỗi dãy là 1 mặt kệ nhìn thẳng — cột = bay (1→n), hàng = tầng (T5 trên cùng → T1 dưới cùng).
+  function renderRack(kho, locs){
+    var rows = {};
+    locs.forEach(function(l){
+      var m = l.match(RACK_RE); if(!m) return;
+      var d = m[1].toUpperCase(), bay = Number(m[2]), t = Number(m[3]);
+      var r = rows[d] || (rows[d] = { bays:{}, tiers:{}, cells:{}, locs:[] });
+      r.bays[bay] = 1; r.tiers[t] = 1; r.cells[bay + '|' + t] = l; r.locs.push(l);
+    });
+    return Object.keys(rows).sort().map(function(d){
+      var r = rows[d];
+      var bays = Object.keys(r.bays).map(Number).sort(function(a, b){ return a - b; });
+      var tiers = Object.keys(r.tiers).map(Number).sort(function(a, b){ return b - a; });
+      var st = locStats(kho, r.locs);
+      var html = '<div class="sdk-rack-h"></div>' + bays.map(function(b){ return '<div class="sdk-rack-h">' + b + '</div>'; }).join('');
+      tiers.forEach(function(t){
+        html += '<div class="sdk-rack-t">T' + t + '</div>';
+        bays.forEach(function(b){
+          var loc = r.cells[b + '|' + t];
+          html += loc ? boxHtml(kho, loc, '', true) : '<div></div>';
+        });
+      });
+      return '<div class="sdk-group"><div class="sdk-group-head">Dãy ' + esc(d) + '<span>' + fmt(r.locs.length) + ' ô kệ · ' + fmt(st.pallets) + '/' + fmt(st.cap) + ' pallet · ' + fmt(st.empty) + ' ô trống</span></div>' +
+        '<div class="sdk-grid-scroll"><div class="sdk-rack" style="grid-template-columns:30px repeat(' + bays.length + ', minmax(52px, 1fr));">' + html + '</div></div></div>';
+    }).join('');
+  }
+  function renderZone3A(zone){
+    var kho = 'Kho 3A', z = ZONES_3A.filter(function(x){ return x.id === zone; })[0];
+    var locs = zoneLocs(zone);
+    var bar = '<div class="sdk-zone-bar"><button type="button" class="sdk-back" data-zone="">← 3 khu vực</button>' +
+      ZONES_3A.map(function(x){ return '<button type="button" class="sdk-zone-pill' + (x.id === zone ? ' active' : '') + '" data-zone="' + x.id + '">' + x.icon + ' ' + esc(x.name) + '</button>'; }).join('') + '</div>';
+    if(!locs.length) return bar + '<div class="wh3b-empty">Khu ' + esc(z.name) + ' chưa có vị trí nào trong dữ liệu tồn kho.</div>';
+    return bar + (zone === 'rack' ? renderRack(kho, locs) : renderGroups(kho, locs));
+  }
+
   // 3) Kho khác chưa có lưới tuỳ chỉnh -> liệt kê mọi locator đang có (sắp tự nhiên).
   function renderDefaultList(kho){
     var locs = Object.keys(state.byKho[kho] || {}).sort(naturalCmp);
@@ -629,6 +804,12 @@
     if(!state.inventory){
       html = '<div class="wh3b-empty">Chưa có dữ liệu tồn kho trên Cloud — hãy tải file tồn kho trên TN5 Dashboard rồi bấm "Làm mới".</div>';
       note.style.display = 'none';
+    } else if(kho === 'Kho 3A'){
+      html = state.zone3A ? renderZone3A(state.zone3A) : renderZones3A();
+      note.style.display = '';
+      note.textContent = state.zone3A
+        ? 'Đang xem chi tiết 1 khu — bấm "← 3 khu vực" để quay lại tổng quan.'
+        : 'Kho 3A chia 3 khu chính — bấm vào 1 khu để mở chi tiết từng vị trí / từng pallet.';
     } else if(hasCustom){
       html = renderCustomGrid(kho, layout);
       note.style.display = '';
@@ -639,6 +820,10 @@
       note.textContent = 'Chưa có lưới tuỳ chỉnh cho ' + kho + ' trên Cloud — đang hiện bố cục mặc định.';
     }
     $('sdk-grid').innerHTML = html;
+    if(kho === 'Kho 3A' && state.inventory){
+      var all3A = locStats(kho, Object.keys(state.byKho[kho] || {}));
+      stats = { locators:all3A.locators, pallets:all3A.pallets, full:all3A.full };
+    }
     $('sdk-summary').innerHTML = state.inventory
       ? '<div><b>' + fmt(stats.locators) + '</b><span>Vị trí (locator)</span></div>' +
         '<div><b>' + fmt(stats.pallets) + '</b><span>Tổng pallet (dòng GI No.)</span></div>' +
@@ -664,26 +849,37 @@
     var groups = query ? parseMultiCodes(query) : [];
     var map = state.byKho[state.activeKho] || {};
     var matched = [], matchedLocs = {};
-    document.querySelectorAll('#sdk-grid .wh3b-box[data-locator]').forEach(function(el){
-      el.classList.remove('wh3b-dim', 'wh3b-highlight');
-      if(!filtering){ el.querySelectorAll('.sdk-slot-dim').forEach(function(sl){ sl.classList.remove('sdk-slot-dim'); }); return; }
-      var loc = el.getAttribute('data-locator');
-      var hits = (map[loc] || []).filter(function(r){
+    // Tính khớp trên TOÀN BỘ vị trí của kho (kể cả khu 3A chưa mở) — để màn hình 3 khu vực vẫn báo được
+    // khu nào đang có hàng khớp.
+    if(filtering) Object.keys(map).forEach(function(loc){
+      var hits = map[loc].filter(function(r){
         var isNg = String(r[RAW.oqc] || '').toUpperCase().indexOf('NG') !== -1;
         if(isNg && !showNg) return false;
         if(!isNg && !showPass) return false;
         if(!query) return true;
         return multiGroupMatch(groups, (r[RAW.item] + ' ' + r[RAW.custpo] + ' ' + r[RAW.locator]).toLowerCase());
       });
+      if(hits.length){ matchedLocs[loc] = hits.length; hits.forEach(function(h){ matched.push(h); }); }
+    });
+    document.querySelectorAll('#sdk-grid .wh3b-box[data-locator]').forEach(function(el){
+      el.classList.remove('wh3b-dim', 'wh3b-highlight');
+      if(!filtering){ el.querySelectorAll('.sdk-slot-dim').forEach(function(sl){ sl.classList.remove('sdk-slot-dim'); }); return; }
+      var loc = el.getAttribute('data-locator');
       el.querySelectorAll('.sdk-slot.filled').forEach(function(sl){
         var isNg = sl.getAttribute('data-ng') === '1';
         var ok = (isNg ? showNg : showPass) && (!query || multiGroupMatch(groups, sl.getAttribute('data-hay')));
         sl.classList.toggle('sdk-slot-dim', !ok);
       });
-      if(hits.length){
-        el.classList.add('wh3b-highlight');
-        if(!matchedLocs[loc]){ matchedLocs[loc] = 1; hits.forEach(function(h){ matched.push(h); }); }
-      } else if(!el.classList.contains('sdk-plan')) el.classList.add('wh3b-dim'); // vị trí đang gợi ý cất thì luôn hiện rõ
+      if(matchedLocs[loc]) el.classList.add('wh3b-highlight');
+      else if(!el.classList.contains('sdk-plan')) el.classList.add('wh3b-dim'); // vị trí đang gợi ý cất thì luôn hiện rõ
+    });
+    document.querySelectorAll('#sdk-grid .sdk-zone-card').forEach(function(card){
+      var z = card.getAttribute('data-zone'), n = 0, nl = 0;
+      Object.keys(matchedLocs).forEach(function(l){ if(zone3A(l) === z){ n += matchedLocs[l]; nl++; } });
+      card.classList.remove('wh3b-dim', 'wh3b-highlight');
+      var tag = card.querySelector('[data-zone-match]');
+      if(tag) tag.textContent = filtering && n ? '🔍 ' + fmt(n) + ' pallet khớp ở ' + fmt(nl) + ' vị trí' : '';
+      if(filtering) card.classList.add(n ? 'wh3b-highlight' : 'wh3b-dim');
     });
     var detail = $('sdk-detail');
     if(filtering){
@@ -778,7 +974,11 @@
     for(n = 1; n <= 5; n++) add('Kho 3B', '3B-PICK-0' + n, Math.floor(rnd() * 8));
     add('Kho 3B', 'D3B-Loading', 12);
     'ABCDEF'.split('').forEach(function(r){ for(var c = 1; c <= 17; c++) for(var t = 1; t <= 5; t++) if(rnd() < 0.6) add('Kho 3A', '3A-' + r + c + '-T' + t, Math.floor(rnd() * 3)); });
-    Object.keys(B2_CAPACITY_MAP).forEach(function(l){ add('Kho 2B', l, Math.floor(rnd() * (B2_CAPACITY_MAP[l] + 4))); });
+    ['A', 'B', 'C'].forEach(function(lane){ for(var c = 1; c <= 15; c++) add('Kho 3A', 'DG3-FG-' + lane + String(c).padStart(2, '0'), Math.floor(rnd() * 24)); });
+    for(n = 1; n <= 12; n++) add('Kho 3A', '3AFG-M1-A' + String(n).padStart(2, '0'), Math.floor(rnd() * 16));
+    for(n = 1; n <= 8; n++) add('Kho 3A', '3AFG-M2-A' + String(n).padStart(2, '0'), Math.floor(rnd() * 3));
+    add('Kho 3A', 'DG3-FG-TG', 6);
+        Object.keys(B2_CAPACITY_MAP).forEach(function(l){ add('Kho 2B', l, Math.floor(rnd() * (B2_CAPACITY_MAP[l] + 4))); });
     for(n = 1; n <= 12; n++) add('Kho DG1', 'DG1-FG-' + String(n).padStart(2, '0'), Math.floor(rnd() * 28));
     return { snapshot_date:'(dữ liệu mẫu)', raw_rows: rows };
   }
@@ -798,10 +998,19 @@
     var b = e.target.closest('.sdk-tab'); if(!b) return;
     state.activeKho = b.getAttribute('data-kho');
     state.activeLocator = null;
+    state.zone3A = null;
     try{ localStorage.setItem(LS_ACTIVE_KHO, state.activeKho); }catch(err){}
     if(state.recv) runRecv(); else render(); // đang gợi ý nhận hàng -> tính lại cho kho vừa chọn
   });
   $('sdk-grid').addEventListener('click', function(e){
+    var zb = e.target.closest('[data-zone]');
+    if(zb && !e.target.closest('.wh3b-box')){
+      state.zone3A = zb.getAttribute('data-zone') || null;
+      state.activeLocator = null;
+      render();
+      $('sdk-grid').scrollIntoView({ behavior:'smooth', block:'start' });
+      return;
+    }
     var slot = e.target.closest('.sdk-slot.filled');
     if(slot){
       // Bấm 1 pallet -> tìm theo đúng mã đó: mọi pallet cùng mã sáng lên, còn lại mờ đi.
@@ -855,7 +1064,7 @@
   });
   $('sdk-recv-result').addEventListener('click', function(e){
     var b = e.target.closest('[data-goto]'); if(!b) return;
-    scrollToLocator(b.getAttribute('data-goto'));
+    goToLocator(b.getAttribute('data-goto'));
   });
   function syncThemeBtn(){ $('sdk-theme-btn').textContent = document.body.getAttribute('data-theme') === 'dark' ? '🌙' : '☀️'; }
   $('sdk-theme-btn').addEventListener('click', function(){
