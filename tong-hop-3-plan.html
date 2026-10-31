@@ -184,6 +184,10 @@
     body{padding:14px 12px 60px;}
     .ph-scroll{overflow-x:visible; border:none; background:transparent; border-radius:0;}
     .ph-cont-table, .ph-cont-table > tbody{display:block; width:100%;}
+    /* width:100% + padding phải tính gộp (border-box), nếu không khối mã hàng rộng hơn thẻ ~24px và bị
+       cắt sát mép phải (số liệu dính vào viền thẻ). */
+    .ph-cont-table, .ph-cont-table *, .ph-items, .ph-items *, .ph-locs, .ph-locs *{box-sizing:border-box;}
+    .ph-cont-table > tbody > tr.ph-cont-detail > td{overflow:hidden;}
     .ph-cont-table > tbody > tr.ph-cont-detail > td > table.ph-items, .ph-items > tbody.ph-item-group{display:block; width:100%;}
     .ph-items > tbody.ph-item-group > tr.ph-detail-row{display:block;}
     .ph-items > tbody.ph-item-group > tr:not(.ph-detail-row){padding:0 12px;}
@@ -270,7 +274,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v4.05';
+  var PH_VERSION = 'v4.06';
   var PH_VERSION_DATE = '31/10/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
