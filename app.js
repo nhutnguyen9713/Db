@@ -1424,7 +1424,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.04';
+const APP_VERSION = 'v4.05';
 const APP_VERSION_DATE = '31/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -1630,7 +1630,12 @@ function parseDateCell(v){
   if(v instanceof Date && !isNaN(v)) return v;
   if(typeof v === 'number') return excelSerialToDate(v);
   if(typeof v === 'string'){
-    const s = v.trim();
+    // Bỏ phần giờ ("21:19", "21:19:00", "9:19 PM") trước khi đọc ngày — giờ được lấy riêng bởi
+    // receiveTimeOfCell(). Trước đây chuỗi có kèm giờ rơi xuống new Date(s) (giờ máy, UTC+7) nên
+    // các mốc sau nửa đêm (VD 01:57) bị lùi 1 ngày khi hiển thị bằng fmtDate (UTC).
+    const s0 = v.trim();
+    const s = s0.replace(/[\sT]+\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:\s*[AP]M)?\s*$/i, '');
+    const hadTime = s !== s0;
     let m = s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})/);
     if(m){
       const mon = MONTHS[m[2].toLowerCase()];
@@ -1643,7 +1648,10 @@ function parseDateCell(v){
     }
     let m2 = s.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
     if(m2){
-      const day = Number(m2[1]), month = Number(m2[2]) - 1;
+      let day = Number(m2[1]), month = Number(m2[2]) - 1;
+      // Chuỗi kèm giờ (VD "10/22/2026 21:19" của WMS) là dạng THÁNG/NGÀY — trước đây đọc bằng new Date(s)
+      // (cũng hiểu tháng/ngày) nên giữ đúng cách hiểu đó; còn lại phần thứ 2 > 12 thì chắc chắn là ngày.
+      if((hadTime && m2[3] && Number(m2[1]) <= 12) || (month > 11 && day <= 12)){ const t = day; day = month + 1; month = t - 1; }
       let year = m2[3] ? Number(m2[3]) : new Date().getFullYear();
       if(year < 100) year += 2000;
       if(month >= 0 && month <= 11 && day >= 1 && day <= 31) return new Date(Date.UTC(year, month, day));
