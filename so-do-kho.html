@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sơ đồ kho — TN5</title>
+<meta name="description" content="Xem sơ đồ kho 3B / 3A / 2B / DG1 theo từng vị trí (locator), đồng bộ trực tiếp với Cloud TN5 Dashboard.">
+<meta name="theme-color" content="#12161F">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Dùng CHUNG styles.css với TN5 Dashboard — ô locator, thanh fill, legend, ô tìm kiếm, banner khoá...
+     giữ đúng 1 giao diện với trang "Sơ đồ kho" trong dashboard, đổi theme Sáng/Tối cũng tự theo. -->
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* Chỉ thêm phần riêng của trang độc lập này (thanh trên cùng, màn hình kết nối, tab kho) — mọi thứ
+     thuộc về ô sơ đồ đã có sẵn trong styles.css. */
+  .sdk-shell{max-width:1500px; margin:0 auto; display:flex; flex-direction:column; gap:16px;}
+  .sdk-topbar{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 14px;
+    background:#12161F; border-radius:18px; color:#E7ECF4;
+  }
+  .sdk-logo{
+    width:40px; height:40px; border-radius:11px; background:#F5A623; color:#12161F;
+    display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-weight:700; font-size:12px;
+    text-decoration:none; flex-shrink:0;
+  }
+  .sdk-tabs{display:flex; gap:6px; flex-wrap:wrap;}
+  .sdk-tab{
+    font-family:var(--mono); font-size:12px; font-weight:700; padding:9px 14px; border-radius:11px;
+    border:1px solid rgba(255,255,255,0.12); background:transparent; color:#C9D2E0; cursor:pointer;
+  }
+  .sdk-tab:hover{border-color:rgba(255,255,255,0.35); color:#fff;}
+  .sdk-tab.active{background:#fff; color:#12161F; border-color:#fff;}
+  .sdk-spacer{flex:1;}
+  .sdk-icon-btn{
+    height:38px; min-width:38px; padding:0 11px; border-radius:11px; border:1px solid rgba(255,255,255,0.12);
+    background:transparent; color:#E7ECF4; cursor:pointer; font-size:13px; font-family:var(--mono);
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .sdk-icon-btn:hover{border-color:rgba(255,255,255,0.4);}
+  .sdk-icon-btn:disabled{opacity:.5; cursor:default;}
+  .sdk-status{font-family:var(--mono); font-size:11px; color:#9AA6BA;}
+  .sdk-snapshot{font-family:var(--mono); font-size:11.5px; color:var(--muted); margin:8px 0 0;}
+  .khogrid-lock-note a{color:var(--blue);}
+  .sdk-snapshot b{color:var(--text);}
+  .sdk-demo-note{
+    font-family:var(--mono); font-size:11.5px; color:var(--amber); background:rgba(245,166,35,0.12);
+    border:1px solid rgba(245,166,35,0.4); border-radius:8px; padding:8px 12px;
+  }
+
+  .sdk-connect{max-width:440px; margin:40px auto; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:22px;}
+  .sdk-connect h2{font-family:var(--disp); font-size:17px; margin:0 0 8px;}
+  .sdk-connect p{font-size:13px; color:var(--muted); line-height:1.5; margin:0 0 16px;}
+  .sdk-connect label{display:block; font-size:12.5px; font-weight:600; color:var(--text); margin-bottom:14px;}
+  .sdk-connect input{
+    display:block; width:100%; margin-top:6px; padding:10px 12px; border-radius:8px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--text); font-size:14px; box-sizing:border-box;
+  }
+  .sdk-btn-primary{width:100%; padding:11px; border-radius:8px; border:none; background:var(--blue); color:#fff; font-size:14px; font-weight:700; cursor:pointer;}
+  .sdk-btn-primary:disabled{opacity:.6; cursor:default;}
+  .sdk-btn-link{all:unset; cursor:pointer; color:var(--blue); font-size:12.5px; margin-top:12px; display:inline-block;}
+  .sdk-conn-error{color:var(--red); font-size:12.5px; margin-top:12px; min-height:1em;}
+  .sdk-conn-note{font-size:11.5px; color:var(--muted-2); margin-top:14px; line-height:1.5;}
+
+  /* Ô trống của grid tuỳ chỉnh — trên dashboard là nút "+" để thêm vị trí; trang này chỉ xem nên giữ
+     đúng khung nét đứt (để bố cục khớp sơ đồ thật) nhưng không bấm được. */
+  .sdk-empty-cell{
+    border:1.5px dashed var(--line); border-radius:9px; min-height:90px;
+    display:flex; align-items:center; justify-content:center; color:var(--muted-2); font-size:20px; font-weight:300;
+  }
+  .sdk-panel-head{display:flex; align-items:flex-start; gap:12px;}
+  .sdk-panel-head > div{flex:1; min-width:0;}
+  .sdk-detail-close{all:unset; cursor:pointer; color:var(--muted); font-size:12px; margin-left:8px;}
+  .sdk-detail-close:hover{color:var(--red);}
+  .wh3b-box-main{cursor:pointer;}
+  @media (max-width:640px){
+    body{padding:12px 10px 40px;}
+    .sdk-tab{padding:8px 10px;}
+  }
+</style>
+</head>
+<body>
+<script>
+  // Áp theme đã chọn ở dashboard (cùng origin) ngay từ đầu, tránh nháy trắng khi đang dùng giao diện tối.
+  try{ var t = localStorage.getItem('tn5_theme'); if(t && t !== 'light') document.body.setAttribute('data-theme', t); }catch(e){}
+</script>
+
+<div class="sdk-shell">
+  <div class="sdk-topbar">
+    <a class="sdk-logo" href="index.html" title="Về TN5 Dashboard">TN5</a>
+    <div class="sdk-tabs" id="sdk-tabs"></div>
+    <div class="sdk-spacer"></div>
+    <span class="sdk-status" id="sdk-status"></span>
+    <button type="button" class="sdk-icon-btn" id="sdk-refresh-btn" title="Tải lại dữ liệu mới nhất từ Cloud">🔄 Làm mới</button>
+    <button type="button" class="sdk-icon-btn" id="sdk-theme-btn" title="Đổi giao diện Sáng / Tối">☀️</button>
+    <button type="button" class="sdk-icon-btn" id="sdk-disconnect-btn" title="Ngắt kết nối Cloud trên máy này">⏏</button>
+  </div>
+
+  <!-- Màn hình kết nối Cloud — giống trang Tổng hợp 3 Plan: thông tin kết nối chỉ lưu trên máy đang
+       xem, KHÔNG nhúng vào mã nguồn (trang này công khai trên GitHub Pages). -->
+  <div class="sdk-connect" id="sdk-connect" style="display:none;">
+    <h2>Kết nối Cloud TN5</h2>
+    <p>Trang này đọc trực tiếp dữ liệu tồn kho và lưới sơ đồ kho đã lưu trên Cloud của TN5 Dashboard (chỉ đọc, không sửa gì).</p>
+    <label>Database URL
+      <input id="sdk-conn-url" type="text" placeholder="https://xxxx.firebaseio.com" autocapitalize="off" autocorrect="off" spellcheck="false">
+    </label>
+    <label>Mã Cloud (token)
+      <input id="sdk-conn-token" type="password" placeholder="Dán mã Cloud vào đây" autocapitalize="off" autocorrect="off" spellcheck="false">
+    </label>
+    <button id="sdk-conn-btn" class="sdk-btn-primary" type="button">Kết nối</button>
+    <div class="sdk-conn-error" id="sdk-conn-error"></div>
+    <button type="button" class="sdk-btn-link" id="sdk-demo-btn">Xem thử bằng dữ liệu mẫu →</button>
+    <div class="sdk-conn-note">Lấy thông tin này trong app TN5 Dashboard chính, mục "Kết nối Cloud" (⚙️ Cài đặt). Nếu đã kết nối Cloud ở dashboard trên cùng trình duyệt này, trang sẽ tự dùng lại.</div>
+  </div>
+
+  <div id="sdk-app" style="display:none;">
+    <div class="sdk-demo-note" id="sdk-demo-note" style="display:none; margin-bottom:16px;">Đang xem DỮ LIỆU MẪU (ngẫu nhiên) — không phải tồn kho thật. Bấm ⏏ để kết nối Cloud.</div>
+
+    <div class="khogrid-lock-bar">
+      <span class="khogrid-lock-toggle khogrid-lock-locked" style="cursor:default;">🔒 Sơ đồ kho đang KHOÁ — trang chỉ xem</span>
+      <span class="khogrid-lock-note">Áp dụng chung cho cả 4 sơ đồ kho (3B / 3A / 2B / DG1) — xem/tìm kiếm/xem chi tiết pallet dùng bình thường; thêm/sửa/xoá/di chuyển vị trí làm ở trang Sơ đồ kho của <a href="index.html">TN5 Dashboard</a>.</span>
+    </div>
+
+    <div class="panel search-panel" id="sdk-panel">
+      <div class="sdk-panel-head">
+        <div>
+          <div class="brand-eyebrow"><span class="dot" id="sdk-eyebrow-dot"></span><span id="sdk-eyebrow">SƠ ĐỒ KHO</span></div>
+          <h1 style="font-size:19px;" id="sdk-title">Sơ đồ kho 3B</h1>
+          <div class="sub" id="sdk-sub"></div>
+          <div class="sdk-snapshot" id="sdk-snapshot"></div>
+          <div class="wh3b-summary" id="sdk-summary" style="margin-top:12px;"></div>
+          <div style="display:flex; gap:6px; margin-top:2px; flex-wrap:wrap;">
+            <button type="button" class="wh3b-grid-mode-btn" id="sdk-heatmap-btn" title="Đổi cách tô màu vị trí: Tắt (4 mức mặc định) / Mật độ lấp đầy / Tỉ lệ PASS-NG">🌡️ Heatmap: Tắt</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <div class="wh3b-search-row">
+          <textarea class="wh3b-search-input" id="sdk-search" rows="1" placeholder="Tìm theo Item No., Cust PO, Locator… (mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng — trong cùng 1 dòng, cách nhau bằng khoảng trắng để kết hợp nhiều điều kiện)"></textarea>
+          <div class="wh3b-oqc-toggle">
+            <label><input type="checkbox" id="sdk-oqc-pass" checked> PASS</label>
+            <label><input type="checkbox" id="sdk-oqc-ng" checked> NG</label>
+          </div>
+        </div>
+        <div class="wh3b-legend" id="sdk-legend"></div>
+        <div class="wh3b-custom-grid-note" id="sdk-grid-note" style="display:none;"></div>
+        <div id="sdk-grid"></div>
+        <div id="sdk-detail"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ============ Cấu hình — khớp đúng app.js của TN5 Dashboard ============ */
+  var RAW = {kho:0, item:1, custpo:2, locator:3, oqc:4, qty:5, gi:6, lot:7, pallet:8, dt:9, buyer:10, ref:11};
+  var KEY_INVENTORY = 'tn5_dashboard_inventory_v1';
+  var KEY_KHO_GRID = 'tn5_dashboard_kho_grid_v1';
+  var KEY_CAP_OVERRIDE = 'tn5_wh_cap_override_v1';
+  var KEY_META = 'tn5_dashboard_meta_v1';
+  var LS_HEATMAP = 'tn5_kho_heatmap_mode_v1';
+  var LS_ACTIVE_KHO = 'sdk_active_kho';
+  // Thứ tự ưu tiên lấy thông tin kết nối đã lưu trên máy: dashboard chính → trang 3 Plan → riêng trang này.
+  var CRED_SOURCES = [
+    ['tn5_cloud_gas_url', 'tn5_cloud_gas_token'],
+    ['tp3_cloud_url', 'tp3_cloud_token'],
+    ['sdk_cloud_url', 'sdk_cloud_token']
+  ];
+  var PROD_RE = /prod/i;
+
+  var B2_CAPACITY_MAP = {"D2B-FG-G06":12,"D2B-FG-G03":12,"D2B-FG-G05":24,"D2B-FG-G02":24,"D2B-FG-G04":24,"D2B-FG-G01":24,"D2B-FG-F12":24,"D2B-FG-D12":36,"D2B-FG-F11":16,"D2B-FG-D11":24,"D2B-FG-B11":32,"D2B-FG-F10":16,"D2B-FG-D10":24,"D2B-FG-B10":32,"D2B-FG-F09":16,"D2B-FG-D09":24,"D2B-FG-B09":36,"D2B-FG-F08":16,"D2B-FG-D08":24,"D2B-FG-B08":36,"D2B-FG-F07":16,"D2B-FG-D07":24,"D2B-FG-B07":36,"D2B-FG-F06":16,"D2B-FG-D06":24,"D2B-FG-B06":36,"D2B-FG-F05":16,"D2B-FG-D05":24,"D2B-FG-B05":36,"D2B-FG-F04":16,"D2B-FG-D04":24,"D2B-FG-B04":36,"D2B-FG-F03":16,"D2B-FG-D03":24,"D2B-FG-B03":36,"D2B-FG-F02":16,"D2B-FG-D02":24,"D2B-FG-B02":36,"D2B-FG-D01":36,"D2B-FG-F01":16,"D2B-FG-B01":36,"D2B-FG-E12":16,"D2B-FG-C12":24,"D2B-FG-A12":36,"D2B-FG-E11":16,"D2B-FG-C11":24,"D2B-FG-A11":36,"D2B-FG-E10":16,"D2B-FG-C10":24,"D2B-FG-A10":36,"D2B-FG-E09":16,"D2B-FG-C09":24,"D2B-FG-A09":36,"D2B-FG-E08":16,"D2B-FG-C08":24,"D2B-FG-A08":36,"D2B-FG-E07":16,"D2B-FG-C07":24,"D2B-FG-A07":36,"D2B-FG-E06":16,"D2B-FG-C06":24,"D2B-FG-A06":36,"D2B-FG-E05":16,"D2B-FG-C05":24,"D2B-FG-A05":36,"D2B-FG-E04":16,"D2B-FG-C04":24,"D2B-FG-A04":36,"D2B-FG-E03":16,"D2B-FG-C03":24,"D2B-FG-A03":36,"D2B-FG-E02":16,"D2B-FG-C02":24,"D2B-FG-A02":36,"D2B-FG-C01":24,"D2B-FG-E01":8,"D2B-FG-A01":13,"D2B-FG-H01":120};
+
+  var KHO = {
+    'Kho 3B': {
+      code:'3B', eyebrow:'SƠ ĐỒ KHO', title:'Sơ đồ kho 3B', dot:'var(--teal)', defaultMax:26,
+      sub:'Số pallet hiện có tại từng vị trí (locator) của Kho 3B — mỗi dòng GI No. trong dữ liệu tồn kho tính là 1 pallet. Sức chứa chuẩn mỗi vị trí: 26 pallet — số hiển thị là số pallet thực tế, thanh fill và màu sắc tính theo mức tối đa 26 (vượt quá vẫn tô đỏ/đầy như mức 26).',
+      capacity:function(){ return 26; }, skipProd:false
+    },
+    'Kho 3A': {
+      code:'3A', eyebrow:'SƠ ĐỒ RACK', title:'Sơ đồ 3A', dot:'var(--violet)', defaultMax:2,
+      sub:'Số pallet tại từng vị trí Rack của Kho 3A — sức chứa chuẩn 2 pallet/vị trí (không tính khu Prod).',
+      capacity:function(){ return 2; }, skipProd:true
+    },
+    'Kho 2B': {
+      code:'2B', eyebrow:'SƠ ĐỒ KHO', title:'Sơ đồ kho 2B', dot:'var(--blue)', defaultMax:24,
+      sub:'Số pallet tại từng vị trí của Kho 2B — sức chứa riêng theo từng locator (đo thực tế ngoài kho), mặc định 24.',
+      capacity:function(loc){ return B2_CAPACITY_MAP[loc] || 24; }, skipProd:false
+    },
+    'Kho DG1': {
+      code:'DG1', eyebrow:'SƠ ĐỒ KHO', title:'Sơ đồ kho DG1', dot:'var(--amber-bright)', defaultMax:24,
+      sub:'Số pallet tại từng vị trí của Kho DG1 — sức chứa chuẩn 24 pallet/vị trí.',
+      capacity:function(){ return 24; }, skipProd:false
+    }
+  };
+  var KHO_ORDER = ['Kho 3B', 'Kho 3A', 'Kho 2B', 'Kho DG1'];
+
+  /* ============ Trạng thái ============ */
+  var state = {
+    inventory: null, grids: {}, capOverride: {}, meta: {},
+    activeKho: 'Kho 3B', heatmap: 'off', demo: false, byKho: {}, activeLocator: null
+  };
+  var cloud = { url:'', token:'' };
+  try{ var savedKho = localStorage.getItem(LS_ACTIVE_KHO); if(KHO[savedKho]) state.activeKho = savedKho; }catch(e){}
+  try{ var savedHeat = localStorage.getItem(LS_HEATMAP); if(['off','qty','oqc'].indexOf(savedHeat) !== -1) state.heatmap = savedHeat; }catch(e){}
+
+  /* ============ Tiện ích ============ */
+  function $(id){ return document.getElementById(id); }
+  function esc(v){ return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmt(n){ return Math.round(Number(n) || 0).toLocaleString('en-US'); }
+  function oqcBadge(oqc){
+    var v = String(oqc || '').toUpperCase();
+    var cls = v === 'PASS' ? 'pass' : (v === 'NG' ? 'ng' : 'other');
+    return '<span class="oqc-badge ' + cls + '">' + esc(oqc || '—') + '</span>';
+  }
+  function parseMultiCodes(text){
+    return text.split(/[,;\n]+/).map(function(l){
+      var seen = {};
+      return l.trim().toLowerCase().split(/\s+/).filter(function(t){ if(!t || seen[t]) return false; seen[t] = 1; return true; });
+    }).filter(function(g){ return g.length; });
+  }
+  function multiGroupMatch(groups, hay){
+    return groups.some(function(g){ return g.every(function(tok){ return hay.indexOf(tok) !== -1; }); });
+  }
+  function naturalCmp(a, b){ return String(a).localeCompare(String(b), 'vi', { numeric:true }); }
+
+  /* ============ Dữ liệu ============ */
+  function getRawRows(data){
+    if(!data) return [];
+    if(data.raw_rows && data.raw_rows.length) return data.raw_rows;
+    // Dữ liệu cũ chưa có raw_rows — suy ra gần đúng từ kho_detail (GI/Lot sẽ hiện "—"), giống app.js.
+    var out = [];
+    Object.keys(data.kho_detail || {}).forEach(function(kho){
+      (data.kho_detail[kho] || []).forEach(function(r){ out.push([kho, r[0], r[1], r[2], r[3], r[4], '', '', '', '', '', r[5] || '']); });
+    });
+    return out;
+  }
+  function buildByKho(){
+    var by = {};
+    KHO_ORDER.forEach(function(k){ by[k] = {}; });
+    Object.keys(B2_CAPACITY_MAP).forEach(function(loc){ by['Kho 2B'][loc] = []; });
+    getRawRows(state.inventory).forEach(function(row){
+      var kho = row[RAW.kho];
+      if(!by[kho]) return;
+      var loc = String(row[RAW.locator] || '').trim();
+      if(!loc) return;
+      if(KHO[kho].skipProd && PROD_RE.test(loc)) return;
+      (by[kho][loc] || (by[kho][loc] = [])).push(row);
+    });
+    state.byKho = by;
+  }
+  function capacityOf(kho, loc){
+    var o = state.capOverride || {};
+    if(o[loc] !== undefined && o[loc] !== null && Number(o[loc]) > 0) return Number(o[loc]);
+    return KHO[kho].capacity(loc);
+  }
+
+  /* ============ Vẽ 1 ô locator — cùng công thức với buildLocatorBoxHtml() trong app.js ============ */
+  function boxStats(kho, loc, rows){
+    var maxPallet = capacityOf(kho, loc);
+    var count = rows.length;
+    var capped = Math.min(count, maxPallet);
+    var pct = Math.round(capped / maxPallet * 100);
+    var level = capped === 0 ? 'empty' : capped < maxPallet * 0.5 ? 'low' : capped < maxPallet * 0.8 ? 'mid' : 'full';
+    var qtyTotal = 0, passQty = 0, ngQty = 0;
+    rows.forEach(function(r){
+      var q = Number(r[RAW.qty]) || 0;
+      qtyTotal += q;
+      var o = String(r[RAW.oqc] || '').toUpperCase();
+      if(o === 'PASS') passQty += q; else if(o === 'NG') ngQty += q;
+    });
+    var graded = passQty + ngQty;
+    return { count:count, maxPallet:maxPallet, pct:pct, level:level, hasNG:ngQty > 0, qtyTotal:qtyTotal, passQty:passQty, ngQty:ngQty, passRatio: graded > 0 ? passQty / graded : null };
+  }
+  function heatStyle(s){
+    if(state.heatmap === 'qty'){
+      if(s.count === 0) return '';
+      return 'background:color-mix(in oklab, var(--panel-2), var(--teal) ' + Math.min(85, s.pct) + '%);';
+    }
+    if(state.heatmap === 'oqc'){
+      if(s.passRatio === null) return '';
+      var d = (s.passRatio - 0.5) * 2;
+      return 'background:color-mix(in oklab, var(--line), ' + (d >= 0 ? 'var(--teal)' : 'var(--red)') + ' ' + Math.round(Math.min(85, Math.abs(d) * 100)) + '%);';
+    }
+    return '';
+  }
+  var stats = { locators:0, pallets:0, full:0 };
+  function boxHtml(kho, loc, posStyle){
+    var rows = (state.byKho[kho] || {})[loc] || [];
+    var s = boxStats(kho, loc, rows);
+    stats.locators++; stats.pallets += s.count; if(s.level === 'full') stats.full++;
+    var over = s.count > s.maxPallet ? '<span class="wh3b-over" title="Vượt sức chứa chuẩn ' + s.maxPallet + ' pallet/vị trí">VƯỢT</span>' : '';
+    var ng = s.hasNG ? '<span class="wh3b-ng-badge" title="Vị trí này đang có hàng NG">NG</span>' : '';
+    var heatCls = state.heatmap === 'off' ? '' : ' heat-' + state.heatmap;
+    var style = (posStyle || '') + heatStyle(s);
+    var title = s.count > 0
+      ? loc + ' — SL: ' + fmt(s.qtyTotal) + ' (PASS ' + fmt(s.passQty) + ' / NG ' + fmt(s.ngQty) + ') · Bấm để xem chi tiết'
+      : 'Bấm để xem chi tiết pallet tại ' + loc;
+    var active = state.activeLocator === loc ? ' active' : '';
+    return '<div class="wh3b-box lvl-' + s.level + heatCls + active + '" data-locator="' + esc(loc) + '"' + (style ? ' style="' + style + '"' : '') + '>' +
+      '<button type="button" class="wh3b-box-main" data-locator="' + esc(loc) + '" title="' + esc(title) + '">' +
+        '<span class="wh3b-box-name">' + esc(loc) + ng + '</span>' +
+        '<span class="wh3b-box-count">' + fmt(s.count) + '<span class="wh3b-box-max">/' + fmt(s.maxPallet) + '</span>' + over + '</span>' +
+        '<span class="wh3b-box-fill"><span class="wh3b-box-fill-bar" style="width:' + s.pct + '%"></span></span>' +
+      '</button></div>';
+  }
+
+  /* ============ Bố cục ============ */
+  // 1) Có lưới tuỳ chỉnh đã lưu trên Cloud -> vẽ đúng y hệt (hàng/cột/gộp ô/ô tiêu đề).
+  function renderCustomGrid(kho, layout){
+    var rowsN = Math.max(1, Number(layout.rows) || 5), colsN = Math.max(1, Number(layout.cols) || 5);
+    var cells = Array.isArray(layout.cells) ? layout.cells : [];
+    var occupied = {};
+    var parts = [];
+    cells.forEach(function(c){
+      var r0 = Number(c.row) || 1, c0 = Number(c.col) || 1, rs = Number(c.rowSpan) || 1, cs = Number(c.colSpan) || 1;
+      for(var r = r0; r < r0 + rs; r++) for(var k = c0; k < c0 + cs; k++) occupied[r + ',' + k] = 1;
+      var pos = 'grid-row:' + r0 + ' / span ' + rs + '; grid-column:' + c0 + ' / span ' + cs + ';';
+      if(c.isLabel){
+        var txt = [];
+        if(c.textColor) txt.push('color:' + c.textColor);
+        if(c.fontSize) txt.push('font-size:' + Number(c.fontSize) + 'px');
+        parts.push('<div class="wh3b-box wh3b-box-label" style="' + esc(pos + (c.bgColor ? ' background:' + c.bgColor + ';' : '')) + '">' +
+          '<div class="wh3b-box-label-text"' + (txt.length ? ' style="' + esc(txt.join(';')) + '"' : '') + '>' + esc(c.label || '') + '</div></div>');
+        return;
+      }
+      parts.push(boxHtml(kho, c.locator, pos));
+    });
+    for(var r = 1; r <= rowsN; r++) for(var k = 1; k <= colsN; k++){
+      if(!occupied[r + ',' + k]) parts.push('<div class="sdk-empty-cell" style="grid-row:' + r + '; grid-column:' + k + ';">+</div>');
+    }
+    return '<div class="wh3b-custom-grid wh3b-grid" style="grid-template-columns:repeat(' + colsN + ', minmax(72px, 1fr)); grid-template-rows:repeat(' + rowsN + ', minmax(90px, auto));">' + parts.join('') + '</div>';
+  }
+  // 2) Kho 3B chưa có lưới tuỳ chỉnh -> bố cục thực tế mặc định (PROD / A01→A33 so le / Picking / Loading).
+  function renderDefault3B(kho){
+    var map = state.byKho[kho] || {};
+    var left = [], right = [], pick = [];
+    for(var n = 1; n <= 15; n++) left.push('D3B-FG-A' + String(n).padStart(2, '0'));
+    for(n = 33; n >= 16; n--) right.push('D3B-FG-A' + String(n).padStart(2, '0'));
+    for(n = 1; n <= 5; n++) pick.push('3B-PICK-' + String(n).padStart(2, '0'));
+    var rowCount = Math.max(left.length, right.length), off = rowCount - left.length;
+    var main = '';
+    for(var i = 0; i < rowCount; i++){
+      var l = i >= off ? left[i - off] : null, rr = right[i] || null;
+      main += l ? boxHtml(kho, l) : '<div class="wh3b-box-blank"></div>';
+      main += rr ? boxHtml(kho, rr) : '<div class="wh3b-box-blank"></div>';
+    }
+    var known = {}; ['D3B-FG-PROD', 'D3B-Loading'].concat(left, right, pick).forEach(function(x){ known[x] = 1; });
+    var others = Object.keys(map).filter(function(x){ return !known[x]; }).sort(naturalCmp);
+    return '<div class="wh3b-grid" style="grid-template-columns:1fr; gap:12px;">' +
+      '<div class="wh3b-block wh3b-block-prod"><div class="wh3b-subgrid wh3b-subgrid-1col">' + boxHtml(kho, 'D3B-FG-PROD') + '</div></div>' +
+      '<div class="wh3b-block wh3b-block-main"><div class="wh3b-subgrid wh3b-subgrid-2col">' + main + '</div></div>' +
+      '<div class="wh3b-block wh3b-block-pick"><div class="wh3b-subgrid wh3b-subgrid-5col">' + pick.map(function(p){ return boxHtml(kho, p); }).join('') + '</div></div>' +
+      '<div class="wh3b-block wh3b-block-loading"><div class="wh3b-subgrid wh3b-subgrid-1col">' + boxHtml(kho, 'D3B-Loading') + '</div></div>' +
+      (others.length ? '<div class="wh3b-block"><div class="wh3b-subgrid" style="grid-template-columns:repeat(auto-fill, minmax(126px, 1fr));">' + others.map(function(o){ return boxHtml(kho, o); }).join('') + '</div></div>' : '') +
+      '</div>';
+  }
+  // 3) Kho khác chưa có lưới tuỳ chỉnh -> liệt kê mọi locator đang có (sắp tự nhiên).
+  function renderDefaultList(kho){
+    var locs = Object.keys(state.byKho[kho] || {}).sort(naturalCmp);
+    if(!locs.length) return '<div class="wh3b-empty">Không có dữ liệu tồn kho cho ' + esc(kho) + ' trong dữ liệu hiện tại.</div>';
+    return '<div class="wh3b-grid">' + locs.map(function(l){ return boxHtml(kho, l); }).join('') + '</div>';
+  }
+
+  function legendHtml(){
+    if(state.heatmap === 'qty') return '<span>Heatmap — mật độ lấp đầy theo vị trí:</span><span style="display:inline-flex; align-items:center; gap:6px;"><i style="background:var(--panel-2)"></i>Trống <span style="width:64px; height:10px; border-radius:5px; border:1px solid var(--line); display:inline-block; background:linear-gradient(90deg, var(--panel-2), var(--teal));"></span> Đầy</span>';
+    if(state.heatmap === 'oqc') return '<span>Heatmap — tỉ lệ PASS/NG theo SL:</span><span style="display:inline-flex; align-items:center; gap:6px;"><span style="color:var(--red)">100% NG</span><span style="width:90px; height:10px; border-radius:5px; border:1px solid var(--line); display:inline-block; background:linear-gradient(90deg, var(--red), var(--line), var(--teal));"></span><span style="color:var(--teal)">100% PASS</span></span>';
+    return '<span><i style="background:var(--muted-2)"></i>Trống (0 pallet)</span><span><i style="background:var(--teal)"></i>Thấp (&lt; 50%)</span><span><i style="background:var(--amber-bright)"></i>Vừa (50–79%)</span><span><i style="background:var(--red)"></i>Đầy / gần đầy (≥ 80%)</span>';
+  }
+
+  function renderTabs(){
+    $('sdk-tabs').innerHTML = KHO_ORDER.map(function(k){
+      return '<button type="button" class="sdk-tab' + (k === state.activeKho ? ' active' : '') + '" data-kho="' + esc(k) + '">' + esc(KHO[k].code) + '</button>';
+    }).join('');
+  }
+
+  function render(){
+    var kho = state.activeKho, cfg = KHO[kho];
+    renderTabs();
+    $('sdk-eyebrow').textContent = cfg.eyebrow;
+    $('sdk-eyebrow-dot').style.background = cfg.dot;
+    $('sdk-eyebrow-dot').style.boxShadow = '0 0 8px ' + cfg.dot;
+    $('sdk-title').textContent = cfg.title;
+    $('sdk-sub').textContent = cfg.sub;
+    $('sdk-legend').innerHTML = legendHtml();
+    var hb = $('sdk-heatmap-btn');
+    hb.textContent = state.heatmap === 'qty' ? '🌡️ Heatmap: Mật độ' : state.heatmap === 'oqc' ? '🌡️ Heatmap: PASS/NG' : '🌡️ Heatmap: Tắt';
+    hb.classList.toggle('active', state.heatmap !== 'off');
+
+    var snap = state.inventory && state.inventory.snapshot_date;
+    var subParts = [];
+    if(snap) subParts.push('NGÀY CHỐT DỮ LIỆU: <b>' + esc(snap) + '</b>');
+    if(state.meta && state.meta.updatedAtText) subParts.push(esc(state.meta.updatedAtText));
+    $('sdk-snapshot').innerHTML = subParts.join(' · ');
+
+    stats = { locators:0, pallets:0, full:0 };
+    var layout = state.grids && state.grids[kho];
+    var hasCustom = layout && Array.isArray(layout.cells) && layout.cells.length;
+    var note = $('sdk-grid-note');
+    var html;
+    if(!state.inventory){
+      html = '<div class="wh3b-empty">Chưa có dữ liệu tồn kho trên Cloud — hãy tải file tồn kho trên TN5 Dashboard rồi bấm "Làm mới".</div>';
+      note.style.display = 'none';
+    } else if(hasCustom){
+      html = renderCustomGrid(kho, layout);
+      note.style.display = '';
+      note.textContent = 'Đang dùng lưới sơ đồ TUỲ CHỈNH lưu trên Cloud — sửa bố cục ở trang Sơ đồ kho của TN5 Dashboard.';
+    } else {
+      html = kho === 'Kho 3B' ? renderDefault3B(kho) : renderDefaultList(kho);
+      note.style.display = '';
+      note.textContent = 'Chưa có lưới tuỳ chỉnh cho ' + kho + ' trên Cloud — đang hiện bố cục mặc định.';
+    }
+    $('sdk-grid').innerHTML = html;
+    $('sdk-summary').innerHTML = state.inventory
+      ? '<div><b>' + fmt(stats.locators) + '</b><span>Vị trí (locator)</span></div>' +
+        '<div><b>' + fmt(stats.pallets) + '</b><span>Tổng pallet (dòng GI No.)</span></div>' +
+        '<div><b>' + fmt(stats.full) + '</b><span>Vị trí đầy / gần đầy (≥ 80%)</span></div>'
+      : '';
+    applyFilter();
+  }
+
+  /* ============ Tìm kiếm + lọc PASS/NG — giống whApplySearchFilter() trong app.js ============ */
+  function detailTable(rows){
+    return '<div class="plan-table-wrap"><table class="plan-detail-table"><thead><tr><th>#</th><th>Locator</th><th>Item No.</th><th>Cust PO</th><th>OQC</th><th style="text-align:right">SL tồn</th><th>GI No.</th><th>Lot No.</th></tr></thead><tbody>' +
+      rows.map(function(r, i){
+        return '<tr><td>' + (i + 1) + '</td><td>' + esc(r[RAW.locator]) + '</td><td>' + esc(r[RAW.item]) + '</td><td>' + esc(r[RAW.custpo]) + '</td><td>' + oqcBadge(r[RAW.oqc]) + '</td><td class="num">' + fmt(r[RAW.qty]) + '</td><td>' + esc(r[RAW.gi] || '—') + '</td><td>' + esc(r[RAW.lot] || '—') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  function sortRows(rows){
+    return rows.slice().sort(function(a, b){ return naturalCmp(a[RAW.locator] || '', b[RAW.locator] || '') || String(a[RAW.item] || '').localeCompare(String(b[RAW.item] || '')); });
+  }
+  function applyFilter(){
+    var query = $('sdk-search').value.trim();
+    var showPass = $('sdk-oqc-pass').checked, showNg = $('sdk-oqc-ng').checked;
+    var filtering = !!query || !showPass || !showNg;
+    var groups = query ? parseMultiCodes(query) : [];
+    var map = state.byKho[state.activeKho] || {};
+    var matched = [], matchedLocs = {};
+    document.querySelectorAll('#sdk-grid .wh3b-box[data-locator]').forEach(function(el){
+      el.classList.remove('wh3b-dim', 'wh3b-highlight');
+      if(!filtering) return;
+      var loc = el.getAttribute('data-locator');
+      var hits = (map[loc] || []).filter(function(r){
+        var isNg = String(r[RAW.oqc] || '').toUpperCase().indexOf('NG') !== -1;
+        if(isNg && !showNg) return false;
+        if(!isNg && !showPass) return false;
+        if(!query) return true;
+        return multiGroupMatch(groups, (r[RAW.item] + ' ' + r[RAW.custpo] + ' ' + r[RAW.locator]).toLowerCase());
+      });
+      if(hits.length){
+        el.classList.add('wh3b-highlight');
+        if(!matchedLocs[loc]){ matchedLocs[loc] = 1; hits.forEach(function(h){ matched.push(h); }); }
+      } else el.classList.add('wh3b-dim');
+    });
+    var detail = $('sdk-detail');
+    if(filtering){
+      state.activeLocator = null;
+      document.querySelectorAll('#sdk-grid .wh3b-box.active').forEach(function(b){ b.classList.remove('active'); });
+      detail.innerHTML = matched.length
+        ? '<div class="wh3b-detail-title">Kết quả tìm/lọc — <b>' + fmt(Object.keys(matchedLocs).length) + '</b> vị trí, ' + fmt(matched.length) + ' pallet (dòng GI No.)</div>' + detailTable(sortRows(matched))
+        : '<div class="wh3b-empty">Không có dòng nào khớp tìm kiếm/lọc.</div>';
+      return;
+    }
+    showLocatorDetail();
+  }
+  function showLocatorDetail(){
+    var detail = $('sdk-detail');
+    var loc = state.activeLocator;
+    if(!loc){ detail.innerHTML = ''; return; }
+    var rows = (state.byKho[state.activeKho] || {})[loc] || [];
+    detail.innerHTML = '<div class="wh3b-detail-title">Chi tiết vị trí <b>' + esc(loc) + '</b> — ' + fmt(rows.length) + ' pallet (dòng GI No.)' +
+      '<button type="button" class="sdk-detail-close" id="sdk-detail-close">✕ Đóng</button></div>' +
+      (rows.length ? detailTable(sortRows(rows)) : '<div class="wh3b-empty">Vị trí này đang trống.</div>');
+  }
+
+  /* ============ Cloud (Firebase Realtime Database REST — cùng node dashboard_data với dashboard) ============ */
+  function fetchKey(key){
+    var url = cloud.url.replace(/\/+$/, '') + '/dashboard_data/' + encodeURIComponent(key) + '.json?auth=' + encodeURIComponent(cloud.token) + '&_ts=' + Date.now();
+    return fetch(url, { cache:'no-store' }).then(function(res){
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      return res.text();
+    }).then(function(text){
+      var once = text ? JSON.parse(text) : null; // node rỗng -> "null"
+      return once ? JSON.parse(once) : null;    // giá trị lưu là CHUỖI JSON đã stringify thêm 1 lớp
+    });
+  }
+  function setStatus(t){ $('sdk-status').textContent = t || ''; }
+  function load(){
+    if(state.demo){ render(); return Promise.resolve(); }
+    var btn = $('sdk-refresh-btn');
+    btn.disabled = true;
+    setStatus('Đang tải từ Cloud…');
+    return Promise.all([KEY_INVENTORY, KEY_KHO_GRID, KEY_CAP_OVERRIDE, KEY_META].map(fetchKey)).then(function(r){
+      state.inventory = r[0];
+      state.grids = r[1] || {};
+      state.capOverride = r[2] || {};
+      state.meta = r[3] || {};
+      buildByKho();
+      render();
+      btn.disabled = false;
+      setStatus('✓ ' + new Date().toLocaleTimeString('vi-VN'));
+    }).catch(function(err){
+      btn.disabled = false;
+      setStatus('✗ Lỗi tải: ' + err.message);
+      if(!state.inventory){ $('sdk-conn-error').textContent = '✗ Không tải được dữ liệu Cloud — ' + err.message; showConnect(); }
+    });
+  }
+  function showApp(){ $('sdk-connect').style.display = 'none'; $('sdk-app').style.display = ''; }
+  function showConnect(){ $('sdk-app').style.display = 'none'; $('sdk-connect').style.display = ''; setStatus(''); }
+  function tryConnect(url, token, remember){
+    var btn = $('sdk-conn-btn'), errEl = $('sdk-conn-error');
+    btn.disabled = true; errEl.textContent = '';
+    cloud.url = url; cloud.token = token;
+    return fetchKey(KEY_META).then(function(){
+      if(remember){ try{ localStorage.setItem('sdk_cloud_url', url); localStorage.setItem('sdk_cloud_token', token); }catch(e){} }
+      btn.disabled = false;
+      state.demo = false;
+      $('sdk-demo-note').style.display = 'none';
+      showApp();
+      return load();
+    }).catch(function(err){
+      btn.disabled = false;
+      cloud.url = ''; cloud.token = '';
+      errEl.textContent = '✗ Kết nối thất bại — ' + (/HTTP 40[13]/.test(err.message) ? 'sai mã Cloud (không có quyền đọc)' : err.message);
+      showConnect();
+    });
+  }
+
+  /* ============ Dữ liệu mẫu — chỉ để xem thử giao diện khi chưa có Cloud ============ */
+  function buildDemo(){
+    var seed = 7; function rnd(){ seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+    var rows = [], gi = 100000;
+    function add(kho, loc, n){
+      for(var i = 0; i < n; i++){
+        var ng = rnd() < 0.12;
+        rows.push([kho, '0950' + String(Math.floor(rnd() * 90000) + 10000), 'PO' + (4500000 + Math.floor(rnd() * 9999)), loc, ng ? 'NG' : 'PASS', Math.floor(rnd() * 400) + 20, 'GI' + (gi++), 'L' + Math.floor(rnd() * 900 + 100), '', '', '', '']);
+      }
+    }
+    add('Kho 3B', 'D3B-FG-PROD', 37);
+    for(var n = 1; n <= 33; n++) add('Kho 3B', 'D3B-FG-A' + String(n).padStart(2, '0'), Math.floor(rnd() * 34));
+    for(n = 1; n <= 5; n++) add('Kho 3B', '3B-PICK-0' + n, Math.floor(rnd() * 8));
+    add('Kho 3B', 'D3B-Loading', 12);
+    'ABCDEF'.split('').forEach(function(r){ for(var c = 1; c <= 17; c++) for(var t = 1; t <= 5; t++) if(rnd() < 0.6) add('Kho 3A', '3A-' + r + c + '-T' + t, Math.floor(rnd() * 3)); });
+    Object.keys(B2_CAPACITY_MAP).forEach(function(l){ add('Kho 2B', l, Math.floor(rnd() * (B2_CAPACITY_MAP[l] + 4))); });
+    for(n = 1; n <= 12; n++) add('Kho DG1', 'DG1-FG-' + String(n).padStart(2, '0'), Math.floor(rnd() * 28));
+    return { snapshot_date:'(dữ liệu mẫu)', raw_rows: rows };
+  }
+  function startDemo(){
+    state.demo = true;
+    state.inventory = buildDemo();
+    state.grids = {}; state.capOverride = { 'D3B-FG-A33': 24 }; state.meta = {};
+    buildByKho();
+    $('sdk-demo-note').style.display = '';
+    showApp();
+    setStatus('Dữ liệu mẫu');
+    render();
+  }
+
+  /* ============ Sự kiện ============ */
+  $('sdk-tabs').addEventListener('click', function(e){
+    var b = e.target.closest('.sdk-tab'); if(!b) return;
+    state.activeKho = b.getAttribute('data-kho');
+    state.activeLocator = null;
+    try{ localStorage.setItem(LS_ACTIVE_KHO, state.activeKho); }catch(err){}
+    render();
+  });
+  $('sdk-grid').addEventListener('click', function(e){
+    var b = e.target.closest('.wh3b-box-main'); if(!b) return;
+    var loc = b.getAttribute('data-locator');
+    if($('sdk-search').value.trim() || !$('sdk-oqc-pass').checked || !$('sdk-oqc-ng').checked){
+      // Đang lọc -> bỏ lọc để xem đúng vị trí vừa bấm.
+      $('sdk-search').value = ''; $('sdk-oqc-pass').checked = true; $('sdk-oqc-ng').checked = true;
+      applyFilter();
+    }
+    state.activeLocator = state.activeLocator === loc ? null : loc;
+    document.querySelectorAll('#sdk-grid .wh3b-box').forEach(function(el){ el.classList.toggle('active', el.getAttribute('data-locator') === state.activeLocator); });
+    showLocatorDetail();
+    if(state.activeLocator) $('sdk-detail').scrollIntoView({ behavior:'smooth', block:'nearest' });
+  });
+  $('sdk-detail').addEventListener('click', function(e){
+    if(e.target.id !== 'sdk-detail-close') return;
+    state.activeLocator = null;
+    document.querySelectorAll('#sdk-grid .wh3b-box.active').forEach(function(el){ el.classList.remove('active'); });
+    showLocatorDetail();
+  });
+  var searchTimer = null;
+  $('sdk-search').addEventListener('input', function(){ clearTimeout(searchTimer); searchTimer = setTimeout(applyFilter, 150); });
+  $('sdk-oqc-pass').addEventListener('change', applyFilter);
+  $('sdk-oqc-ng').addEventListener('change', applyFilter);
+  $('sdk-heatmap-btn').addEventListener('click', function(){
+    var modes = ['off', 'qty', 'oqc'];
+    state.heatmap = modes[(modes.indexOf(state.heatmap) + 1) % modes.length];
+    try{ localStorage.setItem(LS_HEATMAP, state.heatmap); }catch(e){}
+    render();
+  });
+  $('sdk-refresh-btn').addEventListener('click', load);
+  function syncThemeBtn(){ $('sdk-theme-btn').textContent = document.body.getAttribute('data-theme') === 'dark' ? '🌙' : '☀️'; }
+  $('sdk-theme-btn').addEventListener('click', function(){
+    var dark = document.body.getAttribute('data-theme') !== 'dark';
+    if(dark) document.body.setAttribute('data-theme', 'dark'); else document.body.removeAttribute('data-theme');
+    try{ localStorage.setItem('tn5_theme', dark ? 'dark' : 'light'); }catch(e){}
+    syncThemeBtn();
+  });
+  $('sdk-disconnect-btn').addEventListener('click', function(){
+    if(!state.demo){
+      if(!confirm('Ngắt kết nối Cloud trên trang này? (không ảnh hưởng tới TN5 Dashboard)')) return;
+      try{ localStorage.removeItem('sdk_cloud_url'); localStorage.removeItem('sdk_cloud_token'); }catch(e){}
+    }
+    state.demo = false; state.inventory = null; cloud.url = ''; cloud.token = '';
+    $('sdk-conn-url').value = ''; $('sdk-conn-token').value = '';
+    $('sdk-conn-error').textContent = '';
+    showConnect();
+  });
+  $('sdk-conn-btn').addEventListener('click', function(){
+    var url = $('sdk-conn-url').value.trim(), token = $('sdk-conn-token').value.trim();
+    if(!url || !token){ $('sdk-conn-error').textContent = '✗ Nhập đủ Database URL và mã Cloud.'; return; }
+    tryConnect(url, token, true);
+  });
+  $('sdk-demo-btn').addEventListener('click', startDemo);
+
+  /* ============ Khởi động ============ */
+  syncThemeBtn();
+  if(/[?&]demo=1\b/.test(location.search)){ startDemo(); return; }
+  var found = null;
+  try{
+    for(var i = 0; i < CRED_SOURCES.length && !found; i++){
+      var u = localStorage.getItem(CRED_SOURCES[i][0]), t = localStorage.getItem(CRED_SOURCES[i][1]);
+      if(u && t) found = { url:u, token:t };
+    }
+  }catch(e){}
+  if(found){ cloud.url = found.url; cloud.token = found.token; showApp(); load(); }
+  else showConnect();
+})();
+</script>
+</body>
+</html>
