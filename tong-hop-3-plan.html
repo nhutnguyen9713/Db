@@ -105,6 +105,26 @@
   .ph-locs th{background:#fafbfc; color:#8a97ac; font-weight:600; font-size:10.5px; text-transform:uppercase;}
   .ph-locs td.ph-num{text-align:right; font-family:ui-monospace,monospace; padding-right:14px;}
   .ph-locs tr.ph-loc-picked td{color:#9aa3b2; background:#f6f7f9;}
+  /* Bấm 1 dòng Locator -> xổ ra danh sách GI No. (bấm GI hiện QR) / Lot No. / Pallet / Ngày nhận */
+  .ph-locs tr.ph-loc-click{cursor:pointer;}
+  .ph-locs tr.ph-loc-click:hover > td{background:#eef4fc;}
+  .ph-locs tr.ph-loc-click > td:first-child::before{content:'▸'; display:inline-block; width:12px; color:#8a97ac; font-size:10px; transition:transform .15s;}
+  .ph-locs tr.ph-loc-click.ph-loc-open > td:first-child::before{transform:rotate(90deg);}
+  .ph-locs tr.ph-gi-row > td{padding:0 10px 8px 22px; background:#f8fafd; white-space:normal;}
+  .ph-gi-wrap{overflow-x:auto;}
+  .ph-gi-list{display:grid; grid-template-columns:auto minmax(220px,1fr) auto auto auto; min-width:560px; font-size:12px; border:1px solid #e3e8ef; border-radius:8px; background:#fff;}
+  .ph-gi-list > div{padding:5px 9px; border-top:1px solid #eef0f3; white-space:nowrap;}
+  .ph-gi-list > div.ph-gi-h{border-top:none; background:#fafbfc; color:#8a97ac; font-weight:600; font-size:10.5px; text-transform:uppercase;}
+  .ph-gi-list > div.ph-gi-lot{white-space:normal; word-break:break-all; font-family:ui-monospace,monospace; font-size:11.5px;}
+  .ph-gi-list > div.ph-gi-n{text-align:right; font-family:ui-monospace,monospace;}
+  .ph-gi-link{color:#2c6fcb; text-decoration:underline dotted; cursor:pointer; font-family:ui-monospace,monospace;}
+  .ph-gi-empty{font-size:12px; color:#8a97ac; padding:6px 0;}
+  .ph-qr-overlay{position:fixed; inset:0; background:rgba(15,23,42,.55); display:none; align-items:center; justify-content:center; z-index:9999;}
+  .ph-qr-overlay.show{display:flex;}
+  .ph-qr-box{background:#fff; border-radius:12px; padding:18px 20px; text-align:center; box-shadow:0 12px 32px rgba(0,0,0,.25);}
+  .ph-qr-box #ph-qr-canvas{display:flex; justify-content:center; margin:6px 0 10px;}
+  .ph-qr-val{font-family:ui-monospace,monospace; font-size:14px; font-weight:700; color:#1f2937;}
+  .ph-qr-close{padding:6px 18px; border-radius:8px; border:1px solid #d7dae0; background:#fff; cursor:pointer; font:inherit;}
   .ph-picked-tag{display:inline-block; margin-left:6px; padding:1px 6px; border-radius:6px; font-size:10.5px; font-weight:600; color:#0f8f76; background:#e3f5f0;}
   .ph-picked-tag.ph-picking-tag{color:#9a6700; background:#fff4cc;}
   .ph-empty-note{color:#8a97ac; font-size:13px; padding:20px 0;}
@@ -211,6 +231,14 @@
     </div>
   </div>
 
+<div class="ph-qr-overlay" id="ph-qr-overlay">
+  <div class="ph-qr-box">
+    <div class="ph-qr-val" id="ph-qr-value"></div>
+    <div id="ph-qr-canvas"></div>
+    <button type="button" class="ph-qr-close" id="ph-qr-close">Đóng</button>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   var PH_URL_KEY = 'tp3_cloud_url';
   var PH_TOKEN_KEY = 'tp3_cloud_token';
@@ -276,6 +304,49 @@
       });
     });
     return idx;
+  };
+  // Dữ liệu GỐC từng dòng tồn (raw_rows: 1 dòng = 1 GI No. = 1 pallet) gom theo đúng khoá của kho_detail
+  // (kho + item + PO + locator + OQC + Reference) — dùng cho việc bấm 1 dòng Locator để xem GI/Lot/Pallet/Ngày nhận.
+  var phRawIdx = {};
+  var phRawKey = function(kho, item, custpo, locator, oqc, ref){
+    return [kho, item, custpo, locator, oqc, ref].map(function(v){ return String(v == null ? '' : v).trim(); }).join('\u241F');
+  };
+  var phBuildRawIdx = function(rawRows){
+    var idx = {};
+    (rawRows || []).forEach(function(r){
+      var k = phRawKey(r[0], r[1], r[2], r[3], r[4], r[11]);
+      (idx[k] || (idx[k] = [])).push(r);
+    });
+    return idx;
+  };
+  // Mỗi dòng Locator hiển thị (có thể gộp nhiều dòng kho_detail) đăng ký danh sách entry gốc của nó ở đây,
+  // dòng HTML chỉ mang số thứ tự (data-gireg) để khi bấm tra lại đúng các GI tương ứng.
+  var phGiReg = [];
+  var phLocClickAttrs = function(entries){
+    phGiReg.push(entries);
+    return ' class="ph-loc-click" data-gireg="' + (phGiReg.length - 1) + '" title="Bấm để xem GI No. / Lot No. / Pallet / Ngày nhận"';
+  };
+  var phGiListHtml = function(entries){
+    var seen = {};
+    var rows = [];
+    (entries || []).forEach(function(e){
+      var k = phRawKey(e.kho, e.item, e.custpo, e.locator, e.oqc, e.ref);
+      if(seen[k]) return;
+      seen[k] = true;
+      (phRawIdx[k] || []).forEach(function(r){ rows.push(r); });
+    });
+    if(!rows.length) return '<div class="ph-gi-empty">Chưa có chi tiết GI cho dòng này (dữ liệu tồn trên Cloud chưa có dữ liệu gốc từng GI — tải lại file tồn kho ở TN5 Dashboard).</div>';
+    rows.sort(function(a, b){ return (Number(b[5]) || 0) - (Number(a[5]) || 0) || String(a[6]).localeCompare(String(b[6])); });
+    var html = '<div class="ph-gi-h">GI No.</div><div class="ph-gi-h">Lot No.</div><div class="ph-gi-h">Pallet</div><div class="ph-gi-h">Ngày nhận</div><div class="ph-gi-h" style="text-align:right;">SL</div>';
+    rows.forEach(function(r){
+      var gi = String(r[6] || '').trim();
+      html += '<div>' + (gi ? '<span class="ph-gi-link" data-gi="' + phEsc(gi) + '" title="Bấm để xem mã QR">' + phEsc(gi) + '</span>' : '—') + '</div>' +
+        '<div class="ph-gi-lot">' + phEsc(r[7] || '—') + '</div>' +
+        '<div class="ph-gi-n">' + phEsc(r[8] || '—') + '</div>' +
+        '<div>' + phEsc(r[9] || '—') + '</div>' +
+        '<div class="ph-gi-n">' + phFmt(Number(r[5]) || 0) + '</div>';
+    });
+    return '<div class="ph-gi-wrap"><div class="ph-gi-list">' + html + '</div></div>';
   };
   // Locator hậu tố "Loading" -> hiện kèm "(CR# - VNC#)": CR lấy từ Reference của dòng tồn, VNC (Invoice) tra từ
   // Plan đã tải theo mã CSR = CR (cùng cách tra với bảng Picking bên TN5 Dashboard). CR chưa có Invoice -> chỉ "(CR#)".
@@ -429,8 +500,8 @@
       if(!g.locs.length) return '';
       var detailId = uidPrefix + '-' + i;
       var body = g.locs.map(function(l){
-        if(l.picked) return '<tr class="ph-loc-picked" title="Đã scan pick (CR) cho container — không tính vào tồn"><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + ' ' + phPickedTagHtml(l.ref) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">(' + phFmt(l.qty) + ')</td></tr>';
-        return '<tr><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>';
+        if(l.picked) return '<tr' + phLocClickAttrs([l]).replace('class="ph-loc-click"', 'class="ph-loc-click ph-loc-picked"').replace(/ title="[^"]*"/, ' title="Đã scan pick (CR) cho container — không tính vào tồn. Bấm để xem GI"') + '><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + ' ' + phPickedTagHtml(l.ref) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">(' + phFmt(l.qty) + ')</td></tr>';
+        return '<tr' + phLocClickAttrs([l]) + '><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>';
       }).join('');
       return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(poLabel) + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button><button class="ph-shot-btn" data-share="1" type="button" title="Chia sẻ ảnh bảng này sang Zalo/Telegram...">📤 Chia sẻ</button></div><div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></div></td></tr>';
     }).join('');
@@ -583,14 +654,15 @@
         // Locator Loading tách theo từng CR (mỗi CR 1 dòng) để hiện đúng (CR - VNC); locator khác gộp như cũ.
         var crPart = phIsLoadingLocator(l.locator) ? phLoadingCrCodes(l.ref).join('|') : '';
         var lk = String(l.locator || '') + '␟' + poKey + '␟' + crPart;
-        if(!byLocPo[lk]) byLocPo[lk] = { locator: l.locator, po: poKey, oqc: l.oqc, qty: 0, ref: l.ref };
+        if(!byLocPo[lk]) byLocPo[lk] = { locator: l.locator, po: poKey, oqc: l.oqc, qty: 0, ref: l.ref, src: [] };
         byLocPo[lk].qty += (l.qty || 0);
+        byLocPo[lk].src.push(l);
       });
       var rowsList = Object.keys(byLocPo).map(function(k){ return byLocPo[k]; });
       rowsList.sort(function(a, b){
         return String(a.locator).localeCompare(String(b.locator), 'vi', { numeric: true }) || a.po.localeCompare(b.po, 'vi', { numeric: true });
       });
-      var rowsHtml = rowsList.map(function(l){ return '<tr><td>' + phEsc(l.po) + '</td><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
+      var rowsHtml = rowsList.map(function(l){ return '<tr' + phLocClickAttrs(l.src) + '><td>' + phEsc(l.po) + '</td><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
       return '<div class="ph-pick-kho-hdr" style="background:' + khoMeta.khoColors[label] + ';"><span>' + phEsc(label) + ' · ' + phFmt(g.qty) + '</span><button class="ph-pick-shot-btn" type="button" title="Lưu ảnh danh sách vị trí kho này">📷</button><button class="ph-pick-shot-btn" data-share="1" type="button" title="Chia sẻ ảnh danh sách vị trí kho này">📤</button></div>' +
         '<div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th>PO</th><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
     }).join('');
@@ -692,6 +764,7 @@
       var contShipByRef = (contShipRaw && contShipRaw.byRef) || {};
       var khoDetail = (currentData && currentData.kho_detail) || {};
       var invIdx = phBuildIndex(khoDetail);
+      phRawIdx = phBuildRawIdx(currentData && currentData.raw_rows);
       phCrInvMap = phBuildCrInvMap(planDataLive);
       var khoMeta = phComputeKhoMeta(currentData);
 
@@ -824,6 +897,40 @@
       phRenderItemSearch();
     });
   })();
+  // Bấm 1 dòng Locator -> xổ/thu danh sách GI ngay bên dưới; bấm GI No. -> hiện mã QR.
+  document.addEventListener('click', function(e){
+    var giLink = e.target.closest('.ph-gi-link');
+    if(giLink){
+      var gi = giLink.dataset.gi;
+      document.getElementById('ph-qr-value').textContent = gi;
+      var cv = document.getElementById('ph-qr-canvas');
+      cv.innerHTML = '';
+      if(typeof QRCode !== 'undefined') new QRCode(cv, { text: gi, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+      else cv.innerHTML = '<div style="font-size:12px; color:#8a97ac; padding:20px;">Không tải được thư viện tạo mã QR (cần Internet).</div>';
+      document.getElementById('ph-qr-overlay').classList.add('show');
+      return;
+    }
+    if(e.target.id === 'ph-qr-overlay' || e.target.id === 'ph-qr-close'){
+      document.getElementById('ph-qr-overlay').classList.remove('show');
+      return;
+    }
+    var locRow = e.target.closest('tr.ph-loc-click');
+    if(!locRow) return;
+    var next = locRow.nextElementSibling;
+    if(next && next.classList.contains('ph-gi-row')){
+      next.remove();
+      locRow.classList.remove('ph-loc-open');
+      return;
+    }
+    var tr = document.createElement('tr');
+    tr.className = 'ph-gi-row';
+    tr.innerHTML = '<td colspan="' + locRow.children.length + '">' + phGiListHtml(phGiReg[Number(locRow.dataset.gireg)]) + '</td>';
+    locRow.parentNode.insertBefore(tr, next);
+    locRow.classList.add('ph-loc-open');
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') document.getElementById('ph-qr-overlay').classList.remove('show');
+  });
   document.addEventListener('click', function(e){
     if(e.target.closest('.ph-kho-select')) return;
     var khoCell = e.target.closest('.ph-kho-cell');
