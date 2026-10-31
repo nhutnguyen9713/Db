@@ -1424,7 +1424,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.08';
+const APP_VERSION = 'v4.09';
 const APP_VERSION_DATE = '31/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -14587,6 +14587,7 @@ const TX_CHART_POPUP_CONT_COLS = [
   { key:'item', label:'Item' }, { key:'user', label:'User Name' }, { key:'total', label:'Total', num:true }
 ];
 let txChartPopupContRows = [];
+let txChartPopupContAllRows = [];
 // Khoảng ngày giờ pick của 1 cont: cùng ngày -> "06/10 07:12–08:30", khác ngày -> "05/10 22:10 – 06/10 01:30".
 function txFormatPickSpan(minDt, maxDt){
   if(!minDt || !maxDt) return '—';
@@ -14651,22 +14652,24 @@ function txBuildPickingContRows(kho, rackFilter){ // rackFilter: undefined = t�
       locatorDen:join(e.locs), item:join(e.items), user:join(e.users), total:e.total }))
     .sort((a, b) => (a.cr === TX_CONT_NO_CR) - (b.cr === TX_CONT_NO_CR) || a.cr.localeCompare(b.cr));
 }
-function txChartPopupRenderCont(rows){
-  const wrap = document.getElementById('tx-chart-popup-cont-wrap');
+// prefix: 'tx-chart-popup-cont' (bảng theo cont của cột vừa bấm) hoặc 'tx-chart-popup-contall' (tổng Floor + Rack kho 3A).
+function txChartPopupRenderCont(rows, prefix, titleText){
+  prefix = prefix || 'tx-chart-popup-cont';
+  const wrap = document.getElementById(prefix + '-wrap');
   if(!wrap) return;
   const cols = TX_CHART_POPUP_CONT_COLS;
-  const table = document.getElementById('tx-chart-popup-cont-table');
-  const empty = document.getElementById('tx-chart-popup-cont-empty');
+  const table = document.getElementById(prefix + '-table');
+  const empty = document.getElementById(prefix + '-empty');
   const nCont = rows.filter(r => r.cr !== TX_CONT_NO_CR).length;
-  document.getElementById('tx-chart-popup-cont-title').textContent = `Xem theo cont (CR) — ${fmt(nCont)} cont`;
+  document.getElementById(prefix + '-title').textContent = `${titleText || 'Xem theo cont (CR)'} — ${fmt(nCont)} cont`;
   if(!rows.length){
     table.style.display = 'none'; empty.style.display = '';
     return;
   }
   table.style.display = ''; empty.style.display = 'none';
-  document.getElementById('tx-chart-popup-cont-thead').innerHTML = `<tr>${cols.map(c => `<th${c.num ? ' style="text-align:right"' : ''}>${escHtml(c.label)}</th>`).join('')}</tr>`;
+  document.getElementById(prefix + '-thead').innerHTML = `<tr>${cols.map(c => `<th${c.num ? ' style="text-align:right"' : ''}>${escHtml(c.label)}</th>`).join('')}</tr>`;
   const noWrapKeys = new Set(['loadDate', 'planTime', 'pickTime', 'locatorDen']);
-  document.getElementById('tx-chart-popup-cont-tbody').innerHTML = rows.map(r => `<tr>${cols.map(c =>
+  document.getElementById(prefix + '-tbody').innerHTML = rows.map(r => `<tr>${cols.map(c =>
     `<td${c.num ? ' class="num"' : (noWrapKeys.has(c.key) ? ' style="white-space:nowrap"' : '')}>${escHtml(String(r[c.key] === undefined || r[c.key] === null || r[c.key] === '' ? '—' : r[c.key]))}</td>`
   ).join('')}</tr>`).join('');
   const grandTotal = rows.reduce((s, r) => s + (r.total || 0), 0);
@@ -14675,7 +14678,7 @@ function txChartPopupRenderCont(rows){
     if(c.key === 'total') return `<td class="num tx-total-col">${fmt(grandTotal)}</td>`;
     return '<td></td>';
   }).join('');
-  document.getElementById('tx-chart-popup-cont-tfoot').innerHTML = `<tr style="font-weight:700; border-top:2px solid var(--line);">${footTds}</tr>`;
+  document.getElementById(prefix + '-tfoot').innerHTML = `<tr style="font-weight:700; border-top:2px solid var(--line);">${footTds}</tr>`;
 }
 function txOpenChartPopup(kind, kho){
   if(!txState) return;
@@ -14706,6 +14709,12 @@ function txOpenChartPopup(kind, kho){
   txChartPopupContRows = isPickKind ? txBuildPickingContRows(kho, kind === 'pickingFloor' ? 'floor' : kind === 'pickingRack' ? 'rack' : undefined) : [];
   if(contWrap) contWrap.style.display = isPickKind ? '' : 'none';
   if(isPickKind) txChartPopupRenderCont(txChartPopupContRows);
+  // Kho 3A (tách Floor / Rack): thêm bảng TỔNG cont pick gộp cả Floor + Rack ở cuối popup.
+  const contAllWrap = document.getElementById('tx-chart-popup-contall-wrap');
+  const isSplitPick = kind === 'pickingFloor' || kind === 'pickingRack';
+  txChartPopupContAllRows = isSplitPick ? txBuildPickingContRows(kho) : [];
+  if(contAllWrap) contAllWrap.style.display = isSplitPick ? '' : 'none';
+  if(isSplitPick) txChartPopupRenderCont(txChartPopupContAllRows, 'tx-chart-popup-contall', 'Tổng cont pick — Floor + Rack');
   document.getElementById('kho-modal-overlay').classList.add('show');
   searchInput.focus();
 }
@@ -14733,6 +14742,10 @@ document.addEventListener('input', (e) => {
   if(txChartPopupContRows.length){
     txChartPopupRenderCont(!q ? txChartPopupContRows : txChartPopupContRows.filter(r =>
       Object.values(r).some(v => removeDiacritics(String(v || '').toLowerCase()).includes(q))));
+  }
+  if(txChartPopupContAllRows.length){
+    txChartPopupRenderCont(!q ? txChartPopupContAllRows : txChartPopupContAllRows.filter(r =>
+      Object.values(r).some(v => removeDiacritics(String(v || '').toLowerCase()).includes(q))), 'tx-chart-popup-contall', 'Tổng cont pick — Floor + Rack');
   }
 });
 

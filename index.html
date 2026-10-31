@@ -2273,6 +2273,17 @@
         </table>
         <div class="kho-empty" id="tx-chart-popup-cont-empty" style="display:none;">Không có cont nào.</div>
       </div>
+      <!-- Kho 3A: bảng tổng cont pick GỘP cả Floor + Rack — hiện ở cuối popup dù bấm cột Floor hay Rack -->
+      <div id="tx-chart-popup-contall-wrap" style="display:none; margin-top:26px; padding-top:18px; border-top:2px dashed var(--line);">
+        <h3 id="tx-chart-popup-contall-title" style="font-family:var(--disp); font-size:15px; font-weight:600; margin:0 0 4px;">Tổng cont pick — Floor + Rack</h3>
+        <div class="desc" style="font-size:12px; color:var(--muted); margin-bottom:10px;">Gộp mọi lượt pick của kho này, cả từ Floor lẫn Rack — mỗi dòng là 1 cont (mã CR).</div>
+        <table class="kho-detail-table" id="tx-chart-popup-contall-table">
+          <thead id="tx-chart-popup-contall-thead"></thead>
+          <tbody id="tx-chart-popup-contall-tbody"></tbody>
+          <tfoot id="tx-chart-popup-contall-tfoot"></tfoot>
+        </table>
+        <div class="kho-empty" id="tx-chart-popup-contall-empty" style="display:none;">Không có cont nào.</div>
+      </div>
     </div>
   </div>
 </div>
