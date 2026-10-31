@@ -525,6 +525,10 @@
   .kpi.accent .value{color:var(--amber);}
   .kpi.good .value{color:var(--teal);}
   .kpi.bad .value{color:var(--red);}
+  /* Ô nền đỏ (VD "PUT AWAY (MENU)" ở tab Transaction) */
+  .kpi.redbg{background:#D64545;}
+  .kpi.redbg .label, .kpi.redbg .foot{color:rgba(255,255,255,.85);}
+  .kpi.redbg .value{color:#fff;}
   #kpi-strip:hover{filter:brightness(0.97);}
 
   /* ============ Bảng "Cont theo Kho" — 3 cột 3B/3A/2B kèm trạng thái pick từng kho ============ */
