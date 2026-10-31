@@ -125,11 +125,16 @@
   .sdk-zone-strip i{display:block; height:100%;}
   .sdk-zone-open{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--violet);}
   .sdk-zone-match{font-family:var(--mono); font-size:11px; font-weight:700; color:var(--amber);}
-  .sdk-zone-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:14px;}
+  .sdk-zone-bar{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+  .sdk-zones.compact{margin-bottom:16px; gap:10px;}
+  .sdk-zones.compact .sdk-zone-card{padding:10px 14px; gap:6px;}
+  .sdk-zones.compact .sdk-zone-name{font-size:15px;}
+  .sdk-zones.compact .sdk-zone-desc{display:none;}
+  .sdk-zones.compact .sdk-zone-big{font-size:18px;}
+  .sdk-zones.compact .sdk-zone-strip{height:7px;}
+  .sdk-zone-card.active{border-color:var(--violet); box-shadow:0 0 0 2px var(--violet); background:var(--violet-soft, var(--panel));}
   .sdk-back{all:unset; cursor:pointer; font-family:var(--mono); font-size:12px; font-weight:700; padding:7px 12px; border-radius:8px; border:1px solid var(--line); color:var(--text); background:var(--panel-2);}
   .sdk-back:hover{border-color:var(--violet); color:var(--violet);}
-  .sdk-zone-pill{all:unset; cursor:pointer; font-family:var(--mono); font-size:11.5px; font-weight:700; padding:7px 12px; border-radius:8px; border:1px solid var(--line); color:var(--muted);}
-  .sdk-zone-pill.active{background:var(--violet); border-color:var(--violet); color:#fff;}
   .sdk-group{margin-bottom:16px; border:1px solid var(--line); border-radius:11px; padding:12px; background:var(--panel);}
   .sdk-group-head{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--violet); margin-bottom:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:baseline;}
   .sdk-group-head span{color:var(--muted); font-weight:500; font-size:11px;}
@@ -731,20 +736,21 @@
   function zoneLocs(zone){
     return Object.keys(state.byKho['Kho 3A'] || {}).filter(function(l){ return zone3A(l) === zone; }).sort(naturalCmp);
   }
-  function renderZones3A(){
+  // active: đang xem chi tiết 1 khu -> 3 thẻ thu gọn làm tiêu đề (thẻ khu đang xem tô đậm, bấm thẻ khác để chuyển khu).
+  function renderZones3A(active){
     var kho = 'Kho 3A';
-    return '<div class="sdk-zones">' + ZONES_3A.map(function(z){
+    return '<div class="sdk-zones' + (active ? ' compact' : '') + '">' + ZONES_3A.map(function(z){
       var locs = zoneLocs(z.id), st = locStats(kho, locs);
       var pct = st.cap ? Math.round(Math.min(st.pallets, st.cap) / st.cap * 100) : 0;
       var top = Object.keys(st.items).sort(function(a, b){ return st.items[b] - st.items[a]; });
       var strip = top.slice(0, 12).map(function(it){ return '<i title="' + esc(it) + ': ' + st.items[it] + ' pallet" style="width:' + (st.items[it] / Math.max(1, st.cap) * 100) + '%; background:' + itemColor(it) + '"></i>'; }).join('');
-      return '<button type="button" class="sdk-zone-card' + (st.incoming ? ' sdk-plan' : '') + '" data-zone="' + z.id + '">' +
+      return '<button type="button" class="sdk-zone-card' + (st.incoming ? ' sdk-plan' : '') + (active === z.id ? ' active' : '') + '" data-zone="' + z.id + '">' +
         '<div class="sdk-zone-name">' + z.icon + ' ' + esc(z.name) + (st.incoming ? ' <span class="sdk-plan-badge">+' + st.incoming + ' CẤT VÀO</span>' : '') + '</div>' +
         '<div class="sdk-zone-desc">' + esc(z.desc) + '</div>' +
         '<div class="sdk-zone-big">' + fmt(st.pallets) + ' <span>/ ' + fmt(st.cap) + ' pallet · ' + pct + '%</span></div>' +
         '<div class="sdk-zone-strip" title="Mỗi màu = 1 mã hàng (12 mã nhiều pallet nhất)">' + strip + '</div>' +
         '<div class="sdk-zone-meta"><span><b>' + fmt(st.locators) + '</b> vị trí</span><span><b>' + fmt(st.empty) + '</b> trống</span><span><b>' + fmt(st.full) + '</b> đầy ≥80%</span><span><b>' + fmt(top.length) + '</b> mã hàng</span>' + (st.ng ? '<span style="color:var(--red)"><b style="color:var(--red)">' + fmt(st.ng) + '</b> pallet NG</span>' : '') + '</div>' +
-        '<div style="display:flex; justify-content:space-between; gap:8px;"><span class="sdk-zone-match" data-zone-match="' + z.id + '"></span><span class="sdk-zone-open">Mở chi tiết →</span></div>' +
+        '<div style="display:flex; justify-content:space-between; gap:8px;"><span class="sdk-zone-match" data-zone-match="' + z.id + '"></span><span class="sdk-zone-open">' + (active === z.id ? 'Đang xem' : active ? 'Chuyển sang →' : 'Mở chi tiết →') + '</span></div>' +
         '</button>';
     }).join('') + '</div>';
   }
@@ -817,8 +823,7 @@
   function renderZone3A(zone){
     var kho = 'Kho 3A', z = ZONES_3A.filter(function(x){ return x.id === zone; })[0];
     var locs = zoneLocs(zone);
-    var bar = '<div class="sdk-zone-bar"><button type="button" class="sdk-back" data-zone="">← 3 khu vực</button>' +
-      ZONES_3A.map(function(x){ return '<button type="button" class="sdk-zone-pill' + (x.id === zone ? ' active' : '') + '" data-zone="' + x.id + '">' + x.icon + ' ' + esc(x.name) + '</button>'; }).join('') + '</div>';
+    var bar = '<div class="sdk-zone-bar"><button type="button" class="sdk-back" data-zone="">← 3 khu vực</button></div>' + renderZones3A(zone);
     if(!locs.length) return bar + '<div class="wh3b-empty">Khu ' + esc(z.name) + ' chưa có vị trí nào trong dữ liệu tồn kho.</div>';
     return bar + (zone === 'rack' ? renderRack(kho, locs) : renderGroups(kho, locs, zone));
   }
