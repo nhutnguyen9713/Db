@@ -51,7 +51,15 @@
   .ph-tabs{display:flex; gap:4px; border-bottom:1px solid #e2e5ea; margin-bottom:16px;}
   .ph-tab-btn{padding:9px 16px; border:none; background:none; font-size:13.5px; font-weight:600; color:#8a97ac; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px;}
   .ph-tab-btn.ph-tab-active{color:#2c6fcb; border-bottom-color:#2c6fcb;}
-  #ph-item-search{width:100%; max-width:420px; padding:9px 12px; border-radius:8px; border:1px solid #d7dae0; font-size:14px; margin-bottom:16px; box-sizing:border-box;}
+  .ph-item-search-row{display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:16px;}
+  #ph-item-search{flex:1 1 260px; width:100%; max-width:420px; padding:9px 12px; border-radius:8px; border:1px solid #d7dae0; font-size:14px; box-sizing:border-box;}
+  /* Bộ chọn lọc OQC cho tab "Tìm mã hàng": All / Pass / NG */
+  .ph-oqc-filter{display:inline-flex; border:1px solid #d7dae0; border-radius:8px; overflow:hidden; background:#fff; flex:0 0 auto;}
+  .ph-oqc-filter button{padding:8px 14px; border:none; border-left:1px solid #d7dae0; background:#fff; font:inherit; font-size:13px; font-weight:600; color:#6b7280; cursor:pointer;}
+  .ph-oqc-filter button:first-child{border-left:none;}
+  .ph-oqc-filter button.ph-oqc-active{background:#2c6fcb; color:#fff;}
+  .ph-oqc-filter button[data-oqc="PASS"].ph-oqc-active{background:#1f9d55;}
+  .ph-oqc-filter button[data-oqc="NG"].ph-oqc-active{background:#d64545;}
   .ph-search-result-card{border:2px solid #d7dae0; border-radius:10px; margin-bottom:14px; overflow:hidden; background:#fff;}
   .ph-search-hdr{padding:9px 14px; font-size:13px; color:#374151; background:#f8f9fb; border-bottom:1px solid #eef0f3;}
   .ph-search-hdr .ph-badge{margin-right:6px;}
@@ -191,7 +199,14 @@
     </div>
 
     <div id="ph-tab-search" style="display:none;">
-      <input id="ph-item-search" type="text" placeholder="Nhập mã hàng cần tìm (VD: 095079971)...">
+      <div class="ph-item-search-row">
+        <input id="ph-item-search" type="text" placeholder="Nhập mã hàng cần tìm (VD: 095079971)...">
+        <div class="ph-oqc-filter" id="ph-oqc-filter" role="group" aria-label="Lọc theo OQC">
+          <button type="button" data-oqc="ALL" class="ph-oqc-active">All</button>
+          <button type="button" data-oqc="PASS">Pass</button>
+          <button type="button" data-oqc="NG">NG</button>
+        </div>
+      </div>
       <div id="ph-item-search-result"></div>
     </div>
   </div>
@@ -598,13 +613,21 @@
       });
     }).filter(function(termSlots){ return termSlots.length > 0; });
   };
+  // Bộ lọc OQC của tab "Tìm mã hàng": 'ALL' (mặc định) / 'PASS' / 'NG'. Nhớ lựa chọn trong localStorage.
+  var PH_OQC_FILTER_KEY = 'tp3_item_search_oqc';
+  var phItemOqcFilter = 'ALL';
+  try{ var savedOqc = localStorage.getItem(PH_OQC_FILTER_KEY); if(savedOqc === 'PASS' || savedOqc === 'NG') phItemOqcFilter = savedOqc; }catch(e){}
+  var phOqcFilterLabel = function(){ return phItemOqcFilter === 'PASS' ? 'Pass' : (phItemOqcFilter === 'NG' ? 'NG' : ''); };
   var phBuildInventorySearchResultHtml = function(query, khoMeta, invIdx){
+    var oqcFilter = phItemOqcFilter;
+    var oqcNote = oqcFilter === 'ALL' ? '' : ' (chỉ ' + phOqcFilterLabel() + ')';
     var orGroups = phParseItemSearchQuery(query);
     if(!orGroups.length) return '<div class="ph-empty-note">Nhập mã hàng (hoặc 1 phần mã hàng) để tìm. Dấu cách để lọc thêm từ khoá, dấu chấm phẩy (;) để liệt kê nhiều lựa chọn cho 1 từ khoá, dấu phẩy (,) để tìm gộp nhiều mã khác nhau.</div>';
     var matchedByItem = {};
     Object.keys(invIdx || {}).forEach(function(key){
       (invIdx[key] || []).forEach(function(e){
         if(/prod/i.test(e.locator || '') || !((e.qty || 0) > 0)) return;
+        if(oqcFilter !== 'ALL' && String(e.oqc || '').trim().toUpperCase() !== oqcFilter) return;
         var haystack = (key + ' ' + String(e.kho || '') + ' ' + phEntryKhoLabel(e) + ' ' + String(e.custpo || '') + ' ' + String(e.locator || '')).toLowerCase();
         var matches = orGroups.some(function(termSlots){
           return termSlots.every(function(alts){ return alts.some(function(alt){ return haystack.indexOf(alt) !== -1; }); });
@@ -621,8 +644,8 @@
       var entries = matchedByItem[key];
       return phBuildItemPickListHtml(entries[0].item, entries, khoMeta);
     }).join('');
-    if(!cardsHtml.trim()) return '<div class="ph-empty-note">Không tìm thấy mã hàng nào khớp "' + phEsc(query) + '" trong dữ liệu tồn kho.</div>';
-    return '<div class="ph-meta">Tìm thấy ' + phFmt(matchedKeys.length) + ' mã hàng khớp "' + phEsc(query) + '" — mỗi mã liệt kê đủ vị trí theo thứ tự kho · locator để đi lấy hàng.' +
+    if(!cardsHtml.trim()) return '<div class="ph-empty-note">Không tìm thấy mã hàng nào khớp "' + phEsc(query) + '"' + oqcNote + ' trong dữ liệu tồn kho.</div>';
+    return '<div class="ph-meta">Tìm thấy ' + phFmt(matchedKeys.length) + ' mã hàng khớp "' + phEsc(query) + '"' + oqcNote + ' — mỗi mã liệt kê đủ vị trí theo thứ tự kho · locator để đi lấy hàng.' +
       '<button class="ph-pick-shot-all-btn" type="button">📷 Lưu ảnh toàn bộ kết quả</button><button class="ph-pick-shot-all-btn" data-share="1" type="button">📤 Chia sẻ toàn bộ kết quả</button></div>' + cardsHtml;
   };
   var phRenderItemSearch = function(){
@@ -788,6 +811,19 @@
     });
   });
   document.getElementById('ph-item-search').addEventListener('input', phRenderItemSearch);
+  (function(){
+    var box = document.getElementById('ph-oqc-filter');
+    var sync = function(){ box.querySelectorAll('button').forEach(function(b){ b.classList.toggle('ph-oqc-active', b.dataset.oqc === phItemOqcFilter); }); };
+    sync();
+    box.addEventListener('click', function(e){
+      var b = e.target.closest('button[data-oqc]');
+      if(!b) return;
+      phItemOqcFilter = b.dataset.oqc;
+      try{ localStorage.setItem(PH_OQC_FILTER_KEY, phItemOqcFilter); }catch(err){}
+      sync();
+      phRenderItemSearch();
+    });
+  })();
   document.addEventListener('click', function(e){
     if(e.target.closest('.ph-kho-select')) return;
     var khoCell = e.target.closest('.ph-kho-cell');
@@ -993,7 +1029,7 @@
         });
       });
       var q = document.getElementById('ph-item-search').value.trim();
-      phSaveDetailImage('Tìm mã hàng: ' + q, ['ITEM', 'KHO', 'PO', 'LOCATOR', 'OQC', 'SL TỒN'], allRows, !!allBtn.dataset.share);
+      phSaveDetailImage('Tìm mã hàng: ' + q + (phItemOqcFilter !== 'ALL' ? ' (' + phOqcFilterLabel() + ')' : ''), ['ITEM', 'KHO', 'PO', 'LOCATOR', 'OQC', 'SL TỒN'], allRows, !!allBtn.dataset.share);
     }
   });
 
