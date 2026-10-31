@@ -113,10 +113,11 @@
   .ph-locs tr.ph-gi-row > td{padding:0 10px 8px 22px; background:#f8fafd; white-space:normal;}
   .ph-gi-wrap{overflow-x:auto;}
   .ph-gi-list{display:grid; grid-template-columns:auto minmax(220px,1fr) auto auto auto; min-width:560px; font-size:12px; border:1px solid #e3e8ef; border-radius:8px; background:#fff;}
-  .ph-gi-list > div{padding:5px 9px; border-top:1px solid #eef0f3; white-space:nowrap;}
-  .ph-gi-list > div.ph-gi-h{border-top:none; background:#fafbfc; color:#8a97ac; font-weight:600; font-size:10.5px; text-transform:uppercase;}
-  .ph-gi-list > div.ph-gi-lot{white-space:normal; word-break:break-all; font-family:ui-monospace,monospace; font-size:11.5px;}
-  .ph-gi-list > div.ph-gi-n{text-align:right; font-family:ui-monospace,monospace;}
+  .ph-gi-item{display:contents;}
+  .ph-gi-item > div{padding:5px 9px; border-top:1px solid #eef0f3; white-space:nowrap;}
+  .ph-gi-item > div.ph-gi-h{border-top:none; background:#fafbfc; color:#8a97ac; font-weight:600; font-size:10.5px; text-transform:uppercase;}
+  .ph-gi-item > div.ph-gi-lot{white-space:normal; word-break:break-all; font-family:ui-monospace,monospace; font-size:11.5px;}
+  .ph-gi-item > div.ph-gi-n{text-align:right; font-family:ui-monospace,monospace;}
   .ph-gi-link{color:#2c6fcb; text-decoration:underline dotted; cursor:pointer; font-family:ui-monospace,monospace;}
   .ph-gi-empty{font-size:12px; color:#8a97ac; padding:6px 0;}
   .ph-qr-overlay{position:fixed; inset:0; background:rgba(15,23,42,.55); display:none; align-items:center; justify-content:center; z-index:9999;}
@@ -175,6 +176,31 @@
     .ph-items > tbody.ph-item-group > tr.ph-detail-row > td{padding:0;}
 
     .ph-td-label{display:inline-block; font-size:10.5px; font-weight:700; color:#8a97ac; text-transform:uppercase; flex-shrink:0; text-align:left;}
+
+    /* Không để bảng nào đẩy rộng quá màn hình (trước đây phải lướt ngang mới xem hết): bảng container
+       + bảng mã hàng chuyển hẳn sang khối, bảng Locator cho xuống dòng thay vì kéo dài 1 hàng. */
+    body{padding:14px 12px 60px;}
+    .ph-scroll{overflow-x:visible; border:none; background:transparent; border-radius:0;}
+    .ph-cont-table, .ph-cont-table > tbody{display:block; width:100%;}
+    .ph-cont-table > tbody > tr.ph-cont-detail > td > table.ph-items, .ph-items > tbody.ph-item-group{display:block; width:100%;}
+    .ph-items > tbody.ph-item-group > tr.ph-detail-row{display:block;}
+    .ph-items > tbody.ph-item-group > tr:not(.ph-detail-row){padding:0 12px;}
+    .ph-items > tbody.ph-item-group > tr.ph-detail-row > td{display:block;}
+    .ph-locs-scroll{overflow-x:visible;}
+    .ph-locs{table-layout:auto;}
+    .ph-locs th, .ph-locs td{white-space:normal; word-break:break-word; padding:6px 8px;}
+    .ph-locs td.ph-num{white-space:nowrap; padding-right:10px;}
+    .ph-locs .ph-picked-tag{margin-left:0; margin-top:2px;}
+    /* Danh sách GI: mỗi GI = 1 thẻ nhỏ "Nhãn: Giá trị" thay cho bảng 5 cột */
+    .ph-locs tr.ph-gi-row > td{padding:0 6px 8px 6px;}
+    .ph-gi-wrap{overflow-x:visible;}
+    .ph-gi-list{display:block; min-width:0; border:none; background:transparent;}
+    .ph-gi-item.ph-gi-head{display:none;}
+    .ph-gi-item{display:grid; grid-template-columns:auto 1fr; column-gap:10px; background:#fff; border:1px solid #e3e8ef; border-radius:8px; padding:6px 10px; margin-top:6px;}
+    .ph-gi-item > div{display:contents;}
+    .ph-gi-item > div::before{content:attr(data-l); color:#8a97ac; font-size:10.5px; font-weight:600; text-transform:uppercase; padding:3px 0; align-self:center;}
+    .ph-gi-item > div{word-break:break-all; text-align:left;}
+    .ph-gi-item > div::before{justify-self:start; text-align:left;}
   }
 </style>
 </head>
@@ -337,14 +363,14 @@
     });
     if(!rows.length) return '<div class="ph-gi-empty">Chưa có chi tiết GI cho dòng này (dữ liệu tồn trên Cloud chưa có dữ liệu gốc từng GI — tải lại file tồn kho ở TN5 Dashboard).</div>';
     rows.sort(function(a, b){ return (Number(b[5]) || 0) - (Number(a[5]) || 0) || String(a[6]).localeCompare(String(b[6])); });
-    var html = '<div class="ph-gi-h">GI No.</div><div class="ph-gi-h">Lot No.</div><div class="ph-gi-h">Pallet</div><div class="ph-gi-h">Ngày nhận</div><div class="ph-gi-h" style="text-align:right;">SL</div>';
+    var html = '<div class="ph-gi-item ph-gi-head"><div class="ph-gi-h">GI No.</div><div class="ph-gi-h">Lot No.</div><div class="ph-gi-h">Pallet</div><div class="ph-gi-h">Ngày nhận</div><div class="ph-gi-h" style="text-align:right;">SL</div></div>';
     rows.forEach(function(r){
       var gi = String(r[6] || '').trim();
-      html += '<div>' + (gi ? '<span class="ph-gi-link" data-gi="' + phEsc(gi) + '" title="Bấm để xem mã QR">' + phEsc(gi) + '</span>' : '—') + '</div>' +
-        '<div class="ph-gi-lot">' + phEsc(r[7] || '—') + '</div>' +
-        '<div class="ph-gi-n">' + phEsc(r[8] || '—') + '</div>' +
-        '<div>' + phEsc(r[9] ? r[9] + (r[12] ? ' ' + r[12] : '') : '—') + '</div>' +
-        '<div class="ph-gi-n">' + phFmt(Number(r[5]) || 0) + '</div>';
+      html += '<div class="ph-gi-item"><div class="ph-gi-gi" data-l="GI No.">' + (gi ? '<span class="ph-gi-link" data-gi="' + phEsc(gi) + '" title="Bấm để xem mã QR">' + phEsc(gi) + '</span>' : '—') + '</div>' +
+        '<div class="ph-gi-lot" data-l="Lot No.">' + phEsc(r[7] || '—') + '</div>' +
+        '<div class="ph-gi-n" data-l="Pallet">' + phEsc(r[8] || '—') + '</div>' +
+        '<div data-l="Ngày nhận">' + phEsc(r[9] ? r[9] + (r[12] ? ' ' + r[12] : '') : '—') + '</div>' +
+        '<div class="ph-gi-n" data-l="SL">' + phFmt(Number(r[5]) || 0) + '</div></div>';
     });
     return '<div class="ph-gi-wrap"><div class="ph-gi-list">' + html + '</div></div>';
   };
