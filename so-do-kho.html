@@ -749,8 +749,8 @@
     }).join('') + '</div>';
   }
   function groupKeyOf(loc){ return String(loc).replace(/\d+$/, '').replace(/[-_]+$/, '') || loc; }
-  // Thứ tự khu Tầng Trệt theo đường đi thực tế: FG-TG → dãy A → B → C → ITN → Loading → Aging, các khu khác (Pick…) để cuối.
-  var TRET_ORDER = [/-TG$/i, /FG-A$/i, /FG-B$/i, /FG-C$/i, /ITN/i, /LOADING/i, /AGING/i];
+  // Thứ tự khu Tầng Trệt theo đường đi thực tế: FG-TG → dãy A → B → C → ITN → Pick → Loading → Aging, các khu khác để cuối.
+  var TRET_ORDER = [/-TG$/i, /FG-A$/i, /FG-B$/i, /FG-C$/i, /ITN/i, /PICK/i, /LOADING/i, /AGING/i];
   function tretRank(g){
     for(var i = 0; i < TRET_ORDER.length; i++) if(TRET_ORDER[i].test(g)) return i;
     return TRET_ORDER.length;
@@ -763,7 +763,7 @@
     function groupHtml(g){
       var st = locStats(kho, groups[g]);
       return '<div class="sdk-group"><div class="sdk-group-head">' + esc(g) + '<span>' + fmt(groups[g].length) + ' vị trí · ' + fmt(st.pallets) + '/' + fmt(st.cap) + ' pallet</span></div>' +
-        '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fill, minmax(' + minW + 'px, 1fr));">' + groups[g].map(function(l){ return boxHtml(kho, l); }).join('') + '</div></div>';
+        '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fit, minmax(' + minW + 'px, 1fr));">' + groups[g].map(function(l){ return boxHtml(kho, l); }).join('') + '</div></div>';
     }
     // Tầng Trệt: dãy A/B/C đứng cạnh nhau như mặt bằng thực tế — C bên trái, B ở giữa, A bên phải; mỗi dãy 1 locator / hàng.
     var abc = zone === 'tret' ? ['C', 'B', 'A'].map(function(k){
@@ -828,7 +828,7 @@
     var locs = Object.keys(state.byKho[kho] || {}).sort(naturalCmp);
     if(!locs.length) return '<div class="wh3b-empty">Không có dữ liệu tồn kho cho ' + esc(kho) + ' trong dữ liệu hiện tại.</div>';
     var minW = state.view === 'pallet' ? (kho === 'Kho 3A' ? 110 : 170) : 126;
-    return '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fill, minmax(' + minW + 'px, 1fr));">' + locs.map(function(l){ return boxHtml(kho, l); }).join('') + '</div>';
+    return '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fit, minmax(' + minW + 'px, 1fr));">' + locs.map(function(l){ return boxHtml(kho, l); }).join('') + '</div>';
   }
 
   function legendHtml(){
