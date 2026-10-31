@@ -81,7 +81,6 @@
   .sdk-abc{display:grid; gap:12px; align-items:start; margin-bottom:16px;}
   .sdk-abc > .sdk-group{margin-bottom:0;}
   .sdk-slots{display:grid; gap:3px; margin-top:8px;}
-  .sdk-slots.fill .sdk-slot{aspect-ratio:auto; height:18px; min-width:0;}
   .sdk-slot{
     aspect-ratio:1; min-width:9px; border-radius:3px; box-sizing:border-box; position:relative;
     border:1px dashed var(--line); background:transparent; cursor:default;
@@ -562,8 +561,8 @@
         html += '<span class="sdk-slot" title="Chỗ trống"></span>';
       }
     }
-    // fill (dãy A/B/C, 1 locator / hàng): chia đều bề ngang khung cho sức chứa, mỗi ô pallet kéo dài tối đa.
-    var tpl = fill ? 'repeat(' + Math.min(total, 25) + ', minmax(0, 1fr))'
+    // fill (dãy A/B/C, 1 locator / hàng): ô pallet cùng 1 cỡ vuông cố định, xếp ngang hết khung rồi mới xuống hàng.
+    var tpl = fill ? 'repeat(auto-fill, 18px)'
       : wide ? 'repeat(auto-fill, minmax(14px, 1fr))' : 'repeat(' + cols + ', minmax(9px, 18px))';
     return '<div class="sdk-slots' + (fill ? ' fill' : '') + '" style="grid-template-columns:' + tpl + ';">' + html + '</div>';
   }
