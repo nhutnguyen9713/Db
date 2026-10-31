@@ -83,6 +83,8 @@
   .sdk-abc-body{grid-auto-rows:1fr;}
   .sdk-abc-body > .wh3b-box{margin:0;}
   .sdk-slots{display:grid; gap:3px; margin-top:8px;}
+  /* Chế độ "Một màu": mọi ô pallet cùng 1 màu, chấm NG (::after) và viền vượt sức chứa giữ nguyên. */
+  body.sdk-mono .sdk-slot.filled{background:#4A7FB5 !important;}
   .sdk-slot{
     aspect-ratio:1; min-width:9px; border-radius:3px; box-sizing:border-box; position:relative;
     border:1px dashed var(--line); background:transparent; cursor:default;
@@ -287,6 +289,7 @@
           <div class="wh3b-oqc-toggle">
             <label><input type="checkbox" id="sdk-oqc-pass" checked> PASS</label>
             <label><input type="checkbox" id="sdk-oqc-ng" checked> NG</label>
+            <label title="Tô mọi ô pallet cùng 1 màu (không phân màu theo mã hàng). Chấm NG vẫn hiện."><input type="checkbox" id="sdk-mono"> Một màu</label>
           </div>
         </div>
         <div class="wh3b-legend" id="sdk-legend"></div>
@@ -312,6 +315,7 @@
   var LS_HEATMAP = 'tn5_kho_heatmap_mode_v1';
   var LS_ACTIVE_KHO = 'sdk_active_kho';
   var LS_VIEW = 'sdk_view_mode';
+  var LS_MONO = 'sdk_mono_color';
   // Vị trí KHÔNG gợi ý để cất hàng nhận về: khu sản xuất, picking, loading, khu chờ (TG/ITN).
   var NO_STORE_RE = /prod|pick|loading|-TG$|-ITN$/i;
   // Thứ tự ưu tiên lấy thông tin kết nối đã lưu trên máy: dashboard chính → trang 3 Plan → riêng trang này.
@@ -1235,6 +1239,12 @@
   $('sdk-search').addEventListener('input', function(){ state.pick = null; clearTimeout(searchTimer); searchTimer = setTimeout(applyFilter, 150); });
   $('sdk-oqc-pass').addEventListener('change', applyFilter);
   $('sdk-oqc-ng').addEventListener('change', applyFilter);
+  try{ $('sdk-mono').checked = localStorage.getItem(LS_MONO) === '1'; }catch(e){}
+  document.body.classList.toggle('sdk-mono', $('sdk-mono').checked);
+  $('sdk-mono').addEventListener('change', function(){
+    document.body.classList.toggle('sdk-mono', this.checked);
+    try{ localStorage.setItem(LS_MONO, this.checked ? '1' : '0'); }catch(e){}
+  });
   $('sdk-heatmap-btn').addEventListener('click', function(){
     var modes = ['off', 'qty', 'oqc'];
     state.heatmap = modes[(modes.indexOf(state.heatmap) + 1) % modes.length];
