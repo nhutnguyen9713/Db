@@ -404,6 +404,12 @@
   };
   var cloud = { url:'', token:'' };
   try{ var savedKho = localStorage.getItem(LS_ACTIVE_KHO); if(KHO[savedKho]) state.activeKho = savedKho; }catch(e){}
+  // Mở từ nút "Mở sơ đồ chi tiết" của TN5 Dashboard: ?kho=3B / 3A / 2B / DG1 -> mở thẳng kho đó.
+  (function(){
+    var m = location.search.match(/[?&]kho=([^&]+)/); if(!m) return;
+    var code = decodeURIComponent(m[1]).toUpperCase().replace(/^KHO\s*/, '');
+    Object.keys(KHO).forEach(function(k){ if(KHO[k].code === code){ state.activeKho = k; try{ localStorage.setItem(LS_ACTIVE_KHO, k); }catch(e){} } });
+  })();
   try{ var savedView = localStorage.getItem(LS_VIEW); if(savedView === 'summary' || savedView === 'pallet') state.view = savedView; }catch(e){}
   try{ var savedHeat = localStorage.getItem(LS_HEATMAP); if(['off','qty','oqc'].indexOf(savedHeat) !== -1) state.heatmap = savedHeat; }catch(e){}
 
