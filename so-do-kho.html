@@ -1252,9 +1252,13 @@
   // ở handler của lưới (đổi sang mã + PO mới).
   document.addEventListener('click', function(e){
     if(!state.pick) return;
-    if(e.target.closest('#sdk-pick') || e.target.closest('.sdk-slot.filled')) return;
+    // Dùng composedPath (chụp lúc bấm) thay vì e.target.closest: bấm 1 vị trí trong khung nổi sẽ vẽ lại lưới + khung nổi,
+    // nút vừa bấm bị gỡ khỏi trang nên closest('#sdk-pick') không còn thấy -> trước đây bị bỏ chọn nhầm.
+    var path = e.composedPath ? e.composedPath() : [];
+    var hit = function(sel){ return path.some(function(n){ return n.matches && n.matches(sel); }) || !!e.target.closest(sel); };
+    if(hit('#sdk-pick') || hit('.sdk-slot.filled')) return;
     // Chuyển khu (thẻ khu / nút khu / nút quay lại), đổi kho, đổi chế độ xem, heatmap: giữ nguyên mã đang chọn.
-    if(e.target.closest('[data-zone], .sdk-tab, #sdk-view-toggle, #sdk-heatmap-btn, #sdk-refresh-btn')) return;
+    if(hit('[data-zone], .sdk-tab, #sdk-view-toggle, #sdk-heatmap-btn, #sdk-refresh-btn')) return;
     setPick(null);
   });
   document.addEventListener('keydown', function(e){
