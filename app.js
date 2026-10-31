@@ -1424,7 +1424,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.01';
+const APP_VERSION = 'v4.02';
 const APP_VERSION_DATE = '31/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -1654,6 +1654,22 @@ function parseDateCell(v){
   return null;
 }
 
+// Giờ nhận (HH:mm) từ ô "Receive Date" có kèm giờ: số serial Excel -> phần lẻ; chuỗi -> tìm "hh:mm".
+// Ô chỉ có ngày (không có phần giờ) -> ''.
+function receiveTimeOfCell(v){
+  if(v === null || v === undefined || v === '') return '';
+  const pad = n => String(n).padStart(2,'0');
+  if(typeof v === 'number'){
+    const totalMin = Math.round((v - Math.floor(v)) * 24 * 60) % (24 * 60);
+    return totalMin ? `${pad(Math.floor(totalMin/60))}:${pad(totalMin%60)}` : '';
+  }
+  if(v instanceof Date && !isNaN(v)){
+    return (v.getHours() || v.getMinutes()) ? `${pad(v.getHours())}:${pad(v.getMinutes())}` : '';
+  }
+  const m = String(v).match(/(\d{1,2}):(\d{2})/);
+  return m ? `${pad(Number(m[1]))}:${m[2]}` : '';
+}
+
 function formatTimeCell(v){
   if(v === null || v === undefined || v === '') return '';
   const pad = n => String(n).padStart(2,'0');
@@ -1854,12 +1870,13 @@ function computeAggregates(rows){
     const buyer = (colBuyer !== -1 && r[colBuyer]) ? String(r[colBuyer]).trim() : 'Khac';
     const custpo = (colCustPo !== -1 && r[colCustPo] !== null && r[colCustPo] !== undefined && String(r[colCustPo]).trim() !== '') ? String(r[colCustPo]).trim() : '(Khong co)';
     const dt = colDate !== -1 ? parseDateCell(r[colDate]) : null;
+    const tm = colDate !== -1 ? receiveTimeOfCell(r[colDate]) : '';
     const pallet = colPallet !== -1 ? r[colPallet] : null;
     const gi = colGI !== -1 && r[colGI] != null ? String(r[colGI]).trim() : '';
     const lot = colLot !== -1 && r[colLot] != null ? String(r[colLot]).trim() : '';
     const ref = colRef !== -1 && r[colRef] != null ? String(r[colRef]).trim() : '';
     const kho = classifyKho(locator);
-    data.push({item, locator: locator!=null?String(locator):'—', qty, oqc: oqc || 'Khac', buyer, custpo, dt, pallet, gi, lot, kho, ref});
+    data.push({item, locator: locator!=null?String(locator):'—', qty, oqc: oqc || 'Khac', buyer, custpo, dt, pallet, gi, lot, kho, ref, tm});
   }
   if(!data.length) throw new Error('Không đọc được dòng dữ liệu hợp lệ nào.');
 
@@ -1972,7 +1989,8 @@ function computeAggregates(rows){
     raw_rows: data.map(d => [
       d.kho, d.item, d.custpo, d.locator, d.oqc, d.qty,
       d.gi || '', d.lot || '', d.pallet != null ? String(d.pallet) : '',
-      d.dt ? fmtDate(d.dt) : '', d.buyer || '', d.ref || ''
+      d.dt ? fmtDate(d.dt) : '', d.buyer || '', d.ref || '',
+      d.tm || ''   // [12] giờ nhận "HH:mm" (Receive Date có kèm giờ) — tách riêng để không đổi cột ngày [9]
     ]),
   };
 }
@@ -8074,7 +8092,7 @@ function createSearchController(ids){
         <td>${giCellHtml(r[6])}</td>
         <td>${r[7] || '—'}</td>
         <td>${r[8] || '—'}</td>
-        <td>${r[9] || '—'}</td>
+        <td>${r[9] ? r[9] + (r[12] ? ' ' + r[12] : '') : '—'}</td>
         <td>${r[10] || '—'}</td>
         <td>${r[11] || '—'}</td>
       </tr>`).join('');
