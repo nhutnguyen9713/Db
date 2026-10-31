@@ -78,8 +78,10 @@
 
   /* ===== Chế độ "Từng pallet": mỗi ô nhỏ = 1 pallet, tô màu theo mã hàng ===== */
   .sdk-grid-scroll{overflow-x:auto; padding-bottom:4px;}
-  .sdk-abc{display:grid; gap:12px; align-items:start; margin-bottom:16px;}
-  .sdk-abc > .sdk-group{margin-bottom:0;}
+  .sdk-abc{display:grid; column-gap:14px; row-gap:10px;}
+  .sdk-abc-head{margin-bottom:10px;}
+  .sdk-abc-body{grid-auto-rows:1fr;}
+  .sdk-abc-body > .wh3b-box{margin:0;}
   .sdk-slots{display:grid; gap:3px; margin-top:8px;}
   .sdk-slot{
     aspect-ratio:1; min-width:9px; border-radius:3px; box-sizing:border-box; position:relative;
@@ -758,11 +760,10 @@
     locs.forEach(function(l){ var g = groupKeyOf(l); if(!groups[g]){ groups[g] = []; order.push(g); } groups[g].push(l); });
     order.sort(function(a, b){ return (zone === 'tret' ? tretRank(a) - tretRank(b) : 0) || naturalCmp(a, b); });
     var minW = state.view === 'pallet' ? 170 : 126;
-    function groupHtml(g, oneCol){
+    function groupHtml(g){
       var st = locStats(kho, groups[g]);
-      var cols = oneCol ? 'minmax(0, 1fr)' : 'repeat(auto-fill, minmax(' + minW + 'px, 1fr))';
       return '<div class="sdk-group"><div class="sdk-group-head">' + esc(g) + '<span>' + fmt(groups[g].length) + ' vị trí · ' + fmt(st.pallets) + '/' + fmt(st.cap) + ' pallet</span></div>' +
-        '<div class="wh3b-grid" style="grid-template-columns:' + cols + ';">' + groups[g].map(function(l){ return boxHtml(kho, l, '', false, oneCol); }).join('') + '</div></div>';
+        '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fill, minmax(' + minW + 'px, 1fr));">' + groups[g].map(function(l){ return boxHtml(kho, l); }).join('') + '</div></div>';
     }
     // Tầng Trệt: dãy A/B/C đứng cạnh nhau như mặt bằng thực tế — C bên trái, B ở giữa, A bên phải; mỗi dãy 1 locator / hàng.
     var abc = zone === 'tret' ? ['C', 'B', 'A'].map(function(k){
@@ -773,7 +774,17 @@
       if(abc.indexOf(g) < 0){ out.push(groupHtml(g)); return; }
       if(abcDone) return;
       abcDone = true;
-      out.push('<div class="sdk-grid-scroll"><div class="sdk-abc" style="grid-template-columns:repeat(' + abc.length + ', minmax(' + (minW + 26) + 'px, 1fr));">' + abc.map(function(g){ return groupHtml(g, true); }).join('') + '</div></div>');
+      // 1 lưới chung cho cả 3 dãy: hàng thứ i = locator thứ i của C | B | A → khung cùng cỡ, thẳng hàng nhau.
+      var colTpl = 'grid-template-columns:repeat(' + abc.length + ', minmax(' + (minW + 26) + 'px, 1fr));';
+      var heads = abc.map(function(g){
+        var st = locStats(kho, groups[g]);
+        return '<div class="sdk-group-head" style="margin-bottom:0">' + esc(g) + '<span>' + fmt(groups[g].length) + ' vị trí · ' + fmt(st.pallets) + '/' + fmt(st.cap) + ' pallet</span></div>';
+      }).join('');
+      var nRows = Math.max.apply(null, abc.map(function(g){ return groups[g].length; }));
+      var cells = '';
+      for(var i = 0; i < nRows; i++) abc.forEach(function(g){ var l = groups[g][i]; cells += l ? boxHtml(kho, l, '', false, true) : '<div></div>'; });
+      out.push('<div class="sdk-group sdk-grid-scroll"><div class="sdk-abc sdk-abc-head" style="' + colTpl + '">' + heads + '</div>' +
+        '<div class="sdk-abc sdk-abc-body" style="' + colTpl + '">' + cells + '</div></div>');
     });
     return out.join('');
   }
