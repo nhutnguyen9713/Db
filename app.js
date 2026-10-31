@@ -1424,8 +1424,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v3.98';
-const APP_VERSION_DATE = '30/10/2026';
+const APP_VERSION = 'v3.99';
+const APP_VERSION_DATE = '31/10/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -5861,6 +5861,9 @@ async function exportCombinedPlanToExcel(mode){
   const trackWidth1 = (idx, text) => { const len = String(text==null?'':text).length; if(len > colMaxLen1[idx]) colMaxLen1[idx] = len; };
 
   const loadedDoneContainerKeys = computeLoadedDoneContainerKeys();
+  // Nút "Kèm cont xong" (v3.99): khi tick thì xuất luôn các cont đã Pick xong (nền xanh) / Load xong (nền tím).
+  const includeDoneConts = !!(document.getElementById('chk-export-include-done') || {}).checked;
+  const FILL_PICK_DONE = 'FFC6EFCE', FILL_LOAD_DONE = 'FFE4DCFA';
 
   // Dàn phẳng ra 1 dòng/(mã, container) — mã nào dùng nhiều container thì lặp lại đủ số dòng; mã nào
   // không có container nào thì vẫn giữ 1 dòng (cột container để trống), groupKey riêng theo mã đó để
@@ -5872,7 +5875,7 @@ async function exportCombinedPlanToExcel(mode){
   const endBuyerMap = buildEndBuyerPoMap();
   combined.rows.forEach(r => {
     const allContainers = buildItemContainerList(r.item, r.anyPO ? '' : r.custpo);
-    const containers = allContainers.filter(c => !loadedDoneContainerKeys.has(`${c.type}|${c.cNo}|${c.loadDate}|${c.planTime}`));
+    const containers = includeDoneConts ? allContainers : allContainers.filter(c => !loadedDoneContainerKeys.has(`${c.type}|${c.cNo}|${c.loadDate}|${c.planTime}`));
     if(containers.length){
       containers.forEach(c => exportEntries.push({
         r, c,
@@ -5918,12 +5921,14 @@ async function exportCombinedPlanToExcel(mode){
     const isGroupFirst = groupKey !== prevGroupKey;
     if(isGroupFirst) groupIndex++;
     prevGroupKey = groupKey;
-    const fillColor = groupIndex % 2 === 0 ? FILL_A : FILL_B;
+    const contDone = !!(c && loadedDoneContainerKeys.has(groupKey));
+    const doneFill = contDone ? (c.isShipDone ? FILL_LOAD_DONE : FILL_PICK_DONE) : null;
+    const fillColor = doneFill || (groupIndex % 2 === 0 ? FILL_A : FILL_B);
     const leftAlignCols = new Set([contHeaders.length + 1, contHeaders.length + 2, contHeaders.length + 4]); // Item No./Cust PO/Picking
     const row = ws1.addRow(rowValues);
-    imgRows.push({ values: rowValues, fill: fillColor, first: isGroupFirst });
+    imgRows.push({ values: rowValues, fill: fillColor, first: isGroupFirst, done: !!doneFill });
     row.eachCell((cell, colNumber) => {
-      cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: highlightColorByCol.get(colNumber) || fillColor } };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: doneFill || highlightColorByCol.get(colNumber) || fillColor } };
       cell.alignment = { vertical:'middle', horizontal: leftAlignCols.has(colNumber) ? 'left' : 'center' };
       cell.border = {
         top: isGroupFirst ? thick : thin,
@@ -5980,6 +5985,11 @@ async function exportCombinedPlanToExcel(mode){
 
 const btnExportCombinedPlan = document.getElementById('btn-export-combined-plan');
 if(btnExportCombinedPlan) btnExportCombinedPlan.addEventListener('click', () => exportCombinedPlanToExcel('excel'));
+const chkExportIncludeDone = document.getElementById('chk-export-include-done');
+if(chkExportIncludeDone){
+  try{ chkExportIncludeDone.checked = localStorage.getItem('tn5_export_include_done') === '1'; }catch(e){}
+  chkExportIncludeDone.addEventListener('change', () => { try{ localStorage.setItem('tn5_export_include_done', chkExportIncludeDone.checked ? '1' : '0'); }catch(e){} });
+}
 const btnCombinedPlanImg = document.getElementById('btn-combined-plan-img');
 if(btnCombinedPlanImg) btnCombinedPlanImg.addEventListener('click', () => exportCombinedPlanToExcel('image-save'));
 const btnCombinedPlanShare = document.getElementById('btn-combined-plan-share');
@@ -6017,7 +6027,7 @@ function drawCombinedPlanImage(headers, rows, colorByCol, nContCols, share){
   headers.forEach((h,i) => cell(i, 1, headH, colorByCol.has(i+1) ? argb(colorByCol.get(i+1)) : '#EFEFEF', h, true, false));
   rows.forEach((r, ri) => {
     const y = 1 + headH + ri * rowH;
-    r.values.forEach((v,i) => cell(i, y, rowH, colorByCol.has(i+1) ? argb(colorByCol.get(i+1)) : argb(r.fill), String(v == null ? '' : v), false, i === nContCols || i === nContCols + 1));
+    r.values.forEach((v,i) => cell(i, y, rowH, (!r.done && colorByCol.has(i+1)) ? argb(colorByCol.get(i+1)) : argb(r.fill), String(v == null ? '' : v), false, i === nContCols || i === nContCols + 1));
     if(r.first){ g.strokeStyle = '#222'; g.lineWidth = 2; g.beginPath(); g.moveTo(1, y); g.lineTo(W - 1, y); g.stroke(); }
   });
   g.strokeStyle = '#222'; g.lineWidth = 2;
