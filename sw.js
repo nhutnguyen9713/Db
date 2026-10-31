@@ -6,11 +6,11 @@
 // (2) bỏ query ?_t=... khỏi khoá cache (trước đây mỗi lần mở tạo thêm 1 mục không bao giờ bị dọn, và mở
 // offline không khớp được); (3) thêm doi-chieu.html / tong-hop-3-plan.html vào precache và
 // cài từng file riêng để 1 file lỗi không làm hỏng cả lô.
-const CACHE_NAME = 'tn5-dashboard-v5';
+const CACHE_NAME = 'tn5-dashboard-v6';
 const NETWORK_TIMEOUT_MS = 4000;
 const CORE_ASSETS = [
   './', './index.html', './app.js', './styles.css', './manifest.json', './icon-192.png', './icon-512.png',
-  './icon-512-maskable.png', './doi-chieu.html', './tong-hop-3-plan.html'
+  './icon-512-maskable.png', './doi-chieu.html', './tong-hop-3-plan.html', './so-do-kho.html'
 ];
 
 // Khoá cache = URL không có query "_t" (tham số chống cache của cổng khoá) — các query khác giữ nguyên.
