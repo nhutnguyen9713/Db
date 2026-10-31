@@ -78,6 +78,8 @@
 
   /* ===== Chế độ "Từng pallet": mỗi ô nhỏ = 1 pallet, tô màu theo mã hàng ===== */
   .sdk-grid-scroll{overflow-x:auto; padding-bottom:4px;}
+  .sdk-abc{display:grid; gap:12px; align-items:start; margin-bottom:16px;}
+  .sdk-abc > .sdk-group{margin-bottom:0;}
   .sdk-slots{display:grid; gap:3px; margin-top:8px;}
   .sdk-slot{
     aspect-ratio:1; min-width:9px; border-radius:3px; box-sizing:border-box; position:relative;
@@ -754,11 +756,23 @@
     locs.forEach(function(l){ var g = groupKeyOf(l); if(!groups[g]){ groups[g] = []; order.push(g); } groups[g].push(l); });
     order.sort(function(a, b){ return (zone === 'tret' ? tretRank(a) - tretRank(b) : 0) || naturalCmp(a, b); });
     var minW = state.view === 'pallet' ? 170 : 126;
-    return order.map(function(g){
+    function groupHtml(g){
       var st = locStats(kho, groups[g]);
       return '<div class="sdk-group"><div class="sdk-group-head">' + esc(g) + '<span>' + fmt(groups[g].length) + ' vị trí · ' + fmt(st.pallets) + '/' + fmt(st.cap) + ' pallet</span></div>' +
         '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fill, minmax(' + minW + 'px, 1fr));">' + groups[g].map(function(l){ return boxHtml(kho, l); }).join('') + '</div></div>';
-    }).join('');
+    }
+    // Tầng Trệt: dãy A/B/C đứng cạnh nhau như mặt bằng thực tế — C bên trái, B ở giữa, A bên phải.
+    var abc = zone === 'tret' ? ['C', 'B', 'A'].map(function(k){
+      return order.filter(function(g){ return new RegExp('FG-' + k + '$', 'i').test(g); })[0];
+    }).filter(Boolean) : [];
+    var out = [], abcDone = false;
+    order.forEach(function(g){
+      if(abc.indexOf(g) < 0){ out.push(groupHtml(g)); return; }
+      if(abcDone) return;
+      abcDone = true;
+      out.push('<div class="sdk-grid-scroll"><div class="sdk-abc" style="grid-template-columns:repeat(' + abc.length + ', minmax(' + (minW + 26) + 'px, 1fr));">' + abc.map(groupHtml).join('') + '</div></div>');
+    });
+    return out.join('');
   }
   // Rack: mỗi dãy là 1 mặt kệ nhìn thẳng — cột = bay (n→1, bay 1 nằm bên phải), hàng = tầng (T5 trên cùng → T1 dưới cùng).
   function renderRack(kho, locs){
