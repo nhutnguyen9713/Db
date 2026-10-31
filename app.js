@@ -1425,8 +1425,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.09';
-const APP_VERSION_DATE = '31/10/2026';
+const APP_VERSION = 'v4.10';
+const APP_VERSION_DATE = '01/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -13703,6 +13703,30 @@ function txGroupBySetId(records){
   return [...bySetId.values()];
 }
 
+// ===== Nguồn tính Transfer Xuất/Nhận (tick ở panel "Chuyển pallet (Transfer)") =====
+// itn  : Menu Name "ITN Transfer" (Xuất) / "ITN Receiving" (Nhận) — cách tính mặc định trước đây.
+// move : Menu Name "Move Pallet" có 1 đầu là locator khu ITN (VD DG2-FG-ITN): đến ITN = Xuất, từ ITN = Nhận.
+// Tick cả 2 = cộng gộp. Ảnh hưởng bảng tổng hợp, bảng chi tiết, KPI và biểu đồ. Lưu trong localStorage.
+const TX_TRANSFER_SRC_KEY = 'tn5_tx_transfer_src_v1';
+var txTransferSrc = { itn: true, move: false };
+try{
+  const saved = JSON.parse(localStorage.getItem(TX_TRANSFER_SRC_KEY) || 'null');
+  if(saved && typeof saved === 'object') txTransferSrc = { itn: saved.itn !== false, move: !!saved.move };
+}catch(e){}
+function txLocatorIsItn(locator){ return /(^|-)ITN(-|$)/i.test(String(locator || '').trim()); }
+function txIsMovePalletMenu(menuName){ return String(menuName || '').trim().toLowerCase() === 'move pallet'; }
+function txIsTransferXuat(d){
+  if(txTransferSrc.itn && d.menuName === 'ITN Transfer') return true;
+  return !!(txTransferSrc.move && txIsMovePalletMenu(d.menuName) && txLocatorIsItn(d.locatorDen) && !txLocatorIsItn(d.locatorXuat));
+}
+function txIsTransferNhap(d){
+  if(txTransferSrc.itn && d.menuName === 'ITN Receiving') return true;
+  return !!(txTransferSrc.move && txIsMovePalletMenu(d.menuName) && txLocatorIsItn(d.locatorXuat) && !txLocatorIsItn(d.locatorDen));
+}
+function txTransferSrcLabel(){
+  return txTransferSrc.itn && txTransferSrc.move ? 'ITN + Move Pallet' : (txTransferSrc.move ? 'Move Pallet' : (txTransferSrc.itn ? 'ITN' : 'không chọn nguồn'));
+}
+
 // Phân loại 1 giao dịch (1 nhóm Set ID) thành Nhận / Chuyển / Pick cont — DÙNG CHUNG cho cả bảng chi
 // tiết lẫn các bảng tổng hợp, để 2 nơi không bao giờ phân loại lệch nhau. kind = null: không tính
 // (SHIP / dòng không có Menu Name / các Menu Name khác không thuộc 3 loại này — VD "Move Pallet",
@@ -13726,7 +13750,7 @@ function txDescribeSet(group, locatorKhoMap){
   let kind = null, kho = '—';
   if(transType === 'RECEIVE'){ kind = 'receive'; kho = resolveKhoForLocator(locatorDen || first.locator, locatorKhoMap); }
   else if(isPicking){ kind = 'picking'; kho = resolveKhoForLocator(locatorXuat, locatorKhoMap); }
-  else if(menuName === 'ITN Transfer'){ kind = 'transfer'; kho = resolveKhoForLocator(locatorXuat, locatorKhoMap); }
+  else if(txIsTransferXuat({ menuName, locatorXuat, locatorDen })){ kind = 'transfer'; kho = resolveKhoForLocator(locatorXuat, locatorKhoMap); }
   else { kind = null; }
   const crCodes = kind === 'picking' ? (reference.match(/CR\d+/gi) || []).map(c => c.toUpperCase()) : [];
   return { first, transType, menuName, item, user, locatorXuat, locatorDen, dt, qty, reference, gi, kind, kho, crCodes };
@@ -13950,6 +13974,23 @@ function txMasterSave(){
   try{ LS.setItem(TX_MASTER_STORAGE_KEY, JSON.stringify(txMasterMap)); }
   catch(err){ console.warn('Không lưu được bảng Master:', err); }
 }
+// Đổi tick nguồn Transfer (ITN / Move Pallet) -> tính lại toàn bộ từ records rồi vẽ lại (bảng, KPI, biểu đồ).
+function txSyncTransferSrcUi(){
+  document.querySelectorAll('[data-tx-transfer-src]').forEach(cb => { cb.checked = !!txTransferSrc[cb.dataset.txTransferSrc]; });
+  const x = document.getElementById('tx-transfer-xuat-subhead'), n = document.getElementById('tx-transfer-nhap-subhead');
+  if(x) x.textContent = `↗ Xuất — ${txTransferSrc.itn ? 'ITN Transfer' : ''}${txTransferSrc.itn && txTransferSrc.move ? ' + ' : ''}${txTransferSrc.move ? 'Move Pallet vào khu ITN' : ''}` + (!txTransferSrc.itn && !txTransferSrc.move ? '(chưa chọn nguồn)' : '');
+  if(n) n.textContent = `↙ Nhận — ${txTransferSrc.itn ? 'ITN Receiving' : ''}${txTransferSrc.itn && txTransferSrc.move ? ' + ' : ''}${txTransferSrc.move ? 'Move Pallet ra khỏi khu ITN' : ''}` + (!txTransferSrc.itn && !txTransferSrc.move ? '(chưa chọn nguồn)' : '');
+}
+document.addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-tx-transfer-src]');
+  if(!cb) return;
+  txTransferSrc[cb.dataset.txTransferSrc] = cb.checked;
+  try{ localStorage.setItem(TX_TRANSFER_SRC_KEY, JSON.stringify(txTransferSrc)); }catch(err){}
+  txSyncTransferSrcUi();
+  txRecomputeFromRecords();
+});
+document.addEventListener('DOMContentLoaded', txSyncTransferSrcUi);
+setTimeout(txSyncTransferSrcUi, 0);
 function txRecomputeFromRecords(){
   if(!txState || !txState.records) return;
   const stats = txBuildStatsFromRecords(txState.records, txMasterMap);
@@ -14805,8 +14846,8 @@ function txKpiItems(){
   return [
     { label:'TỔNG DÒNG', value:k.nRows, foot:'dòng giao dịch trong file' },
     { label:'RECEIVE', value:k.countReceive, foot:`${fmt(k.receiveGroups)} dòng thống kê`, cls:'accent' },
-    { label:'TRANSFER · XUẤT', value:k.transferTotal, foot:`${fmt(k.transferGroups)} dòng thống kê / ${fmt(k.countTransfer)} bản ghi ITN Transfer`, cls:'good' },
-    { label:'TRANSFER · NHẬN', value:sumTotal(tn), foot:`${fmt(rowsOf(tn))} dòng thống kê · ITN Receiving`, cls:'good' },
+    { label:'TRANSFER · XUẤT', value:k.transferTotal, foot:`${fmt(k.transferGroups)} dòng thống kê / ${fmt(k.countTransfer)} lượt · ${txTransferSrcLabel()}`, cls:'good' },
+    { label:'TRANSFER · NHẬN', value:sumTotal(tn), foot:`${fmt(rowsOf(tn))} dòng thống kê · ${txTransferSrcLabel()}`, cls:'good' },
     { label:'PUT AWAY', value:sumTotal(pa), foot:`${fmt(rowsOf(pa))} dòng thống kê · cất hàng từ FG-TG` },
     { label:'PUT AWAY (MENU)', value:(txState.putawayMenu || {}).trans || 0, foot:`${fmt((txState.putawayMenu || {}).rows || 0)} dòng Menu Name "Put Away" · SL ${fmt((txState.putawayMenu || {}).qty || 0)}`, cls:'redbg' },
     { label:'PICKING', value:k.pickingTotal, foot:`${fmt(k.pickingGroups)} dòng thống kê / ${fmt(k.countPicking)} bản ghi Pick Order` },
@@ -15074,7 +15115,7 @@ function txBuildTransferNhapSummaries(records){
   };
   for(const group of txGroupBySetId(records || [])){
     const d = txDescribeSet(group, locatorKhoMap);
-    if(d.menuName !== 'ITN Receiving') continue;
+    if(!txIsTransferNhap(d)) continue;
     if(!d.locatorXuat || !d.locatorDen) continue;
     const kho = resolveKhoForLocator(d.locatorDen, locatorKhoMap);
     bump(byKho, kho || '—', d.qty, d.user, null);
@@ -15095,7 +15136,7 @@ function renderTxTransferNhapSummaries(){
   const khoRows = [...s.byKho.values()].sort(byCountDesc);
   const userRows = [...s.byUser.values()].sort(txUserByKhoCmp);
   if(!khoRows.length){
-    grid.innerHTML = '<div class="tx-sum-empty">Không có giao dịch ITN Receiving trong file.</div>';
+    grid.innerHTML = `<div class="tx-sum-empty">Không có giao dịch Transfer Nhận (${escHtml(txTransferSrcLabel())}) trong file.</div>`;
     return;
   }
   const totalCount = khoRows.reduce((t, r) => t + r.count, 0);
@@ -15120,7 +15161,7 @@ function txBuildTransferNhapDetailRows(records){
   const map = new Map();
   for(const group of txGroupBySetId(records || [])){
     const d = txDescribeSet(group, locatorKhoMap);
-    if(d.menuName !== 'ITN Receiving') continue;
+    if(!txIsTransferNhap(d)) continue;
     if(!d.locatorXuat || !d.locatorDen) continue;
     const kho = resolveKhoForLocator(d.locatorDen, locatorKhoMap);
     const key = [kho, d.menuName, d.item, d.locatorXuat, d.locatorDen, d.user].join('||');
@@ -15444,6 +15485,8 @@ function txCollectMovePalletCandidates(records, masterMap){
     const d = txDescribeSet(group, locatorKhoMap);
     if(String(d.menuName || '').trim().toLowerCase() !== 'move pallet') continue;
     if(!d.locatorXuat || !d.locatorDen) continue;
+    // Đang tính Move Pallet ra/vào khu ITN là Transfer -> bỏ khỏi bảng Move Pallet để không đếm 2 lần.
+    if(txTransferSrc.move && (txLocatorIsItn(d.locatorXuat) !== txLocatorIsItn(d.locatorDen))) continue;
     if(String(d.locatorXuat).trim().toUpperCase() === String(d.locatorDen).trim().toUpperCase()) continue; // phải sang locator KHÁC
     if(txLocatorIsPutAwayStaging(d.locatorXuat) && !txLocatorIsPutAwayStaging(d.locatorDen)) continue; // đã là Put Away
     // Đã thuộc logic Lên/Xuống khu lầu 3AFG hoặc Lên/Xuống Rack (1 đầu thuộc khu đó, đầu kia không) -> loại.
