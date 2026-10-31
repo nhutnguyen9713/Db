@@ -81,6 +81,7 @@
   .sdk-abc{display:grid; gap:12px; align-items:start; margin-bottom:16px;}
   .sdk-abc > .sdk-group{margin-bottom:0;}
   .sdk-slots{display:grid; gap:3px; margin-top:8px;}
+  .sdk-slots.fill .sdk-slot{aspect-ratio:auto; height:18px; min-width:0;}
   .sdk-slot{
     aspect-ratio:1; min-width:9px; border-radius:3px; box-sizing:border-box; position:relative;
     border:1px dashed var(--line); background:transparent; cursor:default;
@@ -480,7 +481,7 @@
     return '';
   }
   var stats = { locators:0, pallets:0, full:0 };
-  function boxHtml(kho, loc, posStyle, mini){
+  function boxHtml(kho, loc, posStyle, mini, fill){
     var rows = (state.byKho[kho] || {})[loc] || [];
     var s = boxStats(kho, loc, rows);
     stats.locators++; stats.pallets += s.count; if(s.level === 'full') stats.full++;
@@ -490,7 +491,7 @@
     // Vị trí sức chứa lớn (≥ 60 pallet, VD khu chờ FG-TG 500) ở chế độ Từng pallet: trải hết chiều ngang
     // của khu, ô pallet tự xếp kín theo bề rộng thay vì dồn thành 1 cột dài hẹp.
     var wide = !mini && state.view === 'pallet' && s.maxPallet >= 60 && !posStyle;
-    var style = (posStyle || '') + (wide ? 'grid-column:1 / -1;' : '') + heatStyle(s);
+        var style = (posStyle || '') + (wide ? 'grid-column:1 / -1;' : '') + heatStyle(s);
     var title = s.count > 0
       ? loc + ' — SL: ' + fmt(s.qtyTotal) + ' (PASS ' + fmt(s.passQty) + ' / NG ' + fmt(s.ngQty) + ') · Bấm để xem chi tiết'
       : 'Bấm để xem chi tiết pallet tại ' + loc;
@@ -513,7 +514,7 @@
         '<span class="wh3b-box-count">' + fmt(s.count) + '<span class="wh3b-box-max">/' + fmt(s.maxPallet) + '</span>' + over + '</span>' +
         (isPallet ? '' : '<span class="wh3b-box-fill"><span class="wh3b-box-fill-bar" style="width:' + s.pct + '%"></span></span>') +
       '</button>' +
-      (isPallet ? slotsHtml(loc, rows, s.maxPallet, incomingN, wide) : '') +
+      (isPallet ? slotsHtml(loc, rows, s.maxPallet, incomingN, wide, fill && !mini) : '') +
       '</div>';
   }
 
@@ -542,7 +543,7 @@
       return (cnt[kb] - cnt[ka]) || ka.localeCompare(kb) || String(a[RAW.custpo] || '').localeCompare(String(b[RAW.custpo] || ''));
     });
   }
-  function slotsHtml(loc, rows, cap, incomingN, wide){
+  function slotsHtml(loc, rows, cap, incomingN, wide, fill){
     var sorted = groupRows(rows);
     var total = Math.max(cap, sorted.length + incomingN);
     var cols = slotCols(Math.max(cap, total > cap ? cap : total));
@@ -561,8 +562,10 @@
         html += '<span class="sdk-slot" title="Chỗ trống"></span>';
       }
     }
-    var tpl = wide ? 'repeat(auto-fill, minmax(14px, 1fr))' : 'repeat(' + cols + ', minmax(9px, 18px))';
-    return '<div class="sdk-slots" style="grid-template-columns:' + tpl + ';">' + html + '</div>';
+    // fill (dãy A/B/C, 1 locator / hàng): chia đều bề ngang khung cho sức chứa, mỗi ô pallet kéo dài tối đa.
+    var tpl = fill ? 'repeat(' + Math.min(total, 25) + ', minmax(0, 1fr))'
+      : wide ? 'repeat(auto-fill, minmax(14px, 1fr))' : 'repeat(' + cols + ', minmax(9px, 18px))';
+    return '<div class="sdk-slots' + (fill ? ' fill' : '') + '" style="grid-template-columns:' + tpl + ';">' + html + '</div>';
   }
 
   /* ============ Nhận hàng: gợi ý vị trí cất để GOM cùng mã về 1 chỗ ============
@@ -760,7 +763,7 @@
       var st = locStats(kho, groups[g]);
       var cols = oneCol ? 'minmax(0, 1fr)' : 'repeat(auto-fill, minmax(' + minW + 'px, 1fr))';
       return '<div class="sdk-group"><div class="sdk-group-head">' + esc(g) + '<span>' + fmt(groups[g].length) + ' vị trí · ' + fmt(st.pallets) + '/' + fmt(st.cap) + ' pallet</span></div>' +
-        '<div class="wh3b-grid" style="grid-template-columns:' + cols + ';">' + groups[g].map(function(l){ return boxHtml(kho, l); }).join('') + '</div></div>';
+        '<div class="wh3b-grid" style="grid-template-columns:' + cols + ';">' + groups[g].map(function(l){ return boxHtml(kho, l, '', false, oneCol); }).join('') + '</div></div>';
     }
     // Tầng Trệt: dãy A/B/C đứng cạnh nhau như mặt bằng thực tế — C bên trái, B ở giữa, A bên phải; mỗi dãy 1 locator / hàng.
     var abc = zone === 'tret' ? ['C', 'B', 'A'].map(function(k){
