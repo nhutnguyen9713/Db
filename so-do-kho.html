@@ -904,9 +904,9 @@
 
   /* ============ Tìm kiếm + lọc PASS/NG — giống whApplySearchFilter() trong app.js ============ */
   function detailTable(rows){
-    return '<div class="plan-table-wrap"><table class="plan-detail-table"><thead><tr><th>#</th><th>Locator</th><th>Item No.</th><th>Cust PO</th><th>OQC</th><th style="text-align:right">SL tồn</th><th>GI No.</th><th>Lot No.</th></tr></thead><tbody>' +
+    return '<div class="plan-table-wrap"><table class="plan-detail-table"><thead><tr><th>#</th><th>Locator</th><th>Item No.</th><th>Cust PO</th><th>OQC</th><th style="text-align:right">SL tồn</th><th>GI No.</th><th>Lot No.</th><th>Pallet</th></tr></thead><tbody>' +
       rows.map(function(r, i){
-        return '<tr><td>' + (i + 1) + '</td><td>' + esc(r[RAW.locator]) + '</td><td>' + esc(r[RAW.item]) + '</td><td>' + esc(r[RAW.custpo]) + '</td><td>' + oqcBadge(r[RAW.oqc]) + '</td><td class="num">' + fmt(r[RAW.qty]) + '</td><td>' + esc(r[RAW.gi] || '—') + '</td><td>' + esc(r[RAW.lot] || '—') + '</td></tr>';
+        return '<tr><td>' + (i + 1) + '</td><td>' + esc(r[RAW.locator]) + '</td><td>' + esc(r[RAW.item]) + '</td><td>' + esc(r[RAW.custpo]) + '</td><td>' + oqcBadge(r[RAW.oqc]) + '</td><td class="num">' + fmt(r[RAW.qty]) + '</td><td>' + esc(r[RAW.gi] || '—') + '</td><td>' + esc(r[RAW.lot] || '—') + '</td><td>' + esc(r[RAW.pallet] || '—') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
   function sortRows(rows){
