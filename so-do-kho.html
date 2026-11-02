@@ -239,6 +239,7 @@
   .sdk-consol-move .loc.dst{border-color:var(--teal); color:var(--teal);}
   .sdk-consol-btns{display:flex; gap:6px; flex-wrap:wrap;}
   .sdk-consol-btns button{padding:7px 12px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--text); font-size:12.5px; cursor:pointer;}
+  .sdk-consol-btns select{padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); font-size:12.5px;}
   .sdk-consol-btns kbd{font:600 10px var(--mono); padding:0 4px; border:1px solid currentColor; border-radius:4px; opacity:.7; margin-left:4px;}
   .sdk-consol-btns button.active{background:var(--violet); border-color:var(--violet); color:#fff;}
   .sdk-consol-btns button.main{background:var(--teal); border-color:var(--teal); color:#fff; font-weight:700;}
@@ -978,6 +979,8 @@
       '<div class="sdk-consol-btns"><button type="button" data-consol="prev"' + (c.cur ? '' : ' disabled') + ' title="Phím ←">◀ Bước trước <kbd>←</kbd></button>' +
       '<button type="button" class="main" data-consol="done" title="Phím Enter">' + (c.done[st.id] ? '↺ Chưa xong' : '✓ Xong — bước tiếp') + ' <kbd>Enter</kbd></button>' +
       '<button type="button" data-consol="next"' + (c.cur < n - 1 ? '' : ' disabled') + ' title="Phím →">Bỏ qua ▶ <kbd>→</kbd></button>' +
+      '<button type="button" data-consol="play" class="' + (consolPlay.timer ? 'active' : '') + '" title="Phát tuần tự từng bước như video — bấm lại hoặc phím Space để tạm dừng / tiếp tục">' + (consolPlay.timer ? '⏸ Tạm dừng' : '▶ Phát tuần tự') + ' <kbd>Space</kbd></button>' +
+      '<select data-consol-speed title="Tốc độ phát">' + [[3000, '0.5×'], [1500, '1×'], [800, '2×'], [400, '4×']].map(function(o){ return '<option value="' + o[0] + '"' + (consolPlay.ms === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
       '<button type="button" data-consol="end" class="' + (c.end ? 'active' : '') + '" title="Sơ đồ như sau khi đã làm xong MỌI bước">' + (c.end ? '↩ Quay lại bước ' + (c.cur + 1) : '🏁 Xem kết quả cuối') + '</button>' +
       '<button type="button" data-consol="csv">⬇ Tải danh sách (Excel)</button>' +
       '<button type="button" data-consol="reset">Làm lại từ đầu</button></div>' +
@@ -1828,7 +1831,7 @@
     state.activeLocator = null;
     state.zone = null;
     try{ localStorage.setItem(LS_ACTIVE_KHO, state.activeKho); }catch(err){}
-    if(GOM_MODE){ render(); showConsolStep(false); return; }
+    if(GOM_MODE){ consolPlayStop(); render(); showConsolStep(false); return; }
     if(state.recv) runRecv(); else render(); // đang gợi ý nhận hàng -> tính lại cho kho vừa chọn
   });
   $('sdk-grid').addEventListener('click', function(e){
@@ -1903,7 +1906,25 @@
   });
   $('sdk-recv-btn').addEventListener('click', runRecv);
   $('sdk-consol-btn').addEventListener('click', openGomPage);
+  // Phát tuần tự: tự sang bước kế mỗi consolPlay.ms (chỉ xem, không đánh dấu Xong). Hết bước thì dừng.
+  var consolPlay = { timer:null, ms:1500 };
+  try{ var _ms = Number(localStorage.getItem('sdk_consol_speed')); if([3000, 1500, 800, 400].indexOf(_ms) !== -1) consolPlay.ms = _ms; }catch(e){}
+  function consolPlayStop(){ if(consolPlay.timer){ clearInterval(consolPlay.timer); consolPlay.timer = null; } }
+  function consolPlayTick(){
+    var c = state.consol;
+    if(!c || c.cur >= c.plan.steps.length - 1){ consolPlayStop(); renderConsol(); return; }
+    c.end = false; c.cur++; showConsolStep(true);
+  }
+  function consolPlayToggle(){
+    var c = state.consol; if(!c || !c.plan.steps.length) return;
+    if(consolPlay.timer){ consolPlayStop(); renderConsol(); return; }
+    if(c.end || c.cur >= c.plan.steps.length - 1){ c.end = false; c.cur = 0; } // hết rồi -> phát lại từ đầu
+    consolPlay.timer = setInterval(consolPlayTick, consolPlay.ms);
+    showConsolStep(true);
+  }
   function consolAct(act){
+    if(act === 'play'){ consolPlayToggle(); return; }
+    consolPlayStop(); // thao tác tay -> dừng phát
     var c = state.consol; if(!c) return;
     var n = c.plan.steps.length, st = c.plan.steps[c.cur];
     if(!n) return;
@@ -1926,27 +1947,34 @@
     if(!GOM_MODE || !state.consol || e.altKey || e.ctrlKey || e.metaKey) return;
     var t = e.target, tag = t && t.tagName;
     if(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
-    var act = e.key === 'ArrowLeft' ? 'prev' : e.key === 'ArrowRight' ? 'next' : e.key === 'Enter' ? 'done' : null;
+    var act = e.key === 'ArrowLeft' ? 'prev' : e.key === 'ArrowRight' ? 'next' : e.key === 'Enter' ? 'done' : (e.key === ' ' || e.code === 'Space') ? 'play' : null;
     if(!act) return;
     e.preventDefault();
     if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); // tránh Enter bấm lại nút đang focus
     consolAct(act);
   });
+  $('sdk-consol').addEventListener('change', function(e){
+    var sel = e.target.closest('[data-consol-speed]'); if(!sel) return;
+    consolPlay.ms = Number(sel.value) || 1500;
+    try{ localStorage.setItem('sdk_consol_speed', String(consolPlay.ms)); }catch(err){}
+    if(consolPlay.timer){ clearInterval(consolPlay.timer); consolPlay.timer = setInterval(consolPlayTick, consolPlay.ms); }
+  });
   $('sdk-consol').addEventListener('click', function(e){
     var c = state.consol; if(!c) return;
     var g = e.target.closest('[data-goto]');
     if(g){ goToLocator(g.getAttribute('data-goto')); return; }
+    if(e.target.closest('[data-consol-speed]')) return;
     var mb = e.target.closest('[data-consol-mode]');
     if(mb){
       try{ localStorage.setItem('sdk_consol_mode', mb.getAttribute('data-consol-mode')); }catch(err){}
-      openConsol(); showConsolStep(false); return; // đổi phương án: không nhảy trang
+      consolPlayStop(); openConsol(); showConsolStep(false); return; // đổi phương án: không nhảy trang
     }
     var sb = e.target.closest('[data-consol-step]');
-    if(sb){ c.cur = Number(sb.getAttribute('data-consol-step')); c.end = false; showConsolStep(true); return; }
+    if(sb){ consolPlayStop(); c.cur = Number(sb.getAttribute('data-consol-step')); c.end = false; showConsolStep(true); return; }
     var b = e.target.closest('[data-consol]'); if(!b) return;
     var act = b.getAttribute('data-consol');
     if(act === 'csv'){ consolCsv(); return; }
-    if(act === 'reset'){ if(!confirm('Bỏ đánh dấu "Xong" của mọi bước trong ' + c.plan.kho + '?')) return; c.done = {}; consolSaveDone(c.done); c.cur = 0; c.end = false; showConsolStep(true); return; }
+    if(act === 'reset'){ consolPlayStop(); if(!confirm('Bỏ đánh dấu "Xong" của mọi bước trong ' + c.plan.kho + '?')) return; c.done = {}; consolSaveDone(c.done); c.cur = 0; c.end = false; showConsolStep(true); return; }
     consolAct(act);
   });
   $('sdk-pick').addEventListener('click', function(e){
