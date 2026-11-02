@@ -1942,7 +1942,6 @@
      Lấy đúng vị trí / kích thước các ô locator trên sơ đồ khu đang gom (đọc từ trang), vẽ lại lên canvas.
      Mỗi bước: xe nâng chạy tới vị trí lấy, nâng đủ N pallet cùng Mã + PO của bước, chở sang vị trí đặt, hạ xuống,
      rồi sang bước kế. Thanh Zoom phóng to sơ đồ và camera bám theo xe nâng. Space / bấm vào hình = tạm dừng · ← → = lùi / tới 1 bước · Esc = đóng. */
-  var FORK_CAP = Infinity; // mỗi bước = 1 chuyến: xe chở hết số pallet của bước
   var anim = null;
   function animColor(item){ return document.body.classList.contains('sdk-mono') ? '#4A7FB5' : itemColor(item); }
   function animCss(name, fb){ var v = getComputedStyle(document.body).getPropertyValue(name).trim(); return v || fb; }
@@ -2047,16 +2046,16 @@
     var dt = now - anim.last; anim.last = now;
     var c = state.consol, steps = c.plan.steps, n = steps.length;
     if(anim.playing && anim.i < n){
-      var st = steps[anim.i], trips = Math.ceil(st.n / FORK_CAP);
+      var st = steps[anim.i]; // mỗi bước = 1 chuyến: xe chở hết số pallet của bước
       anim.t += dt / anim.tripMs;
-      if(anim.t >= 0.45 && !anim.lifted){ anim.carry = animTake(st.from, st, Math.min(FORK_CAP, st.n - anim.trip * FORK_CAP)); anim.lifted = true; }
+      if(anim.t >= 0.45 && !anim.lifted){ anim.carry = animTake(st.from, st, st.n); anim.lifted = true; }
       if(anim.t >= 1){
         var to = anim.sim[st.to] || (anim.sim[st.to] = []);
         (anim.carry || []).forEach(function(r){ to.push(r); });
-        anim.carry = null; anim.lifted = false; anim.t = 0; anim.trip++;
+        anim.carry = null; anim.lifted = false; anim.t = 0;
         var bt = anim.layout.boxes[st.to]; if(bt) anim.fork = center(bt);
-        if(anim.trip >= trips){
-          anim.trip = 0; anim.i++;
+        {
+          anim.i++;
           if(anim.i < n){
             var nz = ZONES[c.plan.kho] ? zoneOf(c.plan.kho, steps[anim.i].from) : null;
             if(nz !== anim.layoutZone){ var f = anim.fork; animLayout(); anim.fork = f; }
@@ -2137,7 +2136,7 @@
     ctx.restore();
     // Thông tin
     var info = $('sdk-anim-info'), pb = $('sdk-anim-prog');
-    if(pb) pb.style.width = (n ? Math.min(100, (anim.i + (st ? (anim.trip + anim.t) / Math.ceil(st.n / FORK_CAP) : 0)) / n * 100) : 0) + '%';
+    if(pb) pb.style.width = (n ? Math.min(100, (anim.i + (st ? anim.t : 0)) / n * 100) : 0) + '%';
     if(info) info.innerHTML = st
       ? 'Bước <b>' + (anim.i + 1) + '/' + n + '</b> · <b>' + esc(st.item) + '</b> PO ' + esc(st.po || '—') + ' · <b style="color:#E8833A">' + esc(st.from) + '</b> → <b style="color:var(--teal)">' + esc(st.to) + '</b> · ' + fmt(st.n) + ' pallet' + (anim.playing ? '' : ' · ⏸ đang dừng')
       : '🏁 <b>Đã xong toàn bộ ' + fmt(n) + ' bước</b> — bấm ▶ để phát lại từ đầu';
