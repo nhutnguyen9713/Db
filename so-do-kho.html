@@ -251,6 +251,8 @@
   #sdk-consol-btn.active{background:var(--teal); color:#fff; border-color:var(--teal);}
   .wh3b-box.sdk-mv-src{box-shadow:0 0 0 3px #E8833A; border-color:#E8833A; z-index:2;}
   .wh3b-box.sdk-mv-dst{box-shadow:0 0 0 3px var(--teal); border-color:var(--teal); z-index:2;}
+  body.sdk-capturing .sdk-grid-scroll{overflow:visible;}
+  body.sdk-capturing .sdk-zone-card{transition:none;}
   .wh3b-box.sdk-mv-src.wh3b-dim, .wh3b-box.sdk-mv-dst.wh3b-dim{opacity:1; filter:none;}
   .wh3b-box.sdk-mv-src::after, .wh3b-box.sdk-mv-dst::after{position:absolute; top:-9px; right:8px; font:700 10px var(--mono); color:#fff; padding:1px 6px; border-radius:5px;}
   .wh3b-box.sdk-mv-src::after{content:'LẤY ' attr(data-mv); background:#E8833A;}
@@ -739,7 +741,7 @@
          về chỗ nhiều nhất thì gom (ghi rõ còn sót).
        - Mỗi bước = 1 lượt xe nâng: chuyển N pallet từ vị trí A sang vị trí B. Sức chứa được mô phỏng qua từng bước,
          nên bước sau đã tính chỗ trống do bước trước tạo ra.
-     Bỏ qua khu PROD/PICK/Loading/TG/ITN. Trang chỉ xem: đánh dấu "Xong" lưu trên trình duyệt này, không sửa dữ liệu. */
+     Bỏ qua khu PROD/PICK/Loading/TG/ITN và AGING (chỉ để hàng lâu ngày). Trang chỉ xem: đánh dấu "Xong" lưu trên trình duyệt này, không sửa dữ liệu. */
   var LS_CONSOL = 'sdk_consol_done_v1';
   function consolZoneOf(kho, loc){ return ZONES[kho] ? zoneOf(kho, loc) : ''; }
   function computeConsolPlan(kho){
@@ -747,6 +749,7 @@
     var occ = {}, cap = {}, groups = {};
     Object.keys(map).forEach(function(loc){
       if(NO_STORE_RE.test(loc)) return;
+      if(/AGING/i.test(loc)) return; // Aging chỉ chứa hàng lâu ngày: không gom vào, cũng không rút hàng ra
       if(kho === 'Kho 3A' && zoneOf(kho, loc) === 'rack') return;
       occ[loc] = map[loc].length; cap[loc] = capacityOf(kho, loc);
       map[loc].forEach(function(r){
@@ -831,6 +834,7 @@
       '<button type="button" class="main" data-consol="done">' + (c.done[st.id] ? '↺ Chưa xong' : '✓ Xong — bước tiếp') + '</button>' +
       '<button type="button" data-consol="next"' + (c.cur < n - 1 ? '' : ' disabled') + '>Bỏ qua ▶</button>' +
       '<button type="button" data-consol="csv">⬇ Tải danh sách (Excel)</button>' +
+      '<button type="button" data-consol="img" title="Ảnh sơ đồ khu đang xem như sau khi đã làm xong mọi bước gom (kho chia khu, đang ở màn hình tổng quan → mỗi khu 1 ảnh)">📷 Xuất ảnh sau khi gom</button>' +
       '<button type="button" data-consol="reset">Làm lại từ đầu</button>' +
       '<button type="button" data-consol="close">Đóng</button></div></div>';
     if(p.stuck) html += '<div class="sdk-consol-warn">⚠ ' + fmt(p.stuck) + ' nhóm không gom hết được vì vị trí đích không đủ chỗ — cần dọn thêm chỗ trống.</div>';
@@ -855,6 +859,7 @@
     if(curEl){ var l = box.querySelector('.sdk-consol-list'); l.scrollTop = Math.max(0, curEl.offsetTop - l.offsetTop - 60); }
   }
   function markConsol(){
+    if(state.capturing) return;
     document.querySelectorAll('#sdk-grid .sdk-mv-src, #sdk-grid .sdk-mv-dst').forEach(function(el){ el.classList.remove('sdk-mv-src', 'sdk-mv-dst'); el.removeAttribute('data-mv'); });
     var st = consolStep(); if(!st) return;
     var q = function(loc){ return document.querySelector('#sdk-grid .wh3b-box[data-locator="' + (window.CSS && CSS.escape ? CSS.escape(loc) : loc) + '"]'); };
@@ -887,6 +892,90 @@
     a.download = 'gom-hang-kiem-ke-' + KHO[c.plan.kho].code + '-' + (((state.inventory && state.inventory.snapshot_date) || 'data').replace(/[^\w-]+/g, '-')) + '.csv';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+  }
+
+  /* ============ Xuất ảnh khu vực SAU KHI GOM XONG ============
+     Mô phỏng mọi bước của kế hoạch gom (chuyển đúng N pallet cùng Mã + PO từ A sang B) lên 1 bản sao dữ liệu,
+     vẽ lại sơ đồ khu đang xem bằng bản sao đó rồi chụp thành PNG (html2canvas) — dữ liệu thật không đổi. */
+  function consolSimByKho(plan){
+    var src = state.byKho[plan.kho] || {}, sim = {};
+    Object.keys(src).forEach(function(l){ sim[l] = src[l].slice(); });
+    plan.steps.forEach(function(st){
+      var from = sim[st.from] || [], moved = 0, keep = [];
+      from.forEach(function(r){
+        if(moved < st.n && String(r[RAW.item] || '') === st.item && String(r[RAW.custpo] || '') === st.po){
+          var r2 = r.slice(); r2[RAW.locator] = st.to; (sim[st.to] || (sim[st.to] = [])).push(r2); moved++;
+        } else keep.push(r);
+      });
+      sim[st.from] = keep;
+    });
+    return sim;
+  }
+  var _h2cPromise = null;
+  function loadHtml2canvas(){
+    if(window.html2canvas) return Promise.resolve(window.html2canvas);
+    if(!_h2cPromise) _h2cPromise = new Promise(function(res, rej){
+      var sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      sc.onload = function(){ res(window.html2canvas); };
+      sc.onerror = function(){ _h2cPromise = null; rej(new Error('Không tải được thư viện chụp ảnh — kiểm tra kết nối mạng.')); };
+      document.head.appendChild(sc);
+    });
+    return _h2cPromise;
+  }
+  function downloadCanvas(canvas, name){
+    var a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png'); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  function captureGrid(h2c, title, sub){
+    var el = $('sdk-grid');
+    var bg = getComputedStyle(document.body).backgroundColor || '#fff';
+    return h2c(el, { backgroundColor:bg, scale:2, useCORS:true, windowWidth:Math.max(1200, el.scrollWidth + 80), width:el.scrollWidth, height:el.scrollHeight }).then(function(cv){
+      // Ghép dải tiêu đề phía trên ảnh.
+      var pad = 28 * 2, head = 70 * 2, out = document.createElement('canvas');
+      out.width = cv.width + pad * 2; out.height = cv.height + head + pad;
+      var ctx = out.getContext('2d');
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, out.width, out.height);
+      var fg = getComputedStyle(document.body).color || '#111';
+      ctx.fillStyle = fg; ctx.font = '700 ' + (22 * 2) + 'px system-ui, sans-serif'; ctx.fillText(title, pad, 40 * 2);
+      ctx.globalAlpha = 0.7; ctx.font = (13 * 2) + 'px system-ui, sans-serif'; ctx.fillText(sub, pad, 62 * 2); ctx.globalAlpha = 1;
+      ctx.drawImage(cv, pad, head);
+      return out;
+    });
+  }
+  function exportConsolImages(btn){
+    var c = state.consol; if(!c) return;
+    var kho = c.plan.kho, real = state.byKho[kho], keepPick = state.pick, keepZone = state.zone, keepLoc = state.activeLocator;
+    var zones = ZONES[kho] ? (state.zone ? [state.zone] : ZONES[kho].map(function(z){ return z.id; })) : [null];
+    var snap = (state.inventory && state.inventory.snapshot_date) || '';
+    var pallets = c.plan.steps.reduce(function(s2, st){ return s2 + st.n; }, 0);
+    var label = btn.textContent; btn.disabled = true; btn.textContent = '⏳ Đang chụp…';
+    function restore(){
+      state.byKho[kho] = real; state.capturing = false; document.body.classList.remove('sdk-capturing');
+      state.zone = keepZone; state.activeLocator = keepLoc; state.pick = keepPick;
+      render(); showConsolStep(false);
+      btn = $('sdk-consol').querySelector('[data-consol="img"]') || btn;
+    }
+    loadHtml2canvas().then(function(h2c){
+      var sim = consolSimByKho(c.plan);
+      state.capturing = true; document.body.classList.add('sdk-capturing');
+      state.byKho[kho] = sim; state.pick = null; state.activeLocator = null;
+      var chain = Promise.resolve();
+      zones.forEach(function(zid){
+        chain = chain.then(function(){
+          state.zone = zid; render();
+          var zname = zid ? ((ZONES[kho].filter(function(z){ return z.id === zid; })[0] || {}).name || zid) : '';
+          var title = 'Sơ đồ ' + kho + (zname ? ' — ' + zname : '') + ' · SAU KHI GOM HÀNG KIỂM KÊ';
+          var sub = 'Mô phỏng sau ' + fmt(c.plan.steps.length) + ' bước gom (' + fmt(pallets) + ' pallet) · dữ liệu chốt ' + (snap || '—') + ' · xuất lúc ' + new Date().toLocaleString('vi-VN');
+          return new Promise(function(r){ setTimeout(r, 60); }).then(function(){ return captureGrid(h2c, title, sub); }).then(function(cv){
+            downloadCanvas(cv, 'so-do-' + KHO[kho].code + (zname ? '-' + String(zid) : '') + '-sau-gom-' + (snap.replace(/[^\w-]+/g, '-') || 'data') + '.png');
+          });
+        });
+      });
+      return chain;
+    }).then(restore, function(err){ restore(); alert(err && err.message ? err.message : 'Xuất ảnh lỗi.'); })
+      .then(function(){ var b2 = $('sdk-consol').querySelector('[data-consol="img"]'); if(b2){ b2.disabled = false; b2.textContent = label; } });
   }
 
   function goToLocator(loc){
@@ -1734,6 +1823,7 @@
     var act = b.getAttribute('data-consol'), n = c.plan.steps.length, st = c.plan.steps[c.cur];
     if(act === 'close'){ state.consol = null; setPick(null); renderConsol(); markConsol(); return; }
     if(act === 'csv'){ consolCsv(); return; }
+    if(act === 'img'){ exportConsolImages(b); return; }
     if(act === 'reset'){ if(!confirm('Bỏ đánh dấu "Xong" của mọi bước trong ' + c.plan.kho + '?')) return; c.done = {}; consolSaveDone(c.done); c.cur = 0; showConsolStep(true); return; }
     if(act === 'prev' && c.cur > 0) c.cur--;
     else if(act === 'next' && c.cur < n - 1) c.cur++;
