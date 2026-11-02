@@ -146,7 +146,7 @@
   .sdk-zone-card.active{border-color:var(--violet); box-shadow:0 0 0 2px var(--violet); background:var(--violet-soft, var(--panel));}
   .sdk-back{all:unset; cursor:pointer; font-family:var(--mono); font-size:12px; font-weight:700; padding:7px 12px; border-radius:8px; border:1px solid var(--line); color:var(--text); background:var(--panel-2);}
   .sdk-back:hover{border-color:var(--violet); color:var(--violet);}
-  .sdk-2b{display:grid; grid-template-columns:minmax(150px, 0.75fr) minmax(150px, 0.75fr) repeat(3, minmax(250px, 1fr)); grid-template-rows:auto 1fr auto; gap:12px; min-width:1150px;}
+  .sdk-2b{display:grid; grid-template-columns:minmax(150px, 0.75fr) minmax(150px, 0.75fr) repeat(3, minmax(250px, 1fr)); grid-template-rows:auto 1fr auto auto; gap:12px; min-width:1150px;}
   .sdk-2b > .sdk-group{margin:0; display:flex; flex-direction:column;}
   .sdk-2b-blocks{display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:10px; align-content:start;}
   .sdk-2b-blocks > .wh3b-box{margin:0;}
@@ -904,8 +904,10 @@
         // Tầng Lầu: cả tầng (10 locator) nằm trên 1 hàng ngang, ô pallet dài xuống dưới; màn hẹp thì cuộn ngang.
         (zone === 'lau'
           ? '<div class="sdk-grid-scroll"><div class="wh3b-grid" style="grid-template-columns:repeat(' + groups[g].length + ', minmax(112px, 1fr));">'
-          : '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fit, minmax(' + minW + 'px, 1fr));">') +
-        groups[g].map(function(l){ return boxHtml(kho, l); }).join('') + '</div>' + (zone === 'lau' ? '</div>' : '') + '</div>';
+          : zone === '2a'
+            ? '<div class="wh3b-grid" style="grid-template-columns:repeat(3, minmax(0, 1fr)); grid-auto-rows:1fr;">'
+            : '<div class="wh3b-grid" style="grid-template-columns:repeat(auto-fit, minmax(' + minW + 'px, 1fr));">') +
+        groups[g].map(function(l){ return boxHtml(kho, l, zone === '2a' ? 'min-width:0;' : ''); }).join('') + '</div>' + (zone === 'lau' ? '</div>' : '') + '</div>';
     }
     // Tầng Trệt: dãy A/B/C đứng cạnh nhau như mặt bằng thực tế — C bên trái, B ở giữa, A bên phải; mỗi dãy 1 locator / hàng.
     var abc = zone === 'tret' ? ['C', 'B', 'A'].map(function(k){
@@ -997,7 +999,7 @@
     function grid(locs, cols){
       if(!locs.length) return '<div class="sdk-2b-empty">Chưa có vị trí</div>';
       return '<div class="wh3b-grid" style="grid-template-columns:' + (cols ? 'repeat(' + cols + ', minmax(0, 1fr))' : 'repeat(auto-fit, minmax(' + minW + 'px, 1fr))') + ';">' +
-        locs.map(function(l){ return boxHtml(kho, l); }).join('') + '</div>';
+        locs.map(function(l){ return boxHtml(kho, l, 'min-width:0;'); }).join('') + '</div>'; // posStyle -> không trải ngang khung lớn, giữ đúng số cột
     }
     function card(pos, title, locs, cols){ return '<div class="sdk-group" style="' + pos + '">' + head(title, locs) + grid(locs, cols) + '</div>'; }
     // 3 dãy A/B · C/D · E/F chung 1 lưới 6 cột: hàng thứ i của mọi dãy thẳng hàng nhau, khung cùng cỡ.
@@ -1013,12 +1015,12 @@
       return '<div class="sdk-group" style="' + pos + '"><div class="sdk-2b-blocks">' + html + '</div></div>';
     }
     return '<div class="sdk-grid-scroll"><div class="sdk-2b">' +
-      card('grid-column:1; grid-row:1 / 4;', 'LOADING', g.load, 1) +
-      card('grid-column:2; grid-row:1 / 4;', 'PICK', g.pick, 1) +
-      card('grid-column:3 / 6; grid-row:1;', 'Khu ' + rng('H'), g.H) +
+      card('grid-column:1; grid-row:1 / 5;', 'LOADING', g.load, 1) +
+      card('grid-column:2; grid-row:1 / 5;', 'PICK', g.pick, 1) +
+      card('grid-column:3 / 6; grid-row:1;', 'Khu ' + rng('H'), g.H, 3) +
       blocks('grid-column:3 / 6; grid-row:2;') +
-      card('grid-column:3 / 5; grid-row:3;', 'Khu ' + rng('G'), g.G, 4) +
-      card('grid-column:5; grid-row:3;', 'Khác', g.other) +
+      card('grid-column:3 / 6; grid-row:3;', 'Khu ' + rng('G'), g.G, 3) +
+      (g.other.length ? card('grid-column:3 / 6; grid-row:4;', 'Khác', g.other, 3) : '') +
       '</div></div>';
   }
 
