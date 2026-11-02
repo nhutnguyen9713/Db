@@ -1425,8 +1425,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.10';
-const APP_VERSION_DATE = '01/11/2026';
+const APP_VERSION = 'v4.11';
+const APP_VERSION_DATE = '02/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -5955,8 +5955,14 @@ async function exportCombinedPlanToExcel(mode){
     const row = ws1.addRow(rowValues);
     imgRows.push({ values: rowValues, fill: fillColor, first: isGroupFirst, done: !!doneFill });
     const pickingColNo = contHeaders.length + 4;
+    const ngColNo = headers1.indexOf('NG') + 1;
     row.eachCell((cell, colNumber) => {
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: doneFill || highlightColorByCol.get(colNumber) || fillColor } };
+      // Cột NG: ô có số lượng NG (> 0) tô nền ĐỎ chữ trắng đậm để nhìn ra ngay.
+      if(colNumber === ngColNo && Number(cell.value) > 0){
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: NG_CELL_FILL } };
+        cell.font = { bold:true, color:{ argb:'FFFFFFFF' } };
+      }
       cell.alignment = { vertical:'middle', horizontal: leftAlignCols.has(colNumber) ? 'left' : 'center' };
       // Cột Picking: phần số "xx/xx" căn TRÁI, locator Loading căn PHẢI trong CÙNG 1 ô — ô chỉ giữ phần
       // số, locator đưa vào định dạng số dạng  @* "DG3-Loading"  (dấu * = lấp đầy khoảng trống ở giữa).
@@ -6041,6 +6047,7 @@ function splitPickingText(v){
 
 // Vẽ bảng "Tổng hợp 3 Plan" thành ảnh PNG giống file Excel (nền xen kẽ theo container, cột màu theo kho,
 // viền đậm giữa các container). share=true → mở bảng chia sẻ của điện thoại, không hỗ trợ thì tải file.
+const NG_CELL_FILL = 'FFE03131'; // nền đỏ ô NG > 0 (Excel + ảnh Tổng hợp 3 Plan)
 function drawCombinedPlanImage(headers, rows, colorByCol, nContCols, share){
   const argb = a => '#' + String(a).slice(-6);
   const scale = 2, padX = 8, rowH = 28, headH = 40, font = '13px Arial, sans-serif', fontB = 'bold 13px Arial, sans-serif';
@@ -6061,10 +6068,11 @@ function drawCombinedPlanImage(headers, rows, colorByCol, nContCols, share){
   g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
   g.textBaseline = 'middle';
   const xs = []; let x = 1; widths.forEach(w => { xs.push(x); x += w; });
-  const cell = (i, y, h, bg, text, bold, left) => {
+  const ngIdx = headers.indexOf('NG');
+  const cell = (i, y, h, bg, text, bold, left, color) => {
     g.fillStyle = bg; g.fillRect(xs[i], y, widths[i], h);
     g.strokeStyle = '#AAAAAA'; g.lineWidth = 1; g.strokeRect(xs[i] + .5, y + .5, widths[i] - 1, h - 1);
-    g.fillStyle = '#111'; g.font = bold ? fontB : font;
+    g.fillStyle = color || '#111'; g.font = bold ? fontB : font;
     if(left === 'split'){
       // Cột Picking: số "xx/xx" sát trái, locator Loading sát phải
       const sp = splitPickingText(text);
@@ -6077,7 +6085,10 @@ function drawCombinedPlanImage(headers, rows, colorByCol, nContCols, share){
   headers.forEach((h,i) => cell(i, 1, headH, colorByCol.has(i+1) ? argb(colorByCol.get(i+1)) : '#EFEFEF', h, true, false));
   rows.forEach((r, ri) => {
     const y = 1 + headH + ri * rowH;
-    r.values.forEach((v,i) => cell(i, y, rowH, (!r.done && colorByCol.has(i+1)) ? argb(colorByCol.get(i+1)) : argb(r.fill), String(v == null ? '' : v), false, i === nContCols + 3 ? 'split' : (i === nContCols || i === nContCols + 1)));
+    r.values.forEach((v,i) => {
+      const isNg = i === ngIdx && Number(v) > 0;
+      cell(i, y, rowH, isNg ? argb(NG_CELL_FILL) : ((!r.done && colorByCol.has(i+1)) ? argb(colorByCol.get(i+1)) : argb(r.fill)), String(v == null ? '' : v), isNg, i === nContCols + 3 ? 'split' : (i === nContCols || i === nContCols + 1), isNg ? '#fff' : null);
+    });
     if(r.first){ g.strokeStyle = '#222'; g.lineWidth = 2; g.beginPath(); g.moveTo(1, y); g.lineTo(W - 1, y); g.stroke(); }
   });
   g.strokeStyle = '#222'; g.lineWidth = 2;
