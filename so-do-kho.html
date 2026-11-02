@@ -146,9 +146,11 @@
   .sdk-zone-card.active{border-color:var(--violet); box-shadow:0 0 0 2px var(--violet); background:var(--violet-soft, var(--panel));}
   .sdk-back{all:unset; cursor:pointer; font-family:var(--mono); font-size:12px; font-weight:700; padding:7px 12px; border-radius:8px; border:1px solid var(--line); color:var(--text); background:var(--panel-2);}
   .sdk-back:hover{border-color:var(--violet); color:var(--violet);}
-  .sdk-2b{display:grid; grid-template-columns:minmax(150px, 0.75fr) minmax(150px, 0.75fr) repeat(3, minmax(250px, 1fr)); grid-template-rows:auto 1fr auto auto; gap:12px; min-width:1150px;}
+  .sdk-2b{display:grid; grid-template-columns:132px 132px repeat(3, minmax(220px, 1fr)); grid-template-rows:auto 1fr auto auto; gap:12px; min-width:960px;}
+  .sdk-2b-narrow .wh3b-box-name{word-break:break-all;}
+  .sdk-2b-narrow .wh3b-box-main{padding-right:0;}
   .sdk-2b > .sdk-group{margin:0; display:flex; flex-direction:column;}
-  .sdk-2b-blocks{display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:10px; align-content:start;}
+  .sdk-2b-blocks{display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; align-content:start;}
   .sdk-2b-blocks > .wh3b-box{margin:0;}
   .sdk-2b-lanehead .sdk-group-head{margin:0; padding-bottom:6px; border-bottom:2px solid var(--violet);}
   .sdk-2b .wh3b-grid{grid-auto-rows:1fr;}
@@ -1001,22 +1003,20 @@
       return '<div class="wh3b-grid" style="grid-template-columns:' + (cols ? 'repeat(' + cols + ', minmax(0, 1fr))' : 'repeat(auto-fit, minmax(' + minW + 'px, 1fr))') + ';">' +
         locs.map(function(l){ return boxHtml(kho, l, 'min-width:0;'); }).join('') + '</div>'; // posStyle -> không trải ngang khung lớn, giữ đúng số cột
     }
-    function card(pos, title, locs, cols){ return '<div class="sdk-group" style="' + pos + '">' + head(title, locs) + grid(locs, cols) + '</div>'; }
-    // 3 dãy A/B · C/D · E/F chung 1 lưới 6 cột: hàng thứ i của mọi dãy thẳng hàng nhau, khung cùng cỡ.
+    function card(pos, title, locs, cols, cls){ return '<div class="sdk-group' + (cls ? ' ' + cls : '') + '" style="' + pos + '">' + head(title, locs) + grid(locs, cols) + '</div>'; }
+    // 3 dãy A/B · C/D · E/F chung 1 lưới 3 cột (mỗi dãy 1 cột dọc, 1 locator / hàng): hàng thứ i của mọi dãy thẳng hàng nhau, khung cùng cỡ.
     function blocks(pos){
       var html = '';
       [['A', 'C', 'E'], ['B', 'D', 'F']].forEach(function(lane, li){
-        lane.forEach(function(k, j){ html += '<div class="sdk-2b-lanehead" style="grid-column:' + (j * 2 + 1) + ' / span 2;' + (li ? ' margin-top:10px;' : '') + '">' + head(rng(k), g[k]) + '</div>'; });
-        var n = Math.max.apply(null, lane.map(function(k){ return Math.ceil(g[k].length / 2); }));
-        for(var r = 0; r < n; r++) lane.forEach(function(k){
-          for(var c = 0; c < 2; c++){ var l = g[k][r * 2 + c]; html += l ? boxHtml(kho, l) : '<div></div>'; }
-        });
+        lane.forEach(function(k, j){ html += '<div class="sdk-2b-lanehead" style="grid-column:' + (j + 1) + ';' + (li ? ' margin-top:10px;' : '') + '">' + head(rng(k), g[k]) + '</div>'; });
+        var n = Math.max.apply(null, lane.map(function(k){ return g[k].length; }));
+        for(var r = 0; r < n; r++) lane.forEach(function(k){ var l = g[k][r]; html += l ? boxHtml(kho, l, 'min-width:0;') : '<div></div>'; });
       });
       return '<div class="sdk-group" style="' + pos + '"><div class="sdk-2b-blocks">' + html + '</div></div>';
     }
     return '<div class="sdk-grid-scroll"><div class="sdk-2b">' +
-      card('grid-column:1; grid-row:1 / 5;', 'LOADING', g.load, 1) +
-      card('grid-column:2; grid-row:1 / 5;', 'PICK', g.pick, 1) +
+      card('grid-column:1; grid-row:1 / 5;', 'LOADING', g.load, 1, 'sdk-2b-narrow') +
+      card('grid-column:2; grid-row:1 / 5;', 'PICK', g.pick, 1, 'sdk-2b-narrow') +
       card('grid-column:3 / 6; grid-row:1;', 'Khu ' + rng('H'), g.H, 3) +
       blocks('grid-column:3 / 6; grid-row:2;') +
       card('grid-column:3 / 6; grid-row:3;', 'Khu ' + rng('G'), g.G, 3) +
