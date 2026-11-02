@@ -239,6 +239,8 @@
   .sdk-consol-move .loc.dst{border-color:var(--teal); color:var(--teal);}
   .sdk-consol-btns{display:flex; gap:6px; flex-wrap:wrap;}
   .sdk-consol-btns button{padding:7px 12px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--text); font-size:12.5px; cursor:pointer;}
+  .sdk-consol-btns kbd{font:600 10px var(--mono); padding:0 4px; border:1px solid currentColor; border-radius:4px; opacity:.7; margin-left:4px;}
+  .sdk-consol-btns button.active{background:var(--violet); border-color:var(--violet); color:#fff;}
   .sdk-consol-btns button.main{background:var(--teal); border-color:var(--teal); color:#fff; font-weight:700;}
   .sdk-consol-list{margin-top:10px; max-height:300px; overflow:auto; display:flex; flex-direction:column; gap:3px;}
   .sdk-consol-step{all:unset; box-sizing:border-box; display:flex; gap:8px; align-items:center; padding:5px 8px; border-radius:7px; cursor:pointer; font-size:12.5px; border:1px solid transparent;}
@@ -531,7 +533,7 @@
       (by[kho][loc] || (by[kho][loc] = [])).push(row);
     });
     state.byKho = by;
-    if(SIM_MODE) applySimAfterConsol();
+    if(GOM_MODE) state.realByKho = by;
   }
   function capacityOf(kho, loc){
     var o = state.capOverride || {};
@@ -933,13 +935,24 @@
   }
   function openConsol(){
     if(!state.inventory) return;
+    var keepBy = state.byKho; if(state.realByKho) state.byKho = state.realByKho; // kế hoạch luôn tính trên tồn THỰC TẾ
     var plan = consolMode() === '2' ? computeConsolPlan2(state.activeKho) : computeConsolPlan(state.activeKho), done = consolDoneMap();
+    state.byKho = keepBy;
     var cur = 0;
     while(cur < plan.steps.length && done[plan.steps[cur].id]) cur++;
     plan.snap = (state.inventory && state.inventory.snapshot_date) || '';
-    state.consol = { plan:plan, done:done, cur:Math.min(cur, Math.max(0, plan.steps.length - 1)) };
+    var keepEnd = !!(state.consol && state.consol.end) || (!state.consol && SIM_END);
+    state.consol = { plan:plan, done:done, cur:Math.min(cur, Math.max(0, plan.steps.length - 1)), end:keepEnd };
   }
-  function consolStep(){ var c = state.consol; return c && c.plan.kho === state.activeKho ? c.plan.steps[c.cur] : null; }
+  // Sơ đồ mô phỏng: kho đang gom = tồn thực tế + các bước TRƯỚC bước đang làm (xem kết quả cuối = mọi bước).
+  function consolApply(){
+    var c = state.consol, real = state.realByKho;
+    if(!real) return;
+    var by = {}; Object.keys(real).forEach(function(k){ by[k] = real[k]; });
+    if(c && real[c.plan.kho]) by[c.plan.kho] = consolSimByKho(c.plan, real[c.plan.kho], c.end ? c.plan.steps.length : c.cur);
+    state.byKho = by;
+  }
+  function consolStep(){ var c = state.consol; return c && !c.end && c.plan.kho === state.activeKho ? c.plan.steps[c.cur] : null; }
   function consolHtml(){
     var c = state.consol;
     if(!c) return '';
@@ -962,13 +975,13 @@
       (st.to === CONSOL_BUFFER ? '<div class="sdk-consol-sum">↪ Kho hết chỗ sàn trống: đưa tạm ra ngoài để lấy chỗ — sẽ có bước đưa về vị trí đích sau.</div>' : '') +
       '<div class="sdk-consol-sum">Nhóm này: ' + fmt(job.total) + ' pallet ở ' + fmt(job.nLocs) + ' vị trí → ' + (m2 ? 'xếp vào' : 'gom về') + ' <b>' + esc(job.target) + '</b>' +
       (job.full ? '' : ' · <span style="color:var(--red)">⚠ không đủ chỗ, còn sót ' + fmt(job.left) + ' pallet</span>') + '</div>' +
-      '<div class="sdk-consol-btns"><button type="button" data-consol="prev"' + (c.cur ? '' : ' disabled') + '>◀ Bước trước</button>' +
-      '<button type="button" class="main" data-consol="done">' + (c.done[st.id] ? '↺ Chưa xong' : '✓ Xong — bước tiếp') + '</button>' +
-      '<button type="button" data-consol="next"' + (c.cur < n - 1 ? '' : ' disabled') + '>Bỏ qua ▶</button>' +
+      '<div class="sdk-consol-btns"><button type="button" data-consol="prev"' + (c.cur ? '' : ' disabled') + ' title="Phím ←">◀ Bước trước <kbd>←</kbd></button>' +
+      '<button type="button" class="main" data-consol="done" title="Phím Enter">' + (c.done[st.id] ? '↺ Chưa xong' : '✓ Xong — bước tiếp') + ' <kbd>Enter</kbd></button>' +
+      '<button type="button" data-consol="next"' + (c.cur < n - 1 ? '' : ' disabled') + ' title="Phím →">Bỏ qua ▶ <kbd>→</kbd></button>' +
+      '<button type="button" data-consol="end" class="' + (c.end ? 'active' : '') + '" title="Sơ đồ như sau khi đã làm xong MỌI bước">' + (c.end ? '↩ Quay lại bước ' + (c.cur + 1) : '🏁 Xem kết quả cuối') + '</button>' +
       '<button type="button" data-consol="csv">⬇ Tải danh sách (Excel)</button>' +
-      '<button type="button" data-consol="sim" title="Mở tab mới: sơ đồ như sau khi đã làm xong mọi bước của phương án này — bấm, tìm, chọn mã… như sơ đồ thật">🗺️ Mở sơ đồ sau khi gom</button>' +
-      '<button type="button" data-consol="reset">Làm lại từ đầu</button>' +
-      '<button type="button" data-consol="close">Đóng</button></div></div>';
+      '<button type="button" data-consol="reset">Làm lại từ đầu</button></div>' +
+      '<div class="sdk-consol-sum">' + (c.end ? '🏁 Sơ đồ bên dưới đang hiện kho như sau khi làm xong toàn bộ ' + fmt(n) + ' bước.' : 'Sơ đồ bên dưới đang hiện kho ' + (c.cur ? 'như sau khi làm xong bước 1 → ' + c.cur : 'như hiện tại (chưa làm bước nào)') + ' — ô cam = lấy hàng, ô xanh = đặt hàng của bước này.') + '</div></div>';
     if(p.stuck) html += '<div class="sdk-consol-warn">⚠ ' + fmt(p.stuck) + ' nhóm không gom hết được vì vị trí đích không đủ chỗ — cần dọn thêm chỗ trống.</div>';
     var list = '', lastJob = -1;
     p.steps.forEach(function(s2, i){
@@ -1001,12 +1014,9 @@
   // Mở 1 bước: chọn đúng Mã + PO (sáng pallet của nhóm), chuyển khu nếu cần, cuộn tới vị trí lấy hàng.
   function showConsolStep(scroll){
     var st = consolStep();
-    renderConsol();
-    if(!st){ markConsol(); return; }
-    if(ZONES[state.activeKho]){
-      var z = zoneOf(state.activeKho, st.from);
-      if(state.zone !== z){ state.zone = z; render(); }
-    }
+    if(st && ZONES[state.activeKho]) state.zone = zoneOf(state.activeKho, st.from);
+    render(); // vẽ lại sơ đồ mô phỏng theo bước đang làm
+    if(!st){ setPick(null); markConsol(); return; }
     setPick(st.item, st.po);
     markConsol();
     if(scroll) scrollToLocator(st.from);
@@ -1025,15 +1035,17 @@
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
   }
 
-  /* ============ Mở sơ đồ SAU KHI GOM XONG (tab mới, tương tác được) ============
-     so-do-kho.html?sim=1|2 : tải dữ liệu như thường rồi mô phỏng xong MỌI bước của phương án gom (1 hoặc 2)
-     trên từng kho (chuyển đúng N pallet cùng Mã + PO từ A sang B). Sơ đồ, tìm kiếm, chọn mã, chi tiết pallet…
-     dùng bình thường trên dữ liệu mô phỏng — dữ liệu thật trên Cloud không đổi. */
-  var SIM_MODE = (location.search.match(/[?&]sim=([12])\b/) || [])[1] || '';
-  function consolSimByKho(plan){
-    var src = state.byKho[plan.kho] || {}, sim = {};
+  /* ============ Trang GOM HÀNG KIỂM KÊ (tab mới, sơ đồ mô phỏng tương tác được) ============
+     so-do-kho.html?gom=1 : tải dữ liệu như thường; bảng các bước gom nằm ở trang này và sơ đồ được MÔ PHỎNG theo
+     từng bước (kho = tồn thực tế + các bước trước bước đang làm; "Xem kết quả cuối" = mọi bước). Phím tắt:
+     ← bước trước · Enter xác nhận xong · → bỏ qua. Dữ liệu thật trên Cloud không đổi. */
+  var GOM_MODE = /[?&](gom|sim)=/.test(location.search);
+  var SIM_END = /[?&]sim=/.test(location.search); // link cũ ?sim=… -> mở thẳng kết quả cuối
+  function consolSimByKho(plan, src, upto){
+    src = src || state.byKho[plan.kho] || {};
+    var sim = {};
     Object.keys(src).forEach(function(l){ sim[l] = src[l].slice(); });
-    plan.steps.forEach(function(st){
+    plan.steps.slice(0, upto == null ? plan.steps.length : upto).forEach(function(st){
       var from = sim[st.from] || [], moved = 0, keep = [];
       from.forEach(function(r){
         if(moved < st.n && String(r[RAW.item] || '') === st.item && String(r[RAW.custpo] || '') === st.po){
@@ -1045,18 +1057,8 @@
     if(typeof CONSOL_BUFFER !== 'undefined') delete sim[CONSOL_BUFFER];
     return sim;
   }
-  function applySimAfterConsol(){
-    KHO_ORDER.forEach(function(k){
-      if(!state.byKho[k]) return;
-      var plan = SIM_MODE === '2' ? computeConsolPlan2(k) : computeConsolPlan(k);
-      state.byKho[k] = consolSimByKho(plan);
-      (state.simInfo || (state.simInfo = {}))[k] = { steps:plan.steps.length, pallets:plan.steps.reduce(function(s2, st){ return s2 + st.n; }, 0) };
-    });
-  }
-  function openSimPage(){
-    var mode = state.consol && state.consol.plan.mode === '2' ? '2' : '1';
-    var url = 'so-do-kho.html?sim=' + mode + '&kho=' + encodeURIComponent(KHO[state.activeKho].code) + (state.demo ? '&demo=1' : '');
-    window.open(url, '_blank', 'noopener');
+  function openGomPage(){
+    window.open('so-do-kho.html?gom=1&kho=' + encodeURIComponent(KHO[state.activeKho].code) + (state.demo ? '&demo=1' : ''), '_blank', 'noopener');
   }
 
   function goToLocator(loc){
@@ -1477,14 +1479,16 @@
       : '');
     document.querySelectorAll('#sdk-view-toggle button').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-view') === state.view); });
     $('sdk-recv-result').innerHTML = recvResultHtml();
-    if(SIM_MODE){
-      var si = (state.simInfo || {})[kho];
+    if(GOM_MODE){
+      var snapNow = (state.inventory && state.inventory.snapshot_date) || '';
+      if(state.inventory && (!state.consol || state.consol.plan.kho !== kho || state.consol.plan.snap !== snapNow)) openConsol();
+      consolApply();
       $('sdk-sim-note').style.display = '';
-      $('sdk-sim-note').innerHTML = '🗺️ SƠ ĐỒ MÔ PHỎNG SAU KHI GOM HÀNG KIỂM KÊ — ' + (SIM_MODE === '2' ? 'PA 2 · đầy trọn locator, lẻ để kế bên' : 'PA 1 · gom về chỗ nhiều nhất') +
-        (si ? ' · ' + esc(kho) + ': đã mô phỏng ' + fmt(si.steps) + ' bước, ' + fmt(si.pallets) + ' pallet' : '') +
-        '. Đây KHÔNG phải tồn thực tế — dữ liệu trên Cloud không đổi. <a href="so-do-kho.html?kho=' + encodeURIComponent(cfg.code) + (state.demo ? '&demo=1' : '') + '" style="color:inherit; font-weight:700;">← Về sơ đồ thật</a>';
+      $('sdk-sim-note').innerHTML = '🧹 GOM HÀNG KIỂM KÊ — SƠ ĐỒ MÔ PHỎNG theo từng bước. Đây KHÔNG phải tồn thực tế — dữ liệu trên Cloud không đổi. ' +
+        'Phím tắt: <b>←</b> bước trước · <b>Enter</b> xác nhận xong · <b>→</b> bỏ qua. <a href="so-do-kho.html?kho=' + encodeURIComponent(cfg.code) + (state.demo ? '&demo=1' : '') + '" style="color:inherit; font-weight:700;">← Về sơ đồ thật</a>';
       $('sdk-consol-btn').style.display = 'none';
-      document.title = 'Sau khi gom · ' + cfg.code + ' — Sơ đồ kho';
+      $('sdk-recv').style.display = 'none';
+      document.title = 'Gom hàng kiểm kê · ' + cfg.code + ' — Sơ đồ kho';
     }
     var hb = $('sdk-heatmap-btn');
     hb.textContent = state.heatmap === 'qty' ? '🌡️ Heatmap: Mật độ' : state.heatmap === 'oqc' ? '🌡️ Heatmap: PASS/NG' : '🌡️ Heatmap: Tắt';
@@ -1533,7 +1537,6 @@
         '<div><b>' + fmt(stats.full) + '</b><span>Vị trí đầy / gần đầy (≥ 80%)</span></div>'
       : '';
     applyFilter();
-    if(state.consol && (state.consol.plan.kho !== kho || state.consol.plan.snap !== ((state.inventory && state.inventory.snapshot_date) || ''))){ openConsol(); }
     renderConsol();
     markConsol();
   }
@@ -1825,6 +1828,7 @@
     state.activeLocator = null;
     state.zone = null;
     try{ localStorage.setItem(LS_ACTIVE_KHO, state.activeKho); }catch(err){}
+    if(GOM_MODE){ render(); showConsolStep(false); return; }
     if(state.recv) runRecv(); else render(); // đang gợi ý nhận hàng -> tính lại cho kho vừa chọn
   });
   $('sdk-grid').addEventListener('click', function(e){
@@ -1898,28 +1902,13 @@
     render();
   });
   $('sdk-recv-btn').addEventListener('click', runRecv);
-  $('sdk-consol-btn').addEventListener('click', function(){
-    if(state.consol){ state.consol = null; setPick(null); renderConsol(); markConsol(); return; }
-    openConsol(); showConsolStep(false);
-    $('sdk-consol').scrollIntoView({ behavior:'smooth', block:'nearest' });
-  });
-  $('sdk-consol').addEventListener('click', function(e){
+  $('sdk-consol-btn').addEventListener('click', openGomPage);
+  function consolAct(act){
     var c = state.consol; if(!c) return;
-    var g = e.target.closest('[data-goto]');
-    if(g){ goToLocator(g.getAttribute('data-goto')); return; }
-    var mb = e.target.closest('[data-consol-mode]');
-    if(mb){
-      try{ localStorage.setItem('sdk_consol_mode', mb.getAttribute('data-consol-mode')); }catch(err){}
-      openConsol(); showConsolStep(true); return;
-    }
-    var sb = e.target.closest('[data-consol-step]');
-    if(sb){ c.cur = Number(sb.getAttribute('data-consol-step')); showConsolStep(true); return; }
-    var b = e.target.closest('[data-consol]'); if(!b) return;
-    var act = b.getAttribute('data-consol'), n = c.plan.steps.length, st = c.plan.steps[c.cur];
-    if(act === 'close'){ state.consol = null; setPick(null); renderConsol(); markConsol(); return; }
-    if(act === 'csv'){ consolCsv(); return; }
-    if(act === 'sim'){ openSimPage(); return; }
-    if(act === 'reset'){ if(!confirm('Bỏ đánh dấu "Xong" của mọi bước trong ' + c.plan.kho + '?')) return; c.done = {}; consolSaveDone(c.done); c.cur = 0; showConsolStep(true); return; }
+    var n = c.plan.steps.length, st = c.plan.steps[c.cur];
+    if(!n) return;
+    if(act === 'end'){ c.end = !c.end; showConsolStep(!c.end); return; }
+    c.end = false;
     if(act === 'prev' && c.cur > 0) c.cur--;
     else if(act === 'next' && c.cur < n - 1) c.cur++;
     else if(act === 'done' && st){
@@ -1932,6 +1921,33 @@
       consolSaveDone(c.done);
     }
     showConsolStep(true);
+  }
+  document.addEventListener('keydown', function(e){
+    if(!GOM_MODE || !state.consol || e.altKey || e.ctrlKey || e.metaKey) return;
+    var t = e.target, tag = t && t.tagName;
+    if(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+    var act = e.key === 'ArrowLeft' ? 'prev' : e.key === 'ArrowRight' ? 'next' : e.key === 'Enter' ? 'done' : null;
+    if(!act) return;
+    e.preventDefault();
+    if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); // tránh Enter bấm lại nút đang focus
+    consolAct(act);
+  });
+  $('sdk-consol').addEventListener('click', function(e){
+    var c = state.consol; if(!c) return;
+    var g = e.target.closest('[data-goto]');
+    if(g){ goToLocator(g.getAttribute('data-goto')); return; }
+    var mb = e.target.closest('[data-consol-mode]');
+    if(mb){
+      try{ localStorage.setItem('sdk_consol_mode', mb.getAttribute('data-consol-mode')); }catch(err){}
+      openConsol(); showConsolStep(false); return; // đổi phương án: không nhảy trang
+    }
+    var sb = e.target.closest('[data-consol-step]');
+    if(sb){ c.cur = Number(sb.getAttribute('data-consol-step')); c.end = false; showConsolStep(true); return; }
+    var b = e.target.closest('[data-consol]'); if(!b) return;
+    var act = b.getAttribute('data-consol');
+    if(act === 'csv'){ consolCsv(); return; }
+    if(act === 'reset'){ if(!confirm('Bỏ đánh dấu "Xong" của mọi bước trong ' + c.plan.kho + '?')) return; c.done = {}; consolSaveDone(c.done); c.cur = 0; c.end = false; showConsolStep(true); return; }
+    consolAct(act);
   });
   $('sdk-pick').addEventListener('click', function(e){
     if(e.target.closest('#sdk-pick-close')){ setPick(null); return; }
