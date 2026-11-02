@@ -390,6 +390,8 @@
   var LS_VIEW = 'sdk_view_mode';
   var LS_MONO = 'sdk_mono_color';
   // Vị trí KHÔNG gợi ý để cất hàng nhận về: khu sản xuất, picking, loading, khu chờ (TG/ITN).
+  // FG-TG / ITN = locator TRUNG GIAN của hệ thống, không có vị trí vật lý -> loại hẳn khỏi sơ đồ, thống kê và gom hàng.
+  var VIRTUAL_LOC_RE = /-TG$|(^|-)ITN(-|$)/i;
   var NO_STORE_RE = /prod|pick|load|-TG$|-ITN$/i; // không cất / không gom vào-ra: PROD, PICK, LOADING, TG, ITN
   // Thứ tự ưu tiên lấy thông tin kết nối đã lưu trên máy: dashboard chính → trang 3 Plan → riêng trang này.
   var CRED_SOURCES = [
@@ -437,7 +439,7 @@
     return 'tret';
   }
   var ZONES_3A = [
-    { id:'tret', name:'Tầng Trệt', icon:'🟫', desc:'Sàn DG3-FG dãy A/B/C và các vị trí sàn khác (TG, ITN, Loading…)' },
+    { id:'tret', name:'Tầng Trệt', icon:'🟫', desc:'Sàn DG3-FG dãy A/B/C và các vị trí sàn khác (Pick, Loading…)' },
     { id:'rack', name:'Rack', icon:'🗄️', desc:'Kệ 3A-<dãy><bay>-T<tầng> — 2 pallet/ô kệ' },
     { id:'lau', name:'Tầng Lầu', icon:'🏢', desc:'Khu lầu M2/M1 (3AFG-M2 / 3AFG-M1) và khu Aging' }
   ];
@@ -532,6 +534,7 @@
     Object.keys(state.grids || {}).forEach(function(k){
       var lay = state.grids[k];
       if(!by[k] || !lay || !Array.isArray(lay.cells)) return;
+      lay.cells.forEach(function(c){ if(!c.isLabel && c.locator && VIRTUAL_LOC_RE.test(c.locator)) c.locator = ''; }); // TG/ITN: ô trống
       lay.cells.forEach(function(c){ if(!c.isLabel && c.locator && !by[k][c.locator]) by[k][c.locator] = []; });
     });
     var rawRows = getRawRows(state.inventory);
@@ -548,6 +551,7 @@
       if(KHO[kho].skipProd && PROD_RE.test(loc)) return;
       (by[kho][loc] || (by[kho][loc] = [])).push(row);
     });
+    Object.keys(by).forEach(function(k){ Object.keys(by[k]).forEach(function(l){ if(VIRTUAL_LOC_RE.test(l)) delete by[k][l]; }); });
     state.byKho = by;
     if(GOM_MODE) state.realByKho = by;
   }
@@ -1228,10 +1232,10 @@
         if(v && v.locators && typeof v.locators === 'object'){ sel = Object.keys(v.locators); return true; }
         return false;
       }) || (sel = null);
-      if(Array.isArray(sel)) return sel;
+      if(Array.isArray(sel)) return sel.filter(function(l){ return !VIRTUAL_LOC_RE.test(l); });
     }catch(e){}
     var lay = state.grids && state.grids[kho], set = {};
-    if(lay && Array.isArray(lay.cells)) lay.cells.forEach(function(c){ if(!c.isLabel && c.locator) set[c.locator] = true; });
+    if(lay && Array.isArray(lay.cells)) lay.cells.forEach(function(c){ if(!c.isLabel && c.locator && !VIRTUAL_LOC_RE.test(c.locator)) set[c.locator] = true; });
     return Object.keys(set);
   }
   // Pallet / sức chứa / số vị trí của 1 khu tính theo ĐÚNG danh sách vị trí của Overview TN5 (để % khớp Overview).
@@ -1824,7 +1828,6 @@
     ['A', 'B', 'C'].forEach(function(lane){ for(var c = 1; c <= 15; c++) add('Kho 3A', 'DG3-FG-' + lane + String(c).padStart(2, '0'), Math.floor(rnd() * 24)); });
     for(n = 1; n <= 12; n++) add('Kho 3A', '3AFG-M1-A' + String(n).padStart(2, '0'), Math.floor(rnd() * 16));
     for(n = 1; n <= 8; n++) add('Kho 3A', '3AFG-M2-A' + String(n).padStart(2, '0'), Math.floor(rnd() * 3));
-    add('Kho 3A', 'DG3-FG-TG', 6);
         Object.keys(B2_CAPACITY_MAP).forEach(function(l){ add('Kho 2B', l, Math.floor(rnd() * (B2_CAPACITY_MAP[l] + 4))); });
     for(n = 1; n <= 12; n++) add('Kho DG1', 'DG1-FG-' + String(n).padStart(2, '0'), Math.floor(rnd() * 28));
     return { snapshot_date:'(dữ liệu mẫu)', raw_rows: rows };
