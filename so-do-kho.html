@@ -239,6 +239,18 @@
   .sdk-consol-move .loc.dst{border-color:var(--teal); color:var(--teal);}
   .sdk-consol-btns{display:flex; gap:6px; flex-wrap:wrap;}
   .sdk-consol-btns button{padding:7px 12px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--text); font-size:12.5px; cursor:pointer;}
+  #sdk-anim{position:fixed; inset:0; z-index:1000; background:rgba(10,14,22,0.6); display:flex; align-items:center; justify-content:center; padding:2vh 2vw;}
+  .sdk-anim-box{background:var(--panel); color:var(--text); border-radius:14px; width:96vw; height:94vh; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .sdk-anim-bar{display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:10px 14px; border-bottom:1px solid var(--line);}
+  .sdk-anim-bar button, .sdk-anim-bar select{padding:6px 11px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--text); font-size:13px; cursor:pointer;}
+  .sdk-anim-bar button.main{background:var(--teal); border-color:var(--teal); color:#fff; font-weight:700; min-width:110px;}
+  .sdk-anim-title{font-family:var(--disp); font-weight:700; font-size:14px; margin-right:6px;}
+  .sdk-anim-info{flex:1 1 300px; font-size:12.5px; color:var(--muted); min-width:0;}
+  .sdk-anim-info b{color:var(--text);}
+  .sdk-anim-prog{height:4px; background:var(--line);}
+  .sdk-anim-prog i{display:block; height:100%; background:var(--teal); width:0;}
+  .sdk-anim-wrap{flex:1; position:relative; min-height:0;}
+  .sdk-anim-wrap canvas{position:absolute; inset:0; width:100%; height:100%; cursor:pointer;}
   .sdk-consol-btns select{padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--text); font-size:12.5px;}
   .sdk-consol-btns kbd{font:600 10px var(--mono); padding:0 4px; border:1px solid currentColor; border-radius:4px; opacity:.7; margin-left:4px;}
   .sdk-consol-btns button.active{background:var(--violet); border-color:var(--violet); color:#fff;}
@@ -981,6 +993,7 @@
       '<button type="button" data-consol="next"' + (c.cur < n - 1 ? '' : ' disabled') + ' title="Phím →">Bỏ qua ▶ <kbd>→</kbd></button>' +
       '<button type="button" data-consol="play" class="' + (consolPlay.timer ? 'active' : '') + '" title="Phát tuần tự từng bước như video — bấm lại hoặc phím Space để tạm dừng / tiếp tục">' + (consolPlay.timer ? '⏸ Tạm dừng' : '▶ Phát tuần tự') + ' <kbd>Space</kbd></button>' +
       '<select data-consol-speed title="Tốc độ phát">' + [[3000, '0.5×'], [1500, '1×'], [800, '2×'], [400, '4×']].map(function(o){ return '<option value="' + o[0] + '"' + (consolPlay.ms === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+      '<button type="button" data-consol="anim" title="Mở popup mô phỏng xe nâng chở từng chuyến pallet từ chỗ lấy sang chỗ đặt">🎬 Mô phỏng xe nâng</button>' +
       '<button type="button" data-consol="end" class="' + (c.end ? 'active' : '') + '" title="Sơ đồ như sau khi đã làm xong MỌI bước">' + (c.end ? '↩ Quay lại bước ' + (c.cur + 1) : '🏁 Xem kết quả cuối') + '</button>' +
       '<button type="button" data-consol="csv">⬇ Tải danh sách (Excel)</button>' +
       '<button type="button" data-consol="reset">Làm lại từ đầu</button></div>' +
@@ -1922,8 +1935,205 @@
     consolPlay.timer = setInterval(consolPlayTick, consolPlay.ms);
     showConsolStep(true);
   }
+  /* ============ Popup mô phỏng XE NÂNG chở từng chuyến pallet ============
+     Lấy đúng vị trí / kích thước các ô locator trên sơ đồ khu đang gom (đọc từ trang), vẽ lại lên canvas.
+     Mỗi bước: xe nâng chạy tới vị trí lấy, nâng tối đa FORK_CAP pallet cùng Mã + PO, chở sang vị trí đặt, hạ xuống —
+     lặp đến khi chuyển đủ N pallet của bước, rồi sang bước kế. Space / bấm vào hình = tạm dừng · ← → = lùi / tới 1 bước · Esc = đóng. */
+  var FORK_CAP = 2;
+  var anim = null;
+  function animColor(item){ return document.body.classList.contains('sdk-mono') ? '#4A7FB5' : itemColor(item); }
+  function animCss(name, fb){ var v = getComputedStyle(document.body).getPropertyValue(name).trim(); return v || fb; }
+  function animLayout(){
+    var c = state.consol, st = c.plan.steps[Math.min(anim.i, c.plan.steps.length - 1)];
+    var zone = ZONES[c.plan.kho] && st ? zoneOf(c.plan.kho, st.from) : null;
+    if(anim.layout && anim.layoutZone === zone) return;
+    if(ZONES[c.plan.kho]) state.zone = zone;
+    c.end = false; c.cur = Math.min(anim.i, c.plan.steps.length - 1);
+    var keepView = state.view; state.view = 'pallet';
+    render();
+    state.view = keepView;
+    var g = $('sdk-grid').getBoundingClientRect(), boxes = {}, minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+    document.querySelectorAll('#sdk-grid .wh3b-box[data-locator]').forEach(function(el){
+      var r = el.getBoundingClientRect(); if(r.width < 4) return;
+      var b = { x:r.left - g.left, y:r.top - g.top, w:r.width, h:r.height };
+      boxes[el.getAttribute('data-locator')] = b;
+      minX = Math.min(minX, b.x); minY = Math.min(minY, b.y); maxX = Math.max(maxX, b.x + b.w); maxY = Math.max(maxY, b.y + b.h);
+    });
+    Object.keys(boxes).forEach(function(l){ boxes[l].x -= minX; boxes[l].y -= minY; });
+    anim.layout = { boxes:boxes, W:Math.max(1, maxX - minX), H:Math.max(1, maxY - minY) };
+    anim.layoutZone = zone;
+    anim.fork = { x:0, y:anim.layout.H }; // xe nâng xuất phát ở góc dưới bên trái
+  }
+  function animResetSim(){
+    var c = state.consol;
+    var src = consolSimByKho(c.plan, (state.realByKho || state.byKho)[c.plan.kho], anim.i), sim = {};
+    Object.keys(src).forEach(function(l){ sim[l] = src[l].slice(); });
+    anim.sim = sim; anim.trip = 0; anim.t = 0; anim.carry = null; anim.lifted = false; anim.layout = null;
+    animLayout();
+  }
+  function openAnim(){
+    var c = state.consol; if(!c || !c.plan.steps.length) return;
+    consolPlayStop();
+    var m = document.createElement('div'); m.id = 'sdk-anim';
+    m.innerHTML = '<div class="sdk-anim-box"><div class="sdk-anim-bar"><span class="sdk-anim-title">🎬 Mô phỏng xe nâng · ' + esc(c.plan.kho) + '</span>' +
+      '<button type="button" data-anim="prev" title="Lùi 1 bước (←)">⏮</button><button type="button" class="main" data-anim="play" title="Space / bấm vào hình">⏸ Tạm dừng</button><button type="button" data-anim="next" title="Tới 1 bước (→)">⏭</button>' +
+      '<select data-anim-speed title="Tốc độ">' + [[2400, '0.5×'], [1200, '1×'], [600, '2×'], [300, '4×'], [120, '10×']].map(function(o){ return '<option value="' + o[0] + '"' + (o[0] === 1200 ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+      '<span class="sdk-anim-info" id="sdk-anim-info"></span><button type="button" data-anim="close" title="Esc">✕ Đóng</button></div>' +
+      '<div class="sdk-anim-prog"><i id="sdk-anim-prog"></i></div><div class="sdk-anim-wrap"><canvas id="sdk-anim-cv"></canvas></div></div>';
+    document.body.appendChild(m);
+    anim = { i:c.end ? 0 : c.cur, playing:true, tripMs:1200, last:0, raf:0 };
+    animResetSim();
+    m.addEventListener('click', function(e){
+      var b = e.target.closest('[data-anim]');
+      if(e.target.id === 'sdk-anim-cv'){ animToggle(); return; }
+      if(e.target === m){ closeAnim(); return; }
+      if(!b) return;
+      var a = b.getAttribute('data-anim');
+      if(a === 'close') closeAnim(); else if(a === 'play') animToggle(); else if(a === 'prev') animStep(-1); else if(a === 'next') animStep(1);
+    });
+    m.querySelector('[data-anim-speed]').addEventListener('change', function(){ anim.tripMs = Number(this.value) || 1200; });
+    anim.last = performance.now();
+    anim.raf = requestAnimationFrame(animLoop);
+  }
+  function closeAnim(){
+    if(!anim) return;
+    cancelAnimationFrame(anim.raf);
+    var c = state.consol, n = c.plan.steps.length;
+    c.cur = Math.min(anim.i, n - 1); c.end = anim.i >= n;
+    anim = null;
+    var m = $('sdk-anim'); if(m) m.remove();
+    showConsolStep(true);
+  }
+  function animToggle(){
+    if(!anim) return;
+    var n = state.consol.plan.steps.length;
+    if(!anim.playing && anim.i >= n){ anim.i = 0; animResetSim(); } // xem hết rồi -> phát lại từ đầu
+    anim.playing = !anim.playing; anim.last = performance.now();
+  }
+  function animStep(d){
+    if(!anim) return;
+    var n = state.consol.plan.steps.length;
+    anim.i = Math.max(0, Math.min(n, anim.i + d));
+    animResetSim();
+  }
+  // Rút / thêm pallet của 1 bước trên bản mô phỏng.
+  function animTake(loc, st, k){
+    var arr = anim.sim[loc] || [], out = [];
+    for(var j = arr.length - 1; j >= 0 && out.length < k; j--){
+      var r = arr[j];
+      if(String(r[RAW.item] || '') === st.item && String(r[RAW.custpo] || '') === st.po){ out.push(r); arr.splice(j, 1); }
+    }
+    return out;
+  }
+  function center(b){ return { x:b.x + b.w / 2, y:b.y + b.h / 2 }; }
+  function ease(t){ return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+  function animLoop(now){
+    if(!anim) return;
+    var dt = now - anim.last; anim.last = now;
+    var c = state.consol, steps = c.plan.steps, n = steps.length;
+    if(anim.playing && anim.i < n){
+      var st = steps[anim.i], trips = Math.ceil(st.n / FORK_CAP);
+      anim.t += dt / anim.tripMs;
+      if(anim.t >= 0.45 && !anim.lifted){ anim.carry = animTake(st.from, st, Math.min(FORK_CAP, st.n - anim.trip * FORK_CAP)); anim.lifted = true; }
+      if(anim.t >= 1){
+        var to = anim.sim[st.to] || (anim.sim[st.to] = []);
+        (anim.carry || []).forEach(function(r){ to.push(r); });
+        anim.carry = null; anim.lifted = false; anim.t = 0; anim.trip++;
+        var bt = anim.layout.boxes[st.to]; if(bt) anim.fork = center(bt);
+        if(anim.trip >= trips){
+          anim.trip = 0; anim.i++;
+          if(anim.i < n){
+            var nz = ZONES[c.plan.kho] ? zoneOf(c.plan.kho, steps[anim.i].from) : null;
+            if(nz !== anim.layoutZone){ var f = anim.fork; animLayout(); anim.fork = f; }
+          } else anim.playing = false;
+        }
+      }
+    }
+    animDraw();
+    anim.raf = requestAnimationFrame(animLoop);
+  }
+  function animDraw(){
+    var cv = $('sdk-anim-cv'); if(!cv || !anim.layout) return;
+    var dpr = window.devicePixelRatio || 1, cw = cv.clientWidth, ch = cv.clientHeight;
+    if(cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)){ cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
+    var ctx = cv.getContext('2d'), L = anim.layout, pad = 16;
+    var k = Math.min((cw - pad * 2) / L.W, (ch - pad * 2) / L.H);
+    var ox = (cw - L.W * k) / 2, oy = (ch - L.H * k) / 2;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = animCss('--panel', '#fff'); ctx.fillRect(0, 0, cw, ch);
+    ctx.translate(ox, oy); ctx.scale(k, k);
+    var c = state.consol, steps = c.plan.steps, n = steps.length, st = anim.i < n ? steps[anim.i] : null;
+    var line = animCss('--line', '#E1E7F0'), text = animCss('--text', '#16202E'), muted = animCss('--muted', '#55637C'), panel2 = animCss('--panel-2', '#F4F6FA');
+    var kho = c.plan.kho;
+    Object.keys(L.boxes).forEach(function(loc){
+      var b = L.boxes[loc], rows = anim.sim[loc] || [], cap = capacityOf(kho, loc);
+      var isSrc = st && loc === st.from, isDst = st && loc === st.to;
+      ctx.fillStyle = panel2; ctx.strokeStyle = isSrc ? '#E8833A' : isDst ? animCss('--teal', '#0E8F76') : line;
+      ctx.lineWidth = (isSrc || isDst ? 3 : 1) / k;
+      ctx.beginPath(); if(ctx.roundRect) ctx.roundRect(b.x + 2, b.y + 2, b.w - 4, b.h - 4, 7); else ctx.rect(b.x + 2, b.y + 2, b.w - 4, b.h - 4); ctx.fill(); ctx.stroke();
+      var fsz = Math.min(b.h / 5, 11 / k);
+      ctx.fillStyle = text; ctx.font = '700 ' + fsz + 'px ui-monospace, monospace'; ctx.textBaseline = 'top';
+      ctx.fillText(loc, b.x + 9, b.y + 8, b.w - 18);
+      ctx.fillStyle = rows.length > cap ? '#E5484D' : muted; ctx.font = '600 ' + fsz + 'px ui-monospace, monospace';
+      ctx.fillText(rows.length + '/' + cap, b.x + 9, b.y + 10 + fsz, b.w - 18);
+      // Ô pallet: cỡ lớn nhất vừa khung.
+      var top = b.y + 14 + fsz * 2, aw = b.w - 18, ah = b.y + b.h - 8 - top, total = Math.max(cap, rows.length), s = 3, cols = 1;
+      for(var sz = 18; sz >= 3; sz--){ var gp = Math.max(1, sz * 0.18); cols = Math.max(1, Math.floor((aw + gp) / (sz + gp))); if(Math.ceil(total / cols) * (sz + gp) <= ah){ s = sz; break; } }
+      var gap = Math.max(1, s * 0.18); cols = Math.max(1, Math.floor((aw + gap) / (s + gap)));
+      for(var j = 0; j < total; j++){
+        var x = b.x + 9 + (j % cols) * (s + gap), y = top + Math.floor(j / cols) * (s + gap);
+        if(j < rows.length){ ctx.fillStyle = animColor(rows[j][RAW.item]); ctx.fillRect(x, y, s, s); }
+        else { ctx.strokeStyle = line; ctx.lineWidth = 0.8; ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1); }
+      }
+    });
+    // Xe nâng
+    var fk = anim.fork, pos = fk;
+    if(st && anim.playing !== null){
+      var bs = L.boxes[st.from], bd = L.boxes[st.to];
+      if(bs && bd){
+        var a = center(bs), d = center(bd), t = anim.t;
+        if(t < 0.35) pos = { x:fk.x + (a.x - fk.x) * ease(t / 0.35), y:fk.y + (a.y - fk.y) * ease(t / 0.35) };
+        else if(t < 0.45) pos = a;
+        else if(t < 0.92) pos = { x:a.x + (d.x - a.x) * ease((t - 0.45) / 0.47), y:a.y + (d.y - a.y) * ease((t - 0.45) / 0.47) };
+        else pos = d;
+        if(t >= 0.45) { ctx.setLineDash([6 / k, 6 / k]); ctx.strokeStyle = 'rgba(232,131,58,0.55)'; ctx.lineWidth = 2 / k; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(d.x, d.y); ctx.stroke(); ctx.setLineDash([]); }
+      }
+    }
+    var u = 1 / k; // vẽ xe theo px màn hình
+    ctx.save(); ctx.translate(pos.x, pos.y); ctx.scale(u, u);
+    ctx.fillStyle = '#E8833A'; ctx.fillRect(-16, -9, 24, 16);            // thân xe
+    ctx.fillStyle = '#2B3340'; ctx.fillRect(-12, -16, 12, 8);             // cabin
+    ctx.fillRect(8, -20, 3, 27);                                          // khung nâng
+    ctx.fillRect(11, 4, 14, 3);                                           // càng nâng
+    ctx.beginPath(); ctx.arc(-10, 9, 4, 0, 7); ctx.arc(4, 9, 4, 0, 7); ctx.fill(); // bánh
+    (anim.carry || []).forEach(function(r, j){
+      ctx.fillStyle = animColor(r[RAW.item]); ctx.fillRect(12, -8 - j * 12, 12, 11);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(12, -8 - j * 12, 12, 11);
+    });
+    ctx.restore();
+    // Thông tin
+    var info = $('sdk-anim-info'), pb = $('sdk-anim-prog');
+    if(pb) pb.style.width = (n ? Math.min(100, (anim.i + (st ? (anim.trip + anim.t) / Math.ceil(st.n / FORK_CAP) : 0)) / n * 100) : 0) + '%';
+    if(info) info.innerHTML = st
+      ? 'Bước <b>' + (anim.i + 1) + '/' + n + '</b> · chuyến <b>' + (anim.trip + 1) + '/' + Math.ceil(st.n / FORK_CAP) + '</b> · <b>' + esc(st.item) + '</b> PO ' + esc(st.po || '—') + ' · <b style="color:#E8833A">' + esc(st.from) + '</b> → <b style="color:var(--teal)">' + esc(st.to) + '</b> · ' + fmt(st.n) + ' pallet' + (anim.playing ? '' : ' · ⏸ đang dừng')
+      : '🏁 <b>Đã xong toàn bộ ' + fmt(n) + ' bước</b> — bấm ▶ để phát lại từ đầu';
+    var pbtn = document.querySelector('#sdk-anim [data-anim="play"]');
+    if(pbtn) pbtn.textContent = anim.playing ? '⏸ Tạm dừng' : '▶ Phát';
+  }
+  // Phím khi popup đang mở (chặn trước các phím tắt của trang).
+  window.addEventListener('keydown', function(e){
+    if(!anim) return;
+    var key = e.key;
+    if(key === ' ' || e.code === 'Space'){ e.preventDefault(); e.stopPropagation(); animToggle(); }
+    else if(key === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeAnim(); }
+    else if(key === 'ArrowLeft'){ e.preventDefault(); e.stopPropagation(); animStep(-1); }
+    else if(key === 'ArrowRight'){ e.preventDefault(); e.stopPropagation(); animStep(1); }
+    else if(key === 'Enter'){ e.preventDefault(); e.stopPropagation(); }
+  }, true);
+
   function consolAct(act){
     if(act === 'play'){ consolPlayToggle(); return; }
+    if(act === 'anim'){ openAnim(); return; }
     consolPlayStop(); // thao tác tay -> dừng phát
     var c = state.consol; if(!c) return;
     var n = c.plan.steps.length, st = c.plan.steps[c.cur];
