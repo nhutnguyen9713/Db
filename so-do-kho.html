@@ -33,6 +33,13 @@
   }
   .sdk-tab:hover{border-color:rgba(255,255,255,0.35); color:#fff;}
   .sdk-tab.active{background:#fff; color:#12161F; border-color:#fff;}
+  .sdk-tab-warn{display:inline-block; margin-left:5px; min-width:16px; padding:0 4px; border-radius:8px; background:#E5484D; color:#fff; font-size:10px; line-height:16px; text-align:center; font-weight:700;}
+  .sdk-offmap{margin:0 0 12px; padding:10px 12px; border:1px solid rgba(229,72,77,0.45); border-left:4px solid #E5484D; border-radius:10px; background:rgba(229,72,77,0.08); font-size:13px;}
+  .sdk-offmap-title{font-weight:700; color:#E5484D; margin-bottom:4px;}
+  .sdk-offmap-sub{color:var(--muted); font-size:12px; margin-bottom:8px;}
+  .sdk-offmap-chips{display:flex; flex-wrap:wrap; gap:6px;}
+  .sdk-offmap-chip{border:1px solid rgba(229,72,77,0.5); background:var(--panel); color:inherit; border-radius:999px; padding:3px 10px; font:inherit; font-size:12px; cursor:pointer;}
+  .sdk-offmap-chip:hover, .sdk-offmap-chip.active{background:#E5484D; color:#fff; border-color:#E5484D;}
   .sdk-spacer{flex:1;}
   .sdk-icon-btn{
     height:38px; min-width:38px; padding:0 11px; border-radius:11px; border:1px solid rgba(255,255,255,0.12);
@@ -296,6 +303,7 @@
         </div>
         <div class="wh3b-legend" id="sdk-legend"></div>
         <div class="wh3b-custom-grid-note" id="sdk-grid-note" style="display:none;"></div>
+        <div class="sdk-offmap" id="sdk-offmap" style="display:none;"></div>
         <div id="sdk-grid"></div>
         <div id="sdk-detail"></div>
         <div class="sdk-pick" id="sdk-pick" style="display:none;"></div>
@@ -953,10 +961,47 @@
     return '<span><i style="background:var(--muted-2)"></i>Trống (0 pallet)</span><span><i style="background:var(--teal)"></i>Thấp (&lt; 50%)</span><span><i style="background:var(--amber-bright)"></i>Vừa (50–79%)</span><span><i style="background:var(--red)"></i>Đầy / gần đầy (≥ 80%)</span>';
   }
 
+  function offMapBadge(k){
+    if(!state.inventory) return '';
+    var list = offMapOf(k);
+    if(!list.length) return '';
+    var n = list.reduce(function(s, x){ return s + x.n; }, 0);
+    return '<span class="sdk-tab-warn" title="' + esc(fmt(n) + ' pallet ở ' + list.length + ' locator nằm ngoài sơ đồ') + '">⚠ ' + fmt(n) + '</span>';
+  }
   function renderTabs(){
     $('sdk-tabs').innerHTML = KHO_ORDER.map(function(k){
-      return '<button type="button" class="sdk-tab' + (k === state.activeKho ? ' active' : '') + '" data-kho="' + esc(k) + '">' + esc(KHO[k].code) + '</button>';
+      return '<button type="button" class="sdk-tab' + (k === state.activeKho ? ' active' : '') + '" data-kho="' + esc(k) + '">' + esc(KHO[k].code) + offMapBadge(k) + '</button>';
     }).join('');
+  }
+
+  /* ============ Cảnh báo pallet nằm NGOÀI sơ đồ ============
+     Locator đang có pallet nhưng không có ô trên lưới sơ đồ của kho (lưới tuỳ chỉnh trên Cloud; nếu chưa
+     có lưới thì bỏ qua). Những pallet này không được Overview TN5 tính vào Utilization. */
+  function mapLocSetOf(kho){
+    var set = {}, lay = state.grids && state.grids[kho];
+    if(lay && Array.isArray(lay.cells) && lay.cells.some(function(c){ return !c.isLabel && c.locator; })){
+      lay.cells.forEach(function(c){ if(!c.isLabel && c.locator) set[c.locator] = 1; });
+      return set;
+    }
+    return null; // chưa có lưới tuỳ chỉnh -> bố cục mặc định đã liệt kê mọi locator, không có gì nằm ngoài
+  }
+  function offMapOf(kho){
+    var set = mapLocSetOf(kho), map = state.byKho[kho] || {}, out = [];
+    if(!set) return out;
+    Object.keys(map).forEach(function(loc){ if(!set[loc] && map[loc].length) out.push({ loc:loc, n:map[loc].length }); });
+    return out.sort(function(a, b){ return naturalCmp(a.loc, b.loc); });
+  }
+  function renderOffMap(kho){
+    var box = $('sdk-offmap');
+    var list = state.inventory ? offMapOf(kho) : [];
+    if(!list.length){ box.style.display = 'none'; box.innerHTML = ''; return; }
+    var pallets = list.reduce(function(s, x){ return s + x.n; }, 0);
+    box.style.display = '';
+    box.innerHTML = '<div class="sdk-offmap-title">⚠️ ' + esc(kho) + ': ' + fmt(pallets) + ' pallet ở ' + fmt(list.length) + ' locator nằm ngoài sơ đồ</div>' +
+      '<div class="sdk-offmap-sub">Các vị trí này có tồn nhưng không có ô trong lưới sơ đồ kho, nên ' + (ZONES[kho] ? '' : 'không hiện trên sơ đồ và ') + 'không được tính vào Utilization ở Overview TN5. Bấm 1 locator để xem pallet; thêm ô vào sơ đồ ở trang Sơ đồ kho của TN5 Dashboard.</div>' +
+      '<div class="sdk-offmap-chips">' + list.map(function(x){
+        return '<button type="button" class="sdk-offmap-chip' + (state.activeLocator === x.loc ? ' active' : '') + '" data-offmap="' + esc(x.loc) + '">' + esc(x.loc) + ' · ' + fmt(x.n) + '</button>';
+      }).join('') + '</div>';
   }
 
   function render(){
@@ -1007,6 +1052,7 @@
       note.textContent = 'Chưa có lưới tuỳ chỉnh cho ' + kho + ' trên Cloud — đang hiện bố cục mặc định.';
     }
     $('sdk-grid').innerHTML = html;
+    renderOffMap(kho);
     if(ZONES[kho] && state.inventory){
       var all3A = locStats(kho, Object.keys(state.byKho[kho] || {}));
       stats = { locators:all3A.locators, pallets:all3A.pallets, full:all3A.full };
@@ -1336,6 +1382,16 @@
     }
     state.activeLocator = state.activeLocator === loc ? null : loc;
     document.querySelectorAll('#sdk-grid .wh3b-box').forEach(function(el){ el.classList.toggle('active', el.getAttribute('data-locator') === state.activeLocator); });
+    showLocatorDetail();
+    if(state.activeLocator) $('sdk-detail').scrollIntoView({ behavior:'smooth', block:'nearest' });
+  });
+  $('sdk-offmap').addEventListener('click', function(e){
+    var b = e.target.closest('[data-offmap]');
+    if(!b) return;
+    var loc = b.getAttribute('data-offmap');
+    state.activeLocator = state.activeLocator === loc ? null : loc;
+    document.querySelectorAll('#sdk-grid .wh3b-box').forEach(function(el){ el.classList.toggle('active', el.getAttribute('data-locator') === state.activeLocator); });
+    document.querySelectorAll('#sdk-offmap .sdk-offmap-chip').forEach(function(el){ el.classList.toggle('active', el.getAttribute('data-offmap') === state.activeLocator); });
     showLocatorDetail();
     if(state.activeLocator) $('sdk-detail').scrollIntoView({ behavior:'smooth', block:'nearest' });
   });
