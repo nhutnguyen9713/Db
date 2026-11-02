@@ -372,7 +372,7 @@
   var LS_VIEW = 'sdk_view_mode';
   var LS_MONO = 'sdk_mono_color';
   // Vị trí KHÔNG gợi ý để cất hàng nhận về: khu sản xuất, picking, loading, khu chờ (TG/ITN).
-  var NO_STORE_RE = /prod|pick|loading|-TG$|-ITN$/i;
+  var NO_STORE_RE = /prod|pick|load|-TG$|-ITN$/i; // không cất / không gom vào-ra: PROD, PICK, LOADING, TG, ITN
   // Thứ tự ưu tiên lấy thông tin kết nối đã lưu trên máy: dashboard chính → trang 3 Plan → riêng trang này.
   var CRED_SOURCES = [
     ['tn5_cloud_gas_url', 'tn5_cloud_gas_token'],
@@ -801,7 +801,7 @@
      Trong từng khu: các vị trí chứa hàng xếp theo số thứ tự (A01, A02, …); các nhóm Mã + PO xếp theo chỗ đang nằm
      (trung bình vị trí hiện tại) để ít phải chuyển nhất, rồi rót lần lượt vào dãy vị trí — nhóm lớn chiếm trọn các
      locator ở giữa, phần lẻ ở 2 đầu nằm ngay locator kế bên. Khi vị trí đích đang đầy hàng của nhóm khác, nhóm đó được
-     chuyển sang chỗ đích của nó (nếu còn chỗ) hoặc tạm ra KHU CHỜ rồi đưa về sau. */
+     chuyển sang chỗ đích của nó (nếu còn chỗ) hoặc để tạm ở 1 vị trí sàn còn trống rồi đưa về sau (không dùng Loading/PICK). */
   var CONSOL_BUFFER = 'KHU CHỜ (tạm)';
   function computeConsolPlan2(kho){
     var map = state.byKho[kho] || {};
@@ -877,8 +877,22 @@
               var m = Math.min(surplus[k][l], dst.need, ecap[dst.loc] - occ[dst.loc]);
               move(k, l, dst.loc, m); takeSurplus(k, l, m); dst.need -= m;
             } else {
-              var m2 = surplus[k][l];
-              move(k, l, CONSOL_BUFFER, m2); takeSurplus(k, l, m2); buffer[k] = (buffer[k] || 0) + m2;
+              // Để tạm ở 1 vị trí sàn khác còn chỗ (ưu tiên chỗ cuối dãy không thuộc bố cục đích) — KHÔNG dùng Loading/PICK.
+              var tmp = null, best = -1;
+              locs.forEach(function(t){
+                if(t === l || occ[t] >= ecap[t]) return;
+                var tsum = 0; Object.keys(tgt[t]).forEach(function(kk){ tsum += tgt[t][kk]; });
+                var score = (tsum === 0 ? 100000 : 0) + (ecap[t] - occ[t]);
+                if(score > best){ best = score; tmp = t; }
+              });
+              if(tmp){
+                var m3 = Math.min(surplus[k][l], ecap[tmp] - occ[tmp]);
+                move(k, l, tmp, m3); takeSurplus(k, l, m3);
+                (surplus[k] || (surplus[k] = {}))[tmp] = (surplus[k][tmp] || 0) + m3;
+              } else {
+                var m2 = surplus[k][l];
+                move(k, l, CONSOL_BUFFER, m2); takeSurplus(k, l, m2); buffer[k] = (buffer[k] || 0) + m2;
+              }
             }
           }
         }
@@ -945,7 +959,7 @@
     html += '<div class="sdk-consol-cur"><div class="sdk-consol-cur-title">BƯỚC ' + (c.cur + 1) + ' / ' + n + (c.done[st.id] ? ' · ✓ ĐÃ XONG' : '') + '</div>' +
       '<div class="sdk-consol-move"><span class="sdk-item-chip"><i style="background:' + itemColor(st.item) + '"></i><b>' + esc(st.item) + '</b></span> · PO <b>' + esc(st.po || '—') + '</b>' +
       ' — chuyển <b>' + fmt(st.n) + ' pallet</b> từ <span class="loc src" data-goto="' + esc(st.from) + '">' + esc(st.from) + '</span> → <span class="loc dst" data-goto="' + esc(st.to) + '">' + esc(st.to) + '</span></div>' +
-      (st.to === CONSOL_BUFFER ? '<div class="sdk-consol-sum">↪ Đưa tạm ra khu chờ để lấy chỗ — sẽ có bước đưa về vị trí đích sau.</div>' : '') +
+      (st.to === CONSOL_BUFFER ? '<div class="sdk-consol-sum">↪ Kho hết chỗ sàn trống: đưa tạm ra ngoài để lấy chỗ — sẽ có bước đưa về vị trí đích sau.</div>' : '') +
       '<div class="sdk-consol-sum">Nhóm này: ' + fmt(job.total) + ' pallet ở ' + fmt(job.nLocs) + ' vị trí → ' + (m2 ? 'xếp vào' : 'gom về') + ' <b>' + esc(job.target) + '</b>' +
       (job.full ? '' : ' · <span style="color:var(--red)">⚠ không đủ chỗ, còn sót ' + fmt(job.left) + ' pallet</span>') + '</div>' +
       '<div class="sdk-consol-btns"><button type="button" data-consol="prev"' + (c.cur ? '' : ' disabled') + '>◀ Bước trước</button>' +
