@@ -245,6 +245,9 @@
   .sdk-anim-bar button, .sdk-anim-bar select{padding:6px 11px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--text); font-size:13px; cursor:pointer;}
   .sdk-anim-bar button.main{background:var(--teal); border-color:var(--teal); color:#fff; font-weight:700; min-width:110px;}
   .sdk-anim-title{font-family:var(--disp); font-weight:700; font-size:14px; margin-right:6px;}
+  .sdk-anim-zoom{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted);}
+  .sdk-anim-zoom input{width:140px; accent-color:var(--teal);}
+  .sdk-anim-zoom b{color:var(--text); font-family:var(--mono); min-width:42px;}
   .sdk-anim-info{flex:1 1 300px; font-size:12.5px; color:var(--muted); min-width:0;}
   .sdk-anim-info b{color:var(--text);}
   .sdk-anim-prog{height:4px; background:var(--line);}
@@ -1937,9 +1940,9 @@
   }
   /* ============ Popup mô phỏng XE NÂNG chở từng chuyến pallet ============
      Lấy đúng vị trí / kích thước các ô locator trên sơ đồ khu đang gom (đọc từ trang), vẽ lại lên canvas.
-     Mỗi bước: xe nâng chạy tới vị trí lấy, nâng tối đa FORK_CAP pallet cùng Mã + PO, chở sang vị trí đặt, hạ xuống —
-     lặp đến khi chuyển đủ N pallet của bước, rồi sang bước kế. Space / bấm vào hình = tạm dừng · ← → = lùi / tới 1 bước · Esc = đóng. */
-  var FORK_CAP = 2;
+     Mỗi bước: xe nâng chạy tới vị trí lấy, nâng đủ N pallet cùng Mã + PO của bước, chở sang vị trí đặt, hạ xuống,
+     rồi sang bước kế. Thanh Zoom phóng to sơ đồ và camera bám theo xe nâng. Space / bấm vào hình = tạm dừng · ← → = lùi / tới 1 bước · Esc = đóng. */
+  var FORK_CAP = Infinity; // mỗi bước = 1 chuyến: xe chở hết số pallet của bước
   var anim = null;
   function animColor(item){ return document.body.classList.contains('sdk-mono') ? '#4A7FB5' : itemColor(item); }
   function animCss(name, fb){ var v = getComputedStyle(document.body).getPropertyValue(name).trim(); return v || fb; }
@@ -1963,6 +1966,7 @@
     anim.layout = { boxes:boxes, W:Math.max(1, maxX - minX), H:Math.max(1, maxY - minY) };
     anim.layoutZone = zone;
     anim.fork = { x:0, y:anim.layout.H }; // xe nâng xuất phát ở góc dưới bên trái
+    anim.cam = null;
   }
   function animResetSim(){
     var c = state.consol;
@@ -1971,6 +1975,14 @@
     anim.sim = sim; anim.trip = 0; anim.t = 0; anim.carry = null; anim.lifted = false; anim.layout = null;
     animLayout();
   }
+  function animZoomInit(){ try{ var z = Number(localStorage.getItem('sdk_anim_zoom')); if(z >= 100 && z <= 500) return z; }catch(e){} return 220; }
+  function animSetZoom(z){
+    z = Math.max(100, Math.min(500, Math.round(z / 10) * 10));
+    anim.zoom = z / 100;
+    var inp = document.querySelector('#sdk-anim [data-anim-zoom]'); if(inp) inp.value = z;
+    var v = $('sdk-anim-zoomv'); if(v) v.textContent = z + '%';
+    try{ localStorage.setItem('sdk_anim_zoom', String(z)); }catch(e){}
+  }
   function openAnim(){
     var c = state.consol; if(!c || !c.plan.steps.length) return;
     consolPlayStop();
@@ -1978,10 +1990,11 @@
     m.innerHTML = '<div class="sdk-anim-box"><div class="sdk-anim-bar"><span class="sdk-anim-title">🎬 Mô phỏng xe nâng · ' + esc(c.plan.kho) + '</span>' +
       '<button type="button" data-anim="prev" title="Lùi 1 bước (←)">⏮</button><button type="button" class="main" data-anim="play" title="Space / bấm vào hình">⏸ Tạm dừng</button><button type="button" data-anim="next" title="Tới 1 bước (→)">⏭</button>' +
       '<select data-anim-speed title="Tốc độ">' + [[2400, '0.5×'], [1200, '1×'], [600, '2×'], [300, '4×'], [120, '10×']].map(function(o){ return '<option value="' + o[0] + '"' + (o[0] === 1200 ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>' +
+      '<label class="sdk-anim-zoom" title="Phóng to sơ đồ — camera bám theo xe nâng (lăn chuột trên hình cũng zoom được)">🔍 <input type="range" min="100" max="500" step="10" data-anim-zoom value="' + animZoomInit() + '"> <b id="sdk-anim-zoomv">' + animZoomInit() + '%</b></label>' +
       '<span class="sdk-anim-info" id="sdk-anim-info"></span><button type="button" data-anim="close" title="Esc">✕ Đóng</button></div>' +
       '<div class="sdk-anim-prog"><i id="sdk-anim-prog"></i></div><div class="sdk-anim-wrap"><canvas id="sdk-anim-cv"></canvas></div></div>';
     document.body.appendChild(m);
-    anim = { i:c.end ? 0 : c.cur, playing:true, tripMs:1200, last:0, raf:0 };
+    anim = { i:c.end ? 0 : c.cur, playing:true, tripMs:1200, last:0, raf:0, zoom:animZoomInit() / 100, cam:null };
     animResetSim();
     m.addEventListener('click', function(e){
       var b = e.target.closest('[data-anim]');
@@ -1992,6 +2005,8 @@
       if(a === 'close') closeAnim(); else if(a === 'play') animToggle(); else if(a === 'prev') animStep(-1); else if(a === 'next') animStep(1);
     });
     m.querySelector('[data-anim-speed]').addEventListener('change', function(){ anim.tripMs = Number(this.value) || 1200; });
+    m.querySelector('[data-anim-zoom]').addEventListener('input', function(){ animSetZoom(Number(this.value)); });
+    m.querySelector('#sdk-anim-cv').addEventListener('wheel', function(e){ e.preventDefault(); animSetZoom(anim.zoom * 100 + (e.deltaY < 0 ? 20 : -20)); }, { passive:false });
     anim.last = performance.now();
     anim.raf = requestAnimationFrame(animLoop);
   }
@@ -2057,12 +2072,29 @@
     var dpr = window.devicePixelRatio || 1, cw = cv.clientWidth, ch = cv.clientHeight;
     if(cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)){ cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
     var ctx = cv.getContext('2d'), L = anim.layout, pad = 16;
-    var k = Math.min((cw - pad * 2) / L.W, (ch - pad * 2) / L.H);
-    var ox = (cw - L.W * k) / 2, oy = (ch - L.H * k) / 2;
+    var c = state.consol, steps = c.plan.steps, n = steps.length, st = anim.i < n ? steps[anim.i] : null;
+    // Vị trí xe nâng (toạ độ sơ đồ).
+    var fk = anim.fork, pos = fk, a = null, d = null, t = anim.t;
+    if(st){
+      var bs = L.boxes[st.from], bd = L.boxes[st.to];
+      if(bs && bd){
+        a = center(bs); d = center(bd);
+        if(t < 0.35) pos = { x:fk.x + (a.x - fk.x) * ease(t / 0.35), y:fk.y + (a.y - fk.y) * ease(t / 0.35) };
+        else if(t < 0.45) pos = a;
+        else if(t < 0.92) pos = { x:a.x + (d.x - a.x) * ease((t - 0.45) / 0.47), y:a.y + (d.y - a.y) * ease((t - 0.45) / 0.47) };
+        else pos = d;
+      }
+    }
+    // Zoom + camera bám theo xe (giữ trong khung sơ đồ).
+    var k0 = Math.min((cw - pad * 2) / L.W, (ch - pad * 2) / L.H), k = k0 * (anim.zoom || 1);
+    function clampC(v, len, view){ return len * k <= view ? len / 2 : Math.max(view / 2 / k, Math.min(len - view / 2 / k, v)); }
+    var tx = clampC(pos.x, L.W, cw), ty = clampC(pos.y, L.H, ch);
+    if(!anim.cam) anim.cam = { x:tx, y:ty };
+    anim.cam.x += (tx - anim.cam.x) * 0.18; anim.cam.y += (ty - anim.cam.y) * 0.18;
+    var ox = cw / 2 - anim.cam.x * k, oy = ch / 2 - anim.cam.y * k;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = animCss('--panel', '#fff'); ctx.fillRect(0, 0, cw, ch);
     ctx.translate(ox, oy); ctx.scale(k, k);
-    var c = state.consol, steps = c.plan.steps, n = steps.length, st = anim.i < n ? steps[anim.i] : null;
     var line = animCss('--line', '#E1E7F0'), text = animCss('--text', '#16202E'), muted = animCss('--muted', '#55637C'), panel2 = animCss('--panel-2', '#F4F6FA');
     var kho = c.plan.kho;
     Object.keys(L.boxes).forEach(function(loc){
@@ -2087,35 +2119,27 @@
       }
     });
     // Xe nâng
-    var fk = anim.fork, pos = fk;
-    if(st && anim.playing !== null){
-      var bs = L.boxes[st.from], bd = L.boxes[st.to];
-      if(bs && bd){
-        var a = center(bs), d = center(bd), t = anim.t;
-        if(t < 0.35) pos = { x:fk.x + (a.x - fk.x) * ease(t / 0.35), y:fk.y + (a.y - fk.y) * ease(t / 0.35) };
-        else if(t < 0.45) pos = a;
-        else if(t < 0.92) pos = { x:a.x + (d.x - a.x) * ease((t - 0.45) / 0.47), y:a.y + (d.y - a.y) * ease((t - 0.45) / 0.47) };
-        else pos = d;
-        if(t >= 0.45) { ctx.setLineDash([6 / k, 6 / k]); ctx.strokeStyle = 'rgba(232,131,58,0.55)'; ctx.lineWidth = 2 / k; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(d.x, d.y); ctx.stroke(); ctx.setLineDash([]); }
-      }
-    }
-    var u = 1 / k; // vẽ xe theo px màn hình
+    if(st && a && d && t >= 0.45){ ctx.setLineDash([6 / k, 6 / k]); ctx.strokeStyle = 'rgba(232,131,58,0.55)'; ctx.lineWidth = 2 / k; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(d.x, d.y); ctx.stroke(); ctx.setLineDash([]); }
+    var u = Math.min(2.2, Math.sqrt(anim.zoom || 1)) / k; // xe to dần theo zoom
     ctx.save(); ctx.translate(pos.x, pos.y); ctx.scale(u, u);
     ctx.fillStyle = '#E8833A'; ctx.fillRect(-16, -9, 24, 16);            // thân xe
     ctx.fillStyle = '#2B3340'; ctx.fillRect(-12, -16, 12, 8);             // cabin
     ctx.fillRect(8, -20, 3, 27);                                          // khung nâng
     ctx.fillRect(11, 4, 14, 3);                                           // càng nâng
     ctx.beginPath(); ctx.arc(-10, 9, 4, 0, 7); ctx.arc(4, 9, 4, 0, 7); ctx.fill(); // bánh
-    (anim.carry || []).forEach(function(r, j){
-      ctx.fillStyle = animColor(r[RAW.item]); ctx.fillRect(12, -8 - j * 12, 12, 11);
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(12, -8 - j * 12, 12, 11);
+    var cr = anim.carry || [], ccols = Math.min(4, Math.max(1, cr.length));
+    cr.forEach(function(r, j){
+      var cx = 12 + (j % ccols) * 9, cy = -6 - Math.floor(j / ccols) * 9;
+      ctx.fillStyle = animColor(r[RAW.item]); ctx.fillRect(cx, cy, 8, 8);
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(cx, cy, 8, 8);
     });
+    if(cr.length){ ctx.fillStyle = animCss('--text', '#16202E'); ctx.font = '700 11px ui-monospace, monospace'; ctx.textBaseline = 'middle'; ctx.fillText('×' + cr.length, 14 + ccols * 9, -2); }
     ctx.restore();
     // Thông tin
     var info = $('sdk-anim-info'), pb = $('sdk-anim-prog');
     if(pb) pb.style.width = (n ? Math.min(100, (anim.i + (st ? (anim.trip + anim.t) / Math.ceil(st.n / FORK_CAP) : 0)) / n * 100) : 0) + '%';
     if(info) info.innerHTML = st
-      ? 'Bước <b>' + (anim.i + 1) + '/' + n + '</b> · chuyến <b>' + (anim.trip + 1) + '/' + Math.ceil(st.n / FORK_CAP) + '</b> · <b>' + esc(st.item) + '</b> PO ' + esc(st.po || '—') + ' · <b style="color:#E8833A">' + esc(st.from) + '</b> → <b style="color:var(--teal)">' + esc(st.to) + '</b> · ' + fmt(st.n) + ' pallet' + (anim.playing ? '' : ' · ⏸ đang dừng')
+      ? 'Bước <b>' + (anim.i + 1) + '/' + n + '</b> · <b>' + esc(st.item) + '</b> PO ' + esc(st.po || '—') + ' · <b style="color:#E8833A">' + esc(st.from) + '</b> → <b style="color:var(--teal)">' + esc(st.to) + '</b> · ' + fmt(st.n) + ' pallet' + (anim.playing ? '' : ' · ⏸ đang dừng')
       : '🏁 <b>Đã xong toàn bộ ' + fmt(n) + ' bước</b> — bấm ▶ để phát lại từ đầu';
     var pbtn = document.querySelector('#sdk-anim [data-anim="play"]');
     if(pbtn) pbtn.textContent = anim.playing ? '⏸ Tạm dừng' : '▶ Phát';
