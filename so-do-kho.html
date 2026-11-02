@@ -223,6 +223,38 @@
   .sdk-plan-n{font-family:var(--mono); font-weight:700; font-size:15px; color:var(--violet);}
   .sdk-plan-why{font-size:11.5px; color:var(--muted); flex-basis:100%; padding-left:34px;}
   .sdk-recv-warn{margin-top:8px; font-size:12px; color:var(--red);}
+  .sdk-consol{border:1.5px solid rgba(16,150,120,0.45); background:rgba(16,150,120,0.06); border-radius:10px; padding:12px 14px; margin-bottom:14px;}
+  .sdk-consol-head{display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; margin-bottom:8px;}
+  .sdk-consol-title{font-family:var(--disp); font-weight:700; font-size:14px; color:var(--text);}
+  .sdk-consol-sum{font-size:12.5px; color:var(--muted);}
+  .sdk-consol-sum b{color:var(--text);}
+  .sdk-consol-bar{height:8px; border-radius:5px; background:var(--line-soft, var(--line)); overflow:hidden; margin:6px 0 10px;}
+  .sdk-consol-bar i{display:block; height:100%; background:var(--teal);}
+  .sdk-consol-cur{border:1.5px solid var(--teal); border-radius:10px; background:var(--panel); padding:10px 12px; display:flex; flex-direction:column; gap:8px;}
+  .sdk-consol-cur-title{font-size:12px; color:var(--muted); font-family:var(--mono);}
+  .sdk-consol-move{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:14px;}
+  .sdk-consol-move .loc{font-family:var(--mono); font-weight:700; padding:3px 8px; border-radius:6px; cursor:pointer; border:1.5px solid;}
+  .sdk-consol-move .loc.src{border-color:#E8833A; color:#E8833A;}
+  .sdk-consol-move .loc.dst{border-color:var(--teal); color:var(--teal);}
+  .sdk-consol-btns{display:flex; gap:6px; flex-wrap:wrap;}
+  .sdk-consol-btns button{padding:7px 12px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--text); font-size:12.5px; cursor:pointer;}
+  .sdk-consol-btns button.main{background:var(--teal); border-color:var(--teal); color:#fff; font-weight:700;}
+  .sdk-consol-list{margin-top:10px; max-height:300px; overflow:auto; display:flex; flex-direction:column; gap:3px;}
+  .sdk-consol-step{all:unset; box-sizing:border-box; display:flex; gap:8px; align-items:center; padding:5px 8px; border-radius:7px; cursor:pointer; font-size:12.5px; border:1px solid transparent;}
+  .sdk-consol-step:hover{background:var(--panel);}
+  .sdk-consol-step.cur{border-color:var(--teal); background:var(--panel);}
+  .sdk-consol-step.done{opacity:.5; text-decoration:line-through;}
+  .sdk-consol-step .no{font-family:var(--mono); font-weight:700; min-width:34px; color:var(--muted);}
+  .sdk-consol-step .mono{font-family:var(--mono);}
+  .sdk-consol-group{font-size:11.5px; font-weight:700; color:var(--muted); margin-top:6px; padding:0 8px;}
+  .sdk-consol-warn{margin-top:8px; font-size:12px; color:var(--red);}
+  #sdk-consol-btn.active{background:var(--teal); color:#fff; border-color:var(--teal);}
+  .wh3b-box.sdk-mv-src{box-shadow:0 0 0 3px #E8833A; border-color:#E8833A; z-index:2;}
+  .wh3b-box.sdk-mv-dst{box-shadow:0 0 0 3px var(--teal); border-color:var(--teal); z-index:2;}
+  .wh3b-box.sdk-mv-src.wh3b-dim, .wh3b-box.sdk-mv-dst.wh3b-dim{opacity:1; filter:none;}
+  .wh3b-box.sdk-mv-src::after, .wh3b-box.sdk-mv-dst::after{position:absolute; top:-9px; right:8px; font:700 10px var(--mono); color:#fff; padding:1px 6px; border-radius:5px;}
+  .wh3b-box.sdk-mv-src::after{content:'LẤY ' attr(data-mv); background:#E8833A;}
+  .wh3b-box.sdk-mv-dst::after{content:'ĐẶT ' attr(data-mv); background:var(--teal);}
   .sdk-item-chip{display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:11px;}
   .sdk-item-chip i{width:11px; height:11px; border-radius:3px; display:inline-block;}
   @media (max-width:640px){
@@ -286,6 +318,7 @@
               <button type="button" data-view="pallet">🧱 Từng pallet</button><button type="button" data-view="summary">▦ Tổng hợp</button>
             </span>
             <button type="button" class="wh3b-grid-mode-btn" id="sdk-heatmap-btn" title="Đổi cách tô màu vị trí: Tắt (4 mức mặc định) / Mật độ lấp đầy / Tỉ lệ PASS-NG">🌡️ Heatmap: Tắt</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="sdk-consol-btn" title="Lập kế hoạch gom các pallet cùng Mã + PO về 1 vị trí, làm lần lượt từng bước — chuẩn bị cho đợt kiểm kê">🧹 Gom hàng kiểm kê</button>
           </div>
         </div>
       </div>
@@ -302,6 +335,7 @@
           </div>
           <div class="sdk-recv-result" id="sdk-recv-result"></div>
         </div>
+        <div class="sdk-consol" id="sdk-consol" style="display:none;"></div>
         <div class="wh3b-search-row">
           <textarea class="wh3b-search-input" id="sdk-search" rows="1" placeholder="Tìm theo Item No., Cust PO, Locator… (mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng — trong cùng 1 dòng, cách nhau bằng khoảng trắng để kết hợp nhiều điều kiện)"></textarea>
           <div class="wh3b-oqc-toggle">
@@ -425,7 +459,7 @@
     pick: null, // { item, po } — pallet đang chọn (bấm 1 ô pallet), lọc đúng mã + PO; ESC để bỏ chọn
  // null = màn hình 3 khu vực; 'tret' | 'rack' | 'lau' = đang mở chi tiết 1 khu
     activeKho: 'Kho 3B', heatmap: 'off', demo: false, byKho: {}, activeLocator: null,
-    view: 'pallet', recv: null // recv = { item, po, qty, plan:[{kho, loc, n, same, samePo, free}], incoming:{kho:{loc:n}} }
+    view: 'pallet', consol: null, recv: null // recv = { item, po, qty, plan:[{kho, loc, n, same, samePo, free}], incoming:{kho:{loc:n}} }
   };
   var cloud = { url:'', token:'' };
   try{ var savedKho = localStorage.getItem(LS_ACTIVE_KHO); if(KHO[savedKho]) state.activeKho = savedKho; }catch(e){}
@@ -697,6 +731,164 @@
     if(rv.elsewhere.length) html += '<div class="sdk-recv-summary" style="margin-top:8px;">Mã này còn nằm ở: ' + rv.elsewhere.map(function(e){ return '<b>' + esc(e.kho) + '</b> (' + fmt(e.cnt) + ' pallet)'; }).join(', ') + '</div>';
     return html;
   }
+  /* ============ Gom hàng cùng Mã + PO về 1 chỗ — chuẩn bị kiểm kê, làm theo từng bước ============
+     Với kho đang xem (kho chia khu thì gom trong từng khu; bỏ Rack 3A vì mỗi ô kệ chỉ 2 pallet):
+       - Mỗi nhóm Mã + PO đang nằm ở ≥ 2 vị trí là 1 việc cần gom.
+       - Vị trí đích: chỗ đang có NHIỀU pallet của nhóm nhất mà còn đủ chỗ nhận hết phần còn lại; nếu không có
+         thì lấy 1 vị trí trống hoàn toàn vừa đủ sức chứa (nhỏ nhất vừa đủ); không có nữa thì gom được bao nhiêu
+         về chỗ nhiều nhất thì gom (ghi rõ còn sót).
+       - Mỗi bước = 1 lượt xe nâng: chuyển N pallet từ vị trí A sang vị trí B. Sức chứa được mô phỏng qua từng bước,
+         nên bước sau đã tính chỗ trống do bước trước tạo ra.
+     Bỏ qua khu PROD/PICK/Loading/TG/ITN. Trang chỉ xem: đánh dấu "Xong" lưu trên trình duyệt này, không sửa dữ liệu. */
+  var LS_CONSOL = 'sdk_consol_done_v1';
+  function consolZoneOf(kho, loc){ return ZONES[kho] ? zoneOf(kho, loc) : ''; }
+  function computeConsolPlan(kho){
+    var map = state.byKho[kho] || {};
+    var occ = {}, cap = {}, groups = {};
+    Object.keys(map).forEach(function(loc){
+      if(NO_STORE_RE.test(loc)) return;
+      if(kho === 'Kho 3A' && zoneOf(kho, loc) === 'rack') return;
+      occ[loc] = map[loc].length; cap[loc] = capacityOf(kho, loc);
+      map[loc].forEach(function(r){
+        var item = String(r[RAW.item] || ''), po = String(r[RAW.custpo] || '');
+        if(!item) return;
+        var z = consolZoneOf(kho, loc), key = z + '\u0001' + item + '\u0001' + po;
+        var g = groups[key] || (groups[key] = { zone:z, item:item, po:po, locs:{}, total:0 });
+        g.locs[loc] = (g.locs[loc] || 0) + 1; g.total++;
+      });
+    });
+    var list = Object.keys(groups).map(function(k){ return groups[k]; }).filter(function(g){ return Object.keys(g.locs).length > 1; });
+    // Nhóm rải rác nhiều chỗ nhất làm trước; cùng số chỗ thì nhóm nhiều pallet trước.
+    list.sort(function(a, b){ return (Object.keys(b.locs).length - Object.keys(a.locs).length) || (b.total - a.total) || a.item.localeCompare(b.item) || a.po.localeCompare(b.po); });
+    var steps = [], jobs = [], stuck = 0;
+    list.forEach(function(g){
+      var locs = Object.keys(g.locs).sort(function(a, b){ return (g.locs[b] - g.locs[a]) || naturalCmp(a, b); });
+      var target = null, full = true;
+      for(var i = 0; i < locs.length; i++){
+        var t = locs[i];
+        if(cap[t] - occ[t] >= g.total - g.locs[t]){ target = t; break; }
+      }
+      if(!target){
+        var empties = Object.keys(occ).filter(function(l){ return occ[l] === 0 && cap[l] >= g.total && consolZoneOf(kho, l) === g.zone; })
+          .sort(function(a, b){ return (cap[a] - cap[b]) || naturalCmp(a, b); });
+        if(empties.length) target = empties[0];
+      }
+      if(!target){ target = locs[0]; full = false; }
+      var job = { item:g.item, po:g.po, zone:g.zone, target:target, total:g.total, nLocs:locs.length, moves:[], left:0 };
+      // Chuyển từ chỗ ít pallet trước (dọn sạch được nhiều vị trí nhất).
+      locs.slice().reverse().forEach(function(src){
+        if(src === target) return;
+        var n = g.locs[src], room = cap[target] - occ[target];
+        var m = Math.min(n, Math.max(0, room));
+        if(m > 0){
+          occ[target] += m; occ[src] -= m;
+          var st = { id:[g.item, g.po, src, target].join('|'), item:g.item, po:g.po, from:src, to:target, n:m, job:jobs.length };
+          job.moves.push(st); steps.push(st);
+        }
+        if(m < n){ job.left += n - m; full = false; }
+      });
+      job.full = full;
+      if(!full) stuck++;
+      if(job.moves.length) jobs.push(job);
+    });
+    return { kho:kho, steps:steps, jobs:jobs, stuck:stuck, groups:list.length };
+  }
+  function consolKey(){ return state.activeKho + '|' + ((state.inventory && state.inventory.snapshot_date) || ''); }
+  function consolDoneMap(){
+    try{ var all = JSON.parse(localStorage.getItem(LS_CONSOL) || '{}'); return all[consolKey()] || {}; }catch(e){ return {}; }
+  }
+  function consolSaveDone(done){
+    try{ var all = JSON.parse(localStorage.getItem(LS_CONSOL) || '{}'); all[consolKey()] = done; localStorage.setItem(LS_CONSOL, JSON.stringify(all)); }catch(e){}
+  }
+  function openConsol(){
+    if(!state.inventory) return;
+    var plan = computeConsolPlan(state.activeKho), done = consolDoneMap();
+    var cur = 0;
+    while(cur < plan.steps.length && done[plan.steps[cur].id]) cur++;
+    plan.snap = (state.inventory && state.inventory.snapshot_date) || '';
+    state.consol = { plan:plan, done:done, cur:Math.min(cur, Math.max(0, plan.steps.length - 1)) };
+  }
+  function consolStep(){ var c = state.consol; return c && c.plan.kho === state.activeKho ? c.plan.steps[c.cur] : null; }
+  function consolHtml(){
+    var c = state.consol;
+    if(!c) return '';
+    var p = c.plan, n = p.steps.length;
+    var nDone = p.steps.filter(function(st){ return c.done[st.id]; }).length;
+    var pallets = p.steps.reduce(function(s, st){ return s + st.n; }, 0);
+    var html = '<div class="sdk-consol-head"><span class="sdk-consol-title">🧹 Gom hàng cùng Mã + PO về 1 chỗ — chuẩn bị kiểm kê · ' + esc(p.kho) + '</span>' +
+      '<span class="sdk-consol-sum"><b>' + fmt(p.jobs.length) + '</b> nhóm Mã + PO đang rải rác · <b>' + fmt(n) + '</b> bước · <b>' + fmt(pallets) + '</b> pallet cần chuyển · đã xong <b>' + fmt(nDone) + '/' + fmt(n) + '</b></span></div>';
+    if(!n){
+      return html + '<div class="sdk-consol-sum">✅ Không có Mã + PO nào nằm rải rác ở nhiều vị trí trong ' + esc(p.kho) + ' — đã sẵn sàng kiểm kê.</div>';
+    }
+    html += '<div class="sdk-consol-bar"><i style="width:' + (nDone / n * 100) + '%"></i></div>';
+    var st = p.steps[c.cur], job = p.jobs[st.job];
+    html += '<div class="sdk-consol-cur"><div class="sdk-consol-cur-title">BƯỚC ' + (c.cur + 1) + ' / ' + n + (c.done[st.id] ? ' · ✓ ĐÃ XONG' : '') + '</div>' +
+      '<div class="sdk-consol-move"><span class="sdk-item-chip"><i style="background:' + itemColor(st.item) + '"></i><b>' + esc(st.item) + '</b></span> · PO <b>' + esc(st.po || '—') + '</b>' +
+      ' — chuyển <b>' + fmt(st.n) + ' pallet</b> từ <span class="loc src" data-goto="' + esc(st.from) + '">' + esc(st.from) + '</span> → <span class="loc dst" data-goto="' + esc(st.to) + '">' + esc(st.to) + '</span></div>' +
+      '<div class="sdk-consol-sum">Nhóm này: ' + fmt(job.total) + ' pallet ở ' + fmt(job.nLocs) + ' vị trí → gom về <b>' + esc(job.target) + '</b>' +
+      (job.full ? '' : ' · <span style="color:var(--red)">⚠ không đủ chỗ, còn sót ' + fmt(job.left) + ' pallet</span>') + '</div>' +
+      '<div class="sdk-consol-btns"><button type="button" data-consol="prev"' + (c.cur ? '' : ' disabled') + '>◀ Bước trước</button>' +
+      '<button type="button" class="main" data-consol="done">' + (c.done[st.id] ? '↺ Chưa xong' : '✓ Xong — bước tiếp') + '</button>' +
+      '<button type="button" data-consol="next"' + (c.cur < n - 1 ? '' : ' disabled') + '>Bỏ qua ▶</button>' +
+      '<button type="button" data-consol="csv">⬇ Tải danh sách (Excel)</button>' +
+      '<button type="button" data-consol="reset">Làm lại từ đầu</button>' +
+      '<button type="button" data-consol="close">Đóng</button></div></div>';
+    if(p.stuck) html += '<div class="sdk-consol-warn">⚠ ' + fmt(p.stuck) + ' nhóm không gom hết được vì vị trí đích không đủ chỗ — cần dọn thêm chỗ trống.</div>';
+    var list = '', lastJob = -1;
+    p.steps.forEach(function(s2, i){
+      if(s2.job !== lastJob){
+        lastJob = s2.job; var j = p.jobs[s2.job];
+        list += '<div class="sdk-consol-group">' + esc(j.item) + ' · PO ' + esc(j.po || '—') + ' → ' + esc(j.target) + (j.zone && ZONES[p.kho] ? ' (' + esc((ZONES[p.kho].filter(function(z){ return z.id === j.zone; })[0] || {}).name || j.zone) + ')' : '') + '</div>';
+      }
+      list += '<button type="button" class="sdk-consol-step' + (i === c.cur ? ' cur' : '') + (c.done[s2.id] ? ' done' : '') + '" data-consol-step="' + i + '">' +
+        '<span class="no">' + (c.done[s2.id] ? '✓' : (i + 1)) + '</span><span class="mono">' + esc(s2.from) + '</span><span>→</span><span class="mono">' + esc(s2.to) + '</span><span>· ' + fmt(s2.n) + ' pallet</span></button>';
+    });
+    return html + '<div class="sdk-consol-list">' + list + '</div>';
+  }
+  function renderConsol(){
+    var box = $('sdk-consol'), c = state.consol;
+    $('sdk-consol-btn').classList.toggle('active', !!c);
+    if(!c){ box.style.display = 'none'; box.innerHTML = ''; return; }
+    box.style.display = '';
+    box.innerHTML = consolHtml();
+    var curEl = box.querySelector('.sdk-consol-step.cur');
+    if(curEl){ var l = box.querySelector('.sdk-consol-list'); l.scrollTop = Math.max(0, curEl.offsetTop - l.offsetTop - 60); }
+  }
+  function markConsol(){
+    document.querySelectorAll('#sdk-grid .sdk-mv-src, #sdk-grid .sdk-mv-dst').forEach(function(el){ el.classList.remove('sdk-mv-src', 'sdk-mv-dst'); el.removeAttribute('data-mv'); });
+    var st = consolStep(); if(!st) return;
+    var q = function(loc){ return document.querySelector('#sdk-grid .wh3b-box[data-locator="' + (window.CSS && CSS.escape ? CSS.escape(loc) : loc) + '"]'); };
+    var a = q(st.from), b = q(st.to);
+    if(a){ a.classList.add('sdk-mv-src'); a.setAttribute('data-mv', st.n); }
+    if(b){ b.classList.add('sdk-mv-dst'); b.setAttribute('data-mv', '+' + st.n); }
+  }
+  // Mở 1 bước: chọn đúng Mã + PO (sáng pallet của nhóm), chuyển khu nếu cần, cuộn tới vị trí lấy hàng.
+  function showConsolStep(scroll){
+    var st = consolStep();
+    renderConsol();
+    if(!st){ markConsol(); return; }
+    if(ZONES[state.activeKho]){
+      var z = zoneOf(state.activeKho, st.from);
+      if(state.zone !== z){ state.zone = z; render(); }
+    }
+    setPick(st.item, st.po);
+    markConsol();
+    if(scroll) scrollToLocator(st.from);
+  }
+  function consolCsv(){
+    var c = state.consol; if(!c) return;
+    var lines = [['Bước', 'Item No.', 'Cust PO', 'Từ vị trí', 'Đến vị trí', 'Số pallet', 'Đã xong'].join(',')];
+    c.plan.steps.forEach(function(st, i){
+      lines.push([i + 1, st.item, st.po, st.from, st.to, st.n, c.done[st.id] ? 'x' : ''].map(function(v){ v = String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','));
+    });
+    var blob = new Blob(['﻿' + lines.join('\r\n')], { type:'text/csv;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'gom-hang-kiem-ke-' + KHO[c.plan.kho].code + '-' + (((state.inventory && state.inventory.snapshot_date) || 'data').replace(/[^\w-]+/g, '-')) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+  }
+
   function goToLocator(loc){
     if(ZONES[state.activeKho]){
       var z = zoneOf(state.activeKho, loc);
@@ -1162,6 +1354,9 @@
         '<div><b>' + fmt(stats.full) + '</b><span>Vị trí đầy / gần đầy (≥ 80%)</span></div>'
       : '';
     applyFilter();
+    if(state.consol && (state.consol.plan.kho !== kho || state.consol.plan.snap !== ((state.inventory && state.inventory.snapshot_date) || ''))){ openConsol(); }
+    renderConsol();
+    markConsol();
   }
 
   /* ============ Tìm kiếm + lọc PASS/NG — giống whApplySearchFilter() trong app.js ============ */
@@ -1524,6 +1719,35 @@
     render();
   });
   $('sdk-recv-btn').addEventListener('click', runRecv);
+  $('sdk-consol-btn').addEventListener('click', function(){
+    if(state.consol){ state.consol = null; setPick(null); renderConsol(); markConsol(); return; }
+    openConsol(); showConsolStep(false);
+    $('sdk-consol').scrollIntoView({ behavior:'smooth', block:'nearest' });
+  });
+  $('sdk-consol').addEventListener('click', function(e){
+    var c = state.consol; if(!c) return;
+    var g = e.target.closest('[data-goto]');
+    if(g){ goToLocator(g.getAttribute('data-goto')); return; }
+    var sb = e.target.closest('[data-consol-step]');
+    if(sb){ c.cur = Number(sb.getAttribute('data-consol-step')); showConsolStep(true); return; }
+    var b = e.target.closest('[data-consol]'); if(!b) return;
+    var act = b.getAttribute('data-consol'), n = c.plan.steps.length, st = c.plan.steps[c.cur];
+    if(act === 'close'){ state.consol = null; setPick(null); renderConsol(); markConsol(); return; }
+    if(act === 'csv'){ consolCsv(); return; }
+    if(act === 'reset'){ if(!confirm('Bỏ đánh dấu "Xong" của mọi bước trong ' + c.plan.kho + '?')) return; c.done = {}; consolSaveDone(c.done); c.cur = 0; showConsolStep(true); return; }
+    if(act === 'prev' && c.cur > 0) c.cur--;
+    else if(act === 'next' && c.cur < n - 1) c.cur++;
+    else if(act === 'done' && st){
+      if(c.done[st.id]) delete c.done[st.id];
+      else {
+        c.done[st.id] = 1;
+        // Tới bước chưa xong kế tiếp.
+        for(var i = 1; i <= n; i++){ var k = (c.cur + i) % n; if(!c.done[c.plan.steps[k].id]){ c.cur = k; break; } }
+      }
+      consolSaveDone(c.done);
+    }
+    showConsolStep(true);
+  });
   $('sdk-pick').addEventListener('click', function(e){
     if(e.target.closest('#sdk-pick-close')){ setPick(null); return; }
     var b = e.target.closest('[data-goto]'); if(b) goToLocator(b.getAttribute('data-goto'));
@@ -1536,7 +1760,7 @@
     // nút vừa bấm bị gỡ khỏi trang nên closest('#sdk-pick') không còn thấy -> trước đây bị bỏ chọn nhầm.
     var path = e.composedPath ? e.composedPath() : [];
     var hit = function(sel){ return path.some(function(n){ return n.matches && n.matches(sel); }) || !!e.target.closest(sel); };
-    if(hit('#sdk-pick') || hit('.sdk-slot.filled')) return;
+    if(hit('#sdk-pick') || hit('.sdk-slot.filled') || hit('#sdk-consol') || hit('#sdk-consol-btn')) return;
     // Chuyển khu (thẻ khu / nút khu / nút quay lại), đổi kho, đổi chế độ xem, heatmap: giữ nguyên mã đang chọn.
     if(hit('[data-zone], .sdk-tab, #sdk-view-toggle, #sdk-heatmap-btn, #sdk-refresh-btn')) return;
     setPick(null);
