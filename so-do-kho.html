@@ -801,20 +801,53 @@
     var kho = state.activeKho;
     return Object.keys(state.byKho[kho] || {}).filter(function(l){ return zoneOf(kho, l) === zone; }).sort(naturalCmp);
   }
+  // Danh sách vị trí TÍNH Utilization ở trang Overview TN5 cho 1 kho — giống ovActiveLocatorsForKho() của
+  // app.js: danh sách "Tuỳ chỉnh vị trí" (nếu đã tự chọn, đọc bản sao cục bộ cùng trình duyệt) hoặc mặc định
+  // mọi vị trí có trong Grid Sơ đồ kho. Sức chứa từng vị trí vẫn là capacityOf() (cùng công thức + ghi đè).
+  function overviewLocsOf(kho){
+    var code = String(kho).replace('Kho ', '');
+    try{
+      var raw = localStorage.getItem('tn5_local_tn5_ov_locator_config_v1');
+      var sel = raw ? JSON.parse(raw) : null;
+      if(typeof sel === 'string') sel = JSON.parse(sel);
+      [sel, state.ovSel].some(function(src){
+        var v = src && src[code];
+        if(Array.isArray(v) && v.length){ sel = v.slice(); return true; }
+        if(v && v.locators && typeof v.locators === 'object'){ sel = Object.keys(v.locators); return true; }
+        return false;
+      }) || (sel = null);
+      if(Array.isArray(sel)) return sel;
+    }catch(e){}
+    var lay = state.grids && state.grids[kho], set = {};
+    if(lay && Array.isArray(lay.cells)) lay.cells.forEach(function(c){ if(!c.isLabel && c.locator) set[c.locator] = true; });
+    return Object.keys(set);
+  }
+  // Pallet / sức chứa / số vị trí của 1 khu tính theo ĐÚNG danh sách vị trí của Overview TN5 (để % khớp Overview).
+  function overviewZoneStats(kho, zone){
+    var locs = overviewLocsOf(kho).filter(function(l){ return zoneOf(kho, l) === zone; });
+    if(!locs.length) return null;
+    var st = { positions: locs.length, pallets: 0, cap: 0 };
+    locs.forEach(function(l){ st.pallets += ((state.byKho[kho] || {})[l] || []).length; st.cap += capacityOf(kho, l); });
+    return st;
+  }
   // active: đang xem chi tiết 1 khu -> 3 thẻ thu gọn làm tiêu đề (thẻ khu đang xem tô đậm, bấm thẻ khác để chuyển khu).
   function renderZones(active){
     var kho = state.activeKho;
     return '<div class="sdk-zones' + (active ? ' compact' : '') + '">' + ZONES[kho].map(function(z){
       var locs = zoneLocs(z.id), st = locStats(kho, locs);
-      var pct = st.cap ? Math.round(Math.min(st.pallets, st.cap) / st.cap * 100) : 0;
+      // Số lớn (pallet / sức chứa / %) lấy theo danh sách vị trí + capacity của Overview TN5; khu không có
+      // vị trí nào trong danh sách Overview thì giữ cách tính cũ (mọi vị trí đang có hàng/lưới).
+      var ovSt = overviewZoneStats(kho, z.id);
+      var bigPallets = ovSt ? ovSt.pallets : st.pallets, bigCap = ovSt ? ovSt.cap : st.cap;
+      var pct = bigCap ? Math.round(bigPallets / bigCap * 100) : 0;
       var top = Object.keys(st.items).sort(function(a, b){ return st.items[b] - st.items[a]; });
       var strip = top.slice(0, 12).map(function(it){ return '<i title="' + esc(it) + ': ' + st.items[it] + ' pallet" style="width:' + (st.items[it] / Math.max(1, st.cap) * 100) + '%; background:' + itemColor(it) + '"></i>'; }).join('');
       return '<button type="button" class="sdk-zone-card' + (st.incoming ? ' sdk-plan' : '') + (active === z.id ? ' active' : '') + '" data-zone="' + z.id + '">' +
         '<div class="sdk-zone-name">' + z.icon + ' ' + esc(z.name) + (st.incoming ? ' <span class="sdk-plan-badge">+' + st.incoming + ' CẤT VÀO</span>' : '') + '</div>' +
         '<div class="sdk-zone-desc">' + esc(z.desc) + '</div>' +
-        '<div class="sdk-zone-big">' + fmt(st.pallets) + ' <span>/ ' + fmt(st.cap) + ' pallet · ' + pct + '%</span></div>' +
+        '<div class="sdk-zone-big"' + (ovSt ? ' title="Theo Overview TN5: ' + fmt(ovSt.positions) + ' vị trí tính Utilization"' : '') + '>' + fmt(bigPallets) + ' <span>/ ' + fmt(bigCap) + ' pallet · ' + pct + '%' + (ovSt ? ' · theo Overview' : '') + '</span></div>' +
         '<div class="sdk-zone-strip" title="Mỗi màu = 1 mã hàng (12 mã nhiều pallet nhất)">' + strip + '</div>' +
-        '<div class="sdk-zone-meta"><span><b>' + fmt(st.locators) + '</b> vị trí</span><span><b>' + fmt(st.empty) + '</b> trống</span><span><b>' + fmt(st.full) + '</b> đầy ≥80%</span><span><b>' + fmt(top.length) + '</b> mã hàng</span>' + (st.ng ? '<span style="color:var(--red)"><b style="color:var(--red)">' + fmt(st.ng) + '</b> pallet NG</span>' : '') + '</div>' +
+        '<div class="sdk-zone-meta"><span><b>' + fmt(ovSt ? ovSt.positions : st.locators) + '</b> vị trí</span><span><b>' + fmt(st.empty) + '</b> trống</span><span><b>' + fmt(st.full) + '</b> đầy ≥80%</span><span><b>' + fmt(top.length) + '</b> mã hàng</span>' + (st.ng ? '<span style="color:var(--red)"><b style="color:var(--red)">' + fmt(st.ng) + '</b> pallet NG</span>' : '') + '</div>' +
         '<div style="display:flex; justify-content:space-between; gap:8px;"><span class="sdk-zone-match" data-zone-match="' + z.id + '"></span><span class="sdk-zone-open">' + (active === z.id ? 'Đang xem' : active ? 'Chuyển sang →' : 'Mở chi tiết →') + '</span></div>' +
         '</button>';
     }).join('') + '</div>';
@@ -1163,6 +1196,8 @@
       state.grids = r[1] || {};
       state.capOverride = r[2] || {};
       state.meta = r[3] || {};
+      // Danh sách "Tuỳ chỉnh vị trí" của Overview TN5 (nếu có lưu trên Cloud) — để thẻ 3 khu 3A tính sức chứa khớp Overview.
+      fetchKey('tn5_ov_locator_config_v1').then(function(v){ state.ovSel = v || null; if(state.activeKho === 'Kho 3A') render(); }).catch(function(){});
       buildByKho();
       if(state.recv) runRecv(); else render();
       btn.disabled = false;
