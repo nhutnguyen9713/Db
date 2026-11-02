@@ -146,6 +146,13 @@
   .sdk-zone-card.active{border-color:var(--violet); box-shadow:0 0 0 2px var(--violet); background:var(--violet-soft, var(--panel));}
   .sdk-back{all:unset; cursor:pointer; font-family:var(--mono); font-size:12px; font-weight:700; padding:7px 12px; border-radius:8px; border:1px solid var(--line); color:var(--text); background:var(--panel-2);}
   .sdk-back:hover{border-color:var(--violet); color:var(--violet);}
+  .sdk-2b{display:grid; grid-template-columns:minmax(150px, 0.75fr) minmax(150px, 0.75fr) repeat(3, minmax(250px, 1fr)); grid-template-rows:auto 1fr auto; gap:12px; min-width:1150px;}
+  .sdk-2b > .sdk-group{margin:0; display:flex; flex-direction:column;}
+  .sdk-2b-blocks{display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:10px; align-content:start;}
+  .sdk-2b-blocks > .wh3b-box{margin:0;}
+  .sdk-2b-lanehead .sdk-group-head{margin:0; padding-bottom:6px; border-bottom:2px solid var(--violet);}
+  .sdk-2b .wh3b-grid{grid-auto-rows:1fr;}
+  .sdk-2b-empty{color:var(--muted); font-size:12px; padding:6px 2px;}
   .sdk-group{margin-bottom:16px; border:1px solid var(--line); border-radius:11px; padding:12px; background:var(--panel);}
   .sdk-group-head{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--violet); margin-bottom:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:baseline;}
   .sdk-group-head span{color:var(--muted); font-weight:500; font-size:11px;}
@@ -947,6 +954,60 @@
     return bar + renderGroups(kho, locs, zone);
   }
 
+  /* ============ Kho 2B: mặt bằng thực tế (theo bản vẽ tay của kho) ============
+     Loading | PICK | [H trên cùng] / [A/B] [C/D] [E/F] / [G dưới cùng]. Locator nào không thuộc các khu này
+     (VD 2B-FG-ITN) nằm ở ô "Khác" góc dưới bên phải — mọi locator có tồn đều hiện trên sơ đồ. */
+  function layout2BLocs(kho){
+    var set = {};
+    Object.keys(state.byKho[kho] || {}).forEach(function(l){ set[l] = 1; });
+    var lay = state.grids && state.grids[kho];
+    if(lay && Array.isArray(lay.cells)) lay.cells.forEach(function(c){ if(!c.isLabel && c.locator && !/PROD/i.test(c.locator)) set[c.locator] = 1; });
+    var g = { load:[], pick:[], other:[] };
+    'ABCDEFGH'.split('').forEach(function(k){ g[k] = []; });
+    Object.keys(set).sort(naturalCmp).forEach(function(l){
+      var m = l.match(/FG-([A-H])\d+$/i);
+      if(/LOAD/i.test(l)) g.load.push(l);
+      else if(/PICK/i.test(l)) g.pick.push(l);
+      else if(m) g[m[1].toUpperCase()].push(l);
+      else g.other.push(l);
+    });
+    return g;
+  }
+  function renderLayout2B(kho){
+    var g = layout2BLocs(kho), minW = state.view === 'pallet' ? 150 : 110;
+    function rng(k){ var a = g[k]; if(!a.length) return k; var f = function(l){ var m = l.match(/(\d+)$/); return k + (m ? Number(m[1]) : ''); }; return a.length > 1 ? f(a[0]) + ' → ' + f(a[a.length - 1]) : f(a[0]); }
+    function head(title, locs){
+      var st = locStats(kho, locs);
+      return '<div class="sdk-group-head">' + esc(title) + '<span>' + fmt(locs.length) + ' vị trí · ' + fmt(st.pallets) + '/' + fmt(st.cap) + ' pallet</span></div>';
+    }
+    function grid(locs, cols){
+      if(!locs.length) return '<div class="sdk-2b-empty">Chưa có vị trí</div>';
+      return '<div class="wh3b-grid" style="grid-template-columns:' + (cols ? 'repeat(' + cols + ', minmax(0, 1fr))' : 'repeat(auto-fit, minmax(' + minW + 'px, 1fr))') + ';">' +
+        locs.map(function(l){ return boxHtml(kho, l); }).join('') + '</div>';
+    }
+    function card(pos, title, locs, cols){ return '<div class="sdk-group" style="' + pos + '">' + head(title, locs) + grid(locs, cols) + '</div>'; }
+    // 3 dãy A/B · C/D · E/F chung 1 lưới 6 cột: hàng thứ i của mọi dãy thẳng hàng nhau, khung cùng cỡ.
+    function blocks(pos){
+      var html = '';
+      [['A', 'C', 'E'], ['B', 'D', 'F']].forEach(function(lane, li){
+        lane.forEach(function(k, j){ html += '<div class="sdk-2b-lanehead" style="grid-column:' + (j * 2 + 1) + ' / span 2;' + (li ? ' margin-top:10px;' : '') + '">' + head(rng(k), g[k]) + '</div>'; });
+        var n = Math.max.apply(null, lane.map(function(k){ return Math.ceil(g[k].length / 2); }));
+        for(var r = 0; r < n; r++) lane.forEach(function(k){
+          for(var c = 0; c < 2; c++){ var l = g[k][r * 2 + c]; html += l ? boxHtml(kho, l) : '<div></div>'; }
+        });
+      });
+      return '<div class="sdk-group" style="' + pos + '"><div class="sdk-2b-blocks">' + html + '</div></div>';
+    }
+    return '<div class="sdk-grid-scroll"><div class="sdk-2b">' +
+      card('grid-column:1; grid-row:1 / 4;', 'LOADING', g.load, 1) +
+      card('grid-column:2; grid-row:1 / 4;', 'PICK', g.pick, 1) +
+      card('grid-column:3 / 6; grid-row:1;', 'Khu ' + rng('H'), g.H) +
+      blocks('grid-column:3 / 6; grid-row:2;') +
+      card('grid-column:3 / 5; grid-row:3;', 'Khu ' + rng('G'), g.G, 4) +
+      card('grid-column:5; grid-row:3;', 'Khác', g.other) +
+      '</div></div>';
+  }
+
   // 3) Kho khác chưa có lưới tuỳ chỉnh -> liệt kê mọi locator đang có (sắp tự nhiên).
   function renderDefaultList(kho){
     var locs = Object.keys(state.byKho[kho] || {}).sort(naturalCmp);
@@ -998,7 +1059,7 @@
     var pallets = list.reduce(function(s, x){ return s + x.n; }, 0);
     box.style.display = '';
     box.innerHTML = '<div class="sdk-offmap-title">⚠️ ' + esc(kho) + ': ' + fmt(pallets) + ' pallet ở ' + fmt(list.length) + ' locator nằm ngoài sơ đồ</div>' +
-      '<div class="sdk-offmap-sub">Các vị trí này có tồn nhưng không có ô trong lưới sơ đồ kho, nên ' + (ZONES[kho] ? '' : 'không hiện trên sơ đồ và ') + 'không được tính vào Utilization ở Overview TN5. Bấm 1 locator để xem pallet; thêm ô vào sơ đồ ở trang Sơ đồ kho của TN5 Dashboard.</div>' +
+      '<div class="sdk-offmap-sub">Các vị trí này có tồn nhưng không có ô trong lưới sơ đồ kho, nên ' + (ZONES[kho] || kho === 'Kho 2B' ? '' : 'không hiện trên sơ đồ và ') + 'không được tính vào Utilization ở Overview TN5. Bấm 1 locator để xem pallet; thêm ô vào sơ đồ ở trang Sơ đồ kho của TN5 Dashboard.</div>' +
       '<div class="sdk-offmap-chips">' + list.map(function(x){
         return '<button type="button" class="sdk-offmap-chip' + (state.activeLocator === x.loc ? ' active' : '') + '" data-offmap="' + esc(x.loc) + '">' + esc(x.loc) + ' · ' + fmt(x.n) + '</button>';
       }).join('') + '</div>';
@@ -1042,6 +1103,10 @@
       note.textContent = state.zone
         ? 'Đang xem chi tiết 1 khu — bấm "← ' + nz + ' khu vực" để quay lại tổng quan.'
         : kho + ' chia ' + nz + ' khu chính — bấm vào 1 khu để mở chi tiết từng vị trí / từng pallet.';
+    } else if(kho === 'Kho 2B'){
+      html = renderLayout2B(kho);
+      note.style.display = '';
+      note.textContent = 'Sơ đồ Kho 2B theo mặt bằng thực tế: Loading · PICK · khu H trên cùng · 3 dãy A/B, C/D, E/F · khu G dưới cùng.';
     } else if(hasCustom){
       html = renderCustomGrid(kho, layout);
       note.style.display = '';
