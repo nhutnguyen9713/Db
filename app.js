@@ -1425,7 +1425,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.14';
+const APP_VERSION = 'v4.15';
 const APP_VERSION_DATE = '02/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -16643,6 +16643,17 @@ function renderCompareTables(code){
     erpRows.push(`<tr class="cmp-${status}"><td>${escHtml(item)}</td><td>${escHtml(locator)}</td>${lotTd}<td class="num">${eq===null?'—':fmt(eq)}</td></tr>`);
     wmsRows.push(`<tr class="cmp-${status}"><td>${escHtml(item)}</td><td>${escHtml(locator)}</td>${lotTd}<td class="num">${wq===null?'—':fmt(wq)}</td></tr>`);
   });
+  // Đang tìm kiếm -> thêm dòng TỔNG số lượng ở cuối mỗi bảng (cộng các dòng đang hiện).
+  if(query){
+    const sumE = rowsInfo.reduce((t, r) => t + (r.eq || 0), 0);
+    const sumW = rowsInfo.reduce((t, r) => t + (r.wq || 0), 0);
+    const diff = sumE - sumW;
+    const cls = diff === 0 ? 'cmp-total-ok' : 'cmp-total-bad';
+    const lbl = `Tổng (${fmt(rowsInfo.length)} dòng)`;
+    const diffTxt = diff === 0 ? 'khớp' : `lệch ${diff > 0 ? '+' : ''}${fmt(diff)}`;
+    erpRows.push(`<tr class="cmp-total ${cls}"><td colspan="3">${lbl}</td><td class="num">${fmt(sumE)}</td></tr>`);
+    wmsRows.push(`<tr class="cmp-total ${cls}"><td colspan="3">${lbl} · ${diffTxt}</td><td class="num">${fmt(sumW)}</td></tr>`);
+  }
   erpTbody.innerHTML = erpRows.join('');
   wmsTbody.innerHTML = wmsRows.join('');
   if(summaryEl) summaryEl.textContent = `${fmt(rowsInfo.length)} dòng`;
