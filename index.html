@@ -1820,7 +1820,7 @@
       <div>
         <div class="brand-eyebrow"><span class="dot"></span>SO SÁNH DỮ LIỆU</div>
         <h1>So sánh WMS vs ERP</h1>
-        <div class="sub">So sánh Item No., Locator và Số lượng tồn giữa file ERP và file WMS, chia riêng theo 3 kho: 2B, 3A, 3B.</div>
+        <div class="sub">So sánh Item No., Locator, Lot No. và Số lượng tồn giữa file ERP (MIS: Onhand Aging Report) và file WMS, chia riêng theo 3 kho: 2B, 3A (gồm DG3), 3B.</div>
       </div>
       <div class="header-right">
         <div class="upload-wrap">
@@ -1840,7 +1840,7 @@
           </div>
           <input type="file" id="erp-file-input" accept=".tsv,.csv,.txt,.xlsx,.xls" style="display:none;">
           <input type="file" id="wms-file-input" accept=".tsv,.csv,.txt,.xlsx,.xls" style="display:none;">
-          <div class="upload-status" id="cmp-upload-status">Tải file ERP và file WMS (.tsv) để so sánh</div>
+          <div class="upload-status" id="cmp-upload-status">Tải file ERP (MIS Onhand Aging Report .xls) và file WMS (.tsv) để so sánh</div>
         </div>
         <div class="snapshot">
           ERP<br><b id="cmp-erp-updated">Chưa có dữ liệu</b>
@@ -1874,19 +1874,20 @@
       <div class="cc-collapse-body">
         <div class="kpis" id="cmp-kpi-strip-2B"></div>
         <div class="kho-modal-toolbar" style="padding:14px 0 0;">
-          <input type="text" class="kho-search" id="cmp-search-2B" placeholder="Tìm theo Item No. hoặc Locator…">
+          <input type="text" class="kho-search" id="cmp-search-2B" placeholder="Tìm theo Item No., Locator hoặc Lot No.…">
           <div class="kho-summary" id="cmp-summary-2B">—</div>
         </div>
         <div class="cmp-grid" style="margin-top:14px;">
           <div class="panel search-panel">
             <div class="brand-eyebrow"><span class="dot" style="background:#2C6FCB;box-shadow:0 0 8px #2C6FCB;"></span>ERP</div>
-            <h1 style="font-size:15px; margin-bottom:10px;">Bảng ERP (Item + Locator chứa "2B")</h1>
+            <h1 style="font-size:15px; margin-bottom:10px;">Bảng ERP (Item + Locator + Lot — kho 2B, gồm DG2)</h1>
             <div class="cmp-table-scroll" id="cmp-erp-scroll-2B">
               <table class="kho-detail-table" id="cmp-erp-table-2B">
                 <thead>
                   <tr>
                     <th>Item No.</th>
                     <th>Locator</th>
+                    <th>Lot No.</th>
                     <th style="text-align:right">SL ERP</th>
                   </tr>
                 </thead>
@@ -1897,13 +1898,14 @@
           </div>
           <div class="panel search-panel">
             <div class="brand-eyebrow"><span class="dot" style="background:#8a5cf6;box-shadow:0 0 8px #8a5cf6;"></span>WMS</div>
-            <h1 style="font-size:15px; margin-bottom:10px;">Bảng WMS (Item + Locator chứa "2B")</h1>
+            <h1 style="font-size:15px; margin-bottom:10px;">Bảng WMS (Item + Locator + Lot — kho 2B, gồm DG2)</h1>
             <div class="cmp-table-scroll" id="cmp-wms-scroll-2B">
               <table class="kho-detail-table" id="cmp-wms-table-2B">
                 <thead>
                   <tr>
                     <th>Item No.</th>
                     <th>Locator</th>
+                    <th>Lot No.</th>
                     <th style="text-align:right">SL WMS</th>
                   </tr>
                 </thead>
@@ -1930,19 +1932,20 @@
       <div class="cc-collapse-body">
         <div class="kpis" id="cmp-kpi-strip-3A"></div>
         <div class="kho-modal-toolbar" style="padding:14px 0 0;">
-          <input type="text" class="kho-search" id="cmp-search-3A" placeholder="Tìm theo Item No. hoặc Locator…">
+          <input type="text" class="kho-search" id="cmp-search-3A" placeholder="Tìm theo Item No., Locator hoặc Lot No.…">
           <div class="kho-summary" id="cmp-summary-3A">—</div>
         </div>
         <div class="cmp-grid" style="margin-top:14px;">
           <div class="panel search-panel">
             <div class="brand-eyebrow"><span class="dot" style="background:#2C6FCB;box-shadow:0 0 8px #2C6FCB;"></span>ERP</div>
-            <h1 style="font-size:15px; margin-bottom:10px;">Bảng ERP (Item + Locator chứa "3A")</h1>
+            <h1 style="font-size:15px; margin-bottom:10px;">Bảng ERP (Item + Locator + Lot — kho 3A, gồm DG3)</h1>
             <div class="cmp-table-scroll" id="cmp-erp-scroll-3A">
               <table class="kho-detail-table" id="cmp-erp-table-3A">
                 <thead>
                   <tr>
                     <th>Item No.</th>
                     <th>Locator</th>
+                    <th>Lot No.</th>
                     <th style="text-align:right">SL ERP</th>
                   </tr>
                 </thead>
@@ -1953,13 +1956,14 @@
           </div>
           <div class="panel search-panel">
             <div class="brand-eyebrow"><span class="dot" style="background:#8a5cf6;box-shadow:0 0 8px #8a5cf6;"></span>WMS</div>
-            <h1 style="font-size:15px; margin-bottom:10px;">Bảng WMS (Item + Locator chứa "3A")</h1>
+            <h1 style="font-size:15px; margin-bottom:10px;">Bảng WMS (Item + Locator + Lot — kho 3A, gồm DG3)</h1>
             <div class="cmp-table-scroll" id="cmp-wms-scroll-3A">
               <table class="kho-detail-table" id="cmp-wms-table-3A">
                 <thead>
                   <tr>
                     <th>Item No.</th>
                     <th>Locator</th>
+                    <th>Lot No.</th>
                     <th style="text-align:right">SL WMS</th>
                   </tr>
                 </thead>
@@ -1986,19 +1990,20 @@
       <div class="cc-collapse-body">
         <div class="kpis" id="cmp-kpi-strip-3B"></div>
         <div class="kho-modal-toolbar" style="padding:14px 0 0;">
-          <input type="text" class="kho-search" id="cmp-search-3B" placeholder="Tìm theo Item No. hoặc Locator…">
+          <input type="text" class="kho-search" id="cmp-search-3B" placeholder="Tìm theo Item No., Locator hoặc Lot No.…">
           <div class="kho-summary" id="cmp-summary-3B">—</div>
         </div>
         <div class="cmp-grid" style="margin-top:14px;">
           <div class="panel search-panel">
             <div class="brand-eyebrow"><span class="dot" style="background:#2C6FCB;box-shadow:0 0 8px #2C6FCB;"></span>ERP</div>
-            <h1 style="font-size:15px; margin-bottom:10px;">Bảng ERP (Item + Locator chứa "3B")</h1>
+            <h1 style="font-size:15px; margin-bottom:10px;">Bảng ERP (Item + Locator + Lot — kho 3B)</h1>
             <div class="cmp-table-scroll" id="cmp-erp-scroll-3B">
               <table class="kho-detail-table" id="cmp-erp-table-3B">
                 <thead>
                   <tr>
                     <th>Item No.</th>
                     <th>Locator</th>
+                    <th>Lot No.</th>
                     <th style="text-align:right">SL ERP</th>
                   </tr>
                 </thead>
@@ -2009,13 +2014,14 @@
           </div>
           <div class="panel search-panel">
             <div class="brand-eyebrow"><span class="dot" style="background:#8a5cf6;box-shadow:0 0 8px #8a5cf6;"></span>WMS</div>
-            <h1 style="font-size:15px; margin-bottom:10px;">Bảng WMS (Item + Locator chứa "3B")</h1>
+            <h1 style="font-size:15px; margin-bottom:10px;">Bảng WMS (Item + Locator + Lot — kho 3B)</h1>
             <div class="cmp-table-scroll" id="cmp-wms-scroll-3B">
               <table class="kho-detail-table" id="cmp-wms-table-3B">
                 <thead>
                   <tr>
                     <th>Item No.</th>
                     <th>Locator</th>
+                    <th>Lot No.</th>
                     <th style="text-align:right">SL WMS</th>
                   </tr>
                 </thead>

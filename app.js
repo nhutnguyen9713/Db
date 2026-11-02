@@ -1425,7 +1425,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.13';
+const APP_VERSION = 'v4.14';
 const APP_VERSION_DATE = '02/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -16394,17 +16394,36 @@ FileVault.registerReloader(initTransactionPage);
 /* ============================================================
    ============  TAB "SO SÁNH WMS vs ERP"  ============
    ============================================================
-   So sánh Item No. + Locator + Số lượng tồn giữa file ERP (cột Item / Locator /
-   On-hand Qty) và file WMS (cột Item No. / Locator Name / Onhand Qty), tách
-   riêng theo 3 kho: 2B, 3A, 3B (dựa vào locator có chứa mã kho tương ứng).
+   So sánh Item No. + Locator + Lot No. + Số lượng tồn giữa file ERP và file WMS, tách riêng theo
+   3 kho: 2B, 3A, 3B (theo mã kho trong locator; DG2 -> 2B, DG3 -> 3A).
+   - File ERP: "MIS: Onhand Aging Report" xuất từ ERP (đuôi .xls nhưng thực chất là bảng HTML): dòng 1 là
+     thông tin Organization / Sub Inventory / Report Date, dòng 2 là tiêu đề (Part_No, Locator_No,
+     Transaction_Quantity, LOT NO., ...). Vẫn đọc được file ERP kiểu cũ (Item / Locator / On-hand Qty).
+   - File WMS: file tồn kho .tsv (Item No. / Locator Name / Lot No. / Onhand Qty).
    Chỉ tải 1 file ERP + 1 file WMS (đã gồm dữ liệu mọi kho), rồi tự lọc ra 3 bộ. */
-const CMP_STORAGE_KEY = 'tn5_compare_v1';
+const CMP_STORAGE_KEY = 'tn5_compare_v2'; // v2: khoá so sánh có thêm Lot No.
 const CMP_KHO_CODES = ['2B', '3A', '3B'];
-let cmpErpMaps = {}; // { '2B': Map("item||locator"->qty), '3A': Map, '3B': Map }
+let cmpErpMaps = {}; // { '2B': Map("item||locator||lot"->qty), '3A': Map, '3B': Map }
 let cmpWmsMaps = {};
 let cmpErpMeta = null; // { fileName, updatedAtText }
 let cmpWmsMeta = null;
 
+// File .xls xuất từ ERP thực chất là trang HTML chứa <TABLE> -> đọc thẳng từng <TR>/<TD> bằng DOMParser
+// (không cần SheetJS, đọc được cả khi mất mạng).
+function cmpLooksLikeHtml(buf){
+  const head = new TextDecoder('utf-8').decode(new Uint8Array(buf, 0, Math.min(buf.byteLength, 512))).replace(/^\uFEFF/, '').trimStart();
+  return /^<(!doctype|html|head|meta|table|body)/i.test(head);
+}
+function cmpHtmlTableRows(buf){
+  const text = decodeTextBuffer(buf);
+  const doc = new DOMParser().parseFromString(text, 'text/html');
+  const rows = [];
+  doc.querySelectorAll('tr').forEach(tr => {
+    const cells = Array.from(tr.children).filter(c => /^(TD|TH)$/.test(c.tagName)).map(c => (c.textContent || '').replace(/\u00a0/g, ' ').trim());
+    if(cells.length) rows.push(cells);
+  });
+  return rows;
+}
 function cmpReadFileAsRows(file){
   return new Promise((resolve, reject) => {
     const ext = (file.name.split('.').pop() || '').toLowerCase();
@@ -16412,7 +16431,9 @@ function cmpReadFileAsRows(file){
     const r = new FileReader();
     r.onload = (ev) => {
       try{
-        if(isDelimited){
+        if(cmpLooksLikeHtml(ev.target.result)){
+          resolve(cmpHtmlTableRows(ev.target.result));
+        } else if(isDelimited){
           const text = decodeTextBuffer(ev.target.result);
           const delim = ext === 'tsv' ? '\t' : (ext === 'csv' ? ',' : guessDelimiter(text));
           resolve(parseDelimitedText(text, delim));
@@ -16431,16 +16452,31 @@ function cmpReadFileAsRows(file){
 
 // Đọc 1 file, trả về 3 Map (1 map / kho) cùng lúc — mỗi dòng dữ liệu được xếp vào map
 // của kho tương ứng nếu locator có chứa mã kho đó (VD: "2B-FG-ITN" -> Kho 2B).
-function cmpBuildMaps(rows, itemCands, locatorCands, qtyCands, missingMsg){
+// Kho của 1 locator trong phần So sánh: có mã kho trong tên (VD "D3B-FG-A30", "3AFG-M1-A01"), hoặc
+// tiền tố DG2 -> 2B, DG3 -> 3A (cùng quy ước với guessKhoFromLocatorPrefix / classifyKho).
+function cmpKhoOfLocator(locUp){
+  if(/^DG2/.test(locUp)) return '2B';
+  if(/^DG3/.test(locUp)) return '3A';
+  return CMP_KHO_CODES.find(code => locUp.includes(code)) || null;
+}
+function cmpLotText(v){
+  return (v === null || v === undefined) ? '' : String(v).trim().toUpperCase();
+}
+function cmpBuildMaps(rows, itemCands, locatorCands, qtyCands, lotCands, missingMsg){
   if(!rows.length) throw new Error('File không có dữ liệu.');
-  const headers = rows[0];
-  const colItem = findCol(headers, itemCands);
-  const colLocator = findCol(headers, locatorCands);
-  const colQty = findCol(headers, qtyCands);
-  if(colItem === -1 || colLocator === -1 || colQty === -1) throw new Error(missingMsg);
+  // Dòng tiêu đề không nhất thiết là dòng đầu (file ERP có 1 dòng thông tin Organization phía trên)
+  // -> tìm trong 30 dòng đầu dòng nào có đủ cột Item / Locator / Số lượng.
+  let headerIdx = -1, colItem = -1, colLocator = -1, colQty = -1, colLot = -1;
+  for(let h = 0; h < Math.min(rows.length, 30); h++){
+    const headers = (rows[h] || []).map(x => x == null ? '' : String(x));
+    const ci = findCol(headers, itemCands), cl = findCol(headers, locatorCands), cq = findCol(headers, qtyCands);
+    if(ci !== -1 && cl !== -1 && cq !== -1){ headerIdx = h; colItem = ci; colLocator = cl; colQty = cq; colLot = findCol(headers, lotCands); break; }
+  }
+  if(headerIdx === -1) throw new Error(missingMsg);
   const maps = {};
   CMP_KHO_CODES.forEach(c => maps[c] = new Map());
-  for(let i=1;i<rows.length;i++){
+  maps.hasLot = colLot !== -1;
+  for(let i=headerIdx+1;i<rows.length;i++){
     const r = rows[i];
     if(!r) continue;
     const locator = txNorm(r[colLocator]);
@@ -16449,23 +16485,23 @@ function cmpBuildMaps(rows, itemCands, locatorCands, qtyCands, missingMsg){
     const item = txItemText(r[colItem]);
     if(!item) continue;
     const qty = parseNumber(r[colQty]);
-    // Upper-case locator trong khoá: ERP và WMS lệch hoa/thường không còn bị báo "chỉ 1 bên".
-    const key = item + '||' + locUp;
-    CMP_KHO_CODES.forEach(code => {
-      // DG2 (VD "DG2-Loading") thuộc Kho 2B — cùng quy ước với guessKhoFromLocatorPrefix().
-      if(!(locUp.includes(code) || (code === '2B' && /^DG2/.test(locUp)))) return;
-      const map = maps[code];
-      map.set(key, (map.get(key) || 0) + qty);
-    });
+    const lot = colLot !== -1 ? cmpLotText(r[colLot]) : '';
+    // Upper-case locator + lot trong khoá: ERP và WMS lệch hoa/thường không còn bị báo "chỉ 1 bên".
+    const key = item + '||' + locUp + '||' + lot;
+    const code = cmpKhoOfLocator(locUp);
+    if(!code) continue;
+    const map = maps[code];
+    map.set(key, (map.get(key) || 0) + qty);
   }
   return maps;
 }
 function cmpParseErpRows(rows){
-  return cmpBuildMaps(rows, ['item'], ['locator'], ['on-hand qty','onhand qty','on hand qty'],
-    'File ERP thiếu cột bắt buộc (Item / Locator / On-hand Qty).');
+  return cmpBuildMaps(rows, ['part_no','part no','item no','item'], ['locator_no','locator no','locator'],
+    ['transaction_quantity','transaction quantity','on-hand qty','onhand qty','on hand qty'], ['lot no.','lot no','lot number','lot_no','lot'],
+    'File ERP thiếu cột bắt buộc (Part_No / Locator_No / Transaction_Quantity — file "MIS: Onhand Aging Report").');
 }
 function cmpParseWmsRows(rows){
-  return cmpBuildMaps(rows, ['item no.','item no','item number'], ['locator name'], ['onhand qty','on-hand qty','on hand qty'],
+  return cmpBuildMaps(rows, ['item no.','item no','item number'], ['locator name'], ['onhand qty','on-hand qty','on hand qty'], ['lot no.','lot no','lot number','lot'],
     'File WMS thiếu cột bắt buộc (Item No. / Locator Name / Onhand Qty).');
 }
 
@@ -16507,8 +16543,8 @@ function cmpLoadFromStorage(){
 function cmpClearStorage(){ if(STORAGE_OK) LS.removeItem(CMP_STORAGE_KEY); }
 
 function cmpSplitKey(key){
-  const idx = key.indexOf('||');
-  return { item: key.slice(0, idx), locator: key.slice(idx + 2) };
+  const p = key.split('||');
+  return { item: p[0] || '', locator: p[1] || '', lot: p[2] || '' };
 }
 
 function renderCompareKpi(code){
@@ -16532,7 +16568,7 @@ function renderCompareKpi(code){
     else onlyWms++;
   });
   if(el) el.innerHTML = `
-    <div class="kpi"><div class="label">TỔNG DÒNG SO SÁNH</div><div class="value">${fmt(allKeys.size)}</div><div class="foot">Item + Locator "${code}" duy nhất</div></div>
+    <div class="kpi"><div class="label">TỔNG DÒNG SO SÁNH</div><div class="value">${fmt(allKeys.size)}</div><div class="foot">Item + Locator + Lot "${code}" duy nhất</div></div>
     <div class="kpi good"><div class="label">KHỚP SỐ LƯỢNG</div><div class="value">${fmt(matchCount)}</div><div class="foot">ERP = WMS</div></div>
     <div class="kpi"><div class="label">LỆCH SỐ LƯỢNG</div><div class="value">${fmt(mismatchCount)}</div><div class="foot">ERP ≠ WMS</div></div>
     <div class="kpi accent"><div class="label">CHỈ 1 BÊN CÓ</div><div class="value">${fmt(onlyErp + onlyWms)}</div><div class="foot">${fmt(onlyErp)} chỉ ở ERP · ${fmt(onlyWms)} chỉ ở WMS</div></div>
@@ -16602,9 +16638,10 @@ function renderCompareTables(code){
 
   const erpRows = [], wmsRows = [];
   rowsInfo.forEach(({ key, status, eq, wq }) => {
-    const { item, locator } = cmpSplitKey(key);
-    erpRows.push(`<tr class="cmp-${status}"><td>${escHtml(item)}</td><td>${escHtml(locator)}</td><td class="num">${eq===null?'—':fmt(eq)}</td></tr>`);
-    wmsRows.push(`<tr class="cmp-${status}"><td>${escHtml(item)}</td><td>${escHtml(locator)}</td><td class="num">${wq===null?'—':fmt(wq)}</td></tr>`);
+    const { item, locator, lot } = cmpSplitKey(key);
+    const lotTd = `<td class="cmp-lot" title="${escHtml(lot)}">${lot ? escHtml(lot) : '—'}</td>`;
+    erpRows.push(`<tr class="cmp-${status}"><td>${escHtml(item)}</td><td>${escHtml(locator)}</td>${lotTd}<td class="num">${eq===null?'—':fmt(eq)}</td></tr>`);
+    wmsRows.push(`<tr class="cmp-${status}"><td>${escHtml(item)}</td><td>${escHtml(locator)}</td>${lotTd}<td class="num">${wq===null?'—':fmt(wq)}</td></tr>`);
   });
   erpTbody.innerHTML = erpRows.join('');
   wmsTbody.innerHTML = wmsRows.join('');
@@ -16645,7 +16682,8 @@ async function cmpHandleUpload(file, kind){
     const perKhoText = CMP_KHO_CODES.map(c => `${c}: ${fmt(maps[c] ? maps[c].size : 0)}`).join(' · ');
     if(cmpStatusEl){
       cmpStatusEl.className = 'upload-status ok';
-      cmpStatusEl.textContent = `✓ Đã cập nhật ${kind === 'erp' ? 'ERP' : 'WMS'} từ "${file.name}" (${fmt(totalRows)} dòng — ${perKhoText})`;
+      cmpStatusEl.textContent = `✓ Đã cập nhật ${kind === 'erp' ? 'ERP' : 'WMS'} từ "${file.name}" (${fmt(totalRows)} dòng — ${perKhoText})` +
+        (maps.hasLot ? '' : ' · ⚠ File không có cột Lot No. nên các dòng sẽ lệch Lot với bên kia');
     }
   }catch(err){
     console.error('Lỗi khi xử lý file so sánh:', err);
@@ -16679,7 +16717,7 @@ if(cmpBtnReset){
     renderCompareAll();
     ['cmp-erp-updated','cmp-wms-updated'].forEach(id => { const el = document.getElementById(id); if(el) el.textContent = 'Chưa có dữ liệu'; });
     ['cmp-erp-file','cmp-wms-file'].forEach(id => { const el = document.getElementById(id); if(el){ el.textContent = 'File: —'; el.title = ''; } });
-    if(cmpStatusEl){ cmpStatusEl.className = 'upload-status'; cmpStatusEl.textContent = 'Đã xoá — Tải file ERP và file WMS (.tsv) để so sánh'; }
+    if(cmpStatusEl){ cmpStatusEl.className = 'upload-status'; cmpStatusEl.textContent = 'Đã xoá — Tải file ERP (MIS Onhand Aging Report .xls) và file WMS (.tsv) để so sánh'; }
   });
 }
 
