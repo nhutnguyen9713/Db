@@ -881,6 +881,27 @@
         '</button>';
     }).join('') + '</div>';
   }
+  // Thẻ thống kê cả kho (Kho 3B không chia khu) — cùng kiểu thẻ khu của 3A/2B, pallet / sức chứa / %
+  // lấy theo danh sách vị trí + capacity của Overview TN5.
+  function khoSummaryCard(kho){
+    var locs = Object.keys(state.byKho[kho] || {}).filter(function(l){ return !/PROD/i.test(l); }), st = locStats(kho, locs);
+    var ovLocs = overviewLocsOf(kho), ovSt = null;
+    if(ovLocs.length){
+      ovSt = { positions: ovLocs.length, pallets: 0, cap: 0 };
+      ovLocs.forEach(function(l){ ovSt.pallets += ((state.byKho[kho] || {})[l] || []).length; ovSt.cap += capacityOf(kho, l); });
+    }
+    var bigPallets = ovSt ? ovSt.pallets : st.pallets, bigCap = ovSt ? ovSt.cap : st.cap;
+    var pct = bigCap ? Math.round(bigPallets / bigCap * 100) : 0;
+    var top = Object.keys(st.items).sort(function(a, b){ return st.items[b] - st.items[a]; });
+    var strip = top.slice(0, 12).map(function(it){ return '<i title="' + esc(it) + ': ' + st.items[it] + ' pallet" style="width:' + (st.items[it] / Math.max(1, bigCap) * 100) + '%; background:' + itemColor(it) + '"></i>'; }).join('');
+    return '<div class="sdk-zones" style="margin-bottom:16px; grid-template-columns:minmax(0, 460px);"><div class="sdk-zone-card sdk-kho-card" style="cursor:default;">' +
+      '<div class="sdk-zone-name">🏭 ' + esc(kho) + '</div>' +
+      '<div class="sdk-zone-desc">Toàn bộ vị trí sàn ' + esc(KHO[kho].code) + ' (không tính PROD)</div>' +
+      '<div class="sdk-zone-big"' + (ovSt ? ' title="Theo Overview TN5: ' + fmt(ovSt.positions) + ' vị trí tính Utilization"' : '') + '>' + fmt(bigPallets) + ' <span>/ ' + fmt(bigCap) + ' pallet · ' + pct + '%' + (ovSt ? ' · theo Overview' : '') + '</span></div>' +
+      '<div class="sdk-zone-strip" title="Mỗi màu = 1 mã hàng (12 mã nhiều pallet nhất)">' + strip + '</div>' +
+      '<div class="sdk-zone-meta"><span><b>' + fmt(ovSt ? ovSt.positions : st.locators) + '</b> vị trí</span><span><b>' + fmt(st.empty) + '</b> trống</span><span><b>' + fmt(st.full) + '</b> đầy ≥80%</span><span><b>' + fmt(top.length) + '</b> mã hàng</span>' + (st.ng ? '<span style="color:var(--red)"><b style="color:var(--red)">' + fmt(st.ng) + '</b> pallet NG</span>' : '') + '</div>' +
+      '</div></div>';
+  }
   function groupKeyOf(loc){ return String(loc).replace(/\d+$/, '').replace(/[-_]+$/, '') || loc; }
   // Thứ tự khu Tầng Trệt theo đường đi thực tế: FG-TG → dãy A → B → C → ITN → Pick → Loading, các khu khác để cuối.
   var TRET_ORDER = [/-TG$/i, /FG-A$/i, /FG-B$/i, /FG-C$/i, /ITN/i, /PICK/i, /LOADING/i];
@@ -1128,6 +1149,7 @@
       note.style.display = '';
       note.textContent = 'Chưa có lưới tuỳ chỉnh cho ' + kho + ' trên Cloud — đang hiện bố cục mặc định.';
     }
+    if(kho === 'Kho 3B' && state.inventory) html = khoSummaryCard(kho) + html;
     $('sdk-grid').innerHTML = html;
     renderOffMap(kho);
     if(ZONES[kho] && state.inventory){
