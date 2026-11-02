@@ -385,12 +385,20 @@
     { id:'rack', name:'Rack', icon:'🗄️', desc:'Kệ 3A-<dãy><bay>-T<tầng> — 2 pallet/ô kệ' },
     { id:'lau', name:'Tầng Lầu', icon:'🏢', desc:'Khu lầu M2/M1 (3AFG-M2 / 3AFG-M1) và khu Aging' }
   ];
-  /* ============ Khu vực theo kho (hiện chỉ Kho 3A chia khu; 3B / 2B giữ nguyên vị trí như sơ đồ cũ) ============ */
+  /* ============ Kho 2B — 2 khu: locator có "DG2" = khu 2A, còn lại = khu 2B (mặt bằng vẽ tay) ============ */
+  function zone2B(loc){ return /DG2/i.test(loc) ? '2a' : '2b'; }
+  var ZONES_2B = [
+    { id:'2a', name:'Khu 2A', icon:'🟦', desc:'Các locator DG2' },
+    { id:'2b', name:'Khu 2B', icon:'🟩', desc:'Loading · PICK · H · dãy A/B, C/D, E/F · G' }
+  ];
+  /* ============ Khu vực theo kho (3A chia 3 khu, 2B chia 2A/2B; 3B giữ nguyên vị trí như sơ đồ cũ) ============ */
   var ZONES = {
-    'Kho 3A': ZONES_3A
+    'Kho 3A': ZONES_3A,
+    'Kho 2B': ZONES_2B
   };
   function zoneOf(kho, loc){
     if(kho === 'Kho 3A') return zone3A(loc);
+    if(kho === 'Kho 2B') return zone2B(loc);
     return null;
   }
   // Sức chứa mặc định — y hệt ovLocatorDefaultCapacity() của dashboard cho Kho 3A.
@@ -814,7 +822,11 @@
   }
   function zoneLocs(zone){
     var kho = state.activeKho;
-    return Object.keys(state.byKho[kho] || {}).filter(function(l){ return zoneOf(kho, l) === zone; }).sort(naturalCmp);
+    var all = {};
+    Object.keys(state.byKho[kho] || {}).forEach(function(l){ all[l] = 1; });
+    var lay = kho === 'Kho 2B' && state.grids && state.grids[kho];
+    if(lay && Array.isArray(lay.cells)) lay.cells.forEach(function(c){ if(!c.isLabel && c.locator && !/PROD/i.test(c.locator)) all[c.locator] = 1; });
+    return Object.keys(all).filter(function(l){ return zoneOf(kho, l) === zone; }).sort(naturalCmp);
   }
   // Danh sách vị trí TÍNH Utilization ở trang Overview TN5 cho 1 kho — giống ovActiveLocatorsForKho() của
   // app.js: danh sách "Tuỳ chỉnh vị trí" (nếu đã tự chọn, đọc bản sao cục bộ cùng trình duyệt) hoặc mặc định
@@ -951,6 +963,7 @@
     var bar = '<div class="sdk-zone-bar"><button type="button" class="sdk-back" data-zone="">← ' + zs.length + ' khu vực</button></div>' + renderZones(zone);
     if(!locs.length) return bar + '<div class="wh3b-empty">Khu ' + esc(z.name) + ' chưa có vị trí nào trong dữ liệu tồn kho.</div>';
     if(kho === 'Kho 3A' && zone === 'rack') return bar + renderRack(kho, locs);
+    if(kho === 'Kho 2B' && zone === '2b') return bar + renderLayout2B(kho);
     return bar + renderGroups(kho, locs, zone);
   }
 
@@ -965,6 +978,7 @@
     var g = { load:[], pick:[], other:[] };
     'ABCDEFGH'.split('').forEach(function(k){ g[k] = []; });
     Object.keys(set).sort(naturalCmp).forEach(function(l){
+      if(zone2B(l) !== '2b') return; // locator DG2 thuộc khu 2A
       var m = l.match(/FG-([A-H])\d+$/i);
       if(/LOAD/i.test(l)) g.load.push(l);
       else if(/PICK/i.test(l)) g.pick.push(l);
@@ -1059,7 +1073,7 @@
     var pallets = list.reduce(function(s, x){ return s + x.n; }, 0);
     box.style.display = '';
     box.innerHTML = '<div class="sdk-offmap-title">⚠️ ' + esc(kho) + ': ' + fmt(pallets) + ' pallet ở ' + fmt(list.length) + ' locator nằm ngoài sơ đồ</div>' +
-      '<div class="sdk-offmap-sub">Các vị trí này có tồn nhưng không có ô trong lưới sơ đồ kho, nên ' + (ZONES[kho] || kho === 'Kho 2B' ? '' : 'không hiện trên sơ đồ và ') + 'không được tính vào Utilization ở Overview TN5. Bấm 1 locator để xem pallet; thêm ô vào sơ đồ ở trang Sơ đồ kho của TN5 Dashboard.</div>' +
+      '<div class="sdk-offmap-sub">Các vị trí này có tồn nhưng không có ô trong lưới sơ đồ kho, nên ' + (ZONES[kho] ? '' : 'không hiện trên sơ đồ và ') + 'không được tính vào Utilization ở Overview TN5. Bấm 1 locator để xem pallet; thêm ô vào sơ đồ ở trang Sơ đồ kho của TN5 Dashboard.</div>' +
       '<div class="sdk-offmap-chips">' + list.map(function(x){
         return '<button type="button" class="sdk-offmap-chip' + (state.activeLocator === x.loc ? ' active' : '') + '" data-offmap="' + esc(x.loc) + '">' + esc(x.loc) + ' · ' + fmt(x.n) + '</button>';
       }).join('') + '</div>';
@@ -1103,10 +1117,6 @@
       note.textContent = state.zone
         ? 'Đang xem chi tiết 1 khu — bấm "← ' + nz + ' khu vực" để quay lại tổng quan.'
         : kho + ' chia ' + nz + ' khu chính — bấm vào 1 khu để mở chi tiết từng vị trí / từng pallet.';
-    } else if(kho === 'Kho 2B'){
-      html = renderLayout2B(kho);
-      note.style.display = '';
-      note.textContent = 'Sơ đồ Kho 2B theo mặt bằng thực tế: Loading · PICK · khu H trên cùng · 3 dãy A/B, C/D, E/F · khu G dưới cùng.';
     } else if(hasCustom){
       html = renderCustomGrid(kho, layout);
       note.style.display = '';
