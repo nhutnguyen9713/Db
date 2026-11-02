@@ -226,6 +226,7 @@
   .sdk-consol{border:1.5px solid rgba(16,150,120,0.45); background:rgba(16,150,120,0.06); border-radius:10px; padding:12px 14px; margin-bottom:14px;}
   .sdk-consol-head{display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; margin-bottom:8px;}
   .sdk-consol-title{font-family:var(--disp); font-weight:700; font-size:14px; color:var(--text);}
+  .sdk-consol-mode button{font-size:11.5px;}
   .sdk-consol-sum{font-size:12.5px; color:var(--muted);}
   .sdk-consol-sum b{color:var(--text);}
   .sdk-consol-bar{height:8px; border-radius:5px; background:var(--line-soft, var(--line)); overflow:hidden; margin:6px 0 10px;}
@@ -796,7 +797,120 @@
     });
     return { kho:kho, steps:steps, jobs:jobs, stuck:stuck, groups:list.length };
   }
-  function consolKey(){ return state.activeKho + '|' + ((state.inventory && state.inventory.snapshot_date) || ''); }
+  /* ---- Phương án 2: XẾP LẠI — mỗi Mã + PO nằm liền nhau theo thứ tự vị trí: đầy trọn locator, phần lẻ để ở locator kế bên ----
+     Trong từng khu: các vị trí chứa hàng xếp theo số thứ tự (A01, A02, …); các nhóm Mã + PO xếp theo chỗ đang nằm
+     (trung bình vị trí hiện tại) để ít phải chuyển nhất, rồi rót lần lượt vào dãy vị trí — nhóm lớn chiếm trọn các
+     locator ở giữa, phần lẻ ở 2 đầu nằm ngay locator kế bên. Khi vị trí đích đang đầy hàng của nhóm khác, nhóm đó được
+     chuyển sang chỗ đích của nó (nếu còn chỗ) hoặc tạm ra KHU CHỜ rồi đưa về sau. */
+  var CONSOL_BUFFER = 'KHU CHỜ (tạm)';
+  function computeConsolPlan2(kho){
+    var map = state.byKho[kho] || {};
+    var zonesLocs = {};
+    Object.keys(map).forEach(function(loc){
+      if(NO_STORE_RE.test(loc) || /AGING/i.test(loc)) return;
+      if(kho === 'Kho 3A' && zoneOf(kho, loc) === 'rack') return;
+      var z = consolZoneOf(kho, loc); (zonesLocs[z] || (zonesLocs[z] = [])).push(loc);
+    });
+    var steps = [], jobs = [], jobIdx = {}, groupsN = 0, stuck = 0;
+    Object.keys(zonesLocs).forEach(function(z){
+      var locs = zonesLocs[z].sort(naturalCmp), pos = {}, cap = {}, cur = {}, occ = {};
+      locs.forEach(function(l, i){ pos[l] = i; cap[l] = capacityOf(kho, l); cur[l] = {}; occ[l] = map[l].length; });
+      var groups = {};
+      locs.forEach(function(l){ map[l].forEach(function(r){
+        var key = String(r[RAW.item] || '') + '\u0001' + String(r[RAW.custpo] || '');
+        var g = groups[key] || (groups[key] = { key:key, item:String(r[RAW.item] || ''), po:String(r[RAW.custpo] || ''), total:0, posSum:0 });
+        g.total++; g.posSum += pos[l]; cur[l][key] = (cur[l][key] || 0) + 1;
+      }); });
+      var order = Object.keys(groups).map(function(k){ return groups[k]; });
+      order.forEach(function(g){ g.mean = g.posSum / g.total; });
+      order.sort(function(a, b){ return (a.mean - b.mean) || (b.total - a.total) || a.item.localeCompare(b.item); });
+      // Bố cục đích: rót lần lượt.
+      var tgt = {}, ecap = {}, i = 0, room = locs.length ? cap[locs[0]] : 0;
+      locs.forEach(function(l){ tgt[l] = {}; ecap[l] = cap[l]; });
+      order.forEach(function(g){
+        var n = g.total;
+        while(n > 0){
+          while(i < locs.length - 1 && room <= 0){ i++; room = cap[locs[i]]; }
+          var l = locs[i], take = room > 0 ? Math.min(n, room) : n; // hết chỗ cả khu -> dồn phần dư vào vị trí cuối
+          tgt[l][g.key] = (tgt[l][g.key] || 0) + take; n -= take; room -= take;
+          if(room < 0){ ecap[l] = cap[l] - room; room = 0; }
+        }
+      });
+      // Chênh lệch hiện tại so với đích.
+      var surplus = {}, deficit = []; // surplus[key] = {loc:n}
+      locs.forEach(function(l){
+        var keys = {}; Object.keys(cur[l]).forEach(function(k){ keys[k] = 1; }); Object.keys(tgt[l]).forEach(function(k){ keys[k] = 1; });
+        Object.keys(keys).forEach(function(k){
+          var d = (cur[l][k] || 0) - (tgt[l][k] || 0);
+          if(d > 0) (surplus[k] || (surplus[k] = {}))[l] = d;
+          else if(d < 0) deficit.push({ loc:l, key:k, need:-d });
+        });
+      });
+      var buffer = {}; occ[CONSOL_BUFFER] = 0; ecap[CONSOL_BUFFER] = Infinity;
+      function jobOf(k){
+        if(jobIdx[z + '|' + k] != null) return jobIdx[z + '|' + k];
+        var g = groups[k], tl = locs.filter(function(l){ return tgt[l][k]; });
+        var from = locs.filter(function(l){ return cur[l][k]; });
+        jobs.push({ item:g.item, po:g.po, zone:z, target:tl.length > 1 ? tl[0] + ' → ' + tl[tl.length - 1] : (tl[0] || ''), total:g.total, nLocs:from.length, full:true, left:0, moves:[] });
+        groupsN++;
+        return (jobIdx[z + '|' + k] = jobs.length - 1);
+      }
+      function move(k, from, to, n){
+        if(n <= 0) return;
+        var g = groups[k];
+        occ[from] -= n; occ[to] += n;
+        var last = steps[steps.length - 1];
+        if(last && last.from === from && last.to === to && last.key === k){ last.n += n; return; }
+        var st = { id:['P2', g.item, g.po, from, to, steps.length].join('|'), key:k, item:g.item, po:g.po, from:from, to:to, n:n, job:jobOf(k) };
+        steps.push(st); jobs[st.job].moves.push(st);
+      }
+      function takeSurplus(k, l, n){ surplus[k][l] -= n; if(!surplus[k][l]) delete surplus[k][l]; }
+      // Dọn chỗ ở vị trí l: đẩy hàng thừa của nhóm khác sang chỗ đích của nó (còn chỗ) hoặc ra KHU CHỜ.
+      function makeRoom(l){
+        var ks = Object.keys(surplus).filter(function(k){ return surplus[k][l]; });
+        for(var a = 0; a < ks.length && occ[l] >= ecap[l]; a++){
+          var k = ks[a];
+          while(surplus[k] && surplus[k][l] && occ[l] >= ecap[l]){
+            var dst = null;
+            for(var d = 0; d < deficit.length; d++){ var df = deficit[d]; if(df.key === k && df.need > 0 && df.loc !== l && occ[df.loc] < ecap[df.loc]){ dst = df; break; } }
+            if(dst){
+              var m = Math.min(surplus[k][l], dst.need, ecap[dst.loc] - occ[dst.loc]);
+              move(k, l, dst.loc, m); takeSurplus(k, l, m); dst.need -= m;
+            } else {
+              var m2 = surplus[k][l];
+              move(k, l, CONSOL_BUFFER, m2); takeSurplus(k, l, m2); buffer[k] = (buffer[k] || 0) + m2;
+            }
+          }
+        }
+      }
+      deficit.sort(function(a, b){ return (pos[a.loc] - pos[b.loc]); });
+      deficit.forEach(function(df){
+        var guard = 0;
+        while(df.need > 0 && guard++ < 1000){
+          if(occ[df.loc] >= ecap[df.loc]) makeRoom(df.loc);
+          var roomB = ecap[df.loc] - occ[df.loc];
+          if(roomB <= 0) break;
+          var srcLoc = null;
+          if(buffer[df.key]) srcLoc = CONSOL_BUFFER;
+          else {
+            var srcs = Object.keys(surplus[df.key] || {}).sort(function(a, b){ return Math.abs(pos[a] - pos[df.loc]) - Math.abs(pos[b] - pos[df.loc]); });
+            srcLoc = srcs[0] || null;
+          }
+          if(!srcLoc) break;
+          var avail = srcLoc === CONSOL_BUFFER ? buffer[df.key] : surplus[df.key][srcLoc];
+          var m = Math.min(df.need, roomB, avail);
+          move(df.key, srcLoc, df.loc, m);
+          if(srcLoc === CONSOL_BUFFER){ buffer[df.key] -= m; if(!buffer[df.key]) delete buffer[df.key]; } else takeSurplus(df.key, srcLoc, m);
+          df.need -= m;
+        }
+        if(df.need > 0){ var j = jobs[jobOf(df.key)]; if(j.full){ j.full = false; stuck++; } j.left += df.need; }
+      });
+    });
+    return { kho:kho, mode:'2', steps:steps, jobs:jobs, stuck:stuck, groups:groupsN };
+  }
+  function consolMode(){ try{ return localStorage.getItem('sdk_consol_mode') === '2' ? '2' : '1'; }catch(e){ return '1'; } }
+
+  function consolKey(){ return state.activeKho + '|' + (consolMode() === '2' ? 'P2|' : '') + ((state.inventory && state.inventory.snapshot_date) || ''); }
   function consolDoneMap(){
     try{ var all = JSON.parse(localStorage.getItem(LS_CONSOL) || '{}'); return all[consolKey()] || {}; }catch(e){ return {}; }
   }
@@ -805,7 +919,7 @@
   }
   function openConsol(){
     if(!state.inventory) return;
-    var plan = computeConsolPlan(state.activeKho), done = consolDoneMap();
+    var plan = consolMode() === '2' ? computeConsolPlan2(state.activeKho) : computeConsolPlan(state.activeKho), done = consolDoneMap();
     var cur = 0;
     while(cur < plan.steps.length && done[plan.steps[cur].id]) cur++;
     plan.snap = (state.inventory && state.inventory.snapshot_date) || '';
@@ -818,8 +932,11 @@
     var p = c.plan, n = p.steps.length;
     var nDone = p.steps.filter(function(st){ return c.done[st.id]; }).length;
     var pallets = p.steps.reduce(function(s, st){ return s + st.n; }, 0);
-    var html = '<div class="sdk-consol-head"><span class="sdk-consol-title">🧹 Gom hàng cùng Mã + PO về 1 chỗ — chuẩn bị kiểm kê · ' + esc(p.kho) + '</span>' +
-      '<span class="sdk-consol-sum"><b>' + fmt(p.jobs.length) + '</b> nhóm Mã + PO đang rải rác · <b>' + fmt(n) + '</b> bước · <b>' + fmt(pallets) + '</b> pallet cần chuyển · đã xong <b>' + fmt(nDone) + '/' + fmt(n) + '</b></span></div>';
+    var m2 = p.mode === '2';
+    var html = '<div class="sdk-consol-head"><span class="sdk-consol-title">🧹 Gom hàng cùng Mã + PO — chuẩn bị kiểm kê · ' + esc(p.kho) + '</span>' +
+      '<span class="sdk-view-toggle sdk-consol-mode"><button type="button" data-consol-mode="1" class="' + (m2 ? '' : 'active') + '" title="Mỗi nhóm Mã + PO dồn về vị trí đang có nhiều pallet của nhóm nhất">PA 1 · Gom về chỗ nhiều nhất</button>' +
+      '<button type="button" data-consol-mode="2" class="' + (m2 ? 'active' : '') + '" title="Xếp lại cả khu: mỗi Mã + PO nằm liền nhau, đầy trọn locator, phần lẻ để ở locator kế bên">PA 2 · Đầy trọn locator, lẻ để kế bên</button></span>' +
+      '<span class="sdk-consol-sum"><b>' + fmt(p.jobs.length) + '</b> nhóm Mã + PO ' + (m2 ? 'cần xếp lại' : 'đang rải rác') + ' · <b>' + fmt(n) + '</b> bước · <b>' + fmt(pallets) + '</b> pallet cần chuyển · đã xong <b>' + fmt(nDone) + '/' + fmt(n) + '</b></span></div>';
     if(!n){
       return html + '<div class="sdk-consol-sum">✅ Không có Mã + PO nào nằm rải rác ở nhiều vị trí trong ' + esc(p.kho) + ' — đã sẵn sàng kiểm kê.</div>';
     }
@@ -828,7 +945,8 @@
     html += '<div class="sdk-consol-cur"><div class="sdk-consol-cur-title">BƯỚC ' + (c.cur + 1) + ' / ' + n + (c.done[st.id] ? ' · ✓ ĐÃ XONG' : '') + '</div>' +
       '<div class="sdk-consol-move"><span class="sdk-item-chip"><i style="background:' + itemColor(st.item) + '"></i><b>' + esc(st.item) + '</b></span> · PO <b>' + esc(st.po || '—') + '</b>' +
       ' — chuyển <b>' + fmt(st.n) + ' pallet</b> từ <span class="loc src" data-goto="' + esc(st.from) + '">' + esc(st.from) + '</span> → <span class="loc dst" data-goto="' + esc(st.to) + '">' + esc(st.to) + '</span></div>' +
-      '<div class="sdk-consol-sum">Nhóm này: ' + fmt(job.total) + ' pallet ở ' + fmt(job.nLocs) + ' vị trí → gom về <b>' + esc(job.target) + '</b>' +
+      (st.to === CONSOL_BUFFER ? '<div class="sdk-consol-sum">↪ Đưa tạm ra khu chờ để lấy chỗ — sẽ có bước đưa về vị trí đích sau.</div>' : '') +
+      '<div class="sdk-consol-sum">Nhóm này: ' + fmt(job.total) + ' pallet ở ' + fmt(job.nLocs) + ' vị trí → ' + (m2 ? 'xếp vào' : 'gom về') + ' <b>' + esc(job.target) + '</b>' +
       (job.full ? '' : ' · <span style="color:var(--red)">⚠ không đủ chỗ, còn sót ' + fmt(job.left) + ' pallet</span>') + '</div>' +
       '<div class="sdk-consol-btns"><button type="button" data-consol="prev"' + (c.cur ? '' : ' disabled') + '>◀ Bước trước</button>' +
       '<button type="button" class="main" data-consol="done">' + (c.done[st.id] ? '↺ Chưa xong' : '✓ Xong — bước tiếp') + '</button>' +
@@ -909,6 +1027,7 @@
       });
       sim[st.from] = keep;
     });
+    if(typeof CONSOL_BUFFER !== 'undefined') delete sim[CONSOL_BUFFER];
     return sim;
   }
   var _h2cPromise = null;
@@ -1817,6 +1936,11 @@
     var c = state.consol; if(!c) return;
     var g = e.target.closest('[data-goto]');
     if(g){ goToLocator(g.getAttribute('data-goto')); return; }
+    var mb = e.target.closest('[data-consol-mode]');
+    if(mb){
+      try{ localStorage.setItem('sdk_consol_mode', mb.getAttribute('data-consol-mode')); }catch(err){}
+      openConsol(); showConsolStep(true); return;
+    }
     var sb = e.target.closest('[data-consol-step]');
     if(sb){ c.cur = Number(sb.getAttribute('data-consol-step')); showConsolStep(true); return; }
     var b = e.target.closest('[data-consol]'); if(!b) return;
