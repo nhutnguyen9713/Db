@@ -656,6 +656,7 @@
   @media (max-width:900px){.cmp-grid{grid-template-columns:1fr;}}
   .cmp-table-scroll{max-height:640px; overflow:auto; border:1px solid var(--line); border-radius:8px;}
   .cmp-table-scroll .kho-empty{padding:28px 0;}
+  .cmp-table-scroll td.cmp-lot{max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11.5px;}
   tr.cmp-match td{background:rgba(47,169,107,0.28);}
   tr.cmp-mismatch td{background:rgba(214,57,75,0.30);}
   tr.cmp-onlyErp td{background:rgba(44,111,203,0.28);}
