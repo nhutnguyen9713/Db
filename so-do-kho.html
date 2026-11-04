@@ -13,6 +13,7 @@
 <!-- Dùng CHUNG styles.css với TN5 Dashboard — ô locator, thanh fill, legend, ô tìm kiếm, banner khoá...
      giữ đúng 1 giao diện với trang "Sơ đồ kho" trong dashboard, đổi theme Sáng/Tối cũng tự theo. -->
 <link rel="stylesheet" href="styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   /* Chỉ thêm phần riêng của trang độc lập này (thanh trên cùng, màn hình kết nối, tab kho) — mọi thứ
      thuộc về ô sơ đồ đã có sẵn trong styles.css. */
@@ -339,6 +340,7 @@
             </span>
             <button type="button" class="wh3b-grid-mode-btn" id="sdk-heatmap-btn" title="Đổi cách tô màu vị trí: Tắt (4 mức mặc định) / Mật độ lấp đầy / Tỉ lệ PASS-NG">🌡️ Heatmap: Tắt</button>
             <button type="button" class="wh3b-grid-mode-btn" id="sdk-consol-btn" title="Lập kế hoạch gom các pallet cùng Mã + PO về 1 vị trí, làm lần lượt từng bước — chuẩn bị cho đợt kiểm kê">🧹 Gom hàng kiểm kê</button>
+            <button type="button" class="wh3b-grid-mode-btn" id="sdk-export-btn" title="Xuất Excel đúng dữ liệu đang hiển thị (theo kho đang xem + tìm kiếm / lọc PASS-NG / lọc số pallet / mã đang chọn)">📥 Xuất Excel</button>
           </div>
         </div>
       </div>
@@ -1645,6 +1647,7 @@
       if(tag) tag.textContent = filtering && n ? '🔍 ' + fmt(n) + ' pallet khớp ở ' + fmt(nl) + ' vị trí' : '';
       if(filtering) card.classList.add(n ? 'wh3b-highlight' : 'wh3b-dim');
     });
+    state.lastFiltering = filtering; state.lastMatched = matched;
     var detail = $('sdk-detail');
     renderPickPanel(matched, matchedLocs);
     if(filtering){
@@ -1940,6 +1943,47 @@
     document.body.classList.toggle('sdk-mono', this.checked);
     try{ localStorage.setItem(LS_MONO, this.checked ? '1' : '0'); }catch(e){}
   });
+  /* ============ Xuất Excel — đúng dữ liệu đang hiển thị ============ */
+  function exportExcel(){
+    var map = state.byKho[state.activeKho] || {};
+    var rows;
+    if(state.lastFiltering && state.lastMatched) rows = state.lastMatched;
+    else { rows = []; Object.keys(map).forEach(function(l){ map[l].forEach(function(r){ rows.push(r); }); }); }
+    if(!rows.length){ alert('Không có dữ liệu để xuất.'); return; }
+    rows = sortRows(rows);
+    var agg = {};
+    rows.forEach(function(r){
+      var k = (r[RAW.item] || '') + '\u0001' + (r[RAW.custpo] || '');
+      var a = agg[k] || (agg[k] = { item:r[RAW.item] || '', po:r[RAW.custpo] || '', n:0, qty:0, locs:{} });
+      a.n++; a.qty += Number(r[RAW.qty]) || 0; a.locs[r[RAW.locator]] = 1;
+    });
+    var head1 = ['#', 'Kho', 'Locator', 'Item No.', 'Cust PO', 'OQC', 'SL tồn', 'GI No.', 'Lot No.', 'Pallet', 'Số pallet của Mã+PO'];
+    var data1 = [head1].concat(rows.map(function(r, i){
+      var a = agg[(r[RAW.item] || '') + '\u0001' + (r[RAW.custpo] || '')];
+      return [i + 1, state.activeKho, r[RAW.locator] || '', r[RAW.item] || '', r[RAW.custpo] || '', r[RAW.oqc] || '', Number(r[RAW.qty]) || 0, r[RAW.gi] || '', r[RAW.lot] || '', r[RAW.pallet] || '', a ? a.n : ''];
+    }));
+    var data2 = [['Item No.', 'Cust PO', 'Số pallet', 'Số vị trí', 'Tổng SL']].concat(Object.keys(agg).map(function(k){ return agg[k]; })
+      .sort(function(a, b){ return b.n - a.n || String(a.item).localeCompare(String(b.item)); })
+      .map(function(a){ return [a.item, a.po, a.n, Object.keys(a.locs).length, a.qty]; }));
+    var d = new Date(), z = function(n){ return (n < 10 ? '0' : '') + n; };
+    var fname = 'SoDoKho_' + String(state.activeKho).replace(/\s+/g, '') + '_' + d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + '_' + z(d.getHours()) + z(d.getMinutes());
+    if(typeof XLSX === 'undefined'){
+      // Không tải được thư viện (offline) -> xuất CSV để vẫn dùng được.
+      var csv = '\uFEFF' + data1.map(function(r){ return r.map(function(c){ return '"' + String(c).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8' })); a.download = fname + '.csv';
+      document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+      return;
+    }
+    var wb = XLSX.utils.book_new();
+    var ws1 = XLSX.utils.aoa_to_sheet(data1), ws2 = XLSX.utils.aoa_to_sheet(data2);
+    ws1['!cols'] = [{wch:5}, {wch:8}, {wch:16}, {wch:18}, {wch:16}, {wch:8}, {wch:10}, {wch:14}, {wch:14}, {wch:14}, {wch:12}];
+    ws2['!cols'] = [{wch:18}, {wch:16}, {wch:10}, {wch:10}, {wch:12}];
+    ws1['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{c:0, r:0}, e:{c:head1.length - 1, r:data1.length - 1} }) };
+    XLSX.utils.book_append_sheet(wb, ws1, 'Pallet');
+    XLSX.utils.book_append_sheet(wb, ws2, 'Tong hop Ma+PO');
+    XLSX.writeFile(wb, fname + '.xlsx');
+  }
+  $('sdk-export-btn').addEventListener('click', exportExcel);
   $('sdk-heatmap-btn').addEventListener('click', function(){
     var modes = ['off', 'qty', 'oqc'];
     state.heatmap = modes[(modes.indexOf(state.heatmap) + 1) % modes.length];
@@ -2255,7 +2299,7 @@
     // nút vừa bấm bị gỡ khỏi trang nên closest('#sdk-pick') không còn thấy -> trước đây bị bỏ chọn nhầm.
     var path = e.composedPath ? e.composedPath() : [];
     var hit = function(sel){ return path.some(function(n){ return n.matches && n.matches(sel); }) || !!e.target.closest(sel); };
-    if(hit('#sdk-pick') || hit('.sdk-slot.filled') || hit('#sdk-consol') || hit('#sdk-consol-btn')) return;
+    if(hit('#sdk-pick') || hit('.sdk-slot.filled') || hit('#sdk-consol') || hit('#sdk-consol-btn') || hit('#sdk-export-btn')) return;
     // Chuyển khu (thẻ khu / nút khu / nút quay lại), đổi kho, đổi chế độ xem, heatmap: giữ nguyên mã đang chọn.
     if(hit('[data-zone], .sdk-tab, #sdk-view-toggle, #sdk-heatmap-btn, #sdk-refresh-btn')) return;
     setPick(null);
