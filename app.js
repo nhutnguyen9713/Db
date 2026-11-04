@@ -4474,7 +4474,7 @@ async function exportContKpiExcel(){
   // Mỗi container dàn ra 1 dòng/mã hàng. Thông tin container lặp lại ở mọi dòng của nó (lọc/sắp xếp trong Excel
   // không bị mất), đường kẻ đậm ngăn cách giữa các container. Cột "Chênh lệch" lấy ĐÚNG số của file Tổng hợp 3 Plan vs Tồn kho (tồn PASS − SL còn cần, theo Mã + PO; dương = xanh, âm = đỏ);
   // "Ghi chú" (ghi chú của container) chỉ ghi ở dòng đầu của mỗi container.
-  const headers = ['#', 'Loại', 'Cont', 'Ngày Load', 'Giờ Plan', 'Invoice', 'CR', 'Kho', 'Item No.', 'Cust PO', 'Chênh lệch', 'Ghi chú'];
+  const headers = ['#', 'Loại', 'Cont', 'Ngày Load', 'Giờ Plan', 'Invoice', 'CR', 'Kho', 'Item No.', 'Cust PO', 'Picking', 'Chênh lệch', 'Ghi chú'];
   ws.addRow(headers);
   const firstRowOfCont = new Set();
   let diffByItemPo = new Map();
@@ -4484,12 +4484,27 @@ async function exportContKpiExcel(){
   }catch(err){ console.warn('Không tính được cột Chênh lệch:', err); diffByItemPo = new Map(); }
   rows.forEach((r, i) => {
     const items = r.items && r.items.length ? r.items : [null];
+    const contCrs = new Set((String(r.csr || '').match(/CR\d+/gi) || []).map(x => x.toUpperCase()));
     items.forEach((it, k) => {
+      // Picking: đã pick/SL Plan của mã + locator Loading đang chứa hàng đã pick (giống file Tổng hợp 3 Plan).
+      let picking = '—', pickLoc = '';
+      if(it){
+        const pickLocs = [...new Set(buildItemLocatorDetail(it.item, it.po ? it.po : null, true)
+          .filter(l => LOADING_LOCATOR_RE.test(String(l.locator || '').trim())
+            && (String(l.ref || '').match(/CR\d+/gi) || []).some(x => contCrs.has(x.toUpperCase())))
+          .map(l => l.locator))];
+        picking = `${Math.round(it.picked || 0)}/${Math.round(it.qty || 0)}`;
+        pickLoc = pickLocs.join(', ').replace(/"/g, '');
+      }
       const diff = it ? diffByItemPo.get(String(it.item).toLowerCase() + '\u241F' + ((it.po && String(it.po).trim()) ? String(it.po).trim() : '(Khong co)').toLowerCase()) : undefined;
       const row = ws.addRow([i + 1, r.type, String(r.cNo), r.loadDate, r.planTime, r.invoice, r.csr, r.kho,
-        it ? it.item : '—', it ? (it.po || 'Bất kỳ PO') : '—', diff === undefined ? '' : diff, k === 0 ? r.comment : '']);
+        it ? it.item : '—', it ? (it.po || 'Bất kỳ PO') : '—', picking, diff === undefined ? '' : diff, k === 0 ? r.comment : '']);
       if(k === 0) firstRowOfCont.add(row.number);
-      const dc = row.getCell(11);
+      // Số "xx/xx" căn TRÁI, locator Loading căn PHẢI trong CÙNG 1 ô (định dạng @* \"locator\" — dấu * lấp khoảng trống giữa).
+      const pc = row.getCell(11);
+      pc.alignment = { horizontal:'left', vertical:'middle' };
+      if(pickLoc) pc.numFmt = '@* "' + pickLoc + '"';
+      const dc = row.getCell(12);
       dc.alignment = { horizontal:'center', vertical:'middle' };
       if(typeof diff === 'number'){
         dc.numFmt = '#,##0;-#,##0;0';
@@ -4507,7 +4522,7 @@ async function exportContKpiExcel(){
   const head = ws.getRow(1);
   head.font = { bold: true, color:{ argb:'FFFFFFFF' } };
   head.eachCell(cell => { cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF1F2937' } }; cell.alignment = { horizontal:'center', vertical:'middle' }; });
-  [5, 7, 16, 12, 10, 14, 16, 7, 18, 18, 13, 36].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  [5, 7, 16, 12, 10, 14, 16, 7, 18, 18, 26, 13, 36].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   ws.views = [{ state:'frozen', ySplit:1 }];
   ws.autoFilter = { from:{ row:1, column:1 }, to:{ row:1, column:headers.length } };
   const buffer = await workbook.xlsx.writeBuffer();
