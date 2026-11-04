@@ -362,6 +362,12 @@
             <label><input type="checkbox" id="sdk-oqc-pass" checked> PASS</label>
             <label><input type="checkbox" id="sdk-oqc-ng" checked> NG</label>
             <label title="Tô mọi ô pallet cùng 1 màu (không phân màu theo mã hàng). Chấm NG vẫn hiện."><input type="checkbox" id="sdk-mono"> Một màu</label>
+            <span class="sdk-cnt-filter" title="Chỉ hiện các mã + PO có số pallet (dòng GI No.) thỏa điều kiện — đếm trong toàn kho đang xem, theo lọc PASS/NG.">
+              <label><input type="checkbox" id="sdk-cnt-on"> Mã+PO có</label>
+              <select id="sdk-cnt-op"><option value="ge">≥</option><option value="eq">=</option><option value="le">≤</option></select>
+              <input type="number" id="sdk-cnt-n" min="1" step="1" value="5">
+              <span>pallet</span>
+            </span>
           </div>
         </div>
         <div class="wh3b-legend" id="sdk-legend"></div>
@@ -1579,12 +1585,29 @@
     var showPass = $('sdk-oqc-pass').checked, showNg = $('sdk-oqc-ng').checked;
     var pick = state.pick;
     if(pick) query = ''; // đang chọn 1 mã + PO -> chỉ lọc đúng mã + PO đó (ô tìm kiếm tạm bỏ qua)
-    var filtering = !!pick || !!query || !showPass || !showNg;
+    var cntOn = !pick && $('sdk-cnt-on').checked;
+    var cntN = Math.max(1, parseInt($('sdk-cnt-n').value, 10) || 1), cntOp = $('sdk-cnt-op').value;
+    var filtering = !!pick || !!query || !showPass || !showNg || cntOn;
     var groups = query ? parseMultiCodes(query) : [];
     function isPicked(item, po){
       return String(item).toLowerCase() === pick.itemLc && String(po || '').toLowerCase() === pick.poLc;
     }
     var map = state.byKho[state.activeKho] || {};
+    // Đếm số pallet theo (mã + PO) trong toàn kho đang xem (tôn trọng lọc PASS/NG).
+    var cntMap = null;
+    function cntKey(item, po){ return String(item).toLowerCase() + '\u0001' + String(po || '').toLowerCase(); }
+    function cntOk(item, po){
+      var c = cntMap[cntKey(item, po)] || 0;
+      return cntOp === 'eq' ? c === cntN : cntOp === 'le' ? c <= cntN : c >= cntN;
+    }
+    if(cntOn){
+      cntMap = {};
+      Object.keys(map).forEach(function(loc){ map[loc].forEach(function(r){
+        var isNg = String(r[RAW.oqc] || '').toUpperCase().indexOf('NG') !== -1;
+        if(isNg ? !showNg : !showPass) return;
+        var k = cntKey(r[RAW.item], r[RAW.custpo]); cntMap[k] = (cntMap[k] || 0) + 1;
+      }); });
+    }
     var matched = [], matchedLocs = {};
     // Tính khớp trên TOÀN BỘ vị trí của kho (kể cả khu 3A chưa mở) — để màn hình 3 khu vực vẫn báo được
     // khu nào đang có hàng khớp.
@@ -1594,6 +1617,7 @@
         if(isNg && !showNg) return false;
         if(!isNg && !showPass) return false;
         if(pick) return isPicked(r[RAW.item], r[RAW.custpo]);
+        if(cntOn && !cntOk(r[RAW.item], r[RAW.custpo])) return false;
         if(!query) return true;
         return multiGroupMatch(groups, (r[RAW.item] + ' ' + r[RAW.custpo] + ' ' + r[RAW.locator]).toLowerCase());
       });
@@ -1606,7 +1630,7 @@
       el.querySelectorAll('.sdk-slot.filled').forEach(function(sl){
         var isNg = sl.getAttribute('data-ng') === '1';
         var ok = (isNg ? showNg : showPass) &&
-          (pick ? isPicked(sl.getAttribute('data-item'), sl.getAttribute('data-po')) : (!query || multiGroupMatch(groups, sl.getAttribute('data-hay'))));
+          (pick ? isPicked(sl.getAttribute('data-item'), sl.getAttribute('data-po')) : ((!cntOn || cntOk(sl.getAttribute('data-item'), sl.getAttribute('data-po'))) && (!query || multiGroupMatch(groups, sl.getAttribute('data-hay')))));
         sl.classList.toggle('sdk-slot-dim', !ok);
         sl.classList.toggle('sdk-picked', !!pick && ok);
       });
@@ -1873,8 +1897,8 @@
     }
     var b = e.target.closest('.wh3b-box-main'); if(!b) return;
     var loc = b.getAttribute('data-locator');
-    if(state.pick || $('sdk-search').value.trim() || !$('sdk-oqc-pass').checked || !$('sdk-oqc-ng').checked){
-      state.pick = null;
+    if(state.pick || $('sdk-search').value.trim() || !$('sdk-oqc-pass').checked || !$('sdk-oqc-ng').checked || $('sdk-cnt-on').checked){
+      state.pick = null; $('sdk-cnt-on').checked = false;
       // Đang lọc -> bỏ lọc để xem đúng vị trí vừa bấm.
       $('sdk-search').value = ''; $('sdk-oqc-pass').checked = true; $('sdk-oqc-ng').checked = true;
       applyFilter();
@@ -1904,6 +1928,12 @@
   $('sdk-search').addEventListener('input', function(){ state.pick = null; clearTimeout(searchTimer); searchTimer = setTimeout(applyFilter, 150); });
   $('sdk-oqc-pass').addEventListener('change', applyFilter);
   $('sdk-oqc-ng').addEventListener('change', applyFilter);
+  ['sdk-cnt-on', 'sdk-cnt-op', 'sdk-cnt-n'].forEach(function(id){
+    $(id).addEventListener(id === 'sdk-cnt-n' ? 'input' : 'change', function(){
+      if(id === 'sdk-cnt-n' && !$('sdk-cnt-on').checked) return;
+      state.pick = null; applyFilter();
+    });
+  });
   try{ $('sdk-mono').checked = localStorage.getItem(LS_MONO) === '1'; }catch(e){}
   document.body.classList.toggle('sdk-mono', $('sdk-mono').checked);
   $('sdk-mono').addEventListener('change', function(){
