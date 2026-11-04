@@ -1573,7 +1573,7 @@ document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeSettin
    nhập đúng mật khẩu trong Cài đặt mới hiện lại toàn bộ. Chỉ mang tính ẩn bớt cho gọn,
    KHÔNG phải bảo mật thật sự (code vẫn chạy phía client). ---- */
 const APP_LOCK_PASSWORD = '123465';
-const APP_LOCK_RESTRICTED_PAGES = ['overview', 'sodo3b', 'transaction', 'compare'];
+const APP_LOCK_RESTRICTED_PAGES = ['overview', 'ng', 'sodo3b', 'transaction', 'compare'];
 const STORAGE_KEY_APP_UNLOCKED = 'tn5_dashboard_app_unlocked_v1';
 function isAppUnlocked(){
   try{ return localStorage.getItem(STORAGE_KEY_APP_UNLOCKED) === '1'; }catch(e){ return false; }
@@ -2262,6 +2262,8 @@ function renderCapacityOverviews(){
   });
   if(typeof renderUtilizationTrendChart === 'function') renderUtilizationTrendChart();
   if(typeof renderAlertsPanel === 'function') renderAlertsPanel();
+  const ngPageEl = document.getElementById('page-ng');
+  if(ngPageEl && ngPageEl.style.display !== 'none' && typeof renderNgPage === 'function') renderNgPage();
 }
 
 // Danh sách mã hàng + locator đang có hàng NG trong 1 kho (gộp theo item+PO+locator).
@@ -4832,7 +4834,7 @@ document.addEventListener('click', (e) => {
     }, 60);
     return; // không cho nổi bọt lên xử lý click hàng container bên dưới
   }
-  const ngRow = e.target.closest('.ov-ng-row[data-jump-search]');
+  const ngRow = e.target.closest('.ov-ng-row[data-jump-search], .ngp-jump[data-jump-search]');
   if(ngRow){
     // Bấm 1 dòng "Hàng NG" -> chuyển sang trang "Tìm mã hàng", chọn đúng tab kho, tự điền
     // mã + PO + locator + trạng thái NG vào ô tìm kiếm nhiều-mã, rồi mở cả 2 bảng
@@ -13049,6 +13051,166 @@ document.getElementById('btn-reset-confirmed').addEventListener('click', async (
   }
 });
 
+
+/* ============ Tab "Hàng NG" — quản lý hàng OQC = NG của cả 3 kho ============
+   Dữ liệu lấy từ ovGetNgRowsForKho() (cùng nguồn với khối "Hàng NG" ở Overview). Trạng thái xử lý +
+   ghi chú lưu CỤC BỘ (localStorage) theo khoá Kho|Item|PO|Locator — chưa đồng bộ Cloud. */
+const NGP_STORAGE_KEY = 'tn5_ng_manage_v1';
+const NGP_STATUS = { new:'Chưa xử lý', doing:'Đang xử lý', done:'Đã xử lý' };
+const ngpState = { kho:'all', q:'', status:'all', sort:'qty', planOnly:false };
+let ngpManage = null;
+function ngpLoad(){
+  if(ngpManage) return ngpManage;
+  try{ ngpManage = JSON.parse(localStorage.getItem(NGP_STORAGE_KEY) || '{}') || {}; }catch(e){ ngpManage = {}; }
+  return ngpManage;
+}
+function ngpSave(){
+  try{ localStorage.setItem(NGP_STORAGE_KEY, JSON.stringify(ngpManage || {})); }catch(e){ console.warn('Không lưu được trạng thái hàng NG:', e); }
+}
+function ngpKey(r){ return [r.code, r.item, r.custpo, r.locator].join('||'); }
+
+function ngpCollectRows(){
+  const manage = ngpLoad();
+  const counts = typeof ovBuildLocatorCounts === 'function' ? ovBuildLocatorCounts() : null;
+  const out = [], usedByKho = {};
+  ['3B', '3A', '2B'].forEach(code => {
+    const label = OV_KHO_LABELS[code];
+    try{ usedByKho[code] = ovOverviewForLocs(label, ovActiveLocatorsForKho(code), counts).pallets; }catch(e){ usedByKho[code] = 0; }
+    ovGetNgRowsForKho(label).forEach(r => {
+      const row = { code, kho:label, item:r.item, custpo:r.custpo, locator:r.locator, qty:r.qty, pallets:r.pallets };
+      row.hasPlan = typeof buildItemContainerList === 'function' && buildItemContainerList(r.item, r.custpo).length > 0;
+      const m = manage[ngpKey(row)] || {};
+      row.status = NGP_STATUS[m.status] ? m.status : 'new';
+      row.note = m.note || '';
+      out.push(row);
+    });
+  });
+  return { rows: out, usedByKho };
+}
+
+function ngpMatchQuery(r, q){
+  if(!q) return true;
+  const hay = (r.item + ' ' + r.custpo + ' ' + r.locator + ' ' + r.kho).toLowerCase();
+  return q.split(/[,\n;]+/).map(g => g.trim().toLowerCase()).filter(Boolean)
+    .some(g => g.split(/\s+/).every(t => hay.includes(t)));
+}
+function ngpFilteredRows(all){
+  const rows = all.filter(r =>
+    (ngpState.kho === 'all' || r.code === ngpState.kho) &&
+    (ngpState.status === 'all' || r.status === ngpState.status) &&
+    (!ngpState.planOnly || r.hasPlan) &&
+    ngpMatchQuery(r, ngpState.q));
+  const cmp = {
+    qty: (a, b) => b.qty - a.qty,
+    pallets: (a, b) => b.pallets - a.pallets || b.qty - a.qty,
+    item: (a, b) => String(a.item).localeCompare(String(b.item)) || String(a.custpo).localeCompare(String(b.custpo)),
+    locator: (a, b) => String(a.locator).localeCompare(String(b.locator))
+  }[ngpState.sort] || ((a, b) => b.qty - a.qty);
+  return rows.sort(cmp);
+}
+
+function renderNgPage(){
+  const bodyEl = document.getElementById('ngp-body');
+  if(!bodyEl) return;
+  const { rows: all, usedByKho } = ngpCollectRows();
+
+  // KPI theo kho + tổng
+  const kpiEl = document.getElementById('ngp-kpis');
+  if(kpiEl){
+    const kpi = (title, rs, used, cls) => {
+      const pal = rs.reduce((s, r) => s + r.pallets, 0), qty = rs.reduce((s, r) => s + r.qty, 0);
+      const codes = new Set(rs.map(r => r.item + '||' + r.custpo));
+      const planCodes = new Set(rs.filter(r => r.hasPlan).map(r => r.item + '||' + r.custpo));
+      const open = rs.filter(r => r.status !== 'done').length;
+      const pct = used ? ` · ${(pal / used * 100).toFixed(1)}% pallet đang dùng` : '';
+      return `<div class="ngp-kpi ${cls || ''}"><div class="ngp-kpi-title">${title}</div>
+        <div class="ngp-kpi-big">${fmt(pal)} <span style="font-size:13px;font-weight:500;">pallet</span></div>
+        <div class="ngp-kpi-sub">${fmt(codes.size)} mã + PO · ${fmt(qty)} Pcs${pct}<br>Chưa xử lý xong: <b>${fmt(open)}</b>/${fmt(rs.length)} dòng` +
+        (planCodes.size ? `<br><span class="warn">⚠ ${fmt(planCodes.size)} mã có trong Plan xuất cont</span>` : '') + `</div></div>`;
+    };
+    const usedAll = Object.values(usedByKho).reduce((s, v) => s + v, 0);
+    kpiEl.innerHTML = kpi('Tổng 3 kho', all, usedAll, 'total') +
+      ['3B', '3A', '2B'].map(c => kpi('Kho ' + c, all.filter(r => r.code === c), usedByKho[c])).join('');
+  }
+  // đếm trên tab kho
+  document.querySelectorAll('#ngp-tabs .kho-tab').forEach(btn => {
+    const k = btn.dataset.ngkho;
+    const n = k === 'all' ? all.length : all.filter(r => r.code === k).length;
+    const cnt = btn.querySelector('.cnt'); if(cnt) cnt.textContent = '(' + n + ')';
+    btn.classList.toggle('active', k === ngpState.kho);
+  });
+
+  const rows = ngpFilteredRows(all);
+  if(!rows.length){
+    bodyEl.innerHTML = `<tr><td colspan="10" class="ngp-empty">${all.length ? 'Không có dòng nào khớp bộ lọc.' : 'Không có hàng NG trong dữ liệu tồn kho hiện tại.'}</td></tr>`;
+    document.getElementById('ngp-foot').innerHTML = '';
+    return;
+  }
+  bodyEl.innerHTML = rows.map(r => {
+    const key = escAttr(ngpKey(r));
+    const badge = r.hasPlan
+      ? `<button type="button" class="ov-ng-plan-badge item-link" data-item="${escAttr(r.item)}" data-po="${escAttr(r.custpo)}" data-jump-combined="${escAttr(combinedRowDomId(r.item, r.custpo))}" title="Mã + PO này đang nằm trong kế hoạch xuất cont — bấm để xem trong Tổng hợp 3 Plan">⚠ Có trong Plan</button>`
+      : '<span style="color:var(--muted);">—</span>';
+    const opts = Object.keys(NGP_STATUS).map(k => `<option value="${k}"${k === r.status ? ' selected' : ''}>${NGP_STATUS[k]}</option>`).join('');
+    return `<tr class="st-${r.status}" data-ngkey="${key}">
+      <td>${escHtml(r.code)}</td>
+      <td><b>${escHtml(r.item)}</b></td>
+      <td>${escHtml(r.custpo)}</td>
+      <td>${escHtml(r.locator)}</td>
+      <td class="num">${fmt(r.pallets)}</td>
+      <td class="num">${fmt(r.qty)}</td>
+      <td>${badge}</td>
+      <td><select class="ngp-status st-${r.status}" data-ngkey="${key}">${opts}</select></td>
+      <td><input type="text" class="ngp-note" data-ngkey="${key}" value="${escAttr(r.note)}" placeholder="Ghi chú…" maxlength="300"></td>
+      <td><button type="button" class="ngp-jump" data-jump-search data-item="${escAttr(r.item)}" data-po="${escAttr(r.custpo)}" data-locator="${escAttr(r.locator)}" data-kho-label="${escAttr(r.kho)}" title="Xem mã này trong trang Tìm mã hàng">🔍 Xem</button></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('ngp-foot').innerHTML = `<tr><td colspan="4">Tổng (${fmt(rows.length)} dòng · ${fmt(new Set(rows.map(r => r.item + '||' + r.custpo)).size)} mã + PO)</td>
+    <td class="num">${fmt(rows.reduce((s, r) => s + r.pallets, 0))}</td><td class="num">${fmt(rows.reduce((s, r) => s + r.qty, 0))}</td><td colspan="4"></td></tr>`;
+}
+
+function ngpExportExcel(){
+  const rows = ngpFilteredRows(ngpCollectRows().rows);
+  if(!rows.length){ alert('Không có dữ liệu để xuất.'); return; }
+  if(typeof XLSX === 'undefined'){ alert('Chưa tải được thư viện Excel (XLSX) — kiểm tra kết nối mạng.'); return; }
+  const data = [['#', 'Kho', 'Item No.', 'Cust PO', 'Locator', 'Pallet', 'Pcs', 'Có trong Plan xuất cont', 'Trạng thái', 'Ghi chú']]
+    .concat(rows.map((r, i) => [i + 1, r.kho, r.item, r.custpo, r.locator, r.pallets, r.qty, r.hasPlan ? 'Có' : '', NGP_STATUS[r.status], r.note]));
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:5}, {wch:8}, {wch:18}, {wch:16}, {wch:16}, {wch:8}, {wch:10}, {wch:12}, {wch:13}, {wch:36}];
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{c:0, r:0}, e:{c:data[0].length - 1, r:data.length - 1} }) };
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Hang NG');
+  const d = new Date(), z = n => (n < 10 ? '0' : '') + n;
+  XLSX.writeFile(wb, `HangNG_${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}.xlsx`);
+}
+
+(function initNgPage(){
+  const page = document.getElementById('page-ng');
+  if(!page) return;
+  let t = null;
+  document.getElementById('ngp-tabs').addEventListener('click', e => {
+    const b = e.target.closest('.kho-tab[data-ngkho]'); if(!b) return;
+    ngpState.kho = b.dataset.ngkho; renderNgPage();
+  });
+  document.getElementById('ngp-search').addEventListener('input', e => {
+    ngpState.q = e.target.value; clearTimeout(t); t = setTimeout(renderNgPage, 150);
+  });
+  document.getElementById('ngp-status-filter').addEventListener('change', e => { ngpState.status = e.target.value; renderNgPage(); });
+  document.getElementById('ngp-sort').addEventListener('change', e => { ngpState.sort = e.target.value; renderNgPage(); });
+  document.getElementById('ngp-plan-only').addEventListener('change', e => { ngpState.planOnly = e.target.checked; renderNgPage(); });
+  document.getElementById('ngp-export').addEventListener('click', ngpExportExcel);
+  page.addEventListener('change', e => {
+    const key = e.target.dataset && e.target.dataset.ngkey; if(!key) return;
+    const m = ngpLoad(); const cur = m[key] || {};
+    if(e.target.classList.contains('ngp-status')){
+      cur.status = e.target.value;
+    } else if(e.target.classList.contains('ngp-note')){
+      cur.note = e.target.value.trim();
+    } else return;
+    if((cur.status || 'new') === 'new' && !cur.note) delete m[key]; else m[key] = cur;
+    ngpSave(); renderNgPage();
+  });
+})();
+
 const pageOverviewEl = document.getElementById('page-overview');
 const pagePickingEl = document.getElementById('page-picking');
 const pageSearchEl = document.getElementById('page-search');
@@ -13056,6 +13218,7 @@ const pageKiemTonEl = document.getElementById('page-kiemton');
 const pageSodo3bEl = document.getElementById('page-sodo3b');
 const pageTransactionEl = document.getElementById('page-transaction');
 const pageCompareEl = document.getElementById('page-compare');
+const pageNgEl = document.getElementById('page-ng');
 document.querySelectorAll('.sidebar-nav-btn[data-page]').forEach(btn => {
   btn.addEventListener('click', () => {
     const page = btn.dataset.page;
@@ -13067,6 +13230,8 @@ document.querySelectorAll('.sidebar-nav-btn[data-page]').forEach(btn => {
     if(pageSodo3bEl) pageSodo3bEl.style.display = page === 'sodo3b' ? '' : 'none';
     if(pageTransactionEl) pageTransactionEl.style.display = page === 'transaction' ? '' : 'none';
     if(pageCompareEl) pageCompareEl.style.display = page === 'compare' ? '' : 'none';
+    if(pageNgEl) pageNgEl.style.display = page === 'ng' ? '' : 'none';
+    if(page === 'ng') renderNgPage();
     if(page === 'search'){
       renderKhoSearchPage();
       if(searchCtrlMain) setTimeout(() => searchCtrlMain.focus(), 50);

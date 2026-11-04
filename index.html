@@ -111,6 +111,9 @@
       <button class="sidebar-nav-btn active" data-page="overview" type="button" title="Overview" aria-label="Overview">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
       </button>
+      <button class="sidebar-nav-btn" data-page="ng" type="button" title="Hàng NG" aria-label="Hàng NG">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      </button>
       <button class="sidebar-nav-btn" data-page="picking" type="button" title="Picking Status" aria-label="Picking Status">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
       </button>
@@ -1813,6 +1816,49 @@
       </div>
     </div>
 
+  </div>
+
+  <div class="wrap" id="page-ng" style="display:none;">
+    <div class="search-page-head" style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:10px;">
+      <div>
+        <div class="brand-eyebrow"><span class="dot" style="background:var(--red);box-shadow:0 0 8px var(--red);"></span>QUẢN LÝ HÀNG NG</div>
+        <h1>Hàng NG</h1>
+        <div class="sub">Toàn bộ mã + PO đang có OQC = NG trong 3 kho (2B, 3A, 3B). Gán trạng thái xử lý và ghi chú cho từng dòng; cảnh báo nếu mã + PO đang nằm trong kế hoạch xuất cont. Trạng thái / ghi chú lưu trên máy này.</div>
+      </div>
+      <button type="button" class="btn-export-excel" id="ngp-export" style="white-space:nowrap;">📥 Xuất Excel</button>
+    </div>
+    <div class="ngp-kpis" id="ngp-kpis"></div>
+    <div class="panel search-panel" style="margin-bottom:16px; padding:0;">
+      <div class="kho-tabs" id="ngp-tabs">
+        <button type="button" class="kho-tab active" data-ngkho="all">Tất cả <span class="cnt"></span></button>
+        <button type="button" class="kho-tab" data-ngkho="3B">Kho 3B <span class="cnt"></span></button>
+        <button type="button" class="kho-tab" data-ngkho="3A">Kho 3A <span class="cnt"></span></button>
+        <button type="button" class="kho-tab" data-ngkho="2B">Kho 2B <span class="cnt"></span></button>
+      </div>
+      <div class="ngp-toolbar">
+        <input type="text" id="ngp-search" class="ngp-input" placeholder="Tìm Item No., Cust PO, Locator… (dấu phẩy = tìm riêng, khoảng trắng = kết hợp)" autocomplete="off">
+        <select id="ngp-status-filter" class="ngp-input">
+          <option value="all">Mọi trạng thái</option>
+          <option value="new">Chưa xử lý</option>
+          <option value="doing">Đang xử lý</option>
+          <option value="done">Đã xử lý</option>
+        </select>
+        <select id="ngp-sort" class="ngp-input">
+          <option value="qty">Xếp theo: SL giảm dần</option>
+          <option value="pallets">Xếp theo: Số pallet</option>
+          <option value="item">Xếp theo: Item No.</option>
+          <option value="locator">Xếp theo: Locator</option>
+        </select>
+        <label class="ngp-check"><input type="checkbox" id="ngp-plan-only"> Chỉ mã có trong Plan xuất cont</label>
+      </div>
+      <div class="ngp-table-wrap">
+        <table class="ngp-table">
+          <thead><tr><th>Kho</th><th>Item No.</th><th>Cust PO</th><th>Locator</th><th class="num">Pallet</th><th class="num">Pcs</th><th>Plan</th><th>Trạng thái</th><th>Ghi chú</th><th></th></tr></thead>
+          <tbody id="ngp-body"></tbody>
+          <tfoot id="ngp-foot"></tfoot>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div class="wrap" id="page-compare" style="display:none;">
