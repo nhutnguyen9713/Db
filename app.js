@@ -4431,6 +4431,7 @@ function contKpiRows(kind){
         // CR không có trong file Transaction đang tải: đã có SL pick -> pick từ ca trước (ngoài khung giờ của file);
         // chưa pick gì -> "—".
         pickers: [...pickers].sort().join(', ') || (!txHasRecords ? 'Chưa tải file Transaction' : (picked > 0 || r.status === 'done' || r.status === 'manualDone') ? 'Pick Từ Ca Trước' : '—'),
+        items: (r.items || []).map(it => ({ item: it.item, po: it.po || '', qty: it.qty || 0, picked: it.picked || 0 })),
         type: r.type, cNo: r.cNo, loadDate: r.loadDate, planTime: r.planTime, invoice: r.invoice, csr: r.csr,
         kho: r.topKho ? String(r.topKho).replace('Kho ', '') : '—', planQty: r.planQty || 0, picked,
         pct: Math.round((r.pct || 0) * 100) / 100, statusLabel: contPickStatusLabel(r), status: r.status,
@@ -4470,21 +4471,43 @@ async function exportContKpiExcel(){
   workbook.creator = 'TN5 Dashboard';
   workbook.created = new Date();
   const ws = workbook.addWorksheet((CONT_KPI_TITLES[kind] || 'Container').slice(0, 31));
-  const headers = ['#', 'Loại', 'Cont', 'Ngày Load', 'Giờ Plan', 'Invoice', 'CR', 'Kho', 'SL Plan', 'Đã pick', '%', 'Trạng thái', 'Người pick', 'Trạng thái Load', 'Ghi chú'];
+  // Mỗi container dàn ra 1 dòng/mã hàng (giống file "Tổng hợp 3 Plan vs Tồn kho"): thêm 3 cột Item No., Cust PO,
+  // Picking (đã pick/SL Plan của mã + locator Loading đang chứa hàng đã pick). Thông tin container lặp lại ở
+  // mọi dòng của nó để lọc/sắp xếp trong Excel không bị mất; dòng Tổng cộng theo container (không cộng lặp).
+  const headers = ['#', 'Loại', 'Cont', 'Ngày Load', 'Giờ Plan', 'Invoice', 'CR', 'Kho', 'Item No.', 'Cust PO', 'Picking', 'SL Plan', 'Đã pick', '%', 'Trạng thái', 'Người pick', 'Trạng thái Load', 'Ghi chú'];
   ws.addRow(headers);
+  const firstRowOfCont = new Set();
   rows.forEach((r, i) => {
-    const row = ws.addRow([i + 1, r.type, r.cNo, r.loadDate, r.planTime, r.invoice, r.csr, r.kho, r.planQty, r.picked, r.pct / 100, r.statusLabel, r.pickers, r.loadStatus, r.comment]);
-    // Tô xanh cả dòng container đã Load xong (giống popup).
-    if(r.loadKey === 'done') row.eachCell({ includeEmpty: true }, cell => { cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFC6EFCE' } }; });
+    const contCrs = new Set((String(r.csr || '').match(/CR\d+/gi) || []).map(x => x.toUpperCase()));
+    const items = r.items && r.items.length ? r.items : [null];
+    items.forEach((it, k) => {
+      let picking = '—';
+      if(it){
+        const pickLocs = [...new Set(buildItemLocatorDetail(it.item, it.po ? it.po : null, true)
+          .filter(l => LOADING_LOCATOR_RE.test(String(l.locator || '').trim())
+            && (String(l.ref || '').match(/CR\d+/gi) || []).some(x => contCrs.has(x.toUpperCase())))
+          .map(l => l.locator))];
+        picking = `${Math.round(it.picked || 0)}/${Math.round(it.qty || 0)}` + (pickLocs.length ? ' ' + pickLocs.join(', ') : '');
+      }
+      const row = ws.addRow([i + 1, r.type, r.cNo, r.loadDate, r.planTime, r.invoice, r.csr, r.kho,
+        it ? it.item : '—', it ? (it.po || 'Bất kỳ PO') : '—', picking,
+        r.planQty, r.picked, r.pct / 100, r.statusLabel, r.pickers, r.loadStatus, r.comment]);
+      if(k === 0) firstRowOfCont.add(row.number);
+      // Tô xanh cả dòng container đã Load xong (giống popup).
+      if(r.loadKey === 'done') row.eachCell({ includeEmpty: true }, cell => { cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFC6EFCE' } }; });
+    });
   });
-  ws.addRow(['', 'Tổng', '', '', '', '', '', '', rows.reduce((s, r) => s + r.planQty, 0), rows.reduce((s, r) => s + r.picked, 0), '', '', '', '', '']).font = { bold: true };
+  ws.addRow(['', 'Tổng (theo container)', '', '', '', '', '', '', '', '', '', rows.reduce((s, r) => s + r.planQty, 0), rows.reduce((s, r) => s + r.picked, 0), '', '', '', '', '']).font = { bold: true };
   const thin = { style:'thin', color:{ argb:'FFAAAAAA' } };
+  const thick = { style:'medium', color:{ argb:'FF555555' } };
   ws.eachRow(row => row.eachCell({ includeEmpty: true }, cell => { cell.border = { top:thin, bottom:thin, left:thin, right:thin }; }));
+  // Đường kẻ đậm ngăn cách giữa các container.
+  firstRowOfCont.forEach(rn => { if(rn > 2) ws.getRow(rn).eachCell({ includeEmpty: true }, cell => { cell.border = { top:thick, bottom:thin, left:thin, right:thin }; }); });
   const head = ws.getRow(1);
   head.font = { bold: true, color:{ argb:'FFFFFFFF' } };
   head.eachCell(cell => { cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF1F2937' } }; });
-  ws.getColumn(11).numFmt = '0.00%';
-  [5, 7, 7, 12, 10, 12, 18, 7, 10, 10, 9, 12, 30, 16, 30].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  ws.getColumn(14).numFmt = '0.00%';
+  [5, 7, 7, 12, 10, 12, 18, 7, 16, 16, 24, 10, 10, 9, 12, 30, 16, 30].forEach((w, i) => { ws.getColumn(i + 1).width = w; });
   ws.views = [{ state:'frozen', ySplit:1 }];
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
