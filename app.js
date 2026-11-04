@@ -2279,6 +2279,7 @@ function ovGetNgRowsForKho(khoLabel){
       const item = r[RAW_KEY_IDX.item], custpo = r[RAW_KEY_IDX.custpo] || '', locator = r[RAW_KEY_IDX.locator];
       const oqc = String(r[RAW_KEY_IDX.oqc] || '').toUpperCase(), qty = Number(r[RAW_KEY_IDX.qty]) || 0;
       if(!item || !locator) return;
+      if(PROD_LOCATOR_RE.test(locator)) return; // locator PROD = khu sản xuất chứa hàng rework — không tính là hàng NG cần quản lý
       if(!oqc.includes('NG')) return;
       const key = item + '||' + custpo + '||' + locator;
       if(!map.has(key)) map.set(key, { item, custpo, locator, qty: 0, pallets: 0 });
@@ -4834,7 +4835,7 @@ document.addEventListener('click', (e) => {
     }, 60);
     return; // không cho nổi bọt lên xử lý click hàng container bên dưới
   }
-  const ngRow = e.target.closest('.ov-ng-row[data-jump-search], .ngp-jump[data-jump-search]');
+  const ngRow = e.target.closest('.ov-ng-row[data-jump-search]');
   if(ngRow){
     // Bấm 1 dòng "Hàng NG" -> chuyển sang trang "Tìm mã hàng", chọn đúng tab kho, tự điền
     // mã + PO + locator + trạng thái NG vào ô tìm kiếm nhiều-mã, rồi mở cả 2 bảng
@@ -5032,6 +5033,16 @@ function buildItemLocatorPopoverHtml(item, po){
     .filter(kho => khoTotals.has(kho))
     .map(kho => `<div class="cpt-loc-row"><span>${escHtml(kho.replace('Kho ', ''))}</span><b>${fmt(khoTotals.get(kho))}</b></div>`)
     .join('');
+  // Tồn NG của đúng mã + PO này (không tính locator PROD) — hàng NG không xuất được nên KHÔNG cộng vào
+  // tồn khả dụng ở trên, chỉ hiện thêm để biết mã này còn bao nhiêu NG và đang nằm ở khu nào.
+  const ngLocs = buildItemLocatorDetail(item, po, true).filter(l => String(l.oqc || '').toUpperCase().includes('NG'));
+  const ngKhoTotals = new Map();
+  ngLocs.forEach(l => ngKhoTotals.set(l.kho, (ngKhoTotals.get(l.kho) || 0) + l.qty));
+  const ngTotal = ngLocs.reduce((s, l) => s + l.qty, 0);
+  const ngHtml = ngTotal > 0
+    ? `<div class="cpt-total" style="color:var(--red); font-weight:600; margin-top:8px;">Tổng tồn NG: <b>${fmt(ngTotal)}</b> Pcs <span style="font-weight:500;">(không dùng để xuất)</span></div>
+    <div class="cpt-locs">${[...new Set([...CPT_KHO_ORDER, ...ngKhoTotals.keys()])].filter(k => ngKhoTotals.has(k)).map(k => `<div class="cpt-loc-row"><span>${escHtml(k.replace('Kho ', ''))}</span><b style="color:var(--red);">${fmt(ngKhoTotals.get(k))}</b></div>`).join('')}</div>`
+    : '';
   const diff = totalOnHand - remainingQty;
   const isSpp = ccIsSppItem(item);
   const manualOk = isSpp && !!sppManualOk[sppOkKey(item, po)];
@@ -5050,7 +5061,7 @@ function buildItemLocatorPopoverHtml(item, po){
     <div class="cpt-total">Tổng ${fmt(conts.length)} container: <b>${fmt(totalQty)}</b> Pcs${totalPicked ? ` · đã pick ${fmt(totalPicked)} · còn cần <b>${fmt(remainingQty)}</b>` : ''}</div>
     <div class="cpt-total" style="color:var(--muted); font-weight:600; margin-top:6px;">Tổng tồn PASS hiện có: <b style="color:var(--text);">${fmt(totalOnHand)}</b> Pcs${pickedOnHand ? ` <span style="font-weight:500;">(đã trừ ${fmt(pickedOnHand)} đã pick có CR)</span>` : ''}</div>
     <div class="cpt-locs">${khoRowsHtml || '<div class="cpt-empty">Không có tồn kho</div>'}</div>
-    ${diffHtml}`;
+    ${diffHtml}${ngHtml}`;
 }
 
 let cptPinned = false;
@@ -13058,6 +13069,7 @@ document.getElementById('btn-reset-confirmed').addEventListener('click', async (
 const NGP_STORAGE_KEY = 'tn5_ng_manage_v1';
 const NGP_STATUS = { new:'Chưa xử lý', doing:'Đang xử lý', done:'Đã xử lý' };
 const ngpState = { kho:'all', q:'', status:'all', sort:'qty', planOnly:false };
+const ngpExpanded = new Set(); // các dòng đang mở chi tiết (nút "Xem")
 let ngpManage = null;
 function ngpLoad(){
   if(ngpManage) return ngpManage;
@@ -13077,6 +13089,7 @@ function ngpCollectRows(){
     const label = OV_KHO_LABELS[code];
     try{ usedByKho[code] = ovOverviewForLocs(label, ovActiveLocatorsForKho(code), counts).pallets; }catch(e){ usedByKho[code] = 0; }
     ovGetNgRowsForKho(label).forEach(r => {
+      if(PROD_LOCATOR_RE.test(r.locator || '')) return; // locator PROD = khu sản xuất chứa hàng rework, không quản lý ở đây
       const row = { code, kho:label, item:r.item, custpo:r.custpo, locator:r.locator, qty:r.qty, pallets:r.pallets };
       row.hasPlan = typeof buildItemContainerList === 'function' && buildItemContainerList(r.item, r.custpo).length > 0;
       const m = manage[ngpKey(row)] || {};
@@ -13107,6 +13120,22 @@ function ngpFilteredRows(all){
     locator: (a, b) => String(a.locator).localeCompare(String(b.locator))
   }[ngpState.sort] || ((a, b) => b.qty - a.qty);
   return rows.sort(cmp);
+}
+
+// Chi tiết 1 dòng NG: liệt kê từng pallet (dòng dữ liệu gốc = 1 GI No.) của đúng Mã + PO + Locator + Kho.
+function ngpDetailHtml(r){
+  const lines = getRawRows(currentData).filter(x =>
+    x[RAW_KEY_IDX.kho] === r.kho && x[RAW_KEY_IDX.item] === r.item && (x[RAW_KEY_IDX.custpo] || '') === r.custpo &&
+    x[RAW_KEY_IDX.locator] === r.locator && String(x[RAW_KEY_IDX.oqc] || '').toUpperCase().includes('NG'));
+  const body = lines.map((x, i) => `<tr><td class="num">${i + 1}</td><td>${escHtml(x[6] || '—')}</td><td>${escHtml(x[7] || '—')}</td><td>${escHtml(x[8] || '—')}</td>
+    <td class="num">${fmt(Number(x[5]) || 0)}</td><td>${escHtml(x[9] ? x[9] + (x[12] ? ' ' + x[12] : '') : '—')}</td><td>${escHtml(x[10] || '—')}</td><td>${escHtml(x[11] || '—')}</td></tr>`).join('');
+  let plan = '';
+  if(r.hasPlan && typeof buildItemContainerList === 'function'){
+    plan = '<div class="ngp-detail-plan"><b>⚠ Trong Plan xuất cont:</b> ' + buildItemContainerList(r.item, r.custpo).map(c =>
+      escHtml(`${c.type || ''} · ${c.cNo || ''}${c.loadDate ? ' · Load ' + c.loadDate : ''} · Plan ${fmt(c.qty || 0)} Pcs`)).join(' &nbsp;|&nbsp; ') + '</div>';
+  }
+  return `<div class="ngp-detail"><div class="ngp-detail-title">${fmt(lines.length)} pallet NG tại ${escHtml(r.locator)} — ${escHtml(r.item)}${r.custpo ? ' (PO ' + escHtml(r.custpo) + ')' : ''}</div>
+    <table class="ngp-sub"><thead><tr><th class="num">#</th><th>GI No.</th><th>Lot No.</th><th>Pallet</th><th class="num">SL</th><th>Ngày nhập</th><th>Buyer</th><th>Ref</th></tr></thead><tbody>${body}</tbody></table>${plan}</div>`;
 }
 
 function renderNgPage(){
@@ -13148,6 +13177,7 @@ function renderNgPage(){
   }
   bodyEl.innerHTML = rows.map(r => {
     const key = escAttr(ngpKey(r));
+    const open = ngpExpanded.has(ngpKey(r));
     const badge = r.hasPlan
       ? `<button type="button" class="ov-ng-plan-badge item-link" data-item="${escAttr(r.item)}" data-po="${escAttr(r.custpo)}" data-jump-combined="${escAttr(combinedRowDomId(r.item, r.custpo))}" title="Mã + PO này đang nằm trong kế hoạch xuất cont — bấm để xem trong Tổng hợp 3 Plan">⚠ Có trong Plan</button>`
       : '<span style="color:var(--muted);">—</span>';
@@ -13162,25 +13192,116 @@ function renderNgPage(){
       <td>${badge}</td>
       <td><select class="ngp-status st-${r.status}" data-ngkey="${key}">${opts}</select></td>
       <td><input type="text" class="ngp-note" data-ngkey="${key}" value="${escAttr(r.note)}" placeholder="Ghi chú…" maxlength="300"></td>
-      <td><button type="button" class="ngp-jump" data-jump-search data-item="${escAttr(r.item)}" data-po="${escAttr(r.custpo)}" data-locator="${escAttr(r.locator)}" data-kho-label="${escAttr(r.kho)}" title="Xem mã này trong trang Tìm mã hàng">🔍 Xem</button></td>
-    </tr>`;
+      <td><button type="button" class="ngp-jump" data-ngkey="${key}" title="Mở / đóng chi tiết từng pallet của dòng này">${open ? '▲ Ẩn' : '🔍 Xem'}</button></td>
+    </tr>` + (open ? `<tr class="ngp-detail-row"><td colspan="10">${ngpDetailHtml(r)}</td></tr>` : '');
   }).join('');
   document.getElementById('ngp-foot').innerHTML = `<tr><td colspan="4">Tổng (${fmt(rows.length)} dòng · ${fmt(new Set(rows.map(r => r.item + '||' + r.custpo)).size)} mã + PO)</td>
     <td class="num">${fmt(rows.reduce((s, r) => s + r.pallets, 0))}</td><td class="num">${fmt(rows.reduce((s, r) => s + r.qty, 0))}</td><td colspan="4"></td></tr>`;
 }
 
-function ngpExportExcel(){
+async function ngpExportExcel(){
   const rows = ngpFilteredRows(ngpCollectRows().rows);
   if(!rows.length){ alert('Không có dữ liệu để xuất.'); return; }
-  if(typeof XLSX === 'undefined'){ alert('Chưa tải được thư viện Excel (XLSX) — kiểm tra kết nối mạng.'); return; }
-  const data = [['#', 'Kho', 'Item No.', 'Cust PO', 'Locator', 'Pallet', 'Pcs', 'Có trong Plan xuất cont', 'Trạng thái', 'Ghi chú']]
-    .concat(rows.map((r, i) => [i + 1, r.kho, r.item, r.custpo, r.locator, r.pallets, r.qty, r.hasPlan ? 'Có' : '', NGP_STATUS[r.status], r.note]));
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{wch:5}, {wch:8}, {wch:18}, {wch:16}, {wch:16}, {wch:8}, {wch:10}, {wch:12}, {wch:13}, {wch:36}];
-  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{c:0, r:0}, e:{c:data[0].length - 1, r:data.length - 1} }) };
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Hang NG');
-  const d = new Date(), z = n => (n < 10 ? '0' : '') + n;
-  XLSX.writeFile(wb, `HangNG_${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}.xlsx`);
+  if(typeof ExcelJS === 'undefined'){ alert('Chưa tải được thư viện Excel (ExcelJS) — kiểm tra kết nối mạng.'); return; }
+  const wb = new ExcelJS.Workbook();
+  const thin = { style:'thin', color:{ argb:'FFB8C2D6' } };
+  const border = { top:thin, left:thin, bottom:thin, right:thin };
+  const fill = argb => ({ type:'pattern', pattern:'solid', fgColor:{ argb } });
+  const ST = {
+    new:   { bg:'FFFDE2E4', fg:'FFB42336' },
+    doing: { bg:'FFFFF1D6', fg:'FF9A5B00' },
+    done:  { bg:'FFDDF3EA', fg:'FF0B6B50' }
+  };
+  const now = new Date(), z = n => (n < 10 ? '0' : '') + n;
+  const when = `${z(now.getDate())}/${z(now.getMonth() + 1)}/${now.getFullYear()} ${z(now.getHours())}:${z(now.getMinutes())}`;
+  const khoTxt = ngpState.kho === 'all' ? 'Tất cả kho' : 'Kho ' + ngpState.kho;
+
+  /* ---------- Sheet 1: chi tiết ---------- */
+  const ws = wb.addWorksheet('Hàng NG', { views:[{ state:'frozen', ySplit:4 }] });
+  const heads = ['#', 'Kho', 'Item No.', 'Cust PO', 'Locator', 'Pallet', 'Pcs', 'Có trong Plan', 'Trạng thái', 'Ghi chú'];
+  const widths = [6, 9, 17, 17, 18, 9, 11, 14, 15, 42];
+  ws.columns = widths.map(w => ({ width:w }));
+  ws.mergeCells(1, 1, 1, heads.length);
+  const t = ws.getCell(1, 1);
+  t.value = 'BÁO CÁO HÀNG NG'; t.font = { bold:true, size:16, color:{ argb:'FFFFFFFF' } };
+  t.fill = fill('FFD6394B'); t.alignment = { vertical:'middle', horizontal:'left', indent:1 };
+  ws.getRow(1).height = 30;
+  ws.mergeCells(2, 1, 2, heads.length);
+  const s2 = ws.getCell(2, 1);
+  s2.value = `${khoTxt} · không gồm locator PROD · xuất lúc ${when} · ${rows.length} dòng`;
+  s2.font = { italic:true, size:10, color:{ argb:'FF55637C' } }; s2.alignment = { horizontal:'left', indent:1 };
+  ws.getRow(3).height = 6;
+  const hr = ws.getRow(4);
+  heads.forEach((h, i) => {
+    const c = hr.getCell(i + 1);
+    c.value = h; c.font = { bold:true, color:{ argb:'FFFFFFFF' } }; c.fill = fill('FF1F2A44');
+    c.border = border; c.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+  });
+  hr.height = 24;
+  rows.forEach((r, i) => {
+    const row = ws.getRow(5 + i);
+    const vals = [i + 1, r.kho, r.item, r.custpo, r.locator, r.pallets, r.qty, r.hasPlan ? 'Có' : '', NGP_STATUS[r.status], r.note];
+    const zebra = i % 2 ? 'FFF4F6FA' : 'FFFFFFFF';
+    vals.forEach((v, j) => {
+      const c = row.getCell(j + 1);
+      c.value = v; c.border = border; c.fill = fill(zebra);
+      c.alignment = { vertical:'middle', horizontal: (j === 9 || j === 2 || j === 3 || j === 4) ? 'left' : (j === 5 || j === 6) ? 'right' : 'center', wrapText: j === 9 };
+      if(j === 5 || j === 6) c.numFmt = '#,##0';
+    });
+    row.getCell(3).font = { bold:true };
+    if(r.hasPlan){ const c = row.getCell(8); c.fill = fill('FFFFE8B3'); c.font = { bold:true, color:{ argb:'FF9A5B00' } }; }
+    const sc = row.getCell(9); sc.fill = fill(ST[r.status].bg); sc.font = { bold:true, color:{ argb:ST[r.status].fg } };
+  });
+  const first = 5, last = 4 + rows.length, tr = ws.getRow(last + 1);
+  ['TỔNG (theo dòng đang lọc)', '', '', '', '', `SUBTOTAL(109,F${first}:F${last})`, `SUBTOTAL(109,G${first}:G${last})`, '', '', ''].forEach((v, j) => {
+    const c = tr.getCell(j + 1);
+    c.value = (j === 5 || j === 6) ? { formula:v } : v;
+    c.font = { bold:true }; c.fill = fill('FFE1E7F0'); c.border = border;
+    c.alignment = { vertical:'middle', horizontal: (j === 5 || j === 6) ? 'right' : 'left' };
+    if(j === 5 || j === 6) c.numFmt = '#,##0';
+  });
+  ws.mergeCells(last + 1, 1, last + 1, 5);
+  ws.autoFilter = { from:{ row:4, column:1 }, to:{ row:last, column:heads.length } };
+  ws.pageSetup = { orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0, paperSize:9 };
+
+  /* ---------- Sheet 2: tổng hợp theo kho ---------- */
+  const ws2 = wb.addWorksheet('Tổng hợp theo kho');
+  const h2 = ['Kho', 'Số mã + PO', 'Số dòng vị trí', 'Pallet', 'Pcs', 'Chưa xử lý', 'Đang xử lý', 'Đã xử lý', 'Mã có trong Plan'];
+  ws2.columns = [10, 14, 14, 11, 13, 13, 13, 13, 17].map(w => ({ width:w }));
+  ws2.mergeCells(1, 1, 1, h2.length);
+  const t2 = ws2.getCell(1, 1); t2.value = 'TỔNG HỢP HÀNG NG THEO KHO'; t2.font = { bold:true, size:14, color:{ argb:'FFFFFFFF' } };
+  t2.fill = fill('FFD6394B'); t2.alignment = { vertical:'middle', horizontal:'left', indent:1 }; ws2.getRow(1).height = 26;
+  h2.forEach((h, i) => {
+    const c = ws2.getCell(3, i + 1); c.value = h; c.font = { bold:true, color:{ argb:'FFFFFFFF' } };
+    c.fill = fill('FF1F2A44'); c.border = border; c.alignment = { horizontal:'center', vertical:'middle', wrapText:true };
+  });
+  ws2.getRow(3).height = 24;
+  const sumRows = (rs, label) => {
+    const codes = new Set(rs.map(r => r.item + '||' + r.custpo));
+    const plan = new Set(rs.filter(r => r.hasPlan).map(r => r.item + '||' + r.custpo));
+    return [label, codes.size, rs.length, rs.reduce((s, r) => s + r.pallets, 0), rs.reduce((s, r) => s + r.qty, 0),
+      rs.filter(r => r.status === 'new').length, rs.filter(r => r.status === 'doing').length, rs.filter(r => r.status === 'done').length, plan.size];
+  };
+  const lines = ['3B', '3A', '2B'].filter(k => rows.some(r => r.code === k)).map(k => sumRows(rows.filter(r => r.code === k), 'Kho ' + k));
+  lines.push(sumRows(rows, 'TỔNG'));
+  lines.forEach((vals, i) => {
+    const isTotal = i === lines.length - 1;
+    vals.forEach((v, j) => {
+      const c = ws2.getCell(4 + i, j + 1); c.value = v; c.border = border;
+      c.fill = fill(isTotal ? 'FFE1E7F0' : (i % 2 ? 'FFF4F6FA' : 'FFFFFFFF'));
+      c.font = { bold: isTotal || j === 0 };
+      c.alignment = { horizontal: j === 0 ? 'left' : 'right', vertical:'middle' };
+      if(j >= 3 && j <= 4) c.numFmt = '#,##0';
+      if(j === 5 && v > 0) c.font = { bold:true, color:{ argb:ST.new.fg } };
+      if(j === 8 && v > 0) c.font = { bold:true, color:{ argb:'FF9A5B00' } };
+    });
+  });
+
+  const stamp = `${now.getFullYear()}${z(now.getMonth() + 1)}${z(now.getDate())}_${z(now.getHours())}${z(now.getMinutes())}`;
+  const buffer = await wb.xlsx.writeBuffer();
+  const url = URL.createObjectURL(new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+  const link = document.createElement('a'); link.href = url; link.download = `Hang_NG_${stamp}.xlsx`;
+  document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
 }
 
 (function initNgPage(){
@@ -13198,6 +13319,12 @@ function ngpExportExcel(){
   document.getElementById('ngp-sort').addEventListener('change', e => { ngpState.sort = e.target.value; renderNgPage(); });
   document.getElementById('ngp-plan-only').addEventListener('change', e => { ngpState.planOnly = e.target.checked; renderNgPage(); });
   document.getElementById('ngp-export').addEventListener('click', ngpExportExcel);
+  page.addEventListener('click', e => {
+    const b = e.target.closest('.ngp-jump[data-ngkey]'); if(!b) return;
+    const k = b.dataset.ngkey;
+    if(ngpExpanded.has(k)) ngpExpanded.delete(k); else ngpExpanded.add(k);
+    renderNgPage();
+  });
   page.addEventListener('change', e => {
     const key = e.target.dataset && e.target.dataset.ngkey; if(!key) return;
     const m = ngpLoad(); const cur = m[key] || {};

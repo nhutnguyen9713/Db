@@ -1910,3 +1910,11 @@
   .ngp-jump{font-size:12px; padding:3px 8px; border:1px solid var(--line); border-radius:6px; background:#fff; cursor:pointer; white-space:nowrap;}
   .ngp-jump:hover{border-color:var(--amber-bright);}
   .ngp-empty{padding:22px; text-align:center; color:var(--muted);}
+  .ngp-detail-row > td{background:#f7f9fc; padding:0 !important;}
+  .ngp-detail{padding:10px 14px 14px 28px;}
+  .ngp-detail-title{font-family:var(--mono); font-size:12px; font-weight:700; margin-bottom:8px;}
+  .ngp-sub{width:100%; border-collapse:collapse; font-size:12px;}
+  .ngp-sub th{font-family:var(--mono); font-size:10.5px; text-transform:uppercase; color:var(--muted); text-align:left; padding:4px 8px; border-bottom:1px solid var(--line);}
+  .ngp-sub td{padding:4px 8px; border-bottom:1px dashed var(--line);}
+  .ngp-sub .num{text-align:right; font-variant-numeric:tabular-nums;}
+  .ngp-detail-plan{margin-top:8px; font-size:12px; color:var(--amber); line-height:1.6;}
