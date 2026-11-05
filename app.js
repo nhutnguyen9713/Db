@@ -13180,6 +13180,86 @@ function ngpFilteredRows(all){
   return rows.sort(cmp);
 }
 
+/* ---- Hình chụp cho từng dòng NG ----
+   Ảnh được resize về 1 khung cố định (NGP_IMG_W x NGP_IMG_H, nền trắng, giữ nguyên tỉ lệ) rồi lưu trong IndexedDB
+   của trình duyệt (localStorage quá nhỏ cho ảnh), theo cùng khoá Kho|Item|PO|Locator với trạng thái/ghi chú. */
+const NGP_IMG_W = 480, NGP_IMG_H = 360, NGP_IMG_MAX = 4;
+const ngpPhotos = new Map(); // key -> mảng dataURL (jpeg)
+let ngpPhotoDb = null, ngpPhotoTarget = null;
+function ngpPhotoOpen(){
+  if(ngpPhotoDb) return ngpPhotoDb;
+  ngpPhotoDb = new Promise(resolve => {
+    try{
+      const req = indexedDB.open('tn5_ng_photos', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('photos', { keyPath:'key' });
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+    }catch(e){ resolve(null); }
+  });
+  return ngpPhotoDb;
+}
+async function ngpPhotosLoadAll(){
+  const db = await ngpPhotoOpen(); if(!db) return;
+  await new Promise(res => {
+    const rq = db.transaction('photos', 'readonly').objectStore('photos').getAll();
+    rq.onsuccess = () => { (rq.result || []).forEach(o => { if(o.photos && o.photos.length) ngpPhotos.set(o.key, o.photos); }); res(); };
+    rq.onerror = () => res();
+  });
+  const pg = document.getElementById('page-ng');
+  if(pg && pg.style.display !== 'none') renderNgPage();
+}
+async function ngpPhotoPersist(key){
+  const db = await ngpPhotoOpen(); if(!db) return;
+  const st = db.transaction('photos', 'readwrite').objectStore('photos');
+  const arr = ngpPhotos.get(key);
+  if(arr && arr.length) st.put({ key, photos:arr }); else st.delete(key);
+}
+function ngpResizeImage(file){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas'); cv.width = NGP_IMG_W; cv.height = NGP_IMG_H;
+      const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, NGP_IMG_W, NGP_IMG_H);
+      const s = Math.min(NGP_IMG_W / img.naturalWidth, NGP_IMG_H / img.naturalHeight);
+      const w = img.naturalWidth * s, h = img.naturalHeight * s;
+      ctx.drawImage(img, (NGP_IMG_W - w) / 2, (NGP_IMG_H - h) / 2, w, h);
+      URL.revokeObjectURL(url);
+      resolve(cv.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Không đọc được ảnh')); };
+    img.src = url;
+  });
+}
+async function ngpAddPhotos(key, files){
+  const cur = (ngpPhotos.get(key) || []).slice();
+  let skipped = 0;
+  for(const f of files){
+    if(cur.length >= NGP_IMG_MAX){ skipped++; continue; }
+    try{ cur.push(await ngpResizeImage(f)); }catch(e){ alert('Không đọc được ảnh "' + f.name + '" (định dạng không được trình duyệt hỗ trợ).'); }
+  }
+  ngpPhotos.set(key, cur); await ngpPhotoPersist(key);
+  if(skipped) alert('Mỗi dòng tối đa ' + NGP_IMG_MAX + ' ảnh — đã bỏ qua ' + skipped + ' ảnh.');
+  renderNgPage();
+}
+function ngpOpenLightbox(key, idx){
+  const arr = ngpPhotos.get(key) || []; if(!arr[idx]) return;
+  const ov = document.createElement('div'); ov.className = 'ngp-lightbox';
+  ov.innerHTML = `<div class="ngp-lb-box"><img src="${arr[idx]}" alt=""><div class="ngp-lb-bar"><span>${idx + 1}/${arr.length}</span>
+    <button type="button" data-act="del">🗑 Xoá ảnh này</button><button type="button" data-act="close">Đóng</button></div></div>`;
+  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = ev => { if(ev.key === 'Escape') close(); };
+  ov.addEventListener('click', async ev => {
+    const act = ev.target.dataset && ev.target.dataset.act;
+    if(ev.target === ov || act === 'close') return close();
+    if(act === 'del' && confirm('Xoá ảnh này?')){
+      const next = (ngpPhotos.get(key) || []).filter((_, i) => i !== idx);
+      if(next.length) ngpPhotos.set(key, next); else ngpPhotos.delete(key);
+      await ngpPhotoPersist(key); close(); renderNgPage();
+    }
+  });
+  document.addEventListener('keydown', onKey); document.body.appendChild(ov);
+}
+
 // Chi tiết 1 dòng NG: liệt kê từng pallet (dòng dữ liệu gốc = 1 GI No.) của đúng Mã + PO + Locator + Kho.
 function ngpDetailHtml(r){
   const lines = getRawRows(currentData).filter(x =>
@@ -13229,7 +13309,7 @@ function renderNgPage(){
 
   const rows = ngpFilteredRows(all);
   if(!rows.length){
-    bodyEl.innerHTML = `<tr><td colspan="10" class="ngp-empty">${all.length ? 'Không có dòng nào khớp bộ lọc.' : 'Không có hàng NG trong dữ liệu tồn kho hiện tại.'}</td></tr>`;
+    bodyEl.innerHTML = `<tr><td colspan="11" class="ngp-empty">${all.length ? 'Không có dòng nào khớp bộ lọc.' : 'Không có hàng NG trong dữ liệu tồn kho hiện tại.'}</td></tr>`;
     document.getElementById('ngp-foot').innerHTML = '';
     return;
   }
@@ -13250,11 +13330,12 @@ function renderNgPage(){
       <td>${badge}</td>
       <td><select class="ngp-status st-${r.status}" data-ngkey="${key}">${opts}</select></td>
       <td><input type="text" class="ngp-note" data-ngkey="${key}" value="${escAttr(r.note)}" placeholder="Ghi chú…" maxlength="300"></td>
+      <td class="ngp-photos">${(ngpPhotos.get(ngpKey(r)) || []).map((p, i) => `<img class="ngp-thumb" src="${p}" data-ngkey="${key}" data-idx="${i}" alt="Ảnh ${i + 1}" title="Bấm để xem lớn / xoá">`).join('')}${(ngpPhotos.get(ngpKey(r)) || []).length < NGP_IMG_MAX ? `<button type="button" class="ngp-photo-add" data-ngkey="${key}" title="Thêm ảnh chụp (chụp mới hoặc chọn từ máy)">📷</button>` : ''}</td>
       <td><button type="button" class="ngp-jump" data-ngkey="${key}" title="Mở / đóng chi tiết từng pallet của dòng này">${open ? '▲ Ẩn' : '🔍 Xem'}</button></td>
-    </tr>` + (open ? `<tr class="ngp-detail-row"><td colspan="10">${ngpDetailHtml(r)}</td></tr>` : '');
+    </tr>` + (open ? `<tr class="ngp-detail-row"><td colspan="11">${ngpDetailHtml(r)}</td></tr>` : '');
   }).join('');
   document.getElementById('ngp-foot').innerHTML = `<tr><td colspan="4">Tổng (${fmt(rows.length)} dòng · ${fmt(new Set(rows.map(r => r.item + '||' + r.custpo)).size)} mã + PO)</td>
-    <td class="num">${fmt(rows.reduce((s, r) => s + r.pallets, 0))}</td><td class="num">${fmt(rows.reduce((s, r) => s + r.qty, 0))}</td><td colspan="4"></td></tr>`;
+    <td class="num">${fmt(rows.reduce((s, r) => s + r.pallets, 0))}</td><td class="num">${fmt(rows.reduce((s, r) => s + r.qty, 0))}</td><td colspan="5"></td></tr>`;
 }
 
 async function ngpExportExcel(){
@@ -13276,8 +13357,12 @@ async function ngpExportExcel(){
 
   /* ---------- Sheet 1: chi tiết ---------- */
   const ws = wb.addWorksheet('Hàng NG', { views:[{ state:'frozen', ySplit:4 }] });
-  const heads = ['#', 'Kho', 'Item No.', 'Cust PO', 'Locator', 'Pallet', 'Pcs', 'Có trong Plan', 'Trạng thái', 'Ghi chú'];
-  const widths = [6, 9, 17, 17, 18, 9, 11, 14, 15, 42];
+  // Cột ảnh: mỗi ảnh 1 cột riêng (Hình 1..n), mọi ảnh cùng kích thước 120x90 px (từ ảnh đã resize 480x360, tỉ lệ 4:3).
+  const photoCols = Math.min(NGP_IMG_MAX, Math.max(0, ...rows.map(r => (ngpPhotos.get(ngpKey(r)) || []).length)));
+  const IMG_W = 120, IMG_H = 90, ROW_H_PT = 72; // 72pt = 96px
+  const heads = ['#', 'Kho', 'Item No.', 'Cust PO', 'Locator', 'Pallet', 'Pcs', 'Có trong Plan', 'Trạng thái', 'Ghi chú']
+    .concat(Array.from({ length: photoCols }, (_, i) => 'Hình ' + (i + 1)));
+  const widths = [6, 9, 17, 17, 18, 9, 11, 14, 15, 42].concat(Array(photoCols).fill(18));
   ws.columns = widths.map(w => ({ width:w }));
   ws.mergeCells(1, 1, 1, heads.length);
   const t = ws.getCell(1, 1);
@@ -13306,6 +13391,18 @@ async function ngpExportExcel(){
       c.alignment = { vertical:'middle', horizontal: (j === 9 || j === 2 || j === 3 || j === 4) ? 'left' : (j === 5 || j === 6) ? 'right' : 'center', wrapText: j === 9 };
       if(j === 5 || j === 6) c.numFmt = '#,##0';
     });
+    // Ô ảnh: viền + nền như các ô khác, chèn ảnh đúng kích thước.
+    const pics = ngpPhotos.get(ngpKey(r)) || [];
+    for(let p = 0; p < photoCols; p++){
+      const c = row.getCell(11 + p); c.border = border; c.fill = fill(zebra);
+    }
+    if(pics.length){
+      row.height = ROW_H_PT;
+      pics.slice(0, photoCols).forEach((dataUrl, p) => {
+        const id = wb.addImage({ base64: dataUrl.replace(/^data:image\/\w+;base64,/, ''), extension:'jpeg' });
+        ws.addImage(id, { tl:{ col: 10 + p + 0.08, row: 4 + i + 0.07 }, ext:{ width: IMG_W, height: IMG_H }, editAs:'oneCell' });
+      });
+    }
     row.getCell(3).font = { bold:true };
     if(r.hasPlan){ const c = row.getCell(8); c.fill = fill('FFFFE8B3'); c.font = { bold:true, color:{ argb:'FF9A5B00' } }; }
     const sc = row.getCell(9); sc.fill = fill(ST[r.status].bg); sc.font = { bold:true, color:{ argb:ST[r.status].fg } };
@@ -13377,7 +13474,14 @@ async function ngpExportExcel(){
   document.getElementById('ngp-sort').addEventListener('change', e => { ngpState.sort = e.target.value; renderNgPage(); });
   document.getElementById('ngp-plan-only').addEventListener('change', e => { ngpState.planOnly = e.target.checked; renderNgPage(); });
   document.getElementById('ngp-export').addEventListener('click', ngpExportExcel);
+  const fileInput = document.getElementById('ngp-photo-input');
+  if(fileInput) fileInput.addEventListener('change', async () => {
+    const files = [...fileInput.files]; fileInput.value = '';
+    if(ngpPhotoTarget && files.length) await ngpAddPhotos(ngpPhotoTarget, files);
+  });
   page.addEventListener('click', e => {
+    const th = e.target.closest('.ngp-thumb'); if(th){ ngpOpenLightbox(th.dataset.ngkey, Number(th.dataset.idx)); return; }
+    const ad = e.target.closest('.ngp-photo-add'); if(ad){ ngpPhotoTarget = ad.dataset.ngkey; if(fileInput) fileInput.click(); return; }
     const b = e.target.closest('.ngp-jump[data-ngkey]'); if(!b) return;
     const k = b.dataset.ngkey;
     if(ngpExpanded.has(k)) ngpExpanded.delete(k); else ngpExpanded.add(k);
@@ -13395,6 +13499,7 @@ async function ngpExportExcel(){
     ngpSave(); renderNgPage();
   });
 })();
+ngpPhotosLoadAll();
 
 const pageOverviewEl = document.getElementById('page-overview');
 const pagePickingEl = document.getElementById('page-picking');
