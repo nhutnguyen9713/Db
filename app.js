@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.24';
+const APP_VERSION = 'v4.25';
 const APP_VERSION_DATE = '05/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -6121,7 +6121,7 @@ async function exportCombinedPlanToExcel(mode){
     const fillColor = doneFill || (groupIndex % 2 === 0 ? FILL_A : FILL_B);
     const leftAlignCols = new Set([contHeaders.length + 1, contHeaders.length + 2, contHeaders.length + 4, contHeaders.length + 5]); // Item No./Cust PO/Picking/WH
     const row = ws1.addRow(rowValues);
-    imgRows.push({ values: rowValues, fill: fillColor, first: isGroupFirst, done: !!doneFill });
+    imgRows.push({ values: rowValues, fill: fillColor, first: isGroupFirst, done: !!doneFill, day: dayLabel, dayText: c ? `📅 Ngày load ${dayLabel} — ${dayCount[dayLabel].size} container` : 'Mã chưa gán container' });
     if(XL){
       if(isGroupFirst) contSpans.push([row.number, row.number]); else contSpans[contSpans.length - 1][1] = row.number;
       row.getCell(searchCol).value = [r.item, r.custpo, c && c.invoice, c && c.csr, pickingWh, c && c.type, c && c.loadDate].filter(Boolean).join(' ');
@@ -6285,51 +6285,130 @@ function splitPickingText(v){
 // viền đậm giữa các container). share=true → mở bảng chia sẻ của điện thoại, không hỗ trợ thì tải file.
 const NG_CELL_FILL = 'FFF9CFCF', NG_CELL_FONT = 'FFB42318'; // nền đỏ nhạt + chữ đỏ đậm ô NG > 0 (Excel + ảnh Tổng hợp 3 Plan)
 function drawCombinedPlanImage(headers, rows, colorByCol, nContCols, share){
+  // v4.25: ảnh vẽ theo CÙNG form với Excel mới (tiêu đề, dòng nhóm cột, dải Ngày load, gộp ô container,
+  // số 0 hiện "-", Chênh lệch xanh/đỏ, Trạng thái tô màu) — không có ô tìm kiếm.
   const argb = a => '#' + String(a).slice(-6);
-  const scale = 2, padX = 8, rowH = 28, headH = 40, font = '13px Arial, sans-serif', fontB = 'bold 13px Arial, sans-serif';
+  const scale = 2, padX = 8, rowH = 26, headH = 40, titleH = 34, groupH = 22, dayH = 24;
+  const font = '13px Arial, sans-serif', fontB = 'bold 13px Arial, sans-serif';
+  const ngIdx = headers.indexOf('NG'), passIdx = headers.indexOf('PASS'), planIdx = headers.indexOf('SL Plan');
+  const remainIdx = headers.indexOf('SL còn lại'), diffIdx = headers.indexOf('Chênh lệch'), statusIdx = headers.indexOf('Trạng thái');
+  const whIdx = headers.indexOf('WH'), ebIdx = headers.indexOf('End Buyer PO');
+  const numIdx = new Set();
+  headers.forEach((h, i) => { if(colorByCol.has(i + 1) || h === 'PASS' || h === 'NG') numIdx.add(i); });
+  // Cột End Buyer PO trống hết -> bỏ khỏi ảnh (giống Excel ẩn cột).
+  const cols = headers.map((h, i) => i).filter(i => !(i === ebIdx && rows.every(r => !r.values[i])));
+  const fmtNum = n => Math.round(n * 100) / 100 === Math.round(n) ? Math.round(n).toLocaleString('en-US') : (Math.round(n * 100) / 100).toLocaleString('en-US');
+  const show = (i, v) => {
+    if(v == null) return '';
+    if(typeof v === 'number'){
+      if(i === diffIdx) return v > 0 ? '+' + fmtNum(v) : fmtNum(v);
+      if(numIdx.has(i) && v === 0) return '-';
+      return fmtNum(v);
+    }
+    return String(v);
+  };
   const meas = document.createElement('canvas').getContext('2d');
-  meas.font = fontB;
-  const widths = headers.map((h,i) => {
-    let w = meas.measureText(h).width;
-    meas.font = font;
-    rows.forEach(r => { w = Math.max(w, meas.measureText(String(r.values[i] == null ? '' : r.values[i])).width); });
+  const widths = {};
+  cols.forEach(i => {
     meas.font = fontB;
-    return Math.ceil(Math.min(w, 220)) + padX * 2 + (i === nContCols + 3 ? 14 : 0); // Picking: chừa khoảng giữa số và locator
+    const hw = headers[i].split(' ');
+    // Tiêu đề nhiều chữ được xuống 2 dòng -> chỉ cần rộng bằng nửa dài nhất.
+    let w = (hw.length > 2 && headers[i].includes('(')) ? Math.max(...[hw.slice(0, Math.ceil(hw.length / 2)).join(' '), hw.slice(Math.ceil(hw.length / 2)).join(' ')].map(t => meas.measureText(t).width)) : meas.measureText(headers[i]).width;
+    rows.forEach(r => { w = Math.max(w, meas.measureText(show(i, r.values[i])).width); });
+    widths[i] = Math.ceil(Math.min(w, 230)) + padX * 2;
   });
-  const W = widths.reduce((a,b) => a + b, 0) + 2, H = headH + rows.length * rowH + 2;
+  const xs = {}; let x = 1; cols.forEach(i => { xs[i] = x; x += widths[i]; });
+  const W = x + 1;
+  // Bố cục dòng: dải ngày + dòng dữ liệu
+  const layout = []; let y = 1 + titleH + groupH + headH, prevDay;
+  rows.forEach(r => {
+    if(r.day !== prevDay){ layout.push({ type:'day', y, text: r.dayText }); y += dayH; prevDay = r.day; }
+    layout.push({ type:'row', y, r }); y += rowH;
+  });
+  const H = y + 1;
   const cv = document.createElement('canvas');
   cv.width = W * scale; cv.height = H * scale;
   const g = cv.getContext('2d');
   g.scale(scale, scale);
   g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
   g.textBaseline = 'middle';
-  const xs = []; let x = 1; widths.forEach(w => { xs.push(x); x += w; });
-  const ngIdx = headers.indexOf('NG');
-  const cell = (i, y, h, bg, text, bold, left, color) => {
-    g.fillStyle = bg; g.fillRect(xs[i], y, widths[i], h);
-    g.strokeStyle = '#AAAAAA'; g.lineWidth = 1; g.strokeRect(xs[i] + .5, y + .5, widths[i] - 1, h - 1);
-    g.fillStyle = color || '#111'; g.font = bold ? fontB : font;
-    if(left === 'split'){
-      // Cột Picking: số "xx/xx" sát trái, locator Loading sát phải
-      const sp = splitPickingText(text);
-      g.textAlign = 'left'; g.fillText(sp.num, xs[i] + padX, y + h / 2);
-      if(sp.loc){ g.textAlign = 'right'; g.fillText(sp.loc, xs[i] + widths[i] - padX, y + h / 2); }
-    }
-    else if(left){ g.textAlign = 'left'; g.fillText(text, xs[i] + padX, y + h / 2); }
-    else { g.textAlign = 'center'; g.fillText(text, xs[i] + widths[i] / 2, y + h / 2); }
-  };
-  headers.forEach((h,i) => cell(i, 1, headH, colorByCol.has(i+1) ? argb(colorByCol.get(i+1)) : '#EFEFEF', h, true, false));
-  rows.forEach((r, ri) => {
-    const y = 1 + headH + ri * rowH;
-    r.values.forEach((v,i) => {
-      const isNg = i === ngIdx && Number(v) > 0;
-      cell(i, y, rowH, isNg ? argb(NG_CELL_FILL) : ((!r.done && colorByCol.has(i+1)) ? argb(colorByCol.get(i+1)) : argb(r.fill)), String(v == null ? '' : v), isNg, i === nContCols + 3 ? 'split' : (i === nContCols || i === nContCols + 1), isNg ? '#' + NG_CELL_FONT.slice(2) : null);
-    });
-    if(r.first){ g.strokeStyle = '#222'; g.lineWidth = 2; g.beginPath(); g.moveTo(1, y); g.lineTo(W - 1, y); g.stroke(); }
+  const text = (t, x0, y0, align, f, color) => { g.font = f || font; g.fillStyle = color || '#111'; g.textAlign = align || 'center'; g.fillText(t, x0, y0); };
+  const box = (x0, y0, w, h, bg, stroke) => { g.fillStyle = bg; g.fillRect(x0, y0, w, h); g.strokeStyle = stroke || '#AAAAAA'; g.lineWidth = 1; g.strokeRect(x0 + .5, y0 + .5, w - 1, h - 1); };
+  const hline = (x0, x1, y0) => { g.strokeStyle = '#222'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y0); g.stroke(); };
+  const vline = (x0, y0, y1) => { g.strokeStyle = '#222'; g.lineWidth = 2; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0, y1); g.stroke(); };
+  // Tiêu đề
+  g.fillStyle = '#1F2A44'; g.fillRect(1, 1, W - 2, titleH);
+  text('TỔNG HỢP 3 PLAN vs TỒN KHO', 12, 1 + titleH / 2, 'left', 'bold 17px Arial, sans-serif', '#FFFFFF');
+  const now0 = new Date(), z0 = n => String(n).padStart(2, '0');
+  text(`Xuất lúc ${z0(now0.getDate())}/${z0(now0.getMonth() + 1)}/${now0.getFullYear()} ${z0(now0.getHours())}:${z0(now0.getMinutes())} · Mỗi khung đậm = 1 container · "-" = 0 · Chênh lệch = Tổng tồn PASS − SL Plan`, W - 12, 1 + titleH / 2, 'right', 'italic 11px Arial, sans-serif', '#C9D3E6');
+  // Dòng nhóm cột
+  const gy = 1 + titleH;
+  const firstKho = remainIdx + 1;
+  [['THÔNG TIN CONTAINER', 0, nContCols - 1, 'FF3B4A6B'], ['MÃ HÀNG', nContCols, firstKho - 1, 'FF4A5A7F'],
+   ['TỒN KHO THEO KHU', firstKho, ngIdx - 1, 'FF2F6E73'], ['TỔNG TỒN', ngIdx, planIdx - 1, 'FF5B3F8C'],
+   ['KẾ HOẠCH / ĐỐI CHIẾU', planIdx, headers.length - 1, 'FF7A4A1F']].forEach(([label, a, b, color]) => {
+    const inC = cols.filter(i => i >= a && i <= b); if(!inC.length) return;
+    const x0 = xs[inC[0]], x1 = xs[inC[inC.length - 1]] + widths[inC[inC.length - 1]];
+    box(x0, gy, x1 - x0, groupH, argb(color), '#FFFFFF');
+    text(label, (x0 + x1) / 2, gy + groupH / 2, 'center', 'bold 12px Arial, sans-serif', '#FFFFFF');
+    vline(x0, gy, gy + groupH);
   });
+  // Dòng tiêu đề cột
+  const hy = gy + groupH;
+  cols.forEach(i => {
+    box(xs[i], hy, widths[i], headH, colorByCol.has(i + 1) ? argb(colorByCol.get(i + 1)) : '#EFEFEF');
+    const words = headers[i].split(' ');
+    meas.font = fontB;
+    if(meas.measureText(headers[i]).width > widths[i] - 2 * padX && words.length > 1){
+      const half = Math.ceil(words.length / 2);
+      text(words.slice(0, half).join(' '), xs[i] + widths[i] / 2, hy + headH / 2 - 8, 'center', fontB);
+      text(words.slice(half).join(' '), xs[i] + widths[i] / 2, hy + headH / 2 + 8, 'center', fontB);
+    } else text(headers[i], xs[i] + widths[i] / 2, hy + headH / 2, 'center', fontB);
+  });
+  hline(1, W - 1, hy); hline(1, W - 1, hy + headH);
+  // Dòng dữ liệu
+  const contCols = cols.filter(i => i < nContCols), itemCols = cols.filter(i => i >= nContCols);
+  const leftCols = new Set([nContCols, nContCols + 1, nContCols + 3]); // Item No./Cust PO/Picking
+  const spans = []; // khung container: [rowLayoutFrom, rowLayoutTo]
+  layout.forEach((L, li) => {
+    if(L.type === 'day'){
+      box(1, L.y, W - 2, dayH, '#D9E1F2');
+      text(L.text, 12, L.y + dayH / 2, 'left', 'bold 13px Arial, sans-serif', '#1F2A44');
+      hline(1, W - 1, L.y); hline(1, W - 1, L.y + dayH);
+      return;
+    }
+    const r = L.r;
+    if(r.first || !spans.length) spans.push([li, li]); else spans[spans.length - 1][1] = li;
+    itemCols.forEach(i => {
+      const v = r.values[i];
+      let bg = (!r.done && colorByCol.has(i + 1)) ? argb(colorByCol.get(i + 1)) : argb(r.fill);
+      let color = '#111', f = font;
+      if(i === ngIdx){
+        if(Number(v) > 0){ bg = argb(NG_CELL_FILL); color = '#' + NG_CELL_FONT.slice(2); f = fontB; } else color = '#9AA3B2';
+      } else if(numIdx.has(i) && v === 0) color = '#9AA3B2';
+      if(i === diffIdx && typeof v === 'number'){ f = fontB; color = v > 0 ? '#0B7A3B' : v < 0 ? '#C00000' : '#55637C'; }
+      if(i === statusIdx){ const ok = v === 'Đủ'; bg = ok ? '#C6EFCE' : '#FFC7CE'; color = ok ? '#006100' : '#9C0006'; f = fontB; }
+      if(i === planIdx) f = fontB;
+      if(i === remainIdx && typeof v === 'number'){ f = fontB; color = v > 0 ? '#9A5B00' : '#0B7A3B'; }
+      box(xs[i], L.y, widths[i], rowH, bg);
+      const t = show(i, v);
+      if(leftCols.has(i)) text(t, xs[i] + padX, L.y + rowH / 2, 'left', f, color);
+      else text(t, xs[i] + widths[i] / 2, L.y + rowH / 2, 'center', f, color);
+    });
+  });
+  // Cột container: gộp ô theo khung container, viền đậm quanh mỗi khung.
+  spans.forEach(([a, b]) => {
+    const r = layout[a].r, y0 = layout[a].y, y1 = layout[b].y + rowH;
+    contCols.forEach(i => {
+      box(xs[i], y0, widths[i], y1 - y0, r.done ? argb(r.fill) : '#FFFFFF');
+      text(show(i, r.values[i]), xs[i] + widths[i] / 2, (y0 + y1) / 2, 'center', (i === 2 || i === 3) ? fontB : font);
+    });
+    hline(1, W - 1, y0); hline(1, W - 1, y1);
+    vline(xs[itemCols[0]], y0, y1);
+  });
+  vline(xs[itemCols[0]], hy, hy + headH);
   g.strokeStyle = '#222'; g.lineWidth = 2;
   g.strokeRect(1, 1, W - 2, H - 2);
-  g.beginPath(); g.moveTo(xs[nContCols], 1); g.lineTo(xs[nContCols], H - 1); g.stroke();
   const pad = n => String(n).padStart(2,'0'), d = new Date();
   const name = `Tong_hop_3_Plan_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.png`;
   cv.toBlob(blob => {
