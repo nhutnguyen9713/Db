@@ -392,7 +392,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v4.28';
+  var PH_VERSION = 'v4.29';
   var PH_VERSION_DATE = '05/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -762,7 +762,7 @@
       '<div class="ph-item-top"><span class="ph-item-no">' + phEsc(it.item) + '</span><span class="ph-item-po">PO ' + phEsc(poLabel) + '</span>' + shortTag +
       '<span class="ph-item-qty">Pick <b>' + phFmt(it.picked) + '/' + phFmt(it.qty) + '</b> · ' + phFmtDec(it.cbm, 2) + ' CBM</span></div>' +
       '<div class="ph-chips">' + (chips || '<span class="ph-nostock">Không có tồn kho</span>') +
-        (it.need > 0 ? '<span class="ph-need ph-need-left" title="SL kế hoạch − đã pick của mã này trong cont">Còn thiếu <b>' + phFmt(it.need) + '</b></span>' : '<span class="ph-need ph-need-ok">✓ Đã pick đủ</span>') +
+        (it.need > 0 ? '<span class="ph-need ph-need-left" title="SL kế hoạch − đã pick của mã này trong cont">Pick thiếu <b>' + phFmt(it.need) + '</b></span>' : '<span class="ph-need ph-need-ok">✓ Đã pick đủ</span>') +
       '</div>' + panels + '</div>';
   };
 
