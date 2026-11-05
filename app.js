@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.23';
+const APP_VERSION = 'v4.24';
 const APP_VERSION_DATE = '05/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5951,6 +5951,11 @@ async function exportCombinedPlanToExcel(mode){
   // xanh/đỏ, Trạng thái tô màu. Chế độ ảnh giữ nguyên như cũ.
   const XL = mode === 'excel';
   const DASH_FMT = '#,##0;[Red]-#,##0;"-"';
+  // v4.24: ô tìm kiếm tổng ở dòng 2 — chữ để tìm của từng dòng gom vào 1 cột phụ ẩn (searchCol),
+  // định dạng có điều kiện tô vàng dòng khớp (không cần macro).
+  let searchInputRef = null, searchCountCell = null;
+  const searchCol = nCols1 + 1;
+  const WH_LIST = ['D2B', 'DG3', 'D3B', 'DG1']; // danh sách chọn cột WH (4 kho)
   if(XL){
     const now0 = new Date(), z0 = n => String(n).padStart(2, '0');
     const tr = ws1.addRow(['TỔNG HỢP 3 PLAN vs TỒN KHO']);
@@ -5959,10 +5964,34 @@ async function exportCombinedPlanToExcel(mode){
     tr.getCell(1).font = { bold:true, size:14, color:{ argb:'FFFFFFFF' } };
     tr.getCell(1).fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF1F2A44' } };
     tr.getCell(1).alignment = { vertical:'middle', horizontal:'left', indent:1 };
-    const sr = ws1.addRow([`Xuất lúc ${z0(now0.getDate())}/${z0(now0.getMonth() + 1)}/${now0.getFullYear()} ${z0(now0.getHours())}:${z0(now0.getMinutes())} · Mỗi khung đậm = 1 container · "-" = 0 · Chênh lệch = Tổng tồn PASS − SL Plan`]);
-    ws1.mergeCells(sr.number, 1, sr.number, nCols1);
-    sr.getCell(1).font = { italic:true, size:9, color:{ argb:'FF55637C' } };
-    sr.getCell(1).alignment = { horizontal:'left', indent:1 };
+    const subText = `Xuất lúc ${z0(now0.getDate())}/${z0(now0.getMonth() + 1)}/${now0.getFullYear()} ${z0(now0.getHours())}:${z0(now0.getMinutes())} · Mỗi khung đậm = 1 container · "-" = 0 · Chênh lệch = Tổng tồn PASS − SL Plan`;
+    const sr = ws1.addRow(Array(nCols1).fill(''));
+    sr.height = 24;
+    const box = { top:thick, bottom:thick, left:thick, right:thick };
+    ws1.mergeCells(sr.number, 1, sr.number, 2);
+    const lc = sr.getCell(1);
+    lc.value = '🔍 TÌM KIẾM:';
+    lc.font = { bold:true, size:11, color:{ argb:'FF1F2A44' } };
+    lc.alignment = { vertical:'middle', horizontal:'right' };
+    ws1.mergeCells(sr.number, 3, sr.number, 6);
+    const ic = sr.getCell(3);
+    ic.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFFF4C2' } };
+    ic.font = { bold:true, size:11 };
+    ic.alignment = { vertical:'middle', horizontal:'left', indent:1 };
+    ic.note = 'Gõ mã hàng / Cust PO / Invoice / CR / kho… — các dòng khớp sẽ tô vàng.';
+    for(let k = 3; k <= 6; k++) sr.getCell(k).border = box;
+    searchInputRef = `$C$${sr.number}`;
+    ws1.mergeCells(sr.number, 7, sr.number, 9);
+    searchCountCell = sr.getCell(7);
+    searchCountCell.font = { bold:true, color:{ argb:'FF9A5B00' } };
+    searchCountCell.alignment = { vertical:'middle', horizontal:'left', indent:1 };
+    if(nCols1 >= 10){
+      ws1.mergeCells(sr.number, 10, sr.number, nCols1);
+      const tc = sr.getCell(10);
+      tc.value = subText;
+      tc.font = { italic:true, size:9, color:{ argb:'FF55637C' } };
+      tc.alignment = { vertical:'middle', horizontal:'right' };
+    }
     // Dòng nhóm cột
     const firstKhoCol = headers1.indexOf('SL còn lại') + 2, ngCol = headers1.indexOf('NG') + 1, planCol = headers1.indexOf('SL Plan') + 1;
     const groups = [
@@ -6066,7 +6095,8 @@ async function exportCombinedPlanToExcel(mode){
           && (String(l.ref || '').match(/CR\d+/gi) || []).some(x => contCrs.has(x.toUpperCase())))
         .map(l => l.locator))];
       pickingText = `${Math.round(c.picked || 0)}/${Math.round(c.qty || 0)}`;
-      pickingWh = pickLocs.join(', ');
+      // WH chỉ hiện tiền tố kho: "D3B-Loading" -> "D3B" (các kho khác tương tự).
+      pickingWh = [...new Set(pickLocs.map(l => String(l).replace(/[-_\s]*loading\s*$/i, '').trim().toUpperCase()).filter(Boolean))].join(', ');
     }
     const itemValues = [
       r.item,
@@ -6094,6 +6124,7 @@ async function exportCombinedPlanToExcel(mode){
     imgRows.push({ values: rowValues, fill: fillColor, first: isGroupFirst, done: !!doneFill });
     if(XL){
       if(isGroupFirst) contSpans.push([row.number, row.number]); else contSpans[contSpans.length - 1][1] = row.number;
+      row.getCell(searchCol).value = [r.item, r.custpo, c && c.invoice, c && c.csr, pickingWh, c && c.type, c && c.loadDate].filter(Boolean).join(' ');
     }
     const pickingColNo = contHeaders.length + 4;
     const ngColNo = headers1.indexOf('NG') + 1;
@@ -6144,6 +6175,30 @@ async function exportCombinedPlanToExcel(mode){
     });
   });
   if(XL){
+    const firstData = hRowNo + 1, lastData = ws1.lastRow ? ws1.lastRow.number : hRowNo;
+    // Cột WH: danh sách chọn 4 kho cho mọi dòng mã hàng (dòng chưa có kho thì chọn tay).
+    const whColNo = headers1.indexOf('WH') + 1;
+    const whFormula = '"' + WH_LIST.join(',') + '"';
+    contSpans.forEach(([a, b]) => {
+      for(let rn = a; rn <= b; rn++){
+        const wc = ws1.getCell(rn, whColNo);
+        wc.dataValidation = { type:'list', allowBlank:true, showErrorMessage:false, formulae:[whFormula] };
+        wc.alignment = { vertical:'middle', horizontal:'center' };
+      }
+    });
+    // Ô tìm kiếm tổng: tô vàng dòng có chữ khớp + đếm số dòng khớp.
+    const sCol = ws1.getColumn(searchCol);
+    sCol.hidden = true;
+    const sL = sCol.letter, lastL = ws1.getColumn(nCols1).letter;
+    if(lastData >= firstData){
+      ws1.addConditionalFormatting({
+        ref: `A${firstData}:${lastL}${lastData}`,
+        rules: [{ type:'expression', priority:1,
+          formulae: [`AND(${searchInputRef}<>"",ISNUMBER(SEARCH(${searchInputRef},$${sL}${firstData})))`],
+          style: { fill:{ type:'pattern', pattern:'solid', bgColor:{ argb:'FFFFE066' } }, font:{ bold:true } } }]
+      });
+    }
+    searchCountCell.value = { formula: `IF(${searchInputRef}="","← gõ để tìm",COUNTIF(${sL}${firstData}:${sL}${lastData},"*"&${searchInputRef}&"*")&" dòng khớp")` };
     // Gộp ô thông tin container theo chiều dọc cho cont có nhiều mã.
     contSpans.forEach(([a, b]) => {
       for(let k = 1; k <= contHeaders.length; k++){
@@ -6165,7 +6220,7 @@ async function exportCombinedPlanToExcel(mode){
     return;
   }
 
-  const colCapsByHeader1 = { 'SL còn lại': [9,11], 'WH': [8,26], 'Item No.': [14,16], 'Cust PO': [16,26], 'End Buyer PO': [12,14], 'Picking': [9,12], 'Invoice': [10,14], 'CSR': [10,14] };
+  const colCapsByHeader1 = { 'SL còn lại': [9,11], 'WH': [7,12], 'Item No.': [14,16], 'Cust PO': [16,26], 'End Buyer PO': [12,14], 'Picking': [9,12], 'Invoice': [10,14], 'CSR': [10,14] };
   headers1.forEach((h,i) => {
     const [minW, maxW] = colCapsByHeader1[h] || [8,14];
     ws1.getColumn(i+1).width = Math.min(Math.max(colMaxLen1[i] + 2, minW), maxW);
