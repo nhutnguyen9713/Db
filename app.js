@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.21';
+const APP_VERSION = 'v4.22';
 const APP_VERSION_DATE = '05/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5903,7 +5903,7 @@ async function exportCombinedPlanToExcel(mode){
   // dãy/kệ rồi tới "T" + số tầng kệ) là hàng Rack.
   // Cột "Picking" (v3.84) ngay sau Cust PO: SL đã pick / SL Plan của mã trong container đó + locator Loading
   // đang giữ hàng đã pick (dòng tồn Loading có mã CR thuộc container), VD "500/700 DG3-Loading".
-  const itemHeaderParts = ['Item No.', 'Cust PO', 'End Buyer PO', 'Picking'];
+  const itemHeaderParts = ['Item No.', 'Cust PO', 'End Buyer PO', 'Picking', 'SL còn lại']; // SL còn lại = SL Plan của cont − đã pick
   khoHeaderLabels.forEach(label => {
     if(label === '3A') itemHeaderParts.push('3A trệt', '3A lầu', '3A Rack');
     else itemHeaderParts.push(label);
@@ -5964,11 +5964,12 @@ async function exportCombinedPlanToExcel(mode){
     sr.getCell(1).font = { italic:true, size:9, color:{ argb:'FF55637C' } };
     sr.getCell(1).alignment = { horizontal:'left', indent:1 };
     // Dòng nhóm cột
-    const firstKhoCol = contHeaders.length + 5, planCol = headers1.indexOf('SL Plan') + 1;
+    const firstKhoCol = headers1.indexOf('SL còn lại') + 2, ngCol = headers1.indexOf('NG') + 1, planCol = headers1.indexOf('SL Plan') + 1;
     const groups = [
       ['THÔNG TIN CONTAINER', 1, contHeaders.length, 'FF3B4A6B'],
-      ['MÃ HÀNG', contHeaders.length + 1, contHeaders.length + 4, 'FF4A5A7F'],
-      ['TỒN KHO THEO KHU', firstKhoCol, planCol - 1, 'FF2F6E73'],
+      ['MÃ HÀNG', contHeaders.length + 1, firstKhoCol - 1, 'FF4A5A7F'],
+      ['TỒN KHO THEO KHU', firstKhoCol, ngCol - 1, 'FF2F6E73'],
+      ['TỔNG TỒN', ngCol, planCol - 1, 'FF5B3F8C'],
       ['KẾ HOẠCH / ĐỐI CHIẾU', planCol, nCols1, 'FF7A4A1F']
     ];
     const gr = ws1.addRow(Array(nCols1).fill(''));
@@ -6034,6 +6035,7 @@ async function exportCombinedPlanToExcel(mode){
   const contSpans = []; // [rowFrom, rowTo] mỗi container — để gộp ô cột container (chỉ Excel)
   const numCols = new Set();
   headers1.forEach((h, i) => { if(highlightColorByCol.has(i + 1) || h === 'PASS' || h === 'NG') numCols.add(i + 1); });
+  const remainColNo = headers1.indexOf('SL còn lại') + 1;
   const diffColNo = headers1.indexOf('Chênh lệch') + 1, statusColNo = headers1.indexOf('Trạng thái') + 1, planColNo = headers1.indexOf('SL Plan') + 1;
   const dayCount = {};
   exportEntries.forEach(({ c, groupKey }) => { const d = c ? c.loadDate : 'Chưa gán container'; (dayCount[d] || (dayCount[d] = new Set())).add(groupKey); });
@@ -6070,6 +6072,7 @@ async function exportCombinedPlanToExcel(mode){
       r.anyPO ? 'Bất kỳ PO' : r.custpo + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
       r.anyPO ? '' : endBuyerPoFor(r.custpo, endBuyerMap),
       pickingText,
+      c ? Math.max(0, Math.round((c.qty || 0) - (c.picked || 0))) : '—',
     ];
     (r.khoQtys || []).forEach((qty, i) => {
       if(khoHeaderLabels[i] === '3A') itemValues.push(kho3A.treQty, kho3A.floorQty, kho3A.rackQty);
@@ -6129,6 +6132,10 @@ async function exportCombinedPlanToExcel(mode){
           cell.font = { bold:true, color:{ argb: ok ? 'FF006100' : 'FF9C0006' } };
         }
         if(colNumber === planColNo) cell.font = { bold:true };
+        if(colNumber === remainColNo && typeof cell.value === 'number'){
+          cell.numFmt = '#,##0';
+          cell.font = { bold:true, color:{ argb: cell.value > 0 ? 'FF9A5B00' : 'FF0B7A3B' } };
+        }
         if(colNumber <= contHeaders.length && !isGroupFirst) cell.value = null; // ghi 1 lần mỗi cont (gộp ô bên dưới)
         if(colNumber <= contHeaders.length) cell.font = Object.assign({}, cell.font, { bold: colNumber === 3 || colNumber === 4 });
       }
@@ -6156,7 +6163,7 @@ async function exportCombinedPlanToExcel(mode){
     return;
   }
 
-  const colCapsByHeader1 = { 'Item No.': [14,16], 'Cust PO': [16,26], 'End Buyer PO': [12,14], 'Picking': [12,30], 'Invoice': [10,14], 'CSR': [10,14] };
+  const colCapsByHeader1 = { 'SL còn lại': [9,11], 'Item No.': [14,16], 'Cust PO': [16,26], 'End Buyer PO': [12,14], 'Picking': [12,30], 'Invoice': [10,14], 'CSR': [10,14] };
   headers1.forEach((h,i) => {
     const [minW, maxW] = colCapsByHeader1[h] || [8,14];
     ws1.getColumn(i+1).width = Math.min(Math.max(colMaxLen1[i] + 2, minW), maxW);
