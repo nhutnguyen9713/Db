@@ -233,6 +233,8 @@ const STORAGE_KEY_LABELS = {
   tn5_dashboard_kho_grid_v1: 'Lưới sơ đồ kho tuỳ chỉnh',
   tn5_wh_cap_override_v1: 'Sức chứa vị trí (Sơ đồ kho)',
   tn5_dashboard_confirmed_history_v1: 'Lịch sử đã lưu theo ngày',
+  tn5_ng_manage_v1: 'Trạng thái / ghi chú hàng NG',
+  tn5_ng_history_v1: 'Lịch sử hàng NG theo ngày',
   _meta_updatedAt: 'Mốc đồng bộ (kiểm tra Cloud có gì mới trước khi tải)'
 };
 
@@ -1425,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.16';
+const APP_VERSION = 'v4.17';
 const APP_VERSION_DATE = '05/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -2264,6 +2266,7 @@ function renderCapacityOverviews(){
   if(typeof renderAlertsPanel === 'function') renderAlertsPanel();
   const ngPageEl = document.getElementById('page-ng');
   if(ngPageEl && ngPageEl.style.display !== 'none' && typeof renderNgPage === 'function') renderNgPage();
+  else if(typeof ngpRecordToday === 'function') ngpRecordToday(); // chụp bản NG hôm nay kể cả khi chưa mở trang NG
 }
 
 // Danh sách mã hàng + locator đang có hàng NG trong 1 kho (gộp theo item+PO+locator).
@@ -13123,19 +13126,79 @@ document.getElementById('btn-reset-confirmed').addEventListener('click', async (
 
 /* ============ Tab "Hàng NG" — quản lý hàng OQC = NG của cả 3 kho ============
    Dữ liệu lấy từ ovGetNgRowsForKho() (cùng nguồn với khối "Hàng NG" ở Overview). Trạng thái xử lý +
-   ghi chú lưu CỤC BỘ (localStorage) theo khoá Kho|Item|PO|Locator — chưa đồng bộ Cloud. */
+   ghi chú lưu theo khoá Kho|Item|PO|Locator trong LS (đồng bộ Cloud khi bấm "Lưu", từ v4.17 — trước đó
+   chỉ ở localStorage của máy, tự chuyển sang lần đầu mở). Mỗi ngày còn chụp lại 1 bản danh sách NG kèm
+   trạng thái/ghi chú (NGP_HISTORY_KEY) để xem lại theo ngày. Hình chụp vẫn chỉ lưu trên máy (IndexedDB). */
 const NGP_STORAGE_KEY = 'tn5_ng_manage_v1';
+const NGP_HISTORY_KEY = 'tn5_ng_history_v1';
+const NGP_HISTORY_DAYS = 60;
 const NGP_STATUS = { new:'Chưa xử lý', doing:'Đang xử lý', done:'Đã xử lý' };
-const ngpState = { kho:'all', q:'', status:'all', sort:'qty', planOnly:false };
+const ngpState = { kho:'all', q:'', status:'all', sort:'qty', planOnly:false, day:'' }; // day: '' = hôm nay, 'YYYY-MM-DD' = xem lại ngày cũ
 const ngpExpanded = new Set(); // các dòng đang mở chi tiết (nút "Xem")
 let ngpManage = null;
 function ngpLoad(){
   if(ngpManage) return ngpManage;
-  try{ ngpManage = JSON.parse(localStorage.getItem(NGP_STORAGE_KEY) || '{}') || {}; }catch(e){ ngpManage = {}; }
+  let raw = LS.getItem(NGP_STORAGE_KEY);
+  if(raw == null){
+    // Chuyển dữ liệu cũ (chỉ nằm trong localStorage thật của máy này) sang LS để lên Cloud khi bấm "Lưu".
+    try{
+      const old = localStorage.getItem(NGP_STORAGE_KEY);
+      if(old && old !== '{}'){ raw = old; LS.setItem(NGP_STORAGE_KEY, old); }
+    }catch(e){}
+  }
+  try{ ngpManage = JSON.parse(raw || '{}') || {}; }catch(e){ ngpManage = {}; }
   return ngpManage;
 }
 function ngpSave(){
-  try{ localStorage.setItem(NGP_STORAGE_KEY, JSON.stringify(ngpManage || {})); }catch(e){ console.warn('Không lưu được trạng thái hàng NG:', e); }
+  try{ LS.setItem(NGP_STORAGE_KEY, JSON.stringify(ngpManage || {})); }catch(e){ console.warn('Không lưu được trạng thái hàng NG:', e); }
+}
+/* ---- Lịch sử theo ngày: { 'YYYY-MM-DD': { at:'HH:mm', rows:[[code,kho,item,custpo,locator,pallets,qty,hasPlan,status,note], ...] } } ---- */
+let ngpHistory = null;
+function ngpHistoryLoad(){
+  if(ngpHistory) return ngpHistory;
+  try{ ngpHistory = JSON.parse(LS.getItem(NGP_HISTORY_KEY) || '{}') || {}; }catch(e){ ngpHistory = {}; }
+  return ngpHistory;
+}
+function ngpTodayKey(){
+  const d = new Date(), z = n => (n < 10 ? '0' : '') + n;
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`;
+}
+function ngpDateLabel(k){ const p = String(k).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : k; }
+// Ghi bản của HÔM NAY (ghi đè trong ngày) — chỉ khi đã có dữ liệu tồn kho và nội dung thực sự đổi.
+function ngpRecordToday(rows){
+  try{
+    if(!getRawRows(currentData).length) return;
+    if(!rows) rows = ngpCollectRows().rows;
+    const packed = rows.map(r => [r.code, r.kho, r.item, r.custpo, r.locator, r.pallets, r.qty, r.hasPlan ? 1 : 0, r.status, r.note || '']);
+    const h = ngpHistoryLoad(), day = ngpTodayKey();
+    if(h[day] && JSON.stringify(h[day].rows) === JSON.stringify(packed)) return;
+    const d = new Date(), z = n => (n < 10 ? '0' : '') + n;
+    h[day] = { at: `${z(d.getHours())}:${z(d.getMinutes())}`, rows: packed };
+    Object.keys(h).sort().reverse().slice(NGP_HISTORY_DAYS).forEach(k => delete h[k]);
+    LS.setItem(NGP_HISTORY_KEY, JSON.stringify(h));
+  }catch(e){ console.warn('Không ghi được lịch sử hàng NG theo ngày:', e); }
+}
+function ngpHistoryRows(day){
+  const e = ngpHistoryLoad()[day];
+  if(!e || !Array.isArray(e.rows)) return [];
+  return e.rows.map(a => ({ code:a[0], kho:a[1], item:a[2], custpo:a[3], locator:a[4], pallets:Number(a[5]) || 0, qty:Number(a[6]) || 0,
+    hasPlan: !!a[7], status: NGP_STATUS[a[8]] ? a[8] : 'new', note: a[9] || '' }));
+}
+// Dữ liệu đang xem: hôm nay (trực tiếp) hoặc bản đã lưu của 1 ngày cũ.
+function ngpViewData(){
+  if(ngpState.day) return { rows: ngpHistoryRows(ngpState.day), usedByKho: {}, history: true };
+  return ngpCollectRows();
+}
+function ngpRenderDaySelect(){
+  const sel = document.getElementById('ngp-day'); if(!sel) return;
+  const today = ngpTodayKey();
+  const days = Object.keys(ngpHistoryLoad()).filter(k => k !== today).sort().reverse();
+  if(ngpState.day && !days.includes(ngpState.day)) ngpState.day = '';
+  const opts = ['<option value="">Hôm nay (trực tiếp)</option>'].concat(days.map(k => {
+    const e = ngpHistory[k]; return `<option value="${k}"${k === ngpState.day ? ' selected' : ''}>${ngpDateLabel(k)}${e && e.at ? ' · lưu ' + e.at : ''} · ${fmt((e && e.rows || []).length)} dòng</option>`;
+  }));
+  sel.innerHTML = opts.join('');
+  sel.value = ngpState.day || '';
 }
 function ngpKey(r){ return [r.code, r.item, r.custpo, r.locator].join('||'); }
 
@@ -13302,7 +13365,15 @@ function ngpThumbsHtml(arr, key){
 function renderNgPage(){
   const bodyEl = document.getElementById('ngp-body');
   if(!bodyEl) return;
-  const { rows: all, usedByKho } = ngpCollectRows();
+  const view = ngpViewData();
+  const { rows: all, usedByKho } = view;
+  if(!view.history) ngpRecordToday(all);
+  ngpRenderDaySelect();
+  const histNote = document.getElementById('ngp-history-note');
+  if(histNote){
+    histNote.style.display = view.history ? '' : 'none';
+    if(view.history){ const e = ngpHistoryLoad()[ngpState.day] || {}; histNote.textContent = `📅 Đang xem bản lưu ngày ${ngpDateLabel(ngpState.day)}${e.at ? ' (lúc ' + e.at + ')' : ''} — chỉ xem, không sửa được. Chọn "Hôm nay" để quay lại dữ liệu trực tiếp.`; }
+  }
 
   // KPI theo kho + tổng
   const kpiEl = document.getElementById('ngp-kpis');
@@ -13343,6 +13414,12 @@ function renderNgPage(){
       ? `<button type="button" class="ov-ng-plan-badge item-link" data-item="${escAttr(r.item)}" data-po="${escAttr(r.custpo)}" data-jump-combined="${escAttr(combinedRowDomId(r.item, r.custpo))}" title="Mã + PO này đang nằm trong kế hoạch xuất cont — bấm để xem trong Tổng hợp 3 Plan">⚠ Có trong Plan</button>`
       : '<span style="color:var(--muted);">—</span>';
     const opts = Object.keys(NGP_STATUS).map(k => `<option value="${k}"${k === r.status ? ' selected' : ''}>${NGP_STATUS[k]}</option>`).join('');
+    if(view.history){
+      return `<tr class="st-${r.status}"><td>${escHtml(r.code)}</td><td><b>${escHtml(r.item)}</b></td><td>${escHtml(r.custpo)}</td><td>${escHtml(r.locator)}</td>
+        <td class="num">${fmt(r.pallets)}</td><td class="num">${fmt(r.qty)}</td><td>${r.hasPlan ? '<span class="ov-ng-plan-badge">⚠ Có trong Plan</span>' : '<span style="color:var(--muted);">—</span>'}</td>
+        <td><span class="ngp-status st-${r.status} ngp-status-ro">${NGP_STATUS[r.status]}</span></td><td>${r.note ? escHtml(r.note) : '<span style="color:var(--muted);">—</span>'}</td>
+        <td class="ngp-photos">${ngpThumbsHtml(ngpPhotos.get(ngpKey(r)) || [], key)}</td><td></td></tr>`;
+    }
     return `<tr class="st-${r.status}" data-ngkey="${key}">
       <td>${escHtml(r.code)}</td>
       <td><b>${escHtml(r.item)}</b></td>
@@ -13362,7 +13439,7 @@ function renderNgPage(){
 }
 
 async function ngpExportExcel(){
-  const rows = ngpFilteredRows(ngpCollectRows().rows);
+  const rows = ngpFilteredRows(ngpViewData().rows);
   if(!rows.length){ alert('Không có dữ liệu để xuất.'); return; }
   if(typeof ExcelJS === 'undefined'){ alert('Chưa tải được thư viện Excel (ExcelJS) — kiểm tra kết nối mạng.'); return; }
   const wb = new ExcelJS.Workbook();
@@ -13396,7 +13473,7 @@ async function ngpExportExcel(){
   ws.getRow(1).height = 30;
   ws.mergeCells(2, 1, 2, heads.length);
   const s2 = ws.getCell(2, 1);
-  s2.value = `${khoTxt} · không gồm locator PROD · xuất lúc ${when} · ${rows.length} dòng`;
+  s2.value = `${khoTxt} · không gồm locator PROD · ${ngpState.day ? 'dữ liệu lưu ngày ' + ngpDateLabel(ngpState.day) : 'dữ liệu hôm nay'} · xuất lúc ${when} · ${rows.length} dòng`;
   s2.font = { italic:true, size:10, color:{ argb:'FF55637C' } }; s2.alignment = { horizontal:'left', indent:1 };
   ws.getRow(3).height = 6;
   const hr = ws.getRow(4);
@@ -13484,7 +13561,7 @@ async function ngpExportExcel(){
   const stamp = `${now.getFullYear()}${z(now.getMonth() + 1)}${z(now.getDate())}_${z(now.getHours())}${z(now.getMinutes())}`;
   const buffer = await wb.xlsx.writeBuffer();
   const url = URL.createObjectURL(new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-  const link = document.createElement('a'); link.href = url; link.download = `Hang_NG_${stamp}.xlsx`;
+  const link = document.createElement('a'); link.href = url; link.download = `Hang_NG_${ngpState.day ? ngpState.day.replace(/-/g, '') + '_luu' : stamp}.xlsx`;
   document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
 }
 
@@ -13502,6 +13579,8 @@ async function ngpExportExcel(){
   document.getElementById('ngp-status-filter').addEventListener('change', e => { ngpState.status = e.target.value; renderNgPage(); });
   document.getElementById('ngp-sort').addEventListener('change', e => { ngpState.sort = e.target.value; renderNgPage(); });
   document.getElementById('ngp-plan-only').addEventListener('change', e => { ngpState.planOnly = e.target.checked; renderNgPage(); });
+  const daySel = document.getElementById('ngp-day');
+  if(daySel) daySel.addEventListener('change', e => { ngpState.day = e.target.value; ngpExpanded.clear(); renderNgPage(); });
   document.getElementById('ngp-export').addEventListener('click', ngpExportExcel);
   const fileInput = document.getElementById('ngp-photo-input');
   if(fileInput) fileInput.addEventListener('change', async () => {
@@ -13517,7 +13596,7 @@ async function ngpExportExcel(){
     renderNgPage();
   });
   page.addEventListener('change', e => {
-    const key = e.target.dataset && e.target.dataset.ngkey; if(!key) return;
+    const key = e.target.dataset && e.target.dataset.ngkey; if(!key || ngpState.day) return;
     const m = ngpLoad(); const cur = m[key] || {};
     if(e.target.classList.contains('ngp-status')){
       cur.status = e.target.value;
@@ -13529,6 +13608,12 @@ async function ngpExportExcel(){
   });
 })();
 ngpPhotosLoadAll();
+// Tải lại từ Cloud / file đồng bộ -> bỏ bộ nhớ đệm trạng thái + lịch sử NG để đọc bản mới.
+FileVault.registerReloader(() => {
+  ngpManage = null; ngpHistory = null;
+  const pg = document.getElementById('page-ng');
+  if(pg && pg.style.display !== 'none') renderNgPage(); else ngpRecordToday();
+});
 
 const pageOverviewEl = document.getElementById('page-overview');
 const pagePickingEl = document.getElementById('page-picking');

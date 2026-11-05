@@ -1823,7 +1823,7 @@
       <div>
         <div class="brand-eyebrow"><span class="dot" style="background:var(--red);box-shadow:0 0 8px var(--red);"></span>QUẢN LÝ HÀNG NG</div>
         <h1>Hàng NG</h1>
-        <div class="sub">Toàn bộ mã + PO đang có OQC = NG trong 3 kho (2B, 3A, 3B), không gồm locator PROD (khu sản xuất chứa hàng rework). Gán trạng thái xử lý và ghi chú cho từng dòng; cảnh báo nếu mã + PO đang nằm trong kế hoạch xuất cont. Trạng thái / ghi chú / hình chụp lưu trên máy này.</div>
+        <div class="sub">Toàn bộ mã + PO đang có OQC = NG trong 3 kho (2B, 3A, 3B), không gồm locator PROD (khu sản xuất chứa hàng rework). Gán trạng thái xử lý và ghi chú cho từng dòng; cảnh báo nếu mã + PO đang nằm trong kế hoạch xuất cont. Trạng thái / ghi chú đồng bộ Cloud khi bấm "Lưu" và tự lưu lại 1 bản mỗi ngày để xem lại; hình chụp lưu trên máy này.</div>
       </div>
       <button type="button" class="btn-export-excel" id="ngp-export" style="white-space:nowrap;">📥 Xuất Excel</button>
     </div>
@@ -1851,7 +1851,9 @@
           <option value="locator">Xếp theo: Locator</option>
         </select>
         <label class="ngp-check"><input type="checkbox" id="ngp-plan-only"> Chỉ mã có trong Plan xuất cont</label>
+        <select id="ngp-day" class="ngp-input" title="Mỗi ngày tự lưu 1 bản danh sách NG kèm trạng thái / ghi chú — chọn ngày để xem lại"><option value="">Hôm nay (trực tiếp)</option></select>
       </div>
+      <div class="ngp-history-note" id="ngp-history-note" style="display:none;"></div>
       <div class="ngp-table-wrap">
         <table class="ngp-table">
           <thead><tr><th>Kho</th><th>Item No.</th><th>Cust PO</th><th>Locator</th><th class="num">Pallet</th><th class="num">Pcs</th><th>Plan</th><th>Trạng thái</th><th>Ghi chú</th><th>Hình</th><th></th></tr></thead>
