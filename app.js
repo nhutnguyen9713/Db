@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.22';
+const APP_VERSION = 'v4.23';
 const APP_VERSION_DATE = '05/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5903,7 +5903,7 @@ async function exportCombinedPlanToExcel(mode){
   // dãy/kệ rồi tới "T" + số tầng kệ) là hàng Rack.
   // Cột "Picking" (v3.84) ngay sau Cust PO: SL đã pick / SL Plan của mã trong container đó + locator Loading
   // đang giữ hàng đã pick (dòng tồn Loading có mã CR thuộc container), VD "500/700 DG3-Loading".
-  const itemHeaderParts = ['Item No.', 'Cust PO', 'End Buyer PO', 'Picking', 'SL còn lại']; // SL còn lại = SL Plan của cont − đã pick
+  const itemHeaderParts = ['Item No.', 'Cust PO', 'End Buyer PO', 'Picking', 'WH', 'SL còn lại']; // WH = locator Loading đang giữ hàng đã pick (tách riêng từ v4.23) // SL còn lại = SL Plan của cont − đã pick
   khoHeaderLabels.forEach(label => {
     if(label === '3A') itemHeaderParts.push('3A trệt', '3A lầu', '3A Rack');
     else itemHeaderParts.push(label);
@@ -6058,20 +6058,22 @@ async function exportCombinedPlanToExcel(mode){
       ? [c.type, c.loadDate, c.planTime, c.invoice || '—', c.csr || '—']
       : ['—', '—', '—', '—', '—'];
     const kho3A = computeKho3AQty(r);
-    let pickingText = '—';
+    let pickingText = '—', pickingWh = '';
     if(c){
       const contCrs = new Set((String(c.csr || '').match(/CR\d+/gi) || []).map(x => x.toUpperCase()));
       const pickLocs = [...new Set(buildItemLocatorDetail(r.item, r.anyPO ? null : r.custpo, true)
         .filter(l => LOADING_LOCATOR_RE.test(String(l.locator || '').trim())
           && (String(l.ref || '').match(/CR\d+/gi) || []).some(x => contCrs.has(x.toUpperCase())))
         .map(l => l.locator))];
-      pickingText = `${Math.round(c.picked || 0)}/${Math.round(c.qty || 0)}` + (pickLocs.length ? ' ' + pickLocs.join(', ') : '');
+      pickingText = `${Math.round(c.picked || 0)}/${Math.round(c.qty || 0)}`;
+      pickingWh = pickLocs.join(', ');
     }
     const itemValues = [
       r.item,
       r.anyPO ? 'Bất kỳ PO' : r.custpo + (r.poMismatch ? ' (PO không khớp tồn kho)' : ''),
       r.anyPO ? '' : endBuyerPoFor(r.custpo, endBuyerMap),
       pickingText,
+      pickingWh,
       c ? Math.max(0, Math.round((c.qty || 0) - (c.picked || 0))) : '—',
     ];
     (r.khoQtys || []).forEach((qty, i) => {
@@ -6087,7 +6089,7 @@ async function exportCombinedPlanToExcel(mode){
     const contDone = !!(c && loadedDoneContainerKeys.has(groupKey));
     const doneFill = contDone ? (c.isShipDone ? FILL_LOAD_DONE : FILL_PICK_DONE) : null;
     const fillColor = doneFill || (groupIndex % 2 === 0 ? FILL_A : FILL_B);
-    const leftAlignCols = new Set([contHeaders.length + 1, contHeaders.length + 2, contHeaders.length + 4]); // Item No./Cust PO/Picking
+    const leftAlignCols = new Set([contHeaders.length + 1, contHeaders.length + 2, contHeaders.length + 4, contHeaders.length + 5]); // Item No./Cust PO/Picking/WH
     const row = ws1.addRow(rowValues);
     imgRows.push({ values: rowValues, fill: fillColor, first: isGroupFirst, done: !!doneFill });
     if(XL){
@@ -6163,7 +6165,7 @@ async function exportCombinedPlanToExcel(mode){
     return;
   }
 
-  const colCapsByHeader1 = { 'SL còn lại': [9,11], 'Item No.': [14,16], 'Cust PO': [16,26], 'End Buyer PO': [12,14], 'Picking': [12,30], 'Invoice': [10,14], 'CSR': [10,14] };
+  const colCapsByHeader1 = { 'SL còn lại': [9,11], 'WH': [8,26], 'Item No.': [14,16], 'Cust PO': [16,26], 'End Buyer PO': [12,14], 'Picking': [9,12], 'Invoice': [10,14], 'CSR': [10,14] };
   headers1.forEach((h,i) => {
     const [minW, maxW] = colCapsByHeader1[h] || [8,14];
     ws1.getColumn(i+1).width = Math.min(Math.max(colMaxLen1[i] + 2, minW), maxW);
