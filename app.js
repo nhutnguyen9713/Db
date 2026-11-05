@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.19';
+const APP_VERSION = 'v4.20';
 const APP_VERSION_DATE = '05/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5946,17 +5946,55 @@ async function exportCombinedPlanToExcel(mode){
   highlightColorByCol.set(headers1.indexOf('Tổng tồn (PASS+NG)') + 1, nextHighlightColor());
   highlightColorByCol.set(headers1.indexOf('SL Plan') + 1, nextHighlightColor());
 
+  // v4.20 — bố cục Excel dễ đọc hơn: dòng tiêu đề + dòng nhóm cột (Container / Mã hàng / Tồn kho / Kế hoạch),
+  // dải ngày load phân cách, cột container chỉ ghi 1 lần mỗi cont (gộp ô), số 0 hiện "-" mờ, Chênh lệch
+  // xanh/đỏ, Trạng thái tô màu. Chế độ ảnh giữ nguyên như cũ.
+  const XL = mode === 'excel';
+  const DASH_FMT = '#,##0;[Red]-#,##0;"-"';
+  if(XL){
+    const now0 = new Date(), z0 = n => String(n).padStart(2, '0');
+    const tr = ws1.addRow(['TỔNG HỢP 3 PLAN vs TỒN KHO']);
+    ws1.mergeCells(tr.number, 1, tr.number, nCols1);
+    tr.height = 26;
+    tr.getCell(1).font = { bold:true, size:14, color:{ argb:'FFFFFFFF' } };
+    tr.getCell(1).fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FF1F2A44' } };
+    tr.getCell(1).alignment = { vertical:'middle', horizontal:'left', indent:1 };
+    const sr = ws1.addRow([`Xuất lúc ${z0(now0.getDate())}/${z0(now0.getMonth() + 1)}/${now0.getFullYear()} ${z0(now0.getHours())}:${z0(now0.getMinutes())} · Mỗi khung đậm = 1 container · "-" = 0 · Chênh lệch = Tổng tồn PASS − SL Plan`]);
+    ws1.mergeCells(sr.number, 1, sr.number, nCols1);
+    sr.getCell(1).font = { italic:true, size:9, color:{ argb:'FF55637C' } };
+    sr.getCell(1).alignment = { horizontal:'left', indent:1 };
+    // Dòng nhóm cột
+    const firstKhoCol = contHeaders.length + 5, planCol = headers1.indexOf('SL Plan') + 1;
+    const groups = [
+      ['THÔNG TIN CONTAINER', 1, contHeaders.length, 'FF3B4A6B'],
+      ['MÃ HÀNG', contHeaders.length + 1, contHeaders.length + 4, 'FF4A5A7F'],
+      ['TỒN KHO THEO KHU', firstKhoCol, planCol - 1, 'FF2F6E73'],
+      ['KẾ HOẠCH / ĐỐI CHIẾU', planCol, nCols1, 'FF7A4A1F']
+    ];
+    const gr = ws1.addRow(Array(nCols1).fill(''));
+    gr.height = 18;
+    groups.forEach(([label, a, b, color]) => {
+      if(b < a) return;
+      if(b > a) ws1.mergeCells(gr.number, a, gr.number, b);
+      const c = gr.getCell(a);
+      c.value = label; c.font = { bold:true, size:10, color:{ argb:'FFFFFFFF' } };
+      c.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: color } };
+      c.alignment = { vertical:'middle', horizontal:'center' };
+      for(let k = a; k <= b; k++) gr.getCell(k).border = { top:thick, bottom:thin, left: k === a ? thick : thin, right: k === b ? thick : thin };
+    });
+  }
   const headerRow1 = ws1.addRow(headers1);
-  headerRow1.height = 20;
+  headerRow1.height = XL ? 30 : 20;
   headerRow1.eachCell((cell, colNumber) => {
     cell.font = { bold:true };
     cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: highlightColorByCol.get(colNumber) || 'FFEFEFEF' } };
     cell.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
     cell.border = { top:thick, bottom:thick, left:thin, right:thin };
   });
-  ws1.getCell(1, 1).border = Object.assign({}, ws1.getCell(1,1).border, { left:thick });
-  ws1.getCell(1, nCols1).border = Object.assign({}, ws1.getCell(1,nCols1).border, { right:thick });
-  ws1.getCell(1, contHeaders.length + 1).border = Object.assign({}, ws1.getCell(1, contHeaders.length + 1).border, { left:thick });
+  const hRowNo = XL ? headerRow1.number : 1;
+  ws1.getCell(hRowNo, 1).border = Object.assign({}, ws1.getCell(hRowNo,1).border, { left:thick });
+  ws1.getCell(hRowNo, nCols1).border = Object.assign({}, ws1.getCell(hRowNo,nCols1).border, { right:thick });
+  ws1.getCell(hRowNo, contHeaders.length + 1).border = Object.assign({}, ws1.getCell(hRowNo, contHeaders.length + 1).border, { left:thick });
 
   const colMaxLen1 = headers1.map(h => h.length);
   const trackWidth1 = (idx, text) => { const len = String(text==null?'':text).length; if(len > colMaxLen1[idx]) colMaxLen1[idx] = len; };
@@ -5992,7 +6030,28 @@ async function exportCombinedPlanToExcel(mode){
   const imgRows = [];
   let groupIndex = -1;
   let prevGroupKey = null;
+  let prevDay = null;
+  const contSpans = []; // [rowFrom, rowTo] mỗi container — để gộp ô cột container (chỉ Excel)
+  const numCols = new Set();
+  headers1.forEach((h, i) => { if(highlightColorByCol.has(i + 1) || h === 'PASS' || h === 'NG') numCols.add(i + 1); });
+  const diffColNo = headers1.indexOf('Chênh lệch') + 1, statusColNo = headers1.indexOf('Trạng thái') + 1, planColNo = headers1.indexOf('SL Plan') + 1;
+  const dayCount = {};
+  exportEntries.forEach(({ c, groupKey }) => { const d = c ? c.loadDate : 'Chưa gán container'; (dayCount[d] || (dayCount[d] = new Set())).add(groupKey); });
   exportEntries.forEach(({ r, c, groupKey }) => {
+    // Dải phân cách theo NGÀY LOAD (chỉ Excel)
+    const dayLabel = c ? c.loadDate : 'Chưa gán container';
+    if(XL && dayLabel !== prevDay){
+      const dr = ws1.addRow([c ? `📅 Ngày load ${dayLabel} — ${dayCount[dayLabel].size} container` : `Mã chưa gán container`]);
+      ws1.mergeCells(dr.number, 1, dr.number, nCols1);
+      dr.height = 20;
+      const dc = dr.getCell(1);
+      dc.font = { bold:true, size:11, color:{ argb:'FF1F2A44' } };
+      dc.fill = { type:'pattern', pattern:'solid', fgColor:{ argb:'FFD9E1F2' } };
+      dc.alignment = { vertical:'middle', horizontal:'left', indent:1 };
+      dc.border = { top:thick, bottom:thick, left:thick, right:thick };
+      prevDay = dayLabel;
+      prevGroupKey = null; // container đầu tiên sau dải ngày luôn bắt đầu khung mới
+    }
     const contValues = c
       ? [c.type, c.loadDate, c.planTime, c.invoice || '—', c.csr || '—']
       : ['—', '—', '—', '—', '—'];
@@ -6028,6 +6087,9 @@ async function exportCombinedPlanToExcel(mode){
     const leftAlignCols = new Set([contHeaders.length + 1, contHeaders.length + 2, contHeaders.length + 4]); // Item No./Cust PO/Picking
     const row = ws1.addRow(rowValues);
     imgRows.push({ values: rowValues, fill: fillColor, first: isGroupFirst, done: !!doneFill });
+    if(XL){
+      if(isGroupFirst) contSpans.push([row.number, row.number]); else contSpans[contSpans.length - 1][1] = row.number;
+    }
     const pickingColNo = contHeaders.length + 4;
     const ngColNo = headers1.indexOf('NG') + 1;
     row.eachCell((cell, colNumber) => {
@@ -6053,8 +6115,40 @@ async function exportCombinedPlanToExcel(mode){
         left: colNumber === 1 ? thick : (colNumber === contHeaders.length + 1 ? thick : thin),
         right: colNumber === nCols1 ? thick : thin
       };
+      if(XL){
+        if(typeof cell.value === 'number' && numCols.has(colNumber) && colNumber !== ngColNo) cell.numFmt = DASH_FMT;
+        if(colNumber === ngColNo && !(Number(cell.value) > 0)){ cell.numFmt = DASH_FMT; cell.font = { color:{ argb:'FF9AA3B2' } }; }
+        if(numCols.has(colNumber) && cell.value === 0 && colNumber !== ngColNo) cell.font = { color:{ argb:'FF9AA3B2' } };
+        if(colNumber === diffColNo && typeof cell.value === 'number'){
+          cell.numFmt = '+#,##0;-#,##0;0';
+          cell.font = { bold:true, color:{ argb: cell.value > 0 ? 'FF0B7A3B' : cell.value < 0 ? 'FFC00000' : 'FF55637C' } };
+        }
+        if(colNumber === statusColNo){
+          const ok = cell.value === 'Đủ';
+          cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: ok ? 'FFC6EFCE' : 'FFFFC7CE' } };
+          cell.font = { bold:true, color:{ argb: ok ? 'FF006100' : 'FF9C0006' } };
+        }
+        if(colNumber === planColNo) cell.font = { bold:true };
+        if(colNumber <= contHeaders.length && !isGroupFirst) cell.value = null; // ghi 1 lần mỗi cont (gộp ô bên dưới)
+        if(colNumber <= contHeaders.length) cell.font = Object.assign({}, cell.font, { bold: colNumber === 3 || colNumber === 4 });
+      }
     });
   });
+  if(XL){
+    // Gộp ô thông tin container theo chiều dọc cho cont có nhiều mã.
+    contSpans.forEach(([a, b]) => {
+      for(let k = 1; k <= contHeaders.length; k++){
+        if(b > a) ws1.mergeCells(a, k, b, k);
+        const mc = ws1.getCell(a, k);
+        mc.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
+        mc.border = { top:thick, bottom:thick, left: k === 1 ? thick : thin, right: k === contHeaders.length ? thick : thin };
+      }
+      // viền đậm đáy khung container
+      for(let k = contHeaders.length + 1; k <= nCols1; k++){
+        const bc = ws1.getCell(b, k); bc.border = Object.assign({}, bc.border, { bottom: thick });
+      }
+    });
+  }
   if(ws1.lastRow) ws1.lastRow.eachCell(cell => { cell.border = Object.assign({}, cell.border, { bottom: thick }); });
 
   if(mode !== 'excel'){
@@ -6067,7 +6161,11 @@ async function exportCombinedPlanToExcel(mode){
     const [minW, maxW] = colCapsByHeader1[h] || [8,14];
     ws1.getColumn(i+1).width = Math.min(Math.max(colMaxLen1[i] + 2, minW), maxW);
   });
-  ws1.views = [{ state:'frozen', ySplit:1 }];
+  ws1.views = [{ state:'frozen', ySplit: hRowNo, xSplit: contHeaders.length + 1 }];
+  // Cột End Buyer PO trống hết -> ẩn cho gọn.
+  const ebCol = headers1.indexOf('End Buyer PO') + 1;
+  if(ebCol > 0 && !exportEntries.some(e => !e.r.anyPO && endBuyerPoFor(e.r.custpo, endBuyerMap))) ws1.getColumn(ebCol).hidden = true;
+  ws1.pageSetup = { orientation:'landscape', fitToPage:true, fitToWidth:1, fitToHeight:0, paperSize:9, printTitlesRow: `${hRowNo - 1}:${hRowNo}` };
 
   // ===== Sheet 2: Chi tiết vị trí tồn kho — GIỮ NGUYÊN dữ liệu/logic như bản cũ (chỉ đổi cách dựng
   // sang ExcelJS cho khớp cùng workbook, không thêm/bớt/đổi nội dung gì).
