@@ -1425,8 +1425,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.15';
-const APP_VERSION_DATE = '02/11/2026';
+const APP_VERSION = 'v4.16';
+const APP_VERSION_DATE = '05/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -13181,9 +13181,10 @@ function ngpFilteredRows(all){
 }
 
 /* ---- Hình chụp cho từng dòng NG ----
-   Ảnh được resize về 1 khung cố định (NGP_IMG_W x NGP_IMG_H, nền trắng, giữ nguyên tỉ lệ) rồi lưu trong IndexedDB
-   của trình duyệt (localStorage quá nhỏ cho ảnh), theo cùng khoá Kho|Item|PO|Locator với trạng thái/ghi chú. */
-const NGP_IMG_W = 480, NGP_IMG_H = 360, NGP_IMG_MAX = 4;
+   Ảnh giữ nguyên tỉ lệ, chỉ thu nhỏ khi cạnh dài vượt NGP_IMG_LONG px (đủ nét để đọc chữ trên phiếu), rồi lưu
+   trong IndexedDB của trình duyệt (localStorage quá nhỏ cho ảnh), theo cùng khoá Kho|Item|PO|Locator với trạng
+   thái/ghi chú. Không giới hạn số ảnh mỗi dòng (ảnh cũ trước v4.16 vẫn là khung 480x360). */
+const NGP_IMG_LONG = 1600, NGP_THUMB_SHOW = 3;
 const ngpPhotos = new Map(); // key -> mảng dataURL (jpeg)
 let ngpPhotoDb = null, ngpPhotoTarget = null;
 function ngpPhotoOpen(){
@@ -13218,13 +13219,13 @@ function ngpResizeImage(file){
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file), img = new Image();
     img.onload = () => {
-      const cv = document.createElement('canvas'); cv.width = NGP_IMG_W; cv.height = NGP_IMG_H;
-      const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, NGP_IMG_W, NGP_IMG_H);
-      const s = Math.min(NGP_IMG_W / img.naturalWidth, NGP_IMG_H / img.naturalHeight);
-      const w = img.naturalWidth * s, h = img.naturalHeight * s;
-      ctx.drawImage(img, (NGP_IMG_W - w) / 2, (NGP_IMG_H - h) / 2, w, h);
+      const s = Math.min(1, NGP_IMG_LONG / Math.max(img.naturalWidth, img.naturalHeight));
+      const w = Math.max(1, Math.round(img.naturalWidth * s)), h = Math.max(1, Math.round(img.naturalHeight * s));
+      const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
       URL.revokeObjectURL(url);
-      resolve(cv.toDataURL('image/jpeg', 0.82));
+      resolve(cv.toDataURL('image/jpeg', 0.85));
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Không đọc được ảnh')); };
     img.src = url;
@@ -13232,31 +13233,46 @@ function ngpResizeImage(file){
 }
 async function ngpAddPhotos(key, files){
   const cur = (ngpPhotos.get(key) || []).slice();
-  let skipped = 0;
   for(const f of files){
-    if(cur.length >= NGP_IMG_MAX){ skipped++; continue; }
     try{ cur.push(await ngpResizeImage(f)); }catch(e){ alert('Không đọc được ảnh "' + f.name + '" (định dạng không được trình duyệt hỗ trợ).'); }
   }
   ngpPhotos.set(key, cur); await ngpPhotoPersist(key);
-  if(skipped) alert('Mỗi dòng tối đa ' + NGP_IMG_MAX + ' ảnh — đã bỏ qua ' + skipped + ' ảnh.');
   renderNgPage();
 }
 function ngpOpenLightbox(key, idx){
-  const arr = ngpPhotos.get(key) || []; if(!arr[idx]) return;
+  if(!(ngpPhotos.get(key) || [])[idx]) return;
   const ov = document.createElement('div'); ov.className = 'ngp-lightbox';
-  ov.innerHTML = `<div class="ngp-lb-box"><img src="${arr[idx]}" alt=""><div class="ngp-lb-bar"><span>${idx + 1}/${arr.length}</span>
-    <button type="button" data-act="del">🗑 Xoá ảnh này</button><button type="button" data-act="close">Đóng</button></div></div>`;
+  const draw = () => {
+    const arr = ngpPhotos.get(key) || [];
+    if(!arr.length) return close();
+    idx = Math.max(0, Math.min(idx, arr.length - 1));
+    const many = arr.length > 1;
+    ov.innerHTML = `<div class="ngp-lb-box"><div class="ngp-lb-stage">${many ? '<button type="button" class="ngp-lb-nav prev" data-act="prev" title="Ảnh trước (←)">‹</button>' : ''}
+      <a href="${arr[idx]}" target="_blank" rel="noopener" title="Mở ảnh gốc ở tab mới"><img src="${arr[idx]}" alt=""></a>
+      ${many ? '<button type="button" class="ngp-lb-nav next" data-act="next" title="Ảnh sau (→)">›</button>' : ''}</div>
+      <div class="ngp-lb-bar"><span>${idx + 1}/${arr.length}${many ? ' · ← → để chuyển ảnh' : ''}</span>
+      <button type="button" data-act="del">🗑 Xoá ảnh này</button><button type="button" data-act="close">Đóng</button></div></div>`;
+  };
+  const step = d => { const n = (ngpPhotos.get(key) || []).length; if(n > 1){ idx = (idx + d + n) % n; draw(); } };
   const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
-  const onKey = ev => { if(ev.key === 'Escape') close(); };
+  const onKey = ev => {
+    if(ev.key === 'Escape') close();
+    else if(ev.key === 'ArrowLeft') step(-1);
+    else if(ev.key === 'ArrowRight') step(1);
+  };
   ov.addEventListener('click', async ev => {
     const act = ev.target.dataset && ev.target.dataset.act;
     if(ev.target === ov || act === 'close') return close();
+    if(act === 'prev') return step(-1);
+    if(act === 'next') return step(1);
     if(act === 'del' && confirm('Xoá ảnh này?')){
       const next = (ngpPhotos.get(key) || []).filter((_, i) => i !== idx);
       if(next.length) ngpPhotos.set(key, next); else ngpPhotos.delete(key);
-      await ngpPhotoPersist(key); close(); renderNgPage();
+      await ngpPhotoPersist(key); renderNgPage();
+      if(next.length) draw(); else close();
     }
   });
+  draw();
   document.addEventListener('keydown', onKey); document.body.appendChild(ov);
 }
 
@@ -13274,6 +13290,13 @@ function ngpDetailHtml(r){
   }
   return `<div class="ngp-detail"><div class="ngp-detail-title">${fmt(lines.length)} pallet NG tại ${escHtml(r.locator)} — ${escHtml(r.item)}${r.custpo ? ' (PO ' + escHtml(r.custpo) + ')' : ''}</div>
     <table class="ngp-sub"><thead><tr><th class="num">#</th><th>GI No.</th><th>Lot No.</th><th>Pallet</th><th class="num">SL</th><th>Ngày nhập</th><th>Buyer</th><th>Ref</th></tr></thead><tbody>${body}</tbody></table>${plan}</div>`;
+}
+
+// Ô ảnh trên bảng: hiện tối đa NGP_THUMB_SHOW ảnh nhỏ, còn lại gom vào nút "+N" (bấm mở xem tiếp).
+function ngpThumbsHtml(arr, key){
+  const shown = arr.slice(0, NGP_THUMB_SHOW).map((p, i) => `<img class="ngp-thumb" src="${p}" data-ngkey="${key}" data-idx="${i}" alt="Ảnh ${i + 1}" title="Bấm để xem lớn / xoá">`).join('');
+  const more = arr.length - NGP_THUMB_SHOW;
+  return shown + (more > 0 ? `<button type="button" class="ngp-thumb ngp-thumb-more" data-ngkey="${key}" data-idx="${NGP_THUMB_SHOW}" title="Còn ${more} ảnh nữa — bấm để xem">+${more}</button>` : '');
 }
 
 function renderNgPage(){
@@ -13330,7 +13353,7 @@ function renderNgPage(){
       <td>${badge}</td>
       <td><select class="ngp-status st-${r.status}" data-ngkey="${key}">${opts}</select></td>
       <td><input type="text" class="ngp-note" data-ngkey="${key}" value="${escAttr(r.note)}" placeholder="Ghi chú…" maxlength="300"></td>
-      <td class="ngp-photos">${(ngpPhotos.get(ngpKey(r)) || []).map((p, i) => `<img class="ngp-thumb" src="${p}" data-ngkey="${key}" data-idx="${i}" alt="Ảnh ${i + 1}" title="Bấm để xem lớn / xoá">`).join('')}${(ngpPhotos.get(ngpKey(r)) || []).length < NGP_IMG_MAX ? `<button type="button" class="ngp-photo-add" data-ngkey="${key}" title="Thêm ảnh chụp (chụp mới hoặc chọn từ máy)">📷</button>` : ''}</td>
+      <td class="ngp-photos">${ngpThumbsHtml(ngpPhotos.get(ngpKey(r)) || [], key)}<button type="button" class="ngp-photo-add" data-ngkey="${key}" title="Thêm ảnh chụp (chụp mới hoặc chọn từ máy) — không giới hạn số ảnh">📷</button></td>
       <td><button type="button" class="ngp-jump" data-ngkey="${key}" title="Mở / đóng chi tiết từng pallet của dòng này">${open ? '▲ Ẩn' : '🔍 Xem'}</button></td>
     </tr>` + (open ? `<tr class="ngp-detail-row"><td colspan="11">${ngpDetailHtml(r)}</td></tr>` : '');
   }).join('');
@@ -13357,12 +13380,14 @@ async function ngpExportExcel(){
 
   /* ---------- Sheet 1: chi tiết ---------- */
   const ws = wb.addWorksheet('Hàng NG', { views:[{ state:'frozen', ySplit:4 }] });
-  // Cột ảnh: mỗi ảnh 1 cột riêng (Hình 1..n), mọi ảnh cùng kích thước 120x90 px (từ ảnh đã resize 480x360, tỉ lệ 4:3).
-  const photoCols = Math.min(NGP_IMG_MAX, Math.max(0, ...rows.map(r => (ngpPhotos.get(ngpKey(r)) || []).length)));
-  const IMG_W = 120, IMG_H = 90, ROW_H_PT = 72; // 72pt = 96px
+  // Cột ảnh: mỗi ảnh 1 cột riêng (Hình 1..n, n = số ảnh nhiều nhất của 1 dòng — không giới hạn). Mỗi ảnh vừa khung
+  // IMG_BOX_W x IMG_BOX_H px, giữ đúng tỉ lệ ảnh (ảnh dọc chụp phiếu vẫn đọc được). Bấm ảnh trong Excel để phóng to.
+  const photoCols = Math.max(0, ...rows.map(r => (ngpPhotos.get(ngpKey(r)) || []).length));
+  const IMG_BOX_W = 260, IMG_BOX_H = 340, ROW_H_PT = Math.round((IMG_BOX_H + 12) * 0.75), COL_W_CH = Math.round((IMG_BOX_W + 14) / 7);
+  const imgSize = dataUrl => new Promise(res => { const im = new Image(); im.onload = () => res({ w: im.naturalWidth, h: im.naturalHeight }); im.onerror = () => res({ w: 4, h: 3 }); im.src = dataUrl; });
   const heads = ['#', 'Kho', 'Item No.', 'Cust PO', 'Locator', 'Pallet', 'Pcs', 'Có trong Plan', 'Trạng thái', 'Ghi chú']
     .concat(Array.from({ length: photoCols }, (_, i) => 'Hình ' + (i + 1)));
-  const widths = [6, 9, 17, 17, 18, 9, 11, 14, 15, 42].concat(Array(photoCols).fill(18));
+  const widths = [6, 9, 17, 17, 18, 9, 11, 14, 15, 42].concat(Array(photoCols).fill(COL_W_CH));
   ws.columns = widths.map(w => ({ width:w }));
   ws.mergeCells(1, 1, 1, heads.length);
   const t = ws.getCell(1, 1);
@@ -13381,7 +13406,8 @@ async function ngpExportExcel(){
     c.border = border; c.alignment = { vertical:'middle', horizontal:'center', wrapText:true };
   });
   hr.height = 24;
-  rows.forEach((r, i) => {
+  for(let i = 0; i < rows.length; i++){
+    const r = rows[i];
     const row = ws.getRow(5 + i);
     const vals = [i + 1, r.kho, r.item, r.custpo, r.locator, r.pallets, r.qty, r.hasPlan ? 'Có' : '', NGP_STATUS[r.status], r.note];
     const zebra = i % 2 ? 'FFF4F6FA' : 'FFFFFFFF';
@@ -13398,15 +13424,18 @@ async function ngpExportExcel(){
     }
     if(pics.length){
       row.height = ROW_H_PT;
-      pics.slice(0, photoCols).forEach((dataUrl, p) => {
+      for(let p = 0; p < pics.length; p++){
+        const dataUrl = pics[p];
+        const sz = await imgSize(dataUrl);
+        const k = Math.min(IMG_BOX_W / sz.w, IMG_BOX_H / sz.h);
         const id = wb.addImage({ base64: dataUrl.replace(/^data:image\/\w+;base64,/, ''), extension:'jpeg' });
-        ws.addImage(id, { tl:{ col: 10 + p + 0.08, row: 4 + i + 0.07 }, ext:{ width: IMG_W, height: IMG_H }, editAs:'oneCell' });
-      });
+        ws.addImage(id, { tl:{ col: 10 + p + 0.03, row: 4 + i + 0.02 }, ext:{ width: Math.round(sz.w * k), height: Math.round(sz.h * k) }, editAs:'oneCell' });
+      }
     }
     row.getCell(3).font = { bold:true };
     if(r.hasPlan){ const c = row.getCell(8); c.fill = fill('FFFFE8B3'); c.font = { bold:true, color:{ argb:'FF9A5B00' } }; }
     const sc = row.getCell(9); sc.fill = fill(ST[r.status].bg); sc.font = { bold:true, color:{ argb:ST[r.status].fg } };
-  });
+  }
   const first = 5, last = 4 + rows.length, tr = ws.getRow(last + 1);
   ['TỔNG (theo dòng đang lọc)', '', '', '', '', `SUBTOTAL(109,F${first}:F${last})`, `SUBTOTAL(109,G${first}:G${last})`, '', '', ''].forEach((v, j) => {
     const c = tr.getCell(j + 1);
