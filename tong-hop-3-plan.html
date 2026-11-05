@@ -218,7 +218,7 @@
   .ph-bar{display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #e2e5ea; border-radius:10px; padding:6px 8px 6px 12px; margin:8px 0 10px;}
   .ph-bar-info{flex:1 1 auto; min-width:0; font-size:12px; color:#6b7280; line-height:1.35;}
   .ph-bar-info b{color:#12161F;}
-  .ph-bar-info .ph-bar-line{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .ph-bar-info .ph-bar-line{white-space:normal; overflow-wrap:anywhere;}
   .ph-icon-btn{flex:0 0 auto; width:36px; height:36px; border-radius:9px; border:1px solid #d7dae0; background:#fff; font-size:17px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; padding:0;}
   .ph-icon-btn:disabled{opacity:.5;}
   #ph-refresh-btn.ph-icon-btn{background:#2c6fcb; border-color:#2c6fcb; color:#fff; padding:0;}
@@ -280,6 +280,10 @@
   .ph-chip .ph-chip-ng{color:#B42318; font-weight:700; font-size:11.5px;}
   .ph-chip .ph-chip-pk{color:#9a6700; font-size:11px;}
   .ph-chip.on{outline:2px solid #2c6fcb; outline-offset:0;}
+  .ph-need{display:inline-flex; align-items:center; gap:4px; padding:5px 10px; border-radius:8px; font-size:12.5px; font-weight:600;}
+  .ph-need b{font-family:ui-monospace,monospace;}
+  .ph-need-left{color:#9A5B00; background:#fff4cc; border:1px solid #f0d58a;}
+  .ph-need-ok{color:#0B7A3B; background:#e3f5ea; border:1px solid #b9e3c8;}
   .ph-nostock{font-size:12px; color:#9AA3B2; font-style:italic;}
   .ph-kho-panel{margin-top:8px; border:1px solid #e3e8ef; border-radius:8px; background:#fff; overflow:hidden;}
   .ph-kho-panel .ph-detail-label{padding:6px 8px 4px 10px;}
@@ -388,7 +392,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v4.27';
+  var PH_VERSION = 'v4.28';
   var PH_VERSION_DATE = '05/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -743,7 +747,7 @@
       var detailId = uidPrefix + '-' + i;
       chips += '<button type="button" class="ph-chip" data-target="' + detailId + '" style="background:' + khoMeta.khoColors[label] + ';" title="Bấm để xem Locator/OQC/SL tồn">' +
         phEsc(label) + ' <b>' + phFmt(g.qty) + '</b>' + (ng > 0 ? '<span class="ph-chip-ng">NG ' + phFmt(ng) + '</span>' : '') +
-        (pk > 0 ? '<span class="ph-chip-pk">(+' + phFmt(pk) + ' đã pick)</span>' : '') + '</button>';
+        '</button>';
       var body = g.locs.map(function(l){
         var oqcTd = '<td' + (String(l.oqc || '').toUpperCase() === 'NG' ? ' class="ph-oqc-ng"' : '') + '>' + phEsc(l.oqc || '—') + '</td>';
         if(l.picked) return '<tr' + phLocClickAttrs([l]).replace('class="ph-loc-click"', 'class="ph-loc-click ph-loc-picked"').replace(/ title="[^"]*"/, ' title="Đã scan pick (CR) cho container — không tính vào tồn. Bấm để xem GI"') + '><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + ' ' + phPickedTagHtml(l.ref) + '</td>' + oqcTd + '<td class="ph-num">(' + phFmt(l.qty) + ')</td></tr>';
@@ -753,11 +757,13 @@
         '<button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷</button><button class="ph-shot-btn" data-share="1" type="button" title="Chia sẻ ảnh bảng này sang Zalo/Telegram...">📤</button></div>' +
         '<div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></div></div>';
     });
-    var shortTag = it.short > 0 ? '<span class="ph-item-short-tag" title="Tồn PASS chưa pick ' + phFmt(it.passStock) + ' < cần pick ' + phFmt(it.totalNeed) + ' (tính chung mọi container đang chờ)">Thiếu ' + phFmt(it.short) + '</span>' : '';
+    var shortTag = it.short > 0 ? '<span class="ph-item-short-tag" title="Tồn PASS chưa pick ' + phFmt(it.passStock) + ' < cần pick ' + phFmt(it.totalNeed) + ' (tính chung mọi container đang chờ)">Thiếu tồn ' + phFmt(it.short) + '</span>' : '';
     return '<div class="ph-item' + (it.short > 0 ? ' ph-item-short' : '') + '">' +
       '<div class="ph-item-top"><span class="ph-item-no">' + phEsc(it.item) + '</span><span class="ph-item-po">PO ' + phEsc(poLabel) + '</span>' + shortTag +
       '<span class="ph-item-qty">Pick <b>' + phFmt(it.picked) + '/' + phFmt(it.qty) + '</b> · ' + phFmtDec(it.cbm, 2) + ' CBM</span></div>' +
-      '<div class="ph-chips">' + (chips || '<span class="ph-nostock">Không có tồn kho</span>') + '</div>' + panels + '</div>';
+      '<div class="ph-chips">' + (chips || '<span class="ph-nostock">Không có tồn kho</span>') +
+        (it.need > 0 ? '<span class="ph-need ph-need-left" title="SL kế hoạch − đã pick của mã này trong cont">Còn thiếu <b>' + phFmt(it.need) + '</b></span>' : '<span class="ph-need ph-need-ok">✓ Đã pick đủ</span>') +
+      '</div>' + panels + '</div>';
   };
 
   var phIsoDay = function(offset){
