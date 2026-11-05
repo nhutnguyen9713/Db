@@ -4238,7 +4238,8 @@ function renderContainerPickingOverview(){
       if(r.loadDate) entry.loadDates.add(fmtDate(r.loadDate));
       if(r.planTime) entry.planTimes.add(r.planTime);
       const itemPoKey = r.item + '||' + (r.custPo || '');
-      if(!entry.items.has(itemPoKey)) entry.items.set(itemPoKey, { item: r.item, po: r.custPo || '', qty: 0, cbm: 0, picked: 0 });
+      if(!entry.items.has(itemPoKey)) entry.items.set(itemPoKey, { item: r.item, po: r.custPo || '', qty: 0, cbm: 0, picked: 0, csrs: new Set() });
+      if(csrKey) entry.items.get(itemPoKey).csrs.add(csrKey);
       entry.items.get(itemPoKey).qty += planQty;
       entry.items.get(itemPoKey).picked += contribution; // SL đã scan pick theo CR (tối đa = SL kế hoạch)
       entry.items.get(itemPoKey).cbm += (parseFloat(r.cbm) || 0);
@@ -4285,7 +4286,17 @@ function renderContainerPickingOverview(){
       const locs = buildItemLocatorDetail(it.item, it.po, true);
       const totalOnHand = locs.reduce((s, l) => s + l.qty, 0);
       const passOnHand = locs.reduce((s, l) => s + (l.oqc === 'PASS' ? l.qty : 0), 0);
-      return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, picked: it.picked, locs, totalOnHand, passOnHand };
+      // SỬA (lỗi thật đã gặp: cont VNC28514, Excel/cột Picking báo đã pick 1284/1284 nhưng popover chỉ thấy 1,252 ở
+      // D3B-Loading): SL \"đã pick\" của container (it.picked) được tính từ MỌI dòng tồn PASS của mã có Reference = CR
+      // của container (xem buildPickingIndex) — KHÔNG lọc theo Cust PO và không loại locator nào, trong khi danh sách
+      // locs ở trên chỉ lấy đúng Mã + Cust PO (và bỏ PROD) nên có thể thiếu phần hàng đã pick nằm ở PO/locator khác.
+      // Gom riêng các dòng đó (pickExtra) để popover hiển thị đủ và cộng ra đúng số đã pick.
+      const locSet = new Set(locs);
+      const pickExtra = (it.csrs && it.csrs.size)
+        ? (getItemLocatorIndex().get(String(it.item).toLowerCase()) || []).filter(e =>
+            !locSet.has(e) && String(e.oqc || '').toUpperCase() === 'PASS' && e.ref && it.csrs.has(String(e.ref).trim().toLowerCase()))
+        : [];
+      return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, picked: it.picked, locs, totalOnHand, passOnHand, pickExtra };
     });
 
     // Mã hàng nào "Thiếu" TÍNH RIÊNG cho container này (không gộp với container khác dùng chung mã):
@@ -4969,9 +4980,14 @@ function buildContPickTooltipHtml(items){
       ? `<div class="cpt-locs">${it.locs.map(l => {
           const note = isPickedLoc(l) ? ' <span style="font-size:11px; color:var(--amber-bright);">· đã pick</span>'
             : l.oqc !== 'PASS' ? ` <span style="font-size:11px; color:var(--muted-2);">· ${escHtml(l.oqc || 'chưa OQC')}</span>` : '';
-          return `<div class="cpt-loc-row"${counted(l) ? '' : ' style="opacity:.55;"'}><span style="white-space:nowrap">${escHtml(l.locator)}${loadingRefHtml(l, crInvMap)}${note}</span><b>${fmt(l.qty)}</b></div>`;
+          return `<div class="cpt-loc-row"${counted(l) ? '' : ' style="opacity:.55;"'}><span>${escHtml(l.locator)}${loadingRefHtml(l, crInvMap)}${note}</span><b>${fmt(l.qty)}</b></div>`;
         }).join('')}</div>`
       : `<div class="cpt-empty">Không có tồn kho</div>`;
+    // Dòng đã pick cho container này nhưng nằm NGOÀI danh sách trên (khác Cust PO / locator bị loại) — vẫn tính vào SL đã pick.
+    const extraHtml = (it.pickExtra && it.pickExtra.length)
+      ? `<div class="cpt-total" style="color:var(--amber-bright); font-weight:600; margin-top:4px;">Đã pick cùng CR nhưng khác PO / locator:</div><div class="cpt-locs">${it.pickExtra.map(l =>
+          `<div class="cpt-loc-row"><span>${escHtml(l.locator)}${loadingRefHtml(l, crInvMap)} <span style="font-size:11px; color:var(--muted-2);">· PO ${escHtml(l.custpo || '—')}</span></span><b>${fmt(l.qty)}</b></div>`).join('')}</div>`
+      : '';
     // Gộp thêm tổng tồn theo TỪNG KHO (3B/3A/2B/DG1...) cho mã hàng này — bên cạnh chi tiết theo
     // từng Locator ở trên, để biết ngay kho nào đang giữ bao nhiêu mà không cần cộng tay từng dòng.
     const khoTotals = new Map();
@@ -4985,8 +5001,11 @@ function buildContPickTooltipHtml(items){
       ? `<div class="cpt-total" style="color:var(--muted); font-weight:600; margin-top:4px;">Theo kho:</div><div class="cpt-locs">${khoRowsHtml}</div>`
       : '';
     return `<div class="cpt-item">
-      <div class="cpt-item-head"><b>${escHtml(it.item)}</b>${it.po ? ` <span class="cpt-po">(PO ${escHtml(it.po)})</span>` : ''} <span class="cpt-kh">— KH ${fmt(it.qty)} Pcs</span></div>
+      <div class="cpt-item-head"><b>${escHtml(it.item)}</b>${it.po ? ` <span class="cpt-po">(PO ${escHtml(it.po)})</span>` : ''} <span class="cpt-kh">— KH ${fmt(it.qty)} Pcs</span>${(it.qty > 0 && (it.picked || 0) >= it.qty - 0.0001)
+        ? ` <span class="cpt-done-badge">✓ Pick xong ${fmt(it.picked)}/${fmt(it.qty)}</span>`
+        : (it.picked ? ` <span style="font-size:11px; color:var(--amber-bright);">· đã pick ${fmt(it.picked)}/${fmt(it.qty)}</span>` : '')}</div>
       ${locsHtml}
+      ${extraHtml}
       ${khoBlockHtml}
       <div class="cpt-total">Tổng tồn PASS hiện có: <b>${fmt(passQty)}</b> Pcs${pickedQty ? ` <span style="color:var(--muted-2); font-weight:400;">(đã trừ ${fmt(pickedQty)} đã pick có CR)</span>` : ''}</div>
     </div>`;
