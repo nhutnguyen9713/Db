@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.26';
+const APP_VERSION = 'v4.27';
 const APP_VERSION_DATE = '05/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4299,7 +4299,9 @@ function renderContainerPickingOverview(){
         ? (getItemLocatorIndex().get(String(it.item).toLowerCase()) || []).filter(e =>
             !locSet.has(e) && String(e.oqc || '').toUpperCase() === 'PASS' && e.ref && it.csrs.has(String(e.ref).trim().toLowerCase()))
         : [];
-      return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, picked: it.picked, locs, totalOnHand, passOnHand, pickExtra };
+      // v4.27: tồn PASS CÒN LẤY ĐƯỢC = bỏ phần đã gom ra locator Loading có CR (đã pick cho cont nào đó).
+      const passFree = locs.reduce((s, l) => s + ((l.oqc === 'PASS' && !(LOADING_LOCATOR_RE.test(String(l.locator || '').trim()) && /CR\d+/i.test(String(l.ref || '')))) ? l.qty : 0), 0);
+      return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, picked: it.picked, locs, totalOnHand, passOnHand, passFree, pickExtra };
     });
 
     // Mã hàng nào "Thiếu" TÍNH RIÊNG cho container này (không gộp với container khác dùng chung mã):
@@ -4314,9 +4316,13 @@ function renderContainerPickingOverview(){
     // bao giờ khớp được. Chuẩn hoá lại y hệt (it.po || '(Khong co)') ngay khi tra cứu, KHÔNG đổi giá
     // trị "po" gốc đang lưu trong shortItems (dòng map bên dưới vẫn giữ nguyên "po" thật để tính năng
     // "bấm để xem chi tiết mã hàng" nhảy đúng dòng — combinedRowDomId() lại cần "po" RỖNG mới khớp).
-    const shortItems = isManual ? [] : items
-      .filter(it => it.qty > it.passOnHand && !(ccIsSppItem(it.item) && sppManualOk[sppOkKey(it.item, it.po || '(Khong co)')]))
-      .map(it => ({ item: it.item, po: it.po, qty: it.qty, passOnHand: it.passOnHand, diff: it.passOnHand - it.qty }));
+    // SỬA v4.27 (cont VNC28514 mã đã "Pick xong 1,950/1,950" vẫn báo Thiếu 249): trước so SL kế hoạch với
+    // TỔNG tồn PASS (gồm cả hàng đã gom ra D3B-Loading) nên mã pick xong vẫn bị thiếu. Giờ so PHẦN CÒN PHẢI
+    // PICK (kế hoạch − đã pick) với tồn PASS còn lấy được (đã trừ hàng ở Loading có CR).
+    const shortItems = isManual || status === 'done' ? [] : items
+      .map(it => ({ it, need: Math.max(0, (it.qty || 0) - (it.picked || 0)) }))
+      .filter(({ it, need }) => need > it.passFree && !(ccIsSppItem(it.item) && sppManualOk[sppOkKey(it.item, it.po || '(Khong co)')]))
+      .map(({ it, need }) => ({ item: it.item, po: it.po, qty: it.qty, need, passOnHand: it.passFree, diff: it.passFree - need }));
 
     // Kho có SL tồn (PASS+NG, gộp mọi vị trí) nhiều nhất cho các mã hàng của container này
     const qtyByKho = {};
