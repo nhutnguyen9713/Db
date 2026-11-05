@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.18';
+const APP_VERSION = 'v4.19';
 const APP_VERSION_DATE = '05/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -10664,6 +10664,10 @@ function mergeConfirmedDataFromCloud(cloudData){
       });
     });
   }catch(e){ console.warn('Không gộp được confirmedHistory từ Cloud:', e); }
+
+  // Hàng NG: gộp trạng thái/ghi chú (bản nào sửa sau — theo mốc t — thắng) và lịch sử theo ca (thêm các
+  // ca máy này chưa có) từ Cloud, để 2 máy cùng Lưu không xoá mất phần của nhau.
+  if(typeof ngpMergeFromCloud === 'function') ngpMergeFromCloud(cloudData);
 }
 
 async function saveConfirmedSnapshotAndReset(){
@@ -13152,6 +13156,34 @@ function ngpLoad(){
 function ngpSave(){
   try{ LS.setItem(NGP_STORAGE_KEY, JSON.stringify(ngpManage || {})); }catch(e){ console.warn('Không lưu được trạng thái hàng NG:', e); }
 }
+function ngpMergeFromCloud(cloudData){
+  try{
+    const cm = cloudData[NGP_STORAGE_KEY] ? JSON.parse(cloudData[NGP_STORAGE_KEY]) : null;
+    if(cm && typeof cm === 'object'){
+      const m = ngpLoad(); let changed = false;
+      Object.keys(cm).forEach(k => {
+        const c = cm[k], l = m[k];
+        if(c && (!l || (Number(c.t) || 0) > (Number(l.t) || 0))){ m[k] = c; changed = true; }
+      });
+      if(changed) ngpSave();
+    }
+  }catch(e){ console.warn('Không gộp được trạng thái hàng NG từ Cloud:', e); }
+  try{
+    const ch = cloudData[NGP_HISTORY_KEY] ? JSON.parse(cloudData[NGP_HISTORY_KEY]) : null;
+    if(ch && typeof ch === 'object'){
+      const h = ngpHistoryLoad(); let changed = false;
+      Object.keys(ch).forEach(k => {
+        // Cùng 1 ca có ở cả 2 nơi: giữ bản nhiều dòng trạng thái đã cập nhật hơn là không xác định được —
+        // nên giữ bản của máy này (đang trực tiếp), chỉ thêm các ca máy này chưa có.
+        if(!h[k] && ch[k] && Array.isArray(ch[k].rows)){ h[k] = ch[k]; changed = true; }
+      });
+      if(changed){
+        Object.keys(h).sort().reverse().slice(NGP_HISTORY_DAYS).forEach(k => delete h[k]);
+        LS.setItem(NGP_HISTORY_KEY, JSON.stringify(h));
+      }
+    }
+  }catch(e){ console.warn('Không gộp được lịch sử hàng NG từ Cloud:', e); }
+}
 /* ---- Lịch sử theo ngày: { 'YYYY-MM-DD': { at:'HH:mm', rows:[[code,kho,item,custpo,locator,pallets,qty,hasPlan,status,note], ...] } } ---- */
 let ngpHistory = null;
 function ngpHistoryLoad(){
@@ -13613,7 +13645,8 @@ async function ngpExportExcel(){
     } else if(e.target.classList.contains('ngp-note')){
       cur.note = e.target.value.trim();
     } else return;
-    if((cur.status || 'new') === 'new' && !cur.note) delete m[key]; else m[key] = cur;
+    // Không xoá hẳn dòng về "Chưa xử lý" — giữ kèm mốc t để khi gộp với Cloud, lần sửa mới nhất thắng.
+    cur.t = Date.now(); m[key] = cur;
     ngpSave(); renderNgPage();
   });
 })();
