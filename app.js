@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.20';
+const APP_VERSION = 'v4.21';
 const APP_VERSION_DATE = '05/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5908,7 +5908,7 @@ async function exportCombinedPlanToExcel(mode){
     if(label === '3A') itemHeaderParts.push('3A trệt', '3A lầu', '3A Rack');
     else itemHeaderParts.push(label);
   });
-  itemHeaderParts.push('Tổng tồn (PASS+NG)', 'PASS', 'NG', 'SL Plan', 'CBM', 'Chênh lệch', 'Trạng thái');
+  itemHeaderParts.push('NG', 'PASS', 'Tổng tồn (PASS+NG)', 'SL Plan', 'CBM', 'Chênh lệch', 'Trạng thái');
   const itemHeaders = itemHeaderParts;
   const loadingCtx3A = loadingCommittedCtx();
   const computeKho3AQty = (r) => {
@@ -6075,7 +6075,7 @@ async function exportCombinedPlanToExcel(mode){
       if(khoHeaderLabels[i] === '3A') itemValues.push(kho3A.treQty, kho3A.floorQty, kho3A.rackQty);
       else itemValues.push(qty);
     });
-    itemValues.push(r.pass + r.ng, r.pass, r.ng, c ? c.qty : '—', c ? Math.round((c.cbm || 0) * 100) / 100 : '—', r.diff, (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu');
+    itemValues.push(r.ng, r.pass, r.pass + r.ng, c ? c.qty : '—', c ? Math.round((c.cbm || 0) * 100) / 100 : '—', r.diff, (r.diff >= 0 || r.manualOk) ? 'Đủ' : 'Thiếu');
     const rowValues = [...contValues, ...itemValues];
     rowValues.forEach((v,i) => trackWidth1(i, v));
     const isGroupFirst = groupKey !== prevGroupKey;
@@ -6094,10 +6094,10 @@ async function exportCombinedPlanToExcel(mode){
     const ngColNo = headers1.indexOf('NG') + 1;
     row.eachCell((cell, colNumber) => {
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: doneFill || highlightColorByCol.get(colNumber) || fillColor } };
-      // Cột NG: ô có số lượng NG (> 0) tô nền ĐỎ chữ trắng đậm để nhìn ra ngay.
+      // Cột NG: ô có số lượng NG (> 0) tô nền đỏ NHẠT chữ đỏ đậm để nhìn ra ngay.
       if(colNumber === ngColNo && Number(cell.value) > 0){
         cell.fill = { type:'pattern', pattern:'solid', fgColor:{ argb: NG_CELL_FILL } };
-        cell.font = { bold:true, color:{ argb:'FFFFFFFF' } };
+        cell.font = { bold:true, color:{ argb: NG_CELL_FONT } };
       }
       cell.alignment = { vertical:'middle', horizontal: leftAlignCols.has(colNumber) ? 'left' : 'center' };
       // Cột Picking: phần số "xx/xx" căn TRÁI, locator Loading căn PHẢI trong CÙNG 1 ô — ô chỉ giữ phần
@@ -6219,7 +6219,7 @@ function splitPickingText(v){
 
 // Vẽ bảng "Tổng hợp 3 Plan" thành ảnh PNG giống file Excel (nền xen kẽ theo container, cột màu theo kho,
 // viền đậm giữa các container). share=true → mở bảng chia sẻ của điện thoại, không hỗ trợ thì tải file.
-const NG_CELL_FILL = 'FFE03131'; // nền đỏ ô NG > 0 (Excel + ảnh Tổng hợp 3 Plan)
+const NG_CELL_FILL = 'FFF9CFCF', NG_CELL_FONT = 'FFB42318'; // nền đỏ nhạt + chữ đỏ đậm ô NG > 0 (Excel + ảnh Tổng hợp 3 Plan)
 function drawCombinedPlanImage(headers, rows, colorByCol, nContCols, share){
   const argb = a => '#' + String(a).slice(-6);
   const scale = 2, padX = 8, rowH = 28, headH = 40, font = '13px Arial, sans-serif', fontB = 'bold 13px Arial, sans-serif';
@@ -6259,7 +6259,7 @@ function drawCombinedPlanImage(headers, rows, colorByCol, nContCols, share){
     const y = 1 + headH + ri * rowH;
     r.values.forEach((v,i) => {
       const isNg = i === ngIdx && Number(v) > 0;
-      cell(i, y, rowH, isNg ? argb(NG_CELL_FILL) : ((!r.done && colorByCol.has(i+1)) ? argb(colorByCol.get(i+1)) : argb(r.fill)), String(v == null ? '' : v), isNg, i === nContCols + 3 ? 'split' : (i === nContCols || i === nContCols + 1), isNg ? '#fff' : null);
+      cell(i, y, rowH, isNg ? argb(NG_CELL_FILL) : ((!r.done && colorByCol.has(i+1)) ? argb(colorByCol.get(i+1)) : argb(r.fill)), String(v == null ? '' : v), isNg, i === nContCols + 3 ? 'split' : (i === nContCols || i === nContCols + 1), isNg ? '#' + NG_CELL_FONT.slice(2) : null);
     });
     if(r.first){ g.strokeStyle = '#222'; g.lineWidth = 2; g.beginPath(); g.moveTo(1, y); g.lineTo(W - 1, y); g.stroke(); }
   });
