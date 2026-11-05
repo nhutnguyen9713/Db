@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.17';
+const APP_VERSION = 'v4.18';
 const APP_VERSION_DATE = '05/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13131,7 +13131,7 @@ document.getElementById('btn-reset-confirmed').addEventListener('click', async (
    trạng thái/ghi chú (NGP_HISTORY_KEY) để xem lại theo ngày. Hình chụp vẫn chỉ lưu trên máy (IndexedDB). */
 const NGP_STORAGE_KEY = 'tn5_ng_manage_v1';
 const NGP_HISTORY_KEY = 'tn5_ng_history_v1';
-const NGP_HISTORY_DAYS = 60;
+const NGP_HISTORY_DAYS = 120; // số bản giữ lại (2 ca/ngày ≈ 60 ngày)
 const NGP_STATUS = { new:'Chưa xử lý', doing:'Đang xử lý', done:'Đã xử lý' };
 const ngpState = { kho:'all', q:'', status:'all', sort:'qty', planOnly:false, day:'' }; // day: '' = hôm nay, 'YYYY-MM-DD' = xem lại ngày cũ
 const ngpExpanded = new Set(); // các dòng đang mở chi tiết (nút "Xem")
@@ -13159,11 +13159,20 @@ function ngpHistoryLoad(){
   try{ ngpHistory = JSON.parse(LS.getItem(NGP_HISTORY_KEY) || '{}') || {}; }catch(e){ ngpHistory = {}; }
   return ngpHistory;
 }
+// Lưu theo CA: ca ngày 7h–19h, ca đêm 19h–7h sáng hôm sau (giống quy ước shiftDateDMY của Kiểm tồn).
+// Ca đêm tính theo NGÀY BẮT ĐẦU ca: 0h–6h59 vẫn thuộc ca đêm của ngày hôm trước. Khoá: 'YYYY-MM-DD|D' / '|N'.
 function ngpTodayKey(){
-  const d = new Date(), z = n => (n < 10 ? '0' : '') + n;
-  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`;
+  const d = new Date(), z = n => (n < 10 ? '0' : '') + n, h = d.getHours();
+  const shift = (h >= 7 && h < 19) ? 'D' : 'N';
+  if(h < 7) d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}|${shift}`;
 }
-function ngpDateLabel(k){ const p = String(k).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : k; }
+function ngpDateLabel(k){
+  const [day, sh] = String(k).split('|');
+  const p = day.split('-');
+  const dmy = p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : day;
+  return dmy + (sh === 'D' ? ' · Ca ngày (7h–19h)' : sh === 'N' ? ' · Ca đêm (19h–7h)' : '');
+}
 // Ghi bản của HÔM NAY (ghi đè trong ngày) — chỉ khi đã có dữ liệu tồn kho và nội dung thực sự đổi.
 function ngpRecordToday(rows){
   try{
@@ -13194,8 +13203,9 @@ function ngpRenderDaySelect(){
   const today = ngpTodayKey();
   const days = Object.keys(ngpHistoryLoad()).filter(k => k !== today).sort().reverse();
   if(ngpState.day && !days.includes(ngpState.day)) ngpState.day = '';
-  const opts = ['<option value="">Hôm nay (trực tiếp)</option>'].concat(days.map(k => {
-    const e = ngpHistory[k]; return `<option value="${k}"${k === ngpState.day ? ' selected' : ''}>${ngpDateLabel(k)}${e && e.at ? ' · lưu ' + e.at : ''} · ${fmt((e && e.rows || []).length)} dòng</option>`;
+  const curLbl = ngpDateLabel(today).split(' · ')[1] || '';
+  const opts = [`<option value="">Ca hiện tại${curLbl ? ' — ' + curLbl : ''} (trực tiếp)</option>`].concat(days.map(k => {
+    const e = ngpHistory[k]; return `<option value="${k}"${k === ngpState.day ? ' selected' : ''}>${ngpDateLabel(k)}${e && e.at ? ' · lưu lúc ' + e.at : ''} · ${fmt((e && e.rows || []).length)} dòng</option>`;
   }));
   sel.innerHTML = opts.join('');
   sel.value = ngpState.day || '';
@@ -13372,7 +13382,7 @@ function renderNgPage(){
   const histNote = document.getElementById('ngp-history-note');
   if(histNote){
     histNote.style.display = view.history ? '' : 'none';
-    if(view.history){ const e = ngpHistoryLoad()[ngpState.day] || {}; histNote.textContent = `📅 Đang xem bản lưu ngày ${ngpDateLabel(ngpState.day)}${e.at ? ' (lúc ' + e.at + ')' : ''} — chỉ xem, không sửa được. Chọn "Hôm nay" để quay lại dữ liệu trực tiếp.`; }
+    if(view.history){ const e = ngpHistoryLoad()[ngpState.day] || {}; histNote.textContent = `📅 Đang xem bản lưu ${ngpDateLabel(ngpState.day)}${e.at ? ' (cập nhật lần cuối lúc ' + e.at + ')' : ''} — chỉ xem, không sửa được. Chọn "Ca hiện tại" để quay lại dữ liệu trực tiếp.`; }
   }
 
   // KPI theo kho + tổng
@@ -13473,7 +13483,7 @@ async function ngpExportExcel(){
   ws.getRow(1).height = 30;
   ws.mergeCells(2, 1, 2, heads.length);
   const s2 = ws.getCell(2, 1);
-  s2.value = `${khoTxt} · không gồm locator PROD · ${ngpState.day ? 'dữ liệu lưu ngày ' + ngpDateLabel(ngpState.day) : 'dữ liệu hôm nay'} · xuất lúc ${when} · ${rows.length} dòng`;
+  s2.value = `${khoTxt} · không gồm locator PROD · ${ngpState.day ? 'dữ liệu lưu ' + ngpDateLabel(ngpState.day) : 'dữ liệu ca hiện tại'} · xuất lúc ${when} · ${rows.length} dòng`;
   s2.font = { italic:true, size:10, color:{ argb:'FF55637C' } }; s2.alignment = { horizontal:'left', indent:1 };
   ws.getRow(3).height = 6;
   const hr = ws.getRow(4);
@@ -13561,7 +13571,7 @@ async function ngpExportExcel(){
   const stamp = `${now.getFullYear()}${z(now.getMonth() + 1)}${z(now.getDate())}_${z(now.getHours())}${z(now.getMinutes())}`;
   const buffer = await wb.xlsx.writeBuffer();
   const url = URL.createObjectURL(new Blob([buffer], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-  const link = document.createElement('a'); link.href = url; link.download = `Hang_NG_${ngpState.day ? ngpState.day.replace(/-/g, '') + '_luu' : stamp}.xlsx`;
+  const link = document.createElement('a'); link.href = url; link.download = `Hang_NG_${ngpState.day ? ngpState.day.replace(/-/g, '').replace('|D', '_CaNgay').replace('|N', '_CaDem') : stamp}.xlsx`;
   document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
 }
 
