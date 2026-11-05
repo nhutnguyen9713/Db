@@ -208,11 +208,105 @@
     .ph-gi-item > div{word-break:break-all; text-align:left;}
     .ph-gi-item > div::before{justify-self:start; text-align:left;}
   }
+
+  /* ===== v4.26: giao diện thẻ gọn (mọi màn hình) ===== */
+  body{padding:12px 14px 80px;}
+  #ph-app, .ph-head{max-width:860px; margin:0 auto;}
+  .ph-head{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:2px;}
+  .ph-head h1{font-size:17px; margin:0;}
+  .ph-head .ph-version{margin:0;}
+  .ph-bar{display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #e2e5ea; border-radius:10px; padding:6px 8px 6px 12px; margin:8px 0 10px;}
+  .ph-bar-info{flex:1 1 auto; min-width:0; font-size:12px; color:#6b7280; line-height:1.35;}
+  .ph-bar-info b{color:#12161F;}
+  .ph-bar-info .ph-bar-line{white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .ph-icon-btn{flex:0 0 auto; width:36px; height:36px; border-radius:9px; border:1px solid #d7dae0; background:#fff; font-size:17px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; padding:0;}
+  .ph-icon-btn:disabled{opacity:.5;}
+  #ph-refresh-btn.ph-icon-btn{background:#2c6fcb; border-color:#2c6fcb; color:#fff; padding:0;}
+  .ph-menu{position:relative;}
+  .ph-menu-pop{position:absolute; right:0; top:100%; margin-top:6px; z-index:70; background:#fff; border:1px solid #d5dbe5; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.18); padding:6px; min-width:170px;}
+  .ph-menu-pop button{display:block; width:100%; text-align:left; padding:8px 10px; border:none; background:none; font:inherit; font-size:13px; color:#c0392b; cursor:pointer; border-radius:6px;}
+  .ph-menu-pop button:hover{background:#f4f5f7;}
+  .ph-presence .ph-presence-btn{padding:6px 10px;}
+  .ph-presence-pop{left:auto; right:0;}
+
+  .ph-sticky{position:sticky; top:0; z-index:30; background:#f4f5f7; padding:6px 0 8px; margin:0 -2px; }
+  .ph-sticky #ph-search{max-width:none; margin:0 0 8px; padding:10px 12px; font-size:15px; border-radius:10px;}
+  .ph-filters{display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+  .ph-filters::-webkit-scrollbar{display:none;}
+  .ph-fchip{flex:0 0 auto; padding:6px 11px; border-radius:999px; border:1px solid #d7dae0; background:#fff; color:#374151; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap;}
+  .ph-fchip.on{background:#2c6fcb; border-color:#2c6fcb; color:#fff;}
+  .ph-fchip[data-f="short"].on{background:#d64545; border-color:#d64545;}
+  .ph-fchip[data-f="picking"].on{background:#c58a00; border-color:#c58a00;}
+  .ph-fsep{flex:0 0 1px; background:#d7dae0; margin:4px 2px;}
+  .ph-count{font-size:12px; color:#6b7280; margin:6px 2px 0;}
+
+  .ph-day-hdr{position:sticky; top:var(--ph-sticky-h, 92px); z-index:20; background:#dfe6f3; color:#1F2A44; font-weight:700; font-size:13px; padding:7px 12px; border-radius:8px; margin:14px 0 8px; box-shadow:0 1px 0 rgba(0,0,0,.04);}
+  .ph-day-hdr span{font-weight:500; color:#55637C;}
+  .ph-day-hdr .ph-day-short{color:#C00000; font-weight:700;}
+
+  .ph-card{background:#fff; border:1px solid #e2e5ea; border-left:5px solid #9aa3b2; border-radius:10px; margin-bottom:8px; overflow:hidden;}
+  .ph-card.ph-st-ok{border-left-color:#1f9d55;}
+  .ph-card.ph-st-short{border-left-color:#d64545;}
+  .ph-card-head{padding:9px 12px 8px; cursor:pointer; -webkit-tap-highlight-color:transparent;}
+  .ph-card-head:active{background:#f7f8fa;}
+  .ph-l1{display:flex; align-items:center; gap:7px; flex-wrap:wrap;}
+  .ph-l1 .ph-vnc{font-size:15px;}
+  .ph-time{font-weight:700; font-size:14px; color:#1F2A44;}
+  .ph-kho-tag{font-size:11.5px; font-weight:700; color:#2F6E73; background:#e0f2f1; padding:1px 7px; border-radius:5px;}
+  .ph-st{margin-left:auto; font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:999px;}
+  .ph-st-badge-ok{color:#006100; background:#C6EFCE;}
+  .ph-st-badge-short{color:#9C0006; background:#FFC7CE;}
+  .ph-card .ph-arrow{color:#8a97ac; font-size:12px; transition:transform .15s;}
+  .ph-card.ph-open .ph-arrow{transform:rotate(90deg);}
+  .ph-l2{margin-top:4px; font-size:12.5px; color:#55637C; display:flex; flex-wrap:wrap; gap:2px 6px;}
+  .ph-l2 b{color:#12161F; font-family:ui-monospace,monospace;}
+  .ph-prog{margin-top:7px; display:flex; align-items:center; gap:8px; font-size:11.5px; color:#55637C;}
+  .ph-prog-track{flex:1 1 auto; height:7px; background:#eceef2; border-radius:999px; overflow:hidden;}
+  .ph-prog-fill{height:100%; background:#c58a00; border-radius:999px;}
+  .ph-prog-fill.ph-prog-zero{background:transparent;}
+  .ph-prog b{font-family:ui-monospace,monospace; color:#12161F;}
+  .ph-card-body{border-top:1px solid #eef0f3; background:#fafbfc;}
+  .ph-card-tools{display:flex; align-items:center; gap:8px; padding:7px 12px; font-size:11.5px; color:#6b7280;}
+  .ph-item{padding:9px 12px; border-top:1px solid #eef0f3; background:#fff;}
+  .ph-item-top{display:flex; align-items:baseline; gap:6px 10px; flex-wrap:wrap; font-size:13px;}
+  .ph-item-top .ph-item-no{font-weight:700; font-family:ui-monospace,monospace; font-size:14px;}
+  .ph-item-top .ph-item-po{color:#55637C; font-family:ui-monospace,monospace; font-size:12.5px;}
+  .ph-item-top .ph-item-qty{margin-left:auto; font-size:12px; color:#55637C; white-space:nowrap;}
+  .ph-item-top .ph-item-qty b{font-family:ui-monospace,monospace; color:#12161F;}
+  .ph-item-short-tag{font-size:11px; font-weight:700; color:#9C0006; background:#FFC7CE; padding:1px 6px; border-radius:5px;}
+  .ph-chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:7px;}
+  .ph-chip{border:1px solid rgba(18,22,31,.12); border-radius:8px; padding:5px 10px; font:inherit; font-size:12.5px; font-weight:600; color:#374151; cursor:pointer; display:inline-flex; align-items:center; gap:6px;}
+  .ph-chip b{font-family:ui-monospace,monospace; color:#12161F;}
+  .ph-chip .ph-chip-ng{color:#B42318; font-weight:700; font-size:11.5px;}
+  .ph-chip .ph-chip-pk{color:#9a6700; font-size:11px;}
+  .ph-chip.on{outline:2px solid #2c6fcb; outline-offset:0;}
+  .ph-nostock{font-size:12px; color:#9AA3B2; font-style:italic;}
+  .ph-kho-panel{margin-top:8px; border:1px solid #e3e8ef; border-radius:8px; background:#fff; overflow:hidden;}
+  .ph-kho-panel .ph-detail-label{padding:6px 8px 4px 10px;}
+  .ph-kho-panel .ph-detail-label-text{flex:1 1 auto; min-width:0;}
+  .ph-kho-panel .ph-shot-btn{font-size:15px; padding:3px 8px; line-height:1.2;}
+  .ph-locs td.ph-oqc-ng{color:#B42318; font-weight:700;}
+  .ph-empty-note{padding:16px 4px;}
+
+  /* Thanh tab dưới đáy (điện thoại) */
+  @media (max-width: 700px){
+    body{padding:10px 10px calc(76px + env(safe-area-inset-bottom));}
+    .ph-tabs{position:fixed; left:0; right:0; bottom:0; z-index:80; margin:0; gap:0; background:#fff; border-top:1px solid #dfe3ea; border-bottom:none; box-shadow:0 -4px 14px rgba(0,0,0,.06); padding-bottom:env(safe-area-inset-bottom);}
+    .ph-tab-btn{flex:1 1 0; padding:12px 6px 13px; font-size:14px; border-bottom:none; border-top:3px solid transparent; margin:0;}
+    .ph-tab-btn.ph-tab-active{border-top-color:#2c6fcb; background:#f3f7fd;}
+    .ph-head h1{font-size:16px;}
+    /* Không bẻ giữa chữ ("PAS S", số PO gãy đôi) — chỉ xuống dòng ở khoảng trắng */
+    .ph-locs th, .ph-locs td{word-break:normal; overflow-wrap:normal;}
+  }
+  .ph-pick-kho-hdr{justify-content:flex-start;}
+  .ph-pick-kho-hdr > span{flex:1 1 auto;}
 </style>
 </head>
 <body>
-  <div class="ph-version" id="ph-version" title="Phiên bản trang Tổng hợp 3 Plan"></div>
-  <h1>Tổng hợp 3 Plan — Xem theo Container</h1>
+  <div class="ph-head">
+    <h1>Tổng hợp 3 Plan</h1>
+    <div class="ph-version" id="ph-version" title="Phiên bản trang Tổng hợp 3 Plan"></div>
+  </div>
   <div class="ph-meta" id="ph-meta">Trang này luôn lấy dữ liệu trực tiếp từ Cloud — cần kết nối trước khi xem.</div>
 
   <div class="ph-connect" id="ph-connect">
@@ -230,15 +324,20 @@
   </div>
 
   <div id="ph-app" style="display:none;">
-    <div class="ph-snapshot" id="ph-snapshot"></div>
-    <div class="ph-toolbar">
-      <button id="ph-refresh-btn" type="button">🔄 Làm mới</button>
-      <span id="ph-refresh-status"></span>
+    <div class="ph-bar">
+      <div class="ph-bar-info">
+        <div class="ph-bar-line" id="ph-snapshot"></div>
+        <div class="ph-bar-line" id="ph-refresh-status"></div>
+      </div>
       <div class="ph-presence" id="ph-presence">
-        <button type="button" class="ph-presence-btn" id="ph-presence-btn"><span class="ph-presence-dot"></span><span><b id="ph-presence-n">0</b> online</span></button>
+        <button type="button" class="ph-presence-btn" id="ph-presence-btn"><span class="ph-presence-dot"></span><span><b id="ph-presence-n">0</b></span></button>
         <div class="ph-presence-pop" id="ph-presence-pop" style="display:none;"></div>
       </div>
-      <button id="ph-disconnect-btn" type="button" class="ph-link-btn">Ngắt kết nối</button>
+      <button id="ph-refresh-btn" type="button" class="ph-icon-btn" title="Làm mới dữ liệu từ Cloud">🔄</button>
+      <div class="ph-menu">
+        <button id="ph-menu-btn" type="button" class="ph-icon-btn" title="Thêm">⋯</button>
+        <div class="ph-menu-pop" id="ph-menu-pop" style="display:none;"><button id="ph-disconnect-btn" type="button">Ngắt kết nối Cloud</button></div>
+      </div>
     </div>
 
     <div class="ph-tabs" id="ph-tabs">
@@ -247,7 +346,22 @@
     </div>
 
     <div id="ph-tab-cont">
-      <input id="ph-search" type="text" placeholder="Tìm theo VNC, CSR, mã hàng...">
+      <div class="ph-sticky" id="ph-sticky">
+        <input id="ph-search" type="search" placeholder="🔍 Tìm VNC, CSR, mã hàng, PO..." autocomplete="off">
+        <div class="ph-filters" id="ph-filters">
+          <button type="button" class="ph-fchip" data-f="day" data-v="">Tất cả ngày</button>
+          <button type="button" class="ph-fchip" data-f="day" data-v="today">Hôm nay</button>
+          <button type="button" class="ph-fchip" data-f="day" data-v="tomorrow">Ngày mai</button>
+          <span class="ph-fsep"></span>
+          <button type="button" class="ph-fchip" data-f="type" data-v="FC">FC</button>
+          <button type="button" class="ph-fchip" data-f="type" data-v="HCP">HCP</button>
+          <button type="button" class="ph-fchip" data-f="type" data-v="Row">Row</button>
+          <span class="ph-fsep"></span>
+          <button type="button" class="ph-fchip" data-f="short">⚠ Chỉ cont Thiếu</button>
+          <button type="button" class="ph-fchip" data-f="picking">⏳ Đang pick</button>
+        </div>
+        <div class="ph-count" id="ph-count"></div>
+      </div>
       <div id="ph-cont-list"></div>
     </div>
 
@@ -274,7 +388,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v4.25';
+  var PH_VERSION = 'v4.26';
   var PH_VERSION_DATE = '05/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -519,32 +633,6 @@
     });
     return groups;
   };
-  var phGroupBodyHtml = function(item, po, qty, cbm, locs, uidPrefix, khoMeta, ebPo){
-    // Hiện kèm End Buyer PO: "4500307323 (52155219)"
-    var poLabel = po ? (ebPo && ebPo !== po ? po + ' (' + ebPo + ')' : po) : '—';
-    var groups = phKhoGroups(locs, khoMeta.khoLabels);
-    var totalCols = 4 + khoMeta.khoLabels.length;
-    var khoTds = khoMeta.khoLabels.map(function(label, i){
-      var g = groups[label];
-      var bg = 'background:' + khoMeta.khoColors[label] + ';';
-      var lbl = '<span class="ph-td-label">' + phEsc(label) + '</span>';
-      if(!g.locs.length) return '<td class="ph-num" style="' + bg + '">' + lbl + '0</td>';
-      var detailId = uidPrefix + '-' + i;
-      return '<td class="ph-num ph-kho-cell" data-target="' + detailId + '" style="' + bg + '" title="Bấm để xem Locator/OQC/SL tồn">' + lbl + phFmt(g.qty) + '</td>';
-    }).join('');
-    var detailRows = khoMeta.khoLabels.map(function(label, i){
-      var g = groups[label];
-      if(!g.locs.length) return '';
-      var detailId = uidPrefix + '-' + i;
-      var body = g.locs.map(function(l){
-        if(l.picked) return '<tr' + phLocClickAttrs([l]).replace('class="ph-loc-click"', 'class="ph-loc-click ph-loc-picked"').replace(/ title="[^"]*"/, ' title="Đã scan pick (CR) cho container — không tính vào tồn. Bấm để xem GI"') + '><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + ' ' + phPickedTagHtml(l.ref) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">(' + phFmt(l.qty) + ')</td></tr>';
-        return '<tr' + phLocClickAttrs([l]) + '><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>';
-      }).join('');
-      return '<tr class="ph-detail-row" id="' + detailId + '" style="display:none;"><td colspan="' + totalCols + '"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(item) + ' · PO ' + phEsc(poLabel) + '</span><button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷 Lưu ảnh</button><button class="ph-shot-btn" data-share="1" type="button" title="Chia sẻ ảnh bảng này sang Zalo/Telegram...">📤 Chia sẻ</button></div><div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></div></td></tr>';
-    }).join('');
-    return '<tr><td><span class="ph-td-label">Item No.</span>' + phEsc(item) + '</td><td><span class="ph-td-label">Cust PO</span>' + phEsc(poLabel) + '</td><td class="ph-num"><span class="ph-td-label">SL Plan</span>' + phFmt(qty) + '</td><td class="ph-num"><span class="ph-td-label">CBM</span>' + phFmtDec(cbm, 2) + '</td>' + khoTds + '</tr>' + detailRows;
-  };
-
   var phBuildContainers = function(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx, manualKho){
     var contMap = {};
     ['Row', 'FC', 'HCP'].forEach(function(type){
@@ -575,9 +663,10 @@
         if(r.invoice && entry.invoices.indexOf(r.invoice) === -1) entry.invoices.push(r.invoice);
         if(r.csr && entry.csrs.indexOf(r.csr) === -1) entry.csrs.push(r.csr);
         var itemPoKey = r.item + '||' + (r.custPo || '');
-        if(!entry.items[itemPoKey]) entry.items[itemPoKey] = { item: r.item, po: r.custPo || '', ebPo: '', qty: 0, cbm: 0 };
+        if(!entry.items[itemPoKey]) entry.items[itemPoKey] = { item: r.item, po: r.custPo || '', ebPo: '', qty: 0, cbm: 0, picked: 0 };
         if(!entry.items[itemPoKey].ebPo && r.endBuyerPo) entry.items[itemPoKey].ebPo = String(r.endBuyerPo).trim();
         entry.items[itemPoKey].qty += planQty;
+        entry.items[itemPoKey].picked += contribution;
         entry.items[itemPoKey].cbm += (parseFloat(r.cbm) || 0);
       });
     });
@@ -600,7 +689,7 @@
 
       var items = Object.keys(entry.items).map(function(k){
         var it = entry.items[k];
-        return { item: it.item, po: it.po, ebPo: it.ebPo, qty: it.qty, cbm: it.cbm, locs: phLocatorDetail(invIdx, it.item, it.po, true) };
+        return { item: it.item, po: it.po, ebPo: it.ebPo, qty: it.qty, cbm: it.cbm, picked: it.picked, locs: phLocatorDetail(invIdx, it.item, it.po, true) };
       });
 
       var manualKhoVal = manualKho && manualKho[instanceKey];
@@ -612,20 +701,74 @@
         type: entry.type, cNo: entry.cNo, status: status,
         loadDate: entry.loadDate, planTime: entry.planTime,
         invoice: entry.invoices.join(', ') || '—', csr: entry.csrs.join(', ') || '—',
-        planQty: entry.planQty, items: items, topKho: topKho, autoKho: autoKho, isManualKho: isManualKho
+        planQty: entry.planQty, picked: entry.contribution, items: items, topKho: topKho, autoKho: autoKho, isManualKho: isManualKho
       });
     });
     rows.sort(function(a, b){ return phDateTimeSortKey(a.loadDate, a.planTime) - phDateTimeSortKey(b.loadDate, b.planTime); });
+    // Đủ/Thiếu theo từng mã (item + PO) — tính CHUNG mọi container còn đang chờ (giống cột Chênh lệch
+    // của Excel): tồn PASS chưa pick phải >= tổng phần còn cần pick của mã đó ở tất cả container.
+    var needByKey = {}, stockByKey = {};
+    rows.forEach(function(row){
+      row.items.forEach(function(it){
+        var k = String(it.item || '').toLowerCase() + '␟' + String(it.po || '').toLowerCase();
+        it.need = Math.max(0, (it.qty || 0) - (it.picked || 0));
+        needByKey[k] = (needByKey[k] || 0) + it.need;
+        if(stockByKey[k] === undefined){
+          stockByKey[k] = (it.locs || []).reduce(function(s, l){ return s + ((!l.picked && String(l.oqc || '').toUpperCase() === 'PASS') ? (l.qty || 0) : 0); }, 0);
+        }
+        it.key = k;
+      });
+    });
+    rows.forEach(function(row){
+      row.items.forEach(function(it){
+        it.passStock = stockByKey[it.key];
+        it.totalNeed = needByKey[it.key];
+        it.short = it.need > 0 && it.passStock < it.totalNeed ? (it.totalNeed - it.passStock) : 0;
+      });
+      row.short = row.items.some(function(it){ return it.short > 0; });
+    });
     return rows;
+  };
+
+  var phItemHtml = function(it, uidPrefix, khoMeta){
+    var po = it.po, ebPo = it.ebPo;
+    var poLabel = po ? (ebPo && ebPo !== po ? po + ' (' + ebPo + ')' : po) : '—';
+    var groups = phKhoGroups(it.locs, khoMeta.khoLabels);
+    var chips = '', panels = '';
+    khoMeta.khoLabels.forEach(function(label, i){
+      var g = groups[label];
+      if(!g.locs.length) return; // bỏ khu không có hàng (trước đây hiện 1 dòng "0")
+      var ng = 0, pk = 0;
+      g.locs.forEach(function(l){ if(l.picked) pk += (l.qty || 0); else if(String(l.oqc || '').toUpperCase() === 'NG') ng += (l.qty || 0); });
+      var detailId = uidPrefix + '-' + i;
+      chips += '<button type="button" class="ph-chip" data-target="' + detailId + '" style="background:' + khoMeta.khoColors[label] + ';" title="Bấm để xem Locator/OQC/SL tồn">' +
+        phEsc(label) + ' <b>' + phFmt(g.qty) + '</b>' + (ng > 0 ? '<span class="ph-chip-ng">NG ' + phFmt(ng) + '</span>' : '') +
+        (pk > 0 ? '<span class="ph-chip-pk">(+' + phFmt(pk) + ' đã pick)</span>' : '') + '</button>';
+      var body = g.locs.map(function(l){
+        var oqcTd = '<td' + (String(l.oqc || '').toUpperCase() === 'NG' ? ' class="ph-oqc-ng"' : '') + '>' + phEsc(l.oqc || '—') + '</td>';
+        if(l.picked) return '<tr' + phLocClickAttrs([l]).replace('class="ph-loc-click"', 'class="ph-loc-click ph-loc-picked"').replace(/ title="[^"]*"/, ' title="Đã scan pick (CR) cho container — không tính vào tồn. Bấm để xem GI"') + '><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + ' ' + phPickedTagHtml(l.ref) + '</td>' + oqcTd + '<td class="ph-num">(' + phFmt(l.qty) + ')</td></tr>';
+        return '<tr' + phLocClickAttrs([l]) + '><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + '</td>' + oqcTd + '<td class="ph-num">' + phFmt(l.qty) + '</td></tr>';
+      }).join('');
+      panels += '<div class="ph-kho-panel" id="' + detailId + '" style="display:none;"><div class="ph-detail-label"><span class="ph-detail-label-text">' + phEsc(label) + ' — ' + phEsc(it.item) + ' · PO ' + phEsc(poLabel) + '</span>' +
+        '<button class="ph-shot-btn" type="button" title="Lưu ảnh bảng Locator/OQC/SL tồn này">📷</button><button class="ph-shot-btn" data-share="1" type="button" title="Chia sẻ ảnh bảng này sang Zalo/Telegram...">📤</button></div>' +
+        '<div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + body + '</tbody></table></div></div>';
+    });
+    var shortTag = it.short > 0 ? '<span class="ph-item-short-tag" title="Tồn PASS chưa pick ' + phFmt(it.passStock) + ' < cần pick ' + phFmt(it.totalNeed) + ' (tính chung mọi container đang chờ)">Thiếu ' + phFmt(it.short) + '</span>' : '';
+    return '<div class="ph-item' + (it.short > 0 ? ' ph-item-short' : '') + '">' +
+      '<div class="ph-item-top"><span class="ph-item-no">' + phEsc(it.item) + '</span><span class="ph-item-po">PO ' + phEsc(poLabel) + '</span>' + shortTag +
+      '<span class="ph-item-qty">Pick <b>' + phFmt(it.picked) + '/' + phFmt(it.qty) + '</b> · ' + phFmtDec(it.cbm, 2) + ' CBM</span></div>' +
+      '<div class="ph-chips">' + (chips || '<span class="ph-nostock">Không có tồn kho</span>') + '</div>' + panels + '</div>';
+  };
+
+  var phIsoDay = function(offset){
+    var d = new Date(); d.setDate(d.getDate() + (offset || 0));
+    var p = function(n){ return String(n).padStart(2, '0'); };
+    return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear();
   };
 
   var phBuildContainerRowHtml = function(row, khoMeta, uidState){
     var totalCbm = row.items.reduce(function(s, it){ return s + (it.cbm || 0); }, 0);
     var contColor = PH_TYPE_COLORS[row.type] || '#8892A0';
-    var cardBg = PH_CARD_BG_PALETTE[uidState.c % PH_CARD_BG_PALETTE.length];
-    var cardBorder = PH_CARD_BORDER_PALETTE[uidState.c % PH_CARD_BORDER_PALETTE.length];
-    var rowBg = cardBg;
-    var detailBg = phRgba(cardBg, 0.5);
     var detailId = 'cd' + (uidState.c++);
     var khoManualVal = row.isManualKho ? row.topKho : '';
     var khoAutoLabel = row.autoKho ? row.autoKho.replace('Kho ', '') : '—';
@@ -635,34 +778,83 @@
     var khoSelect = '<select class="ph-kho-select" data-auto-kho="' + phEsc(row.autoKho || '') + '" title="Kho tự động theo SL tồn nhiều nhất — có thể chọn tay để xem thử">' +
       '<option value=""' + (!row.isManualKho ? ' selected' : '') + '>' + phEsc(khoAutoLabel) + (row.isManualKho ? '' : ' (auto)') + '</option>' +
       khoOptionsHtml + '</select>';
-    var khoTh = khoMeta.khoLabels.map(function(label){ return '<th style="background:' + khoMeta.khoColors[label] + '; text-align:right;">' + phEsc(label) + '</th>'; }).join('');
-    var itemsHtml = row.items.map(function(it){
-      var uidPrefix = 'k' + (uidState.n++);
-      return '<tbody class="ph-item-group">' + phGroupBodyHtml(it.item, it.po, it.qty, it.cbm, it.locs, uidPrefix, khoMeta, it.ebPo) + '</tbody>';
-    }).join('');
-    return '<tr class="ph-cont-row" data-target="' + detailId + '" style="background:' + rowBg + '; border-color:' + cardBorder + ';">' +
-        '<td class="ph-arrow-cell" style="border-left:4px solid ' + contColor + ';"><span class="ph-arrow">▸</span></td>' +
-        '<td><span class="ph-td-label">Loại</span><span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span></td>' +
-        '<td class="ph-vnc"><span class="ph-td-label">VNC</span>' + phEsc(row.invoice) + '</td>' +
-        '<td class="ph-csr"><span class="ph-td-label">CSR</span>' + phEsc(row.csr) + '</td>' +
-        '<td class="ph-date"><span class="ph-td-label">Ngày · Giờ</span>' + phEsc(row.loadDate) + ' · ' + phEsc(row.planTime) + '</td>' +
-        '<td><span class="ph-td-label">Kho</span>' + khoSelect + '</td>' +
-        '<td class="ph-num"><span class="ph-td-label">SL Plan</span>' + phFmt(row.planQty) + '</td>' +
-        '<td class="ph-num"><span class="ph-td-label">CBM</span>' + phFmtDec(totalCbm, 2) + '</td>' +
-      '</tr>' +
-      '<tr class="ph-cont-detail" id="' + detailId + '" style="display:none; background:' + detailBg + '; border-color:' + cardBorder + ';">' +
-        '<td colspan="8"><table class="ph-items"><thead><tr><th>Item No.</th><th>Cust PO</th><th style="text-align:right;">SL Plan</th><th style="text-align:right;">CBM</th>' + khoTh + '</tr></thead>' + itemsHtml + '</table></td>' +
-      '</tr>';
+    var itemsHtml = row.items.map(function(it){ return phItemHtml(it, 'k' + (uidState.n++), khoMeta); }).join('');
+    var kho = row.topKho ? row.topKho.replace('Kho ', '') : '';
+    var pct = row.planQty > 0 ? Math.min(100, (row.picked || 0) / row.planQty * 100) : 0;
+    var picking = row.status === 'inProgress';
+    var hay = [row.type, row.invoice, row.csr, row.loadDate, row.planTime, kho].concat(row.items.map(function(it){ return it.item + ' ' + it.po + ' ' + (it.ebPo || ''); })).join(' ').toLowerCase();
+    return '<div class="ph-card ' + (row.short ? 'ph-st-short' : 'ph-st-ok') + '" data-type="' + phEsc(row.type) + '" data-day="' + phEsc(row.loadDate) + '" data-short="' + (row.short ? 1 : 0) + '" data-picking="' + (picking ? 1 : 0) + '" data-hay="' + phEsc(hay) + '">' +
+      '<div class="ph-card-head" data-target="' + detailId + '">' +
+        '<div class="ph-l1"><span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span>' +
+          '<span class="ph-vnc">' + phEsc(row.invoice) + '</span><span class="ph-time">' + phEsc(row.planTime || '—') + '</span>' +
+          (kho ? '<span class="ph-kho-tag" title="Kho có nhiều tồn nhất">' + phEsc(kho) + '</span>' : '') +
+          '<span class="ph-st ' + (row.short ? 'ph-st-badge-short' : 'ph-st-badge-ok') + '">' + (row.short ? 'Thiếu' : 'Đủ') + '</span><span class="ph-arrow">▸</span></div>' +
+        '<div class="ph-l2"><span><b>' + phFmt(row.planQty) + '</b> pcs</span>·<span><b>' + phFmtDec(totalCbm, 2) + '</b> CBM</span>·<span class="ph-csr">' + phEsc(row.csr) + '</span>·<span>' + row.items.length + ' mã</span></div>' +
+        '<div class="ph-prog"><div class="ph-prog-track"><div class="ph-prog-fill' + (pct <= 0 ? ' ph-prog-zero' : '') + '" style="width:' + pct.toFixed(1) + '%;"></div></div><span>Pick <b>' + phFmt(row.picked) + '/' + phFmt(row.planQty) + '</b></span></div>' +
+      '</div>' +
+      '<div class="ph-card-body" id="' + detailId + '" style="display:none;">' +
+        '<div class="ph-card-tools">Ngày load ' + phEsc(row.loadDate) + ' · Kho: ' + khoSelect + '</div>' + itemsHtml +
+      '</div></div>';
   };
 
-  // KHÔNG còn chia theo Kho thành nhiều bảng nữa — chỉ 1 danh sách DUY NHẤT, sắp theo Ngày·Giờ tăng
-  // dần (đã sort sẵn ở phBuildContainers). Cột "Kho" vẫn giữ lại (auto-detect + chọn tay để xem thử)
-  // như 1 cột thông tin bình thường, không còn tác dụng "chuyển dòng sang bảng khác" nữa.
+  // Danh sách thẻ container, chia theo NGÀY LOAD (tiêu đề ngày dính trên đầu khi cuộn), trong ngày sắp
+  // theo Giờ tăng dần (đã sort sẵn ở phBuildContainers).
   var phBuildContainerListHtml = function(rows, khoMeta){
     var uidState = { n: 0, c: 0 };
-    var rowsHtml = rows.map(function(row){ return phBuildContainerRowHtml(row, khoMeta, uidState); }).join('');
-    return '<div class="ph-scroll"><table class="ph-cont-table"><thead><tr><th></th><th>Loại</th><th>VNC</th><th>CSR</th><th>Ngày · Giờ</th><th>Kho</th><th style="text-align:right">SL Plan</th><th style="text-align:right">CBM</th></tr></thead>' +
-      '<tbody>' + rowsHtml + '</tbody></table></div>';
+    var byDay = [], dayMap = {};
+    rows.forEach(function(row){
+      var d = row.loadDate || '—';
+      if(!dayMap[d]){ dayMap[d] = { day: d, rows: [] }; byDay.push(dayMap[d]); }
+      dayMap[d].rows.push(row);
+    });
+    if(!rows.length) return '<div class="ph-empty-note">Không còn container nào đang chờ pick.</div>';
+    return byDay.map(function(g){
+      var nShort = g.rows.filter(function(r){ return r.short; }).length;
+      var label = g.day === phIsoDay(0) ? ' (hôm nay)' : (g.day === phIsoDay(1) ? ' (ngày mai)' : '');
+      return '<div class="ph-day" data-day="' + phEsc(g.day) + '"><div class="ph-day-hdr">📅 ' + phEsc(g.day) + phEsc(label) + ' <span>· ' + g.rows.length + ' cont</span>' +
+        (nShort ? ' <span class="ph-day-short">· ' + nShort + ' thiếu</span>' : '') + '</div>' +
+        g.rows.map(function(row){ return phBuildContainerRowHtml(row, khoMeta, uidState); }).join('') + '</div>';
+    }).join('') + '<div class="ph-empty-note" id="ph-filter-empty" style="display:none;">Không có container nào khớp bộ lọc.</div>';
+  };
+
+  // ===== Bộ lọc nhanh + tìm kiếm (nhớ lựa chọn trên máy) =====
+  var PH_FILTER_KEY = 'tp3_cont_filters_v1';
+  var phFilters = { day: '', types: [], short: false, picking: false };
+  try{ var savedF = JSON.parse(localStorage.getItem(PH_FILTER_KEY) || 'null'); if(savedF && typeof savedF === 'object') phFilters = Object.assign(phFilters, savedF); }catch(e){}
+  var phApplyFilters = function(){
+    var q = (document.getElementById('ph-search').value || '').trim().toLowerCase();
+    var terms = q.split(/\s+/).filter(Boolean);
+    var dayWant = phFilters.day === 'today' ? phIsoDay(0) : (phFilters.day === 'tomorrow' ? phIsoDay(1) : '');
+    var shown = 0, total = 0, shortShown = 0;
+    document.querySelectorAll('#ph-cont-list .ph-day').forEach(function(dayEl){
+      var any = 0;
+      dayEl.querySelectorAll('.ph-card').forEach(function(card){
+        total++;
+        var ok = (!dayWant || card.dataset.day === dayWant) &&
+          (!phFilters.types.length || phFilters.types.indexOf(card.dataset.type) !== -1) &&
+          (!phFilters.short || card.dataset.short === '1') &&
+          (!phFilters.picking || card.dataset.picking === '1') &&
+          terms.every(function(t){ return card.dataset.hay.indexOf(t) !== -1; });
+        card.style.display = ok ? '' : 'none';
+        if(ok){ any++; shown++; if(card.dataset.short === '1') shortShown++; }
+      });
+      dayEl.style.display = any ? '' : 'none';
+    });
+    var emptyEl = document.getElementById('ph-filter-empty');
+    if(emptyEl) emptyEl.style.display = (total && !shown) ? '' : 'none';
+    var cnt = document.getElementById('ph-count');
+    if(cnt) cnt.textContent = total ? ('Hiện ' + shown + '/' + total + ' container' + (shortShown ? ' · ' + shortShown + ' thiếu' : '')) : '';
+    document.querySelectorAll('#ph-filters .ph-fchip').forEach(function(b){
+      var f = b.dataset.f, on;
+      if(f === 'day') on = (b.dataset.v || '') === (phFilters.day || '');
+      else if(f === 'type') on = phFilters.types.indexOf(b.dataset.v) !== -1;
+      else on = !!phFilters[f];
+      b.classList.toggle('on', on);
+    });
+  };
+  var phSyncStickyH = function(){
+    var st = document.getElementById('ph-sticky');
+    if(st) document.documentElement.style.setProperty('--ph-sticky-h', st.offsetHeight + 'px');
   };
 
   // Tab "Tìm mã hàng" — tìm TRỰC TIẾP trên dữ liệu TỒN KHO (invIdx), KHÔNG qua Plan/container. Gom
@@ -783,7 +975,7 @@
     var btn = document.getElementById('ph-refresh-btn');
     var status = document.getElementById('ph-refresh-status');
     btn.disabled = true;
-    status.textContent = 'Đang tải dữ liệu từ Cloud...';
+    status.textContent = 'Đang tải từ Cloud...';
     var keys = [
       'tn5_dashboard_inventory_v1', 'tn5_dashboard_plans_v1', 'tn5_dashboard_manual_picked_v1',
       'tn5_dashboard_hidden_containers_v1', 'tn5_dashboard_spp_ok_v1', 'tn5_dashboard_cont_ship_v1',
@@ -820,7 +1012,9 @@
       } else {
         listEl.innerHTML = phBuildContainerListHtml(rows, khoMeta);
       }
-      document.getElementById('ph-meta').textContent = 'Tự lấy dữ liệu trực tiếp từ Cloud mỗi lần mở/làm mới · ' + phFmt(rows.length) + ' container (đã bỏ container "Pick xong") · Sắp xếp theo Ngày · Giờ tăng dần · Bấm vào 1 dòng để mở/đóng xem chi tiết mã hàng · Bấm số lượng của 1 kho để xem Locator/OQC/SL tồn';
+      phApplyFilters();
+      phSyncStickyH();
+      document.getElementById('ph-meta').style.display = 'none';
 
       var snapEl = document.getElementById('ph-snapshot');
       var snapDate = currentData && currentData.snapshot_date;
@@ -828,16 +1022,16 @@
         var subParts = [];
         if(meta.updatedAtText) subParts.push(meta.updatedAtText);
         if(meta.inventoryFileName) subParts.push('File: ' + meta.inventoryFileName);
-        snapEl.innerHTML = 'NGÀY CHỐT DỮ LIỆU: <b>' + phEsc(snapDate) + '</b>' +
-          (subParts.length ? '<div class="ph-snapshot-sub">' + phEsc(subParts.join(' · ')) + '</div>' : '');
-        snapEl.style.display = 'block';
+        snapEl.innerHTML = 'Chốt <b>' + phEsc(snapDate) + '</b>' + (meta.updatedAtText ? ' · ' + phEsc(meta.updatedAtText) : '');
+        snapEl.title = subParts.join(' · ');
       } else {
-        snapEl.style.display = 'none';
-        snapEl.innerHTML = '';
+        snapEl.innerHTML = 'Chưa có dữ liệu tồn kho';
+        snapEl.title = '';
       }
 
       btn.disabled = false;
-      status.textContent = '✓ Đã tải lúc ' + new Date().toLocaleString('vi-VN');
+      var z2 = function(n){ return String(n).padStart(2, '0'); }, nw = new Date();
+      status.textContent = '✓ Tải lúc ' + z2(nw.getHours()) + ':' + z2(nw.getMinutes()) + ' · ' + phFmt(rows.length) + ' cont đang chờ';
     }).catch(function(err){
       btn.disabled = false;
       status.textContent = '✗ Không tải được (kiểm tra mạng/thông tin kết nối) — Lỗi: ' + err.message;
@@ -894,7 +1088,7 @@
     phLastInvIdx = null;
     phLastKhoMeta = null;
     document.getElementById('ph-snapshot').innerHTML = '';
-    document.getElementById('ph-snapshot').style.display = 'none';
+    document.getElementById('ph-meta').style.display = '';
     phShowConnect();
   });
   document.getElementById('ph-refresh-btn').addEventListener('click', phLoad);
@@ -910,15 +1104,27 @@
 
   // ===== Tìm kiếm + mở/đóng dòng + xem Locator theo kho — gắn trên document để vẫn hoạt động đúng
   // sau khi "Làm mới" dựng lại toàn bộ nội dung #ph-cont-list. =====
-  document.getElementById('ph-search').addEventListener('input', function(e){
-    var q = e.target.value.trim().toLowerCase();
-    document.querySelectorAll('.ph-cont-row').forEach(function(row){
-      var detail = document.getElementById(row.dataset.target);
-      var hay = row.textContent.toLowerCase() + (detail ? detail.textContent.toLowerCase() : '');
-      var hide = !!q && hay.indexOf(q) === -1;
-      row.style.display = hide ? 'none' : '';
-      if(hide && detail){ detail.style.display = 'none'; row.classList.remove('ph-open'); }
-    });
+  document.getElementById('ph-search').addEventListener('input', phApplyFilters);
+  document.getElementById('ph-filters').addEventListener('click', function(e){
+    var b = e.target.closest('.ph-fchip');
+    if(!b) return;
+    var f = b.dataset.f;
+    if(f === 'day') phFilters.day = b.dataset.v || '';
+    else if(f === 'type'){
+      var i = phFilters.types.indexOf(b.dataset.v);
+      if(i === -1) phFilters.types.push(b.dataset.v); else phFilters.types.splice(i, 1);
+    } else phFilters[f] = !phFilters[f];
+    try{ localStorage.setItem(PH_FILTER_KEY, JSON.stringify(phFilters)); }catch(err){}
+    phApplyFilters();
+  });
+  window.addEventListener('resize', phSyncStickyH);
+  phApplyFilters();
+  document.getElementById('ph-menu-btn').addEventListener('click', function(e){
+    e.stopPropagation(); var pop = document.getElementById('ph-menu-pop'); pop.style.display = pop.style.display === 'none' ? '' : 'none';
+  });
+  document.addEventListener('click', function(e){
+    var pop = document.getElementById('ph-menu-pop');
+    if(pop && !e.target.closest('.ph-menu')) pop.style.display = 'none';
   });
   document.getElementById('ph-item-search').addEventListener('input', phRenderItemSearch);
   (function(){
@@ -970,19 +1176,19 @@
   });
   document.addEventListener('click', function(e){
     if(e.target.closest('.ph-kho-select')) return;
-    var khoCell = e.target.closest('.ph-kho-cell');
-    if(khoCell){
-      var target = document.getElementById(khoCell.dataset.target);
-      if(target) target.style.display = (target.style.display === 'none') ? 'table-row' : 'none';
+    var chip = e.target.closest('.ph-chip');
+    if(chip){
+      var target = document.getElementById(chip.dataset.target);
+      if(target){ var show = target.style.display === 'none'; target.style.display = show ? '' : 'none'; chip.classList.toggle('on', show); }
       return;
     }
-    var row = e.target.closest('.ph-cont-row');
-    if(row){
-      var detail = document.getElementById(row.dataset.target);
+    var head = e.target.closest('.ph-card-head');
+    if(head){
+      var detail = document.getElementById(head.dataset.target);
       if(!detail) return;
       var isOpen = detail.style.display !== 'none';
       detail.style.display = isOpen ? 'none' : '';
-      row.classList.toggle('ph-open', !isOpen);
+      head.parentElement.classList.toggle('ph-open', !isOpen);
     }
   });
 
