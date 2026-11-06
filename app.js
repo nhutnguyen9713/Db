@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.98';
+const APP_VERSION = 'v5.99';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3888,6 +3888,12 @@ function contShipBuildFromRecords(records){
 
 // Suy ra danh sách Kho (VD: "Kho 2B", "Kho 2B + Kho 3A") từ tập hợp Locator Name gom được của các
 // Reference vừa khớp — dùng đúng logic đoán Kho theo tiền tố locator đã có sẵn (resolveKhoForLocator).
+// v5.99: kho load của cont (theo Reference CR khớp dữ liệu Ship) dạng ngắn cho cột WH Excel: "3A", "2B + 3A"
+function v5LoadWhLabel(csr){
+  if(typeof contShipData === 'undefined' || !contShipData || !contShipData.byRef || !contShipData.byRefLocators) return '';
+  const refs = String(csr || '').split(',').map(x => x.trim().toUpperCase().replace(/[;,.\s]+$/, '')).filter(x => x && contShipData.byRef.has(x));
+  return refs.length ? contShipKhoLabelForRefs(refs, contShipData.byRefLocators).replace(/Kho /g, '') : '';
+}
 function contShipKhoLabelForRefs(refs, byRefLocators){
   const khoSet = new Set();
   const lookupMap = buildLocatorKhoMap();
@@ -6142,6 +6148,8 @@ async function exportCombinedPlanToExcel(mode){
       pickingText = `${Math.round(c.picked || 0)}/${Math.round(c.qty || 0)}`;
       // WH chỉ hiện tiền tố kho: "D3B-Loading" -> "D3B" (các kho khác tương tự).
       pickingWh = [...new Set(pickLocs.map(l => String(l).replace(/[-_\s]*loading\s*$/i, '').trim().toUpperCase()).filter(Boolean))].join(', ');
+      // v5.99: cont đã Load xong → WH = kho load (theo dữ liệu Ship), VD "3A"; Excel gộp ô WH cả cont.
+      if(c.isShipDone){ const lw = v5LoadWhLabel(c.csr); if(lw) pickingWh = lw; }
     }
     const itemValues = [
       r.item,
@@ -6169,6 +6177,7 @@ async function exportCombinedPlanToExcel(mode){
     imgRows.push({ values: rowValues, fill: fillColor, first: isGroupFirst, done: !!doneFill, day: dayLabel, dayText: c ? `📅 Ngày load ${dayLabel} — ${dayCount[dayLabel].size} container` : 'Mã chưa gán container' });
     if(XL){
       if(isGroupFirst) contSpans.push([row.number, row.number]); else contSpans[contSpans.length - 1][1] = row.number;
+      if(c && c.isShipDone && pickingWh) contSpans[contSpans.length - 1].loadWh = pickingWh;
       row.getCell(searchCol).value = [r.item, r.custpo, c && c.invoice, c && c.csr, pickingWh, c && c.type, c && c.loadDate].filter(Boolean).join(' ');
     }
     const pickingColNo = contHeaders.length + 4;
@@ -6224,7 +6233,17 @@ async function exportCombinedPlanToExcel(mode){
     // Cột WH: danh sách chọn 4 kho cho mọi dòng mã hàng (dòng chưa có kho thì chọn tay).
     const whColNo = headers1.indexOf('WH') + 1;
     const whFormula = '"' + WH_LIST.join(',') + '"';
-    contSpans.forEach(([a, b]) => {
+    contSpans.forEach(span => {
+      const [a, b] = span;
+      if(span.loadWh){
+        // v5.99: cont Load xong → 1 ô WH gộp cho cả cont, ghi kho load (VD "3A")
+        for(let rn = a; rn <= b; rn++) ws1.getCell(rn, whColNo).value = rn === a ? span.loadWh : null;
+        if(b > a) ws1.mergeCells(a, whColNo, b, whColNo);
+        const mc = ws1.getCell(a, whColNo);
+        mc.alignment = { vertical:'middle', horizontal:'center' };
+        mc.font = { bold:true, color:{ argb:'FF5B3F8C' } };
+        return;
+      }
       for(let rn = a; rn <= b; rn++){
         const wc = ws1.getCell(rn, whColNo);
         wc.dataValidation = { type:'list', allowBlank:true, showErrorMessage:false, formulae:[whFormula] };
