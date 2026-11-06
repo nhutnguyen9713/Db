@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.40';
+const APP_VERSION = 'v5.41';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18533,9 +18533,12 @@ try{ v5RenderSummary(); }catch(e){ console.error(e); }
 // ===== v5.40: bảng "Chi tiết kế hoạch xuất" có chế độ Thẻ — mỗi container 1 thẻ (vòng % pick,
 // trạng thái, giờ plan, Invoice, QTY/Mã/CTN/CBM, thanh tiến độ từng mã). Bấm thẻ để xổ bảng chi tiết
 // đủ cột của riêng container đó. Nút Bảng | Thẻ lưu ở localStorage tn5_v5_plan_view (mặc định Thẻ).
+// Hàm này có thể chạy khi trang khôi phục dữ liệu lúc mở (trước khi tới dòng khai báo ở cuối file),
+// nên không dựa vào biến var đã gán giá trị — dùng chuỗi trực tiếp và tạo Set khi cần.
 var V5_PLAN_VIEW_KEY = 'tn5_v5_plan_view';
-var v5PlanOpen = new Set();
-function v5PlanView(){ try{ return localStorage.getItem(V5_PLAN_VIEW_KEY) === 'table' ? 'table' : 'card'; }catch(e){ return 'card'; } }
+var v5PlanOpen;
+function v5PlanOpenSet(){ if(!v5PlanOpen) v5PlanOpen = new Set(); return v5PlanOpen; }
+function v5PlanView(){ try{ return localStorage.getItem('tn5_v5_plan_view') === 'table' ? 'table' : 'card'; }catch(e){ return 'card'; } }
 function v5PlanViewBarHtml(type, n){
   const v = v5PlanView();
   return `<div class="v5-pv-bar"><div class="v5-seg" role="tablist">
@@ -18566,7 +18569,7 @@ function v5PlanCardsHtml(type, groups, theadHtml){
     const st = v5PlanContStatus(type, g, pct);
     const ringCol = pct >= 100 ? 'var(--teal)' : pct >= 70 ? 'var(--amber-bright)' : pct > 0 ? 'var(--red)' : 'transparent';
     const domId = contDomId(type, g.cNo, g.date, g.time);
-    const open = v5PlanOpen.has(type + '|' + g.key);
+    const open = v5PlanOpenSet().has(type + '|' + g.key);
     const pctTxt = typeof pickPctLabel === 'function' ? pickPctLabel(pct) : Math.round(pct) + '%';
     html += `<div class="v5-pc${open ? ' open' : ''}" id="plan-cont-card-${domId}" data-v5-pc="${escapeAttrV5(type + '|' + g.key)}" style="--c:${g.color}">
       <div class="v5-pc-top">
@@ -18592,7 +18595,7 @@ function escapeAttrV5(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&
 document.addEventListener('click', (e) => {
   const vb = e.target.closest('[data-v5-planview]');
   if(vb){
-    try{ localStorage.setItem(V5_PLAN_VIEW_KEY, vb.dataset.v5Planview); }catch(err){}
+    try{ localStorage.setItem('tn5_v5_plan_view', vb.dataset.v5Planview); }catch(err){}
     const on = vb.dataset.v5Planview === 'card';
     document.querySelectorAll('#plan-overview-row .plan-card').forEach(c => { if(!c.classList.contains('plan-card-editing')) c.classList.toggle('v5-pv-card', on); });
     document.querySelectorAll('[data-v5-planview]').forEach(b => b.classList.toggle('on', b.dataset.v5Planview === vb.dataset.v5Planview));
@@ -18602,6 +18605,6 @@ document.addEventListener('click', (e) => {
   if(!card || e.target.closest('.item-link') || e.target.closest('.v5-pc-detail')) return;
   const k = card.dataset.v5Pc;
   const det = card.querySelector('.v5-pc-detail');
-  if(v5PlanOpen.has(k)){ v5PlanOpen.delete(k); card.classList.remove('open'); if(det) det.innerHTML = ''; }
-  else { v5PlanOpen.add(k); card.classList.add('open'); if(det) det.innerHTML = (v5PlanCardsHtml._cache || {})[k] || ''; }
+  if(v5PlanOpenSet().has(k)){ v5PlanOpenSet().delete(k); card.classList.remove('open'); if(det) det.innerHTML = ''; }
+  else { v5PlanOpenSet().add(k); card.classList.add('open'); if(det) det.innerHTML = (v5PlanCardsHtml._cache || {})[k] || ''; }
 });
