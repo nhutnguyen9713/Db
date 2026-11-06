@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.10';
+const APP_VERSION = 'v5.20';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18142,4 +18142,96 @@ document.addEventListener('click', (e) => {
       if(!cur || cur === 'light'){ if(typeof tn5ApplyTheme === 'function') tn5ApplyTheme('dark'); }
     }
   }catch(e){}
+})();
+
+
+/* ============================================================
+   v5.20 — Hiệu ứng nền: Cực quang / Sàn lưới 3D / Chòm sao (chọn trong nút Giao diện, lưu tn5_v5_bg).
+   Lớp nền là 1 thẻ fixed z-index:-1 nằm sau toàn bộ nội dung, không bắt chuột. Tự dừng chuyển động khi
+   tab bị ẩn hoặc máy bật "giảm chuyển động".
+   ============================================================ */
+const V5_BG_LIST = [
+  { id: 'aurora', label: 'Cực quang' },
+  { id: 'grid', label: 'Sàn lưới 3D' },
+  { id: 'stars', label: 'Chòm sao' },
+  { id: 'none', label: 'Không hiệu ứng' }
+];
+const V5_BG_KEY = 'tn5_v5_bg';
+let v5BgRaf = null;
+function v5BgCurrent(){ try{ const v = localStorage.getItem(V5_BG_KEY); return V5_BG_LIST.some(b => b.id === v) ? v : 'aurora'; }catch(e){ return 'aurora'; } }
+function v5BgStopStars(){ if(v5BgRaf){ cancelAnimationFrame(v5BgRaf); v5BgRaf = null; } }
+function v5BgStartStars(cv){
+  v5BgStopStars();
+  const g = cv.getContext('2d');
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W = 0, H = 0, pts = [], dpr = Math.min(2, window.devicePixelRatio || 1);
+  const resize = () => {
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const n = Math.round(Math.min(90, Math.max(28, W * H / 16000)));
+    pts = Array.from({ length: n }, () => ({ x: Math.random() * W, y: Math.random() * H, vx: (Math.random() - .5) * .25, vy: (Math.random() - .5) * .25, r: Math.random() * 1.6 + .6 }));
+  };
+  resize();
+  cv._v5Resize = resize;
+  let last = 0;
+  const draw = (t) => {
+    v5BgRaf = requestAnimationFrame(draw);
+    if(document.hidden || t - last < 33) return;
+    last = t;
+    const dark = !!document.body.getAttribute('data-theme');
+    const dot = dark ? '150,190,255' : '60,80,120', link = dark ? '120,160,255' : '80,100,150';
+    g.clearRect(0, 0, W, H);
+    pts.forEach(p => {
+      if(!reduce){ p.x += p.vx; p.y += p.vy; }
+      if(p.x < -20) p.x = W + 20; if(p.x > W + 20) p.x = -20;
+      if(p.y < -20) p.y = H + 20; if(p.y > H + 20) p.y = -20;
+    });
+    const D = 140;
+    for(let i = 0; i < pts.length; i++){
+      const a = pts[i];
+      for(let j = i + 1; j < pts.length; j++){
+        const b = pts[j], dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy;
+        if(d2 < D * D){
+          g.strokeStyle = `rgba(${link},${(1 - Math.sqrt(d2) / D) * (dark ? .28 : .18)})`;
+          g.lineWidth = 1; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+        }
+      }
+      g.fillStyle = `rgba(${dot},${dark ? .75 : .45})`;
+      g.beginPath(); g.arc(a.x, a.y, a.r, 0, Math.PI * 2); g.fill();
+    }
+    if(reduce){ cancelAnimationFrame(v5BgRaf); v5BgRaf = null; }
+  };
+  v5BgRaf = requestAnimationFrame(draw);
+}
+function v5ApplyBg(id, persist){
+  let el = document.getElementById('v5-bg');
+  if(!el){ el = document.createElement('div'); el.id = 'v5-bg'; el.setAttribute('aria-hidden', 'true'); document.body.insertBefore(el, document.body.firstChild); }
+  v5BgStopStars();
+  el.dataset.bg = id;
+  document.body.dataset.v5bg = id;
+  if(id === 'aurora') el.innerHTML = '<i class="a1"></i><i class="a2"></i><i class="a3"></i><i class="a4"></i>';
+  else if(id === 'grid') el.innerHTML = '<div class="v5-horizon"></div><div class="v5-floor"></div><div class="v5-scan"></div>';
+  else if(id === 'stars'){ el.innerHTML = '<canvas></canvas>'; v5BgStartStars(el.querySelector('canvas')); }
+  else el.innerHTML = '';
+  if(persist){ try{ localStorage.setItem(V5_BG_KEY, id); }catch(e){} }
+  document.querySelectorAll('.v5-bg-option').forEach(b => b.classList.toggle('active', b.dataset.v5bg === id));
+}
+(function v5InitBg(){
+  const panel = document.getElementById('theme-panel');
+  if(panel){
+    const sec = document.createElement('div');
+    sec.className = 'v5-bg-sec';
+    sec.innerHTML = '<div class="theme-panel-head">Hiệu ứng nền</div>' + V5_BG_LIST.map(b =>
+      `<button type="button" class="theme-option v5-bg-option" data-v5bg="${b.id}"><span class="v5-bg-sw v5-bg-sw-${b.id}"></span>${b.label}<svg class="theme-option-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>`).join('');
+    panel.appendChild(sec);
+    sec.addEventListener('click', (e) => {
+      const b = e.target.closest('.v5-bg-option');
+      if(!b) return;
+      e.stopPropagation();
+      v5ApplyBg(b.dataset.v5bg, true);
+    });
+  }
+  v5ApplyBg(v5BgCurrent(), false);
+  window.addEventListener('resize', () => { const cv = document.querySelector('#v5-bg canvas'); if(cv && cv._v5Resize) cv._v5Resize(); });
 })();

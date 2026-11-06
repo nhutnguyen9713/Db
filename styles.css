@@ -2246,3 +2246,59 @@
     body.v5-nav-collapsed .sidebar-spacer .dock-scene{display:none;}
   }
   @media (min-width:901px){ #desktop-mode-toggle{left:auto; right:62px; bottom:14px;} }
+
+  /* ==================================================================================
+     v5.20 — HIỆU ỨNG NỀN (Cực quang / Sàn lưới 3D / Chòm sao)
+     ================================================================================== */
+  #v5-bg{position:fixed; inset:0; z-index:-1; pointer-events:none; overflow:hidden;}
+  #v5-bg canvas{position:absolute; inset:0;}
+  /* Thẻ hơi trong suốt ở nền Tối để ánh nền xuyên qua nhẹ */
+  body[data-theme="dark"]:not([data-v5bg="none"]) .panel, body[data-theme="dark"]:not([data-v5bg="none"]) .plan-bar,
+  body[data-theme="dark"]:not([data-v5bg="none"]) .kcs-panel, body[data-theme="dark"]:not([data-v5bg="none"]) .v5-tile,
+  body[data-theme="dark"]:not([data-v5bg="none"]) .kpi, body[data-theme="dark"]:not([data-v5bg="none"]) .snapshot{
+    background:linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,0) 40%), rgba(17,26,44,.80);
+  }
+  body[data-theme="dark"]:not([data-v5bg="none"]) .sidebar{background:linear-gradient(180deg, rgba(14,22,40,.90), rgba(11,18,34,.90));}
+
+  /* --- Cực quang: 4 mảng sáng mờ trôi chậm --- */
+  #v5-bg[data-bg="aurora"] i{position:absolute; border-radius:50%; filter:blur(90px); will-change:transform; opacity:.55;}
+  #v5-bg[data-bg="aurora"] .a1{width:52vw; height:52vw; left:-12vw; top:-18vw; background:#2F6BFF; animation:v5Au1 26s ease-in-out infinite alternate;}
+  #v5-bg[data-bg="aurora"] .a2{width:44vw; height:44vw; right:-10vw; top:-8vw; background:#8B5CF6; animation:v5Au2 32s ease-in-out infinite alternate;}
+  #v5-bg[data-bg="aurora"] .a3{width:40vw; height:40vw; left:30vw; bottom:-20vw; background:#14C9A0; opacity:.38; animation:v5Au3 28s ease-in-out infinite alternate;}
+  #v5-bg[data-bg="aurora"] .a4{width:26vw; height:26vw; right:18vw; bottom:6vw; background:#FF9F43; opacity:.22; animation:v5Au4 36s ease-in-out infinite alternate;}
+  @keyframes v5Au1{to{transform:translate(18vw, 14vw) scale(1.15);}}
+  @keyframes v5Au2{to{transform:translate(-16vw, 18vw) scale(.9);}}
+  @keyframes v5Au3{to{transform:translate(-20vw, -12vw) scale(1.2);}}
+  @keyframes v5Au4{to{transform:translate(-14vw, -16vw) scale(1.1);}}
+  body:not([data-theme]) #v5-bg[data-bg="aurora"] i{opacity:.20;}
+  body:not([data-theme]) #v5-bg[data-bg="aurora"] .a4{opacity:.12;}
+
+  /* --- Sàn lưới 3D: đường chân trời phát sáng + sàn lưới phối cảnh chạy về phía xa --- */
+  #v5-bg[data-bg="grid"] .v5-horizon{position:absolute; left:0; right:0; top:46%; height:2px; background:linear-gradient(90deg, transparent, rgba(94,168,255,.9), rgba(167,139,255,.9), transparent); box-shadow:0 0 40px 8px rgba(94,168,255,.35);}
+  #v5-bg[data-bg="grid"] .v5-floor{
+    position:absolute; left:-60%; right:-60%; top:46%; bottom:-40%;
+    background-image:linear-gradient(rgba(94,168,255,.55) 1px, transparent 1px), linear-gradient(90deg, rgba(94,168,255,.55) 1px, transparent 1px);
+    background-size:70px 70px; transform:perspective(520px) rotateX(64deg); transform-origin:top center;
+    -webkit-mask-image:linear-gradient(to bottom, transparent 0%, #000 35%); mask-image:linear-gradient(to bottom, transparent 0%, #000 35%);
+    animation:v5Floor 3.2s linear infinite;
+  }
+  @keyframes v5Floor{from{background-position:0 0;} to{background-position:0 70px;}}
+  #v5-bg[data-bg="grid"]::before{content:''; position:absolute; left:0; right:0; top:0; height:46%; background:radial-gradient(ellipse 60% 80% at 50% 100%, rgba(94,168,255,.18), transparent 70%);}
+  #v5-bg[data-bg="grid"] .v5-scan{position:absolute; left:0; right:0; top:46%; bottom:0; background:linear-gradient(to bottom, transparent, rgba(94,168,255,.08) 50%, transparent); background-size:100% 30%; background-repeat:no-repeat; animation:v5Scan 7s ease-in-out infinite;}
+  @keyframes v5Scan{0%{background-position:0 -30%;} 100%{background-position:0 130%;}}
+  body:not([data-theme]) #v5-bg[data-bg="grid"] .v5-floor{background-image:linear-gradient(rgba(44,111,203,.22) 1px, transparent 1px), linear-gradient(90deg, rgba(44,111,203,.22) 1px, transparent 1px);}
+  body:not([data-theme]) #v5-bg[data-bg="grid"] .v5-horizon{opacity:.5;}
+  body[data-theme="cyberpunk"] #v5-bg[data-bg="grid"] .v5-floor{background-image:linear-gradient(rgba(255,62,201,.45) 1px, transparent 1px), linear-gradient(90deg, rgba(63,225,255,.45) 1px, transparent 1px);}
+
+  @media (prefers-reduced-motion: reduce){ #v5-bg *{animation:none !important;} }
+
+  /* Mục Hiệu ứng nền trong bảng Giao diện */
+  .v5-bg-sec{border-top:1px solid var(--line);}
+  .v5-bg-sw{width:16px; height:16px; border-radius:5px; flex-shrink:0; border:1px solid var(--line);}
+  .v5-bg-sw-aurora{background:linear-gradient(135deg, #2F6BFF, #8B5CF6 55%, #14C9A0);}
+  .v5-bg-sw-grid{background:#0B1222; background-image:linear-gradient(rgba(94,168,255,.8) 1px, transparent 1px), linear-gradient(90deg, rgba(94,168,255,.8) 1px, transparent 1px); background-size:5px 5px;}
+  .v5-bg-sw-stars{background:radial-gradient(circle at 30% 30%, #9cc2ff 1.5px, transparent 2px), radial-gradient(circle at 70% 65%, #9cc2ff 1.5px, transparent 2px), #0B1222;}
+  .v5-bg-sw-none{background:var(--panel-2);}
+  .v5-bg-option.active .theme-option-check{visibility:visible;}
+  .v5-bg-option.active{color:var(--text); font-weight:700;}
+  .theme-panel{max-height:80vh; overflow-y:auto;}
