@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.95';
+const APP_VERSION = 'v5.96';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18199,24 +18199,20 @@ function v5RenderTimeline(){
   const all = contPickAllRows || [];
   if(!all.length){ el.style.display = 'none'; return; }
   el.style.display = '';
-  const day = v5TodayStr(v5TlDayOff);
-  const items = all.map(r => ({ r, ts: ovParseDateTimeSortKey(r.loadDate, r.planTime) }))
-    .filter(x => isFinite(x.ts) && String(x.r.loadDate || '').split(',')[0].trim() === day)
-    .sort((x, y) => x.ts - y.ts);
-  const dm = day.split('/');
-  const d0 = new Date(+dm[2], +dm[1] - 1, +dm[0]).getTime();
-  let h0 = 6, h1 = 18;
-  if(items.length){
-    const hs = items.map(x => (x.ts - d0) / 3600000);
-    h0 = Math.max(0, Math.floor(Math.min.apply(null, hs)) - 1);
-    h1 = Math.min(24, Math.ceil(Math.max.apply(null, hs)) + 2);
-  }
-  if(v5TlDayOff === 0){ const nh = (Date.now() - d0) / 3600000; if(nh >= 0 && nh < 24){ h0 = Math.min(h0, Math.floor(nh)); h1 = Math.max(h1, Math.min(24, Math.ceil(nh) + 1)); } }
-  if(h1 - h0 < 8){ h1 = Math.min(24, h0 + 8); h0 = Math.max(0, h1 - 8); }
+  // v5.96: chia theo CA (ngày 7h–19h, đêm 19h–7h) thay vì theo ngày — 0 = ca hiện tại, 1 = ca sau
+  const sh = v5ShiftInfo();
+  const ws = sh.start + v5TlDayOff * 12 * 3600000, we = ws + 12 * 3600000;
+  const wsDay = new Date(ws).getHours() === 7;
+  const day = String(ws);
+  const parsed = all.map(r => ({ r, ts: ovParseDateTimeSortKey(r.loadDate, r.planTime) })).filter(x => isFinite(x.ts));
+  const items = parsed.filter(x => x.ts >= ws && x.ts < we).sort((x, y) => x.ts - y.ts);
+  const lateN = v5TlDayOff === 0 ? parsed.filter(x => x.ts < ws && x.ts >= ws - 12 * 3600000 && !v5IsDone(x.r)).length : 0;
+  const d0 = ws, sH = new Date(ws).getHours();
+  const h0 = 0, h1 = 12;
   const done = items.filter(x => v5IsDone(x.r)).length;
   const prevScroll = (el.querySelector('.v5-tl-scroll') || {}).scrollLeft;
-  el.innerHTML = `<div class="v5-tl-head"><div class="v5-tl-title">Dòng thời gian cont<span>${items.length} cont · ${done} xong</span></div>
-    <div class="v5-tl-ctrl"><div class="v5-seg"><button type="button" data-v5-tlday="0" class="${v5TlDayOff === 0 ? 'on' : ''}">Hôm nay</button><button type="button" data-v5-tlday="1" class="${v5TlDayOff === 1 ? 'on' : ''}">Ngày mai</button></div>
+  el.innerHTML = `<div class="v5-tl-head"><div class="v5-tl-title">Dòng thời gian cont<span>${wsDay ? '☀️ Ca ngày' : '🌙 Ca đêm'} ${v5Pad(new Date(ws).getDate())}/${v5Pad(new Date(ws).getMonth() + 1)} · ${items.length} cont · ${done} xong${lateN ? ` · <b style="color:var(--red)">${lateN} cont trễ từ ca trước</b>` : ''}</span></div>
+    <div class="v5-tl-ctrl"><div class="v5-seg"><button type="button" data-v5-tlday="0" class="${v5TlDayOff === 0 ? 'on' : ''}" title="Ca đang làm">Ca hiện tại</button><button type="button" data-v5-tlday="1" class="${v5TlDayOff === 1 ? 'on' : ''}" title="12 giờ tiếp theo sau ca hiện tại">Ca sau</button></div>
     <div class="v5-seg"><button type="button" data-v5-tlzoom="-1" title="Thu nhỏ">−</button><button type="button" data-v5-tlzoom="1" title="Phóng to">+</button></div></div></div>
     <div class="v5-tl-scroll"><div class="v5-tl-inner"></div></div>`;
   const scroller = el.querySelector('.v5-tl-scroll'), inner = el.querySelector('.v5-tl-inner');
@@ -18230,7 +18226,7 @@ function v5RenderTimeline(){
   const lanes = khoOrder.concat(['Khác']).filter(k => items.some(x => laneOf(x.r) === k));
   let y = 26, html = '';
   const step = Math.max(1, Math.ceil(70 / pph));
-  for(let h = h0; h <= h1; h += step){ html += `<div class="v5-tl-tick" style="left:${LBL + (h - h0) * pph}px"><span>${v5Pad(h)}:00</span></div>`; }
+  for(let h = h0; h <= h1; h += step){ html += `<div class="v5-tl-tick" style="left:${LBL + (h - h0) * pph}px"><span>${v5Pad((sH + h) % 24)}:00</span></div>`; }
   lanes.forEach((k, li) => {
     const ends = [];
     const blocks = [];
@@ -18252,7 +18248,7 @@ function v5RenderTimeline(){
     });
     y += laneH;
   });
-  if(!items.length){ html += `<div class="v5-tl-empty">Không có cont nào load ${v5TlDayOff ? 'ngày mai' : 'hôm nay'}</div>`; y = 80; }
+  if(!items.length){ html += `<div class="v5-tl-empty">Không có cont nào load trong ${v5TlDayOff ? 'ca sau' : 'ca hiện tại'}</div>`; y = 80; }
   let nowX = null;
   if(v5TlDayOff === 0){
     const nx = xOf(Date.now());
