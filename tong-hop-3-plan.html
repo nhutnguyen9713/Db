@@ -473,7 +473,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v5.83';
+  var PH_VERSION = 'v5.84';
   var PH_VERSION_DATE = '06/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -963,7 +963,7 @@
             if(l.picked || String(l.oqc || '').toUpperCase() !== 'PASS') return;
             var lb = phEntryKhoLabel(l);
             if(PH_HARD_LABELS.indexOf(lb) !== -1) hard.push({ label: lb, locator: l.locator, qty: l.qty || 0 });
-            else if(!/loading\s*$/i.test(String(l.locator || ''))) easy += (l.qty || 0);
+            else if((lb === '3A trệt' || lb === '3B') && !/loading\s*$/i.test(String(l.locator || ''))) easy += (l.qty || 0); // chỉ 3A trệt + 3B là khu dễ lấy (Drak chốt)
           });
           easyLeft[k] = easy; hardLeft[k] = hard;
         }
@@ -1002,7 +1002,7 @@
     el.style.display = '';
     if(!list.length){ el.innerHTML = '<div class="ph-hard-h"><b>🏗 Ưu tiên pick 3A lầu + Rack</b></div><div class="ph-hard-empty">Không có cont nào (theo bộ lọc hiện tại) cần pick hàng ở 3A lầu / 3A Rack.</div>'; return; }
     var nSel = list.filter(function(x){ return phHardSel[x.key] !== false; }).length;
-    el.innerHTML = '<div class="ph-hard-h"><b>🏗 Ưu tiên pick 3A lầu + Rack</b><span>Chỉ cont mà tồn 3A trệt/khu khác không còn đủ (chia theo giờ plan) · chọn cont rồi xuất ảnh</span></div>' +
+    el.innerHTML = '<div class="ph-hard-h"><b>🏗 Ưu tiên pick 3A lầu + Rack</b><span>Chỉ cont mà tồn 3A trệt + 3B không còn đủ (chia theo giờ plan) · chọn cont rồi xuất ảnh</span></div>' +
       '<div class="ph-hard-list">' + list.map(function(x){
         var r = x.row, on = phHardSel[x.key] !== false, nLoc = r.hard.nLoc;
         return '<label class="ph-hard-row' + (on ? ' on' : '') + '"><input type="checkbox" data-hard-key="' + phEsc(x.key) + '"' + (on ? ' checked' : '') + '>' +
@@ -1049,7 +1049,7 @@
         var needTxt = 'Lấy ở lầu/rack ' + phFmt(l.need);
         T(needTxt, x1, y + IH / 2, F(800, 13), '#B42318');
         g.font = F(800, 13); x1 += g.measureText(needTxt).width + 10;
-        T('(cont cần ' + phFmt(l.totalNeed) + (l.fromEasy > 0 ? ', lấy ở trệt/khu khác ' + phFmt(l.fromEasy) : ', trệt/khu khác đã hết') + ')', x1, y + IH / 2, F(500, 12), '#55637C');
+        T('(cont cần ' + phFmt(l.totalNeed) + (l.fromEasy > 0 ? ', lấy ở 3A trệt/3B ' + phFmt(l.fromEasy) : ', 3A trệt/3B đã hết') + ')', x1, y + IH / 2, F(500, 12), '#55637C');
         var extra = [];
         if(l.suggQty < l.need) extra.push('lầu/rack thiếu ' + phFmt(l.need - l.suggQty));
         if(l.restN > 0) extra.push('lầu/rack còn ' + l.restN + ' vị trí khác (' + phFmt(l.restQty) + ')');
@@ -1067,7 +1067,7 @@
       });
       y += 12;
     });
-    T('Tổng hợp 3 Plan · ' + PH_VERSION + ' · tồn 3A trệt/khu khác chia cho cont giờ sớm trước, chỉ phần còn thiếu mới lấy ở lầu/rack', PAD, H - 16, F(500, 11), '#9AA3B2');
+    T('Tổng hợp 3 Plan · ' + PH_VERSION + ' · tồn 3A trệt + 3B chia cho cont giờ sớm trước, chỉ phần còn thiếu mới lấy ở lầu/rack', PAD, H - 16, F(500, 11), '#9AA3B2');
     phDeliverCanvas(cv, 'UuTien_3A_Lau_Rack_' + p(now.getDate()) + p(now.getMonth() + 1) + '_' + p(now.getHours()) + p(now.getMinutes()), share);
   };
   document.addEventListener('change', function(e){
