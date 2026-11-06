@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.00';
+const APP_VERSION = 'v6.01';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -17952,6 +17952,7 @@ if(btnStorageSize) btnStorageSize.addEventListener('click', renderStorageSize);
     setInterval(() => load(false), 5 * 60 * 1000);
     document.addEventListener('visibilitychange', () => { if(!document.hidden) load(false); });
   }
+  // v6.01: Drak bỏ 2 ô thời tiết khỏi trang (đã gỡ khỏi index.html) — giữ code, không có ô thì không tải gì.
   document.querySelectorAll('.tn5-forecast').forEach(setupSlot);
 })();
 
