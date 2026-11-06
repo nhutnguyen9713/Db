@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.97';
+const APP_VERSION = 'v5.98';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18791,6 +18791,7 @@ function v5RenderShiftStats(){
       <div class="v5-sh-n"><b>${fmt(list.length)}</b><span>cont</span></div>
       <div class="v5-sh-chips"><span class="c0">Chưa pick <b>${fmt(n('notStarted'))}</b></span><span class="c1">Đang pick <b>${fmt(n('inProgress'))}</b></span><span class="c2">Pick xong <b>${fmt(done)}</b></span><span class="c3">Load xong <b>${fmt(ship)}</b></span></div>
       <div class="v5-sh-pal"><span>Pallet đã pick <b>${fmt(pal.picked)}</b></span><span>Pallet đã load <b>${pal.loaded === null ? '—' : fmt(pal.loaded)}</b></span></div>
+      ${v5ShiftKhoLine(list)}
     </div>`;
   };
   el.innerHTML = `<div class="v5-sh-head">Thống kê theo ca <em>${sh.day ? '☀️ Ca ngày' : '🌙 Ca đêm'} · ${hm(sh.start)} → ${hm(sh.end)}</em><button type="button" class="v5-sh-report" data-v5-shift-report="1" title="Xuất ảnh tổng kết ca để gửi bàn giao">📸 Báo cáo ca</button></div>
@@ -18841,6 +18842,17 @@ document.addEventListener('click', (e) => {
 
 
 // ===== v5.60: nhóm cont theo ca (dùng chung cho thẻ Thống kê theo ca và Báo cáo ca) =====
+// v5.98: số cont theo kho pick chính (topKho) trong từng thẻ ca — VD "3B 3 cont · 2B 5 cont" (kèm số đã pick xong)
+const V5_SH_KHO_ORDER = ['Kho 3B', 'Kho 3A', 'Kho 2B', 'Kho DG1'];
+function v5ShiftKhoCounts(list){
+  const m = new Map();
+  list.forEach(r => { const k = r.topKho || 'Khác'; const e = m.get(k) || { n: 0, done: 0 }; e.n++; if(r.status === 'done' || r.status === 'manualDone' || r.isShipDone) e.done++; m.set(k, e); });
+  return [...m.entries()].sort((a, b) => (V5_SH_KHO_ORDER.indexOf(a[0]) + 1 || 99) - (V5_SH_KHO_ORDER.indexOf(b[0]) + 1 || 99));
+}
+function v5ShiftKhoLine(list){
+  const ks = v5ShiftKhoCounts(list); if(!ks.length) return '';
+  return `<div class="v5-sh-kho">${ks.map(([k, e]) => `<span style="--kc:${(typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR[k]) || 'var(--muted-2)'}" title="${escAttr(k)}: ${e.n} cont, đã pick xong ${e.done}"><i></i>${escHtml(k.replace('Kho ', ''))} <b>${fmt(e.n)}</b> cont${e.done ? ` <em>(${fmt(e.done)} xong)</em>` : ''}</span>`).join('')}</div>`;
+}
 function v5ShiftGroups(sh){
   const late = [], inShift = [], next = [];
   (contPickAllRows || []).forEach(r => {
