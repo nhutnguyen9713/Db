@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.24';
+const APP_VERSION = 'v6.25';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4300,7 +4300,10 @@ function renderContainerPickingOverview(){
     // vì chất hàng lên xe/cont chỉ xảy ra SAU khi đã pick xong khỏi kho.
     const isShipDone = !isManualUser && contShipIsFullyLoaded(entry.csrs, entry.planQty);
     const isManual = isManualUser || isShipDone;
-    const status = isManual ? 'manualDone' : autoStatus;
+    // v6.25 (Drak chốt): cont ĐÃ CÓ LOAD (SL Ship khớp CR > 0) thì chắc chắn đã pick đủ 100% — hàng scan lên xe
+    // rời khỏi tồn nên % pick tụt xuống, không được tính là "Đang pick". → status 'done' (Pick xong).
+    const shipKP = contShipKeyPct(entry.csrs, entry.planQty);
+    const status = isManual ? 'manualDone' : (shipKP.shipKey === 'inProgress' ? 'done' : autoStatus);
     if(status === 'manualDone' || status === 'done') done++;
     else if(status === 'notStarted') notStarted++;
     else inProgress++;
@@ -4391,7 +4394,7 @@ function renderContainerPickingOverview(){
     detailRows.push({
       type: entry.type, cNo: entry.cNo, pct, status, autoStatus, autoPct: pct, isManual, isShipDone,
       // v6.24: trạng thái Load theo file Ship, tính cả khi cont đã đánh dấu tay — 'done' | 'inProgress' | 'notStarted' | 'none'
-      ...contShipKeyPct(entry.csrs, entry.planQty),
+      ...shipKP,
       changeStatus: changeInfo ? changeInfo.status : null,
       comment: contPickComments[instanceKey] || '',
       instanceKey, planQty: entry.planQty,
