@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.10';
+const APP_VERSION = 'v6.11';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -19656,72 +19656,7 @@ function v5KtRenderStale(){
   window.addEventListener('scroll', () => { if(pop.style.display !== 'none') pop.style.display = 'none'; }, { passive: true });
 })();
 
-// v6.09: Bảng "Số liệu báo cáo ca" — dòng theo ĐÚNG thứ tự Tasks trong file KPI Efficiency của Drak (Receiver, Put away
-// Floor/Rack, Pick Order Floor/Rack, Move Pallet Up Down, Transfer to/Recive from other WHs, Stock/Cycle Count), cột = kho.
-// Số = lượt (cùng số với bảng Grand Total, theo bộ lọc hiện tại). Nút 📋 copy 1 cột kho (mỗi dòng 1 số) để dán thẳng vào
-// cột Output của khối kho đó trong Excel; "Copy cả bảng" copy dạng bảng (Tab) có tiêu đề.
-const V5_KPI_TASKS = [
-  { t: 'Receiver', kinds: k => ['receive'] },
-  { t: 'Put away - Floor', kinds: k => k === '3A' ? ['putawayFloor'] : ['putaway'] },
-  { t: 'Put away - Rack', kinds: k => k === '3A' ? ['putawayRack'] : [] },
-  { t: 'Pick Order - Floor', kinds: k => k === '3A' ? ['pickingFloor'] : ['picking'] },
-  { t: 'Pick Order - Rack', kinds: k => k === '3A' ? ['pickingRack'] : [] },
-  { t: 'Move Pallet Up Down', kinds: k => ['updownUp', 'updownDown'], hint: 'Lên + Xuống lầu M1/M2 (v6.10: không tính Rack)' },
-  { t: 'Transfer to other WHs', kinds: k => ['transfer'] },
-  { t: 'Recive from other WHs', kinds: k => ['transferNhap'] },
-  { t: 'Stock Count', kinds: null },
-  { t: 'Cycle Count 3.0', kinds: null }
-];
-const V5_KPI_EXTRA = [
-  { t: 'Move Pallet (nội bộ)', kinds: k => ['movePallet'] },
-  { t: 'Lên/Xuống Rack', kinds: k => ['rackUp', 'rackDown'] },
-  { t: 'Xuất RW', kinds: k => ['reworkXuat'] },
-  { t: 'Nhận RW', kinds: k => ['reworkNhap'] }
-];
-function v5KpiVal(task, kho){
-  if(!task.kinds) return null;
-  return task.kinds(kho).reduce((t, kind) => t + txKhoTotalFor(kind, kho).total, 0);
-}
-function v5KpiCopy(text, btn){
-  const done = () => { if(btn){ const o = btn.textContent; btn.textContent = '✓ Đã copy'; setTimeout(() => { btn.textContent = o; }, 1400); } };
-  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => { window.prompt('Copy thủ công:', text); });
-  else { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); done(); }catch(e){} ta.remove(); }
-}
-function v5KpiTableHtml(){
-  if(!txState) return '';
-  const khos = TX_CHART_KHO_ORDER;
-  const cell = v => v === null ? '<td class="na">—</td>' : `<td class="${v ? '' : 'z'}">${v ? fmt(v) : '0'}</td>`;
-  const row = (task, cls) => {
-    const vals = khos.map(k => v5KpiVal(task, k));
-    const tot = vals.every(v => v === null) ? null : vals.reduce((t, v) => t + (v || 0), 0);
-    return `<tr class="${cls || ''}"><th title="${escAttr(task.hint || '')}">${escHtml(task.t)}${task.hint ? ' <i>ⓘ</i>' : ''}</th>${vals.map(cell).join('')}${cell(tot).replace('<td', '<td data-tot="1"')}</tr>`;
-  };
-  return `<div class="v5-kpi" id="v5-kpi"><div class="v5-kpi-h"><div><b>📋 Số liệu báo cáo ca</b><span>Theo thứ tự dòng của file KPI · đơn vị: lượt (pallet) · theo bộ lọc hiện tại</span></div>
-    <div class="v5-kpi-btns">${khos.map(k => `<button type="button" data-v5-kpi-copy="${k}" title="Copy cột Kho ${k} (10 dòng theo form) để dán vào cột Output">📋 ${k}</button>`).join('')}<button type="button" data-v5-kpi-copy="all">📋 Copy cả bảng</button></div></div>
-    <div class="v5-kpi-scroll"><table class="v5-kpi-t"><thead><tr><th>Tasks</th>${khos.map(k => `<th>Kho ${k}</th>`).join('')}<th>Tổng</th></tr></thead><tbody>
-    ${V5_KPI_TASKS.map(t => row(t)).join('')}
-    <tr class="sep"><td colspan="${khos.length + 2}">Ngoài form KPI</td></tr>
-    ${V5_KPI_EXTRA.map(t => row(t, 'ex')).join('')}
-    </tbody></table></div></div>`;
-}
-document.addEventListener('click', e => {
-  const b = e.target.closest('[data-v5-kpi-copy]'); if(!b) return;
-  const k = b.dataset.v5KpiCopy, khos = TX_CHART_KHO_ORDER;
-  const num = v => v === null ? '' : String(v);
-  let text;
-  if(k === 'all') text = ['Tasks\t' + khos.map(x => 'Kho ' + x).join('\t')].concat(V5_KPI_TASKS.map(t => t.t + '\t' + khos.map(x => num(v5KpiVal(t, x))).join('\t'))).join('\n');
-  else text = V5_KPI_TASKS.map(t => num(v5KpiVal(t, k))).join('\n');
-  v5KpiCopy(text, b);
-});
-{
-  const _rtc = renderTxChart;
-  renderTxChart = function(){
-    const r = _rtc.apply(this, arguments);
-    const wrap = document.getElementById('tx-chart-body');
-    if(wrap && txState){ const old = document.getElementById('v5-kpi'); if(old) old.remove(); wrap.insertAdjacentHTML('afterbegin', v5KpiTableHtml()); }
-    return r;
-  };
-}
+// v6.11: bỏ bảng "Số liệu báo cáo ca" (v6.09–v6.10) theo yêu cầu.
 
 // v6.03: initTransactionPage() khôi phục dữ liệu Transaction lúc tải trang CHẠY TRƯỚC các bản ghi đè v5.90 (v5.90+)
 // → F5 vẫn hiện biểu đồ cột cũ. Vẽ lại 1 lần bằng bản mới nếu đã có dữ liệu.
