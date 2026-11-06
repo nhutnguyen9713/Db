@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.93';
+const APP_VERSION = 'v5.94';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -11890,7 +11890,7 @@ function ccComputeScoresForKho(khoLabel, allowPick){
     const anomaly = ccGetQtyAnomalyScore(row.kho, row.item, row.locator, totalQtyAtLoc);
     const anomalyScore = anomaly.score;
 
-    const score = Math.round(agingScore * 0.30 + freqScore * 0.30 + mismatchScore * 0.25 + anomalyScore * 0.15);
+    const score = Math.round(agingScore * 0.30 + freqScore * 0.30 + mismatchScore * 0.25 + anomalyScore * 0.15) + ((daysSince === null || daysSince >= 30) ? 10 : 0); // v5.94: +10 cho vị trí lâu chưa kiểm (≥ 30 ngày / chưa từng)
 
     const reasons = [];
     if(daysSince === null) reasons.push({ cls:'new', label:'Chưa từng kiểm' });
@@ -12026,7 +12026,7 @@ function ccRenderKhoResult(code, khoLabel, mode, list){
           <th>Cust PO</th>
           <th class="cc-item-sort-th" data-cc-item-sort="${escAttr(code)}" data-sort-key="item" style="cursor:pointer;" title="Bấm để sắp xếp theo Item No.">Item No. <span style="font-size:9px;">${sortArrow('item')}</span></th>
           <th class="cc-item-sort-th" data-cc-item-sort="${escAttr(code)}" data-sort-key="qty" style="cursor:pointer; text-align:right" title="Bấm để sắp xếp theo SL tồn">SL tồn <span style="font-size:9px;">${sortArrow('qty')}</span></th>
-          <th style="text-align:left">Kiểm thực tế (6 số)</th>
+          <th style="text-align:left">Đếm thực tế (số thùng × SL/thùng)</th>
         </tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
@@ -12180,7 +12180,7 @@ function buildKtItemRowHtml(r, rowStyle, groupCls, locBorderStyle){
   const mismatchBadgeText = r.isWrongLocation && r.isWrongOqc ? '⚠ Sai vị trí & OQC' : (r.isWrongLocation ? '⚠ Sai vị trí' : (r.isWrongOqc ? '⚠ Sai OQC' : ''));
   const locatorCellHtml = r.isScannedExtra
     ? `<select class="scanned-extra-loc-select">${ccAllLocatorsInResult(r.kho).map(loc => `<option value="${escAttr(loc)}"${loc === r.locator ? ' selected' : ''}>${escHtml(loc)}</option>`).join('')}</select>${wmsNoteHtml}`
-    : escHtml(r.locator);
+    : `<span class="loc-text">${escHtml(r.locator)}</span>`;
 
   return `
     <tr class="${(groupCls || '').trim()}${r.isScannedExtra ? ' row-scanned-extra' : ''}"${rowStyle || ''} data-wrong-location="${r.isWrongLocation ? '1' : '0'}" data-wms-locator="${escAttr(r.wmsLocator || '')}" data-wrong-oqc="${r.isWrongOqc ? '1' : '0'}" data-wms-oqc="${escAttr(r.wmsOqc || '')}" data-kho="${escAttr(r.kho || '')}">
@@ -12193,7 +12193,7 @@ function buildKtItemRowHtml(r, rowStyle, groupCls, locBorderStyle){
       <td class="kt-calc-cell">
         <div class="kt-calc-row">
           <span style="color:var(--text); font-weight:700; margin-right:4px;">KT =</span>
-          <span class="kt-result" style="font-weight:700; color:${ktResultColor(ktIv0*ktIv1 + ktIv2*ktIv3 + ktIv4*ktIv5, r.qty)}; min-width:40px; text-align:right; display:inline-block;">${fmt(ktIv0*ktIv1 + ktIv2*ktIv3 + ktIv4*ktIv5)}</span>
+          <span class="kt-result" style="font-weight:700; color:${ktResultColor(ktIv0*ktIv1 + ktIv2*ktIv3 + ktIv4*ktIv5, r.qty)}; min-width:40px; text-align:right; display:inline-block;">${fmt(ktIv0*ktIv1 + ktIv2*ktIv3 + ktIv4*ktIv5)}</span><span class="kt-diff"></span>
           <button type="button" class="kt-calc-toggle"><span>Nhập số liệu</span><span class="kt-calc-toggle-arrow">▾</span></button>
           <span class="kt-calc-inputs">
             <span style="margin: 0 4px; color:var(--muted-2);">|</span>
@@ -12211,6 +12211,7 @@ function buildKtItemRowHtml(r, rowStyle, groupCls, locBorderStyle){
             <input type="number" class="kt-input" value="${ktIv5}" data-default="1" style="width:35px; padding:2px; border:1px solid var(--line); border-radius:3px; text-align:center; font-size:11px; box-sizing:border-box;">
             <span style="color:var(--muted-2);">)</span>
           </span>
+          <button type="button" class="kt-match-btn" title="Đếm thực tế KHỚP SL tồn — tự điền KT = SL tồn và xác nhận luôn">✓ Khớp</button>
           <button class="kt-confirm-btn" style="margin-left:8px; padding:2px 10px; border-radius:4px; border:1px solid var(--teal); background:var(--teal); color:white; font-size:11px; cursor:pointer; transition:all 0.2s; white-space:nowrap;" data-locked="false">Xác nhận</button>
           <button type="button" class="kt-delete-btn" title="Xoá hẳn dòng này khỏi danh sách đề xuất kiểm (VD: dòng bị tạo sai do quét nhầm sang locator khác mà quên đổi vị trí) — các GI No. đã quét gắn với dòng này cũng sẽ được xoá khỏi lịch sử quét để có thể quét lại." style="margin-left:4px; padding:2px 8px; border-radius:4px; border:1px solid var(--red); background:transparent; color:var(--red); font-size:11px; cursor:pointer; transition:all 0.2s; white-space:nowrap;">🗑</button>
         </div>
@@ -12252,9 +12253,11 @@ function ccRenderLocatorCards(code, khoLabel, list){
     const locBorderStyle = ` style="border-left-color:${locColor};"`;
     const itemsHtml = loc.items.map((it) => buildKtItemRowHtml(it, rowStyle, '', locBorderStyle)).join('');
     if(!itemsHtml.replace(/\s/g, '')) return ''; // Vị trí này đã kiểm/xác nhận hết -> không hiện tiêu đề trống
+    const locDone = loc.items.filter(it => confirmedKiemTonItems[ccRowKeyForItem(it)]).length;
     const headerRow = `<tr class="kt-loc-header-row"><td colspan="7" style="background:${hexToRgba(locColor, 0.1)}; border-left:4px solid ${locColor};">
         <div class="kt-loc-header-inner">
           <span class="kt-loc-header-name">📍 ${escHtml(loc.locator)}</span>
+          <span class="kt-loc-prog" title="Đã xác nhận / tổng số dòng ở vị trí này">${fmt(locDone)}/${fmt(loc.items.length)}</span>
           <button type="button" class="kt-confirm-locator-btn" data-loc-name="${escAttr(loc.locator)}" title="Xác nhận TẤT CẢ các dòng đang hiện ở vị trí này, dùng đúng số liệu đang nhập hiện tại của từng dòng (dòng nào chưa nhập gì thì tính bằng 0)">✓✓</button>
         </div>
       </td></tr>`;
@@ -12268,7 +12271,7 @@ function ccRenderLocatorCards(code, khoLabel, list){
 
   const arrow = sortDir === 1 ? '▲' : '▼';
   wrap.innerHTML = `
-    <table class="kho-detail-table kt-mode-table">
+    <table class="kho-detail-table kt-mode-table kt-locmode">
       <thead>
         <tr>
           <th class="col-kho kt-card-hide">Kho</th>
@@ -12277,7 +12280,7 @@ function ccRenderLocatorCards(code, khoLabel, list){
           <th>Cust PO</th>
           <th>Item No.</th>
           <th style="text-align:right">SL tồn</th>
-          <th style="text-align:left">Kiểm thực tế (6 số)</th>
+          <th style="text-align:left">Đếm thực tế (số thùng × SL/thùng)</th>
         </tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
@@ -19472,4 +19475,102 @@ function v5SrchCodesRender(){
   if(ta) ta.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { try{ v5SrchCodesRender(); }catch(e){} }, 200); });
   const clr = document.getElementById('btn-clear-multi');
   if(clr) clr.addEventListener('click', () => setTimeout(() => { try{ v5SrchCodesRender(); }catch(e){} }, 0));
+}
+
+// ================= v5.94 — Kiểm tồn: tiến độ, nút Khớp, chênh lệch, tóm tắt đã xác nhận, nhắc vị trí lâu chưa kiểm =================
+function v5KtFlatItems(list){ const out = []; (list || []).forEach(e => { if(e && Array.isArray(e.items)) e.items.forEach(it => out.push(it)); else if(e && e.item) out.push(e); }); return out; }
+function v5KtRenderProgress(code, list){
+  const block = document.getElementById('cc-result-block-' + code); if(!block) return;
+  const items = v5KtFlatItems(list);
+  let el = document.getElementById('v5-kt-prog-' + code);
+  if(!el){ el = document.createElement('div'); el.id = 'v5-kt-prog-' + code; el.className = 'v5-kt-prog'; const wrap = document.getElementById('cc-loc-cards-' + code); if(wrap) wrap.parentNode.insertBefore(el, wrap); else block.appendChild(el); }
+  if(!items.length){ el.style.display = 'none'; return; }
+  let done = 0, diff = 0;
+  items.forEach(it => { const c = confirmedKiemTonItems[ccRowKeyForItem(it)]; if(c){ done++; if(Math.round(c.result) !== Math.round(Number(it.qty) || 0)) diff++; } });
+  const pct = Math.round(done / items.length * 100);
+  el.style.display = '';
+  el.innerHTML = `<div class="v5-kt-bar"><span style="width:${pct}%"></span></div><div class="v5-kt-lbl">Đã kiểm <b>${fmt(done)}</b>/${fmt(items.length)} dòng (${pct}%)${diff ? ` · <span class="bad">${fmt(diff)} dòng lệch</span>` : ''}${done === items.length ? ' · <span class="ok">✓ Xong</span>' : ''}</div>`;
+}
+{
+  const _rkr = ccRenderKhoResult;
+  ccRenderKhoResult = function(code, khoLabel, mode, list){ const r = _rkr.apply(this, arguments); try{ v5KtRenderProgress(code, list); }catch(e){ console.error(e); } return r; };
+  const _rlc = ccRenderLocatorCards;
+  ccRenderLocatorCards = function(code, khoLabel, list){ const r = _rlc.apply(this, arguments); try{ v5KtRenderProgress(code, list); }catch(e){ console.error(e); } return r; };
+}
+// Chênh lệch cạnh "KT =": chưa nhập -> "chưa kiểm" (xám), khớp -> ✓, thiếu -> −N (đỏ), thừa -> +N (cam)
+function v5KtDecorateRow(tr){
+  const td = tr.querySelector('td.kt-calc-cell'); if(!td) return;
+  const res = td.querySelector('.kt-result'), dEl = td.querySelector('.kt-diff'); if(!res || !dEl) return;
+  const v = [...td.querySelectorAll('.kt-input')].map(i => parseFloat(i.value) || 0);
+  const qtyCell = tr.querySelector('td[data-label="SL tồn"]');
+  const qty = qtyCell ? (parseFloat(qtyCell.textContent.replace(/,/g, '')) || 0) : 0;
+  const pending = !v[0] && !v[2] && !v[4];
+  const tot = Math.round(v[0] * v[1] + v[2] * v[3] + v[4] * v[5]), d = tot - Math.round(qty);
+  const txt = pending ? 'chưa kiểm' : d === 0 ? '✓ khớp' : (d > 0 ? '+' : '−') + fmt(Math.abs(d));
+  const cls = 'kt-diff ' + (pending ? 'pend' : d === 0 ? 'ok' : d < 0 ? 'bad' : 'over');
+  if(dEl.textContent !== txt) dEl.textContent = txt;
+  if(dEl.className !== cls) dEl.className = cls;
+  res.classList.toggle('kt-pending', pending);
+}
+function v5KtDecorateAll(){ document.querySelectorAll('#page-kiemton .kt-mode-table tbody tr').forEach(v5KtDecorateRow); }
+document.addEventListener('input', e => { if(e.target.classList && e.target.classList.contains('kt-input')){ const tr = e.target.closest('tr'); if(tr) v5KtDecorateRow(tr); } });
+// Nút "✓ Khớp": điền (1 × SL tồn) rồi xác nhận luôn
+document.addEventListener('click', e => {
+  const b = e.target.closest('.kt-match-btn'); if(!b) return;
+  const tr = b.closest('tr'), td = b.closest('td.kt-calc-cell'); if(!tr || !td) return;
+  const qtyCell = tr.querySelector('td[data-label="SL tồn"]');
+  const qty = qtyCell ? (parseFloat(qtyCell.textContent.replace(/,/g, '')) || 0) : 0;
+  const ins = [...td.querySelectorAll('.kt-input')]; if(ins.length < 6) return;
+  [1, qty, 0, 1, 0, 1].forEach((val, i) => { ins[i].value = val; ins[i].dispatchEvent(new Event('input', { bubbles: true })); });
+  const cb = td.querySelector('.kt-confirm-btn'); if(cb && cb.dataset.locked !== 'true') cb.click();
+});
+// Tóm tắt "Danh sách đã xác nhận" + lọc chỉ dòng lệch
+let v5KtOnlyDiff = false;
+function v5KtConfirmedSummary(){
+  const table = document.getElementById('confirmed-detail-table'); if(!table) return;
+  let el = document.getElementById('v5-kt-csum');
+  if(!el){ el = document.createElement('div'); el.id = 'v5-kt-csum'; el.className = 'v5-kt-csum'; const host = table.closest('.kho-modal-body') || table; host.parentNode.insertBefore(el, host); }
+  const vals = Object.values(confirmedKiemTonItems || {});
+  if(!vals.length){ el.style.display = 'none'; return; }
+  let ok = 0, under = 0, over = 0, uQ = 0, oQ = 0;
+  vals.forEach(c => { const q = Math.round(Number(c.data && c.data.qty) || 0), r = Math.round(Number(c.result) || 0); if(r === q) ok++; else if(r < q){ under++; uQ += q - r; } else { over++; oQ += r - q; } });
+  el.style.display = '';
+  el.innerHTML = `<span class="s ok">✓ Khớp <b>${fmt(ok)}</b></span><span class="s bad">▼ Thiếu <b>${fmt(under)}</b> dòng · −${fmt(uQ)} Pcs</span><span class="s over">▲ Thừa <b>${fmt(over)}</b> dòng · +${fmt(oQ)} Pcs</span>
+    <label class="v5-kt-only"><input type="checkbox" id="v5-kt-onlydiff"${v5KtOnlyDiff ? ' checked' : ''}> Chỉ xem dòng lệch</label>`;
+  document.querySelectorAll('#confirmed-detail-tbody tr').forEach(tr => {
+    const tds = tr.children; if(tds.length < 8) return;
+    const q = parseFloat(tds[5].textContent.replace(/,/g, '')) || 0, r = parseFloat(tds[7].textContent.replace(/,/g, '')) || 0, d = Math.round(r - q);
+    tr.classList.toggle('v5-kt-match', d === 0);
+    tr.style.display = v5KtOnlyDiff && d === 0 ? 'none' : '';
+    if(!tds[7].querySelector('.kt-diff') && d !== 0) tds[7].insertAdjacentHTML('beforeend', ` <span class="kt-diff ${d < 0 ? 'bad' : 'over'}">${d > 0 ? '+' : '−'}${fmt(Math.abs(d))}</span>`);
+  });
+}
+{
+  const _rcl = renderConfirmedList;
+  renderConfirmedList = function(){ const r = _rcl.apply(this, arguments); try{ v5KtConfirmedSummary(); }catch(e){ console.error(e); } return r; };
+}
+document.addEventListener('change', e => { if(e.target.id === 'v5-kt-onlydiff'){ v5KtOnlyDiff = e.target.checked; v5KtConfirmedSummary(); } });
+// Nhắc vị trí lâu chưa kiểm (≥ 30 ngày hoặc chưa từng) trên thẻ từng kho
+function v5KtRenderStale(){
+  if(!currentData || typeof ccBuildInventoryRows !== 'function') return;
+  const rows = Array.from(ccBuildInventoryRows(false).values());
+  const now = Date.now();
+  document.querySelectorAll('.cc-kho-card[data-kho]').forEach(card => {
+    const label = card.dataset.kho, code = card.dataset.khoCode;
+    const byLoc = new Map();
+    rows.forEach(r => { if(r.kho !== label) return; const iso = lastCheckedMap[r.item + '||' + r.locator]; const t = iso ? new Date(iso).getTime() : 0; byLoc.set(r.locator, Math.max(byLoc.get(r.locator) || 0, t)); });
+    let never = 0, old = 0; byLoc.forEach(t => { if(!t) never++; else if((now - t) / 86400000 >= 30) old++; });
+    let el = card.querySelector('.v5-kt-stale');
+    if(!el){ el = document.createElement('div'); el.className = 'v5-kt-stale'; const head = card.querySelector('.cc-kho-card-head'); if(head) head.insertAdjacentElement('afterend', el); else card.prepend(el); }
+    const n = never + old;
+    el.style.display = byLoc.size ? '' : 'none';
+    el.className = 'v5-kt-stale' + (n ? ' warn' : ' ok');
+    el.innerHTML = n ? `⏰ <b>${fmt(n)}</b>/${fmt(byLoc.size)} vị trí chưa kiểm ≥ 30 ngày${never ? ` (${fmt(never)} chưa từng kiểm)` : ''} — được ưu tiên khi tạo danh sách` : `✓ Mọi vị trí đều đã kiểm trong 30 ngày`;
+  });
+}
+{
+  const _rksp2 = renderKhoSearchPage;
+  renderKhoSearchPage = function(){ const r = _rksp2.apply(this, arguments); try{ v5KtRenderStale(); v5KtDecorateAll(); }catch(e){ console.error(e); } return r; };
+  let t = 0; const pg = document.getElementById('page-kiemton');
+  if(pg && typeof MutationObserver === 'function') new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => { try{ v5KtDecorateAll(); }catch(e){} }, 80); }).observe(pg, { childList: true, subtree: true });
 }

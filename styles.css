@@ -2900,3 +2900,47 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
 }
 .ngp-table td.c-img{min-width:56px;} .ngp-table td{padding-left:6px; padding-right:6px;}
 .v5-sc-fifo b{white-space:nowrap;}
+
+/* ================= v5.94 — Kiểm tồn ================= */
+.v5-kt-prog{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:6px 0 10px;}
+.v5-kt-bar{flex:0 0 240px; height:8px; border-radius:99px; background:rgba(255,255,255,.1); overflow:hidden;} .v5-kt-bar span{display:block; height:100%; background:var(--teal);}
+.v5-kt-lbl{font-size:12.5px; color:var(--muted);} .v5-kt-lbl b{color:var(--text);} .v5-kt-lbl .bad{color:#FF6B7A; font-weight:700;} .v5-kt-lbl .ok{color:var(--teal); font-weight:700;}
+.kt-loc-prog{font:700 11px var(--mono); color:var(--muted); padding:2px 8px; border-radius:99px; border:1px solid var(--line); margin-left:8px;}
+.kt-diff{display:inline-block; margin-left:6px; font:700 11px var(--mono); white-space:nowrap;}
+.kt-diff.pend{color:var(--muted-2); font-weight:500; font-style:italic;} .kt-diff.ok{color:var(--teal);} .kt-diff.bad{color:#FF6B7A;} .kt-diff.over{color:#F5A623;}
+.kt-result.kt-pending{color:var(--muted-2) !important;}
+.kt-match-btn{margin-left:8px; padding:2px 10px; border-radius:4px; border:1px solid var(--teal); background:transparent; color:var(--teal); font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap;}
+.kt-match-btn:hover{background:rgba(14,143,118,.15);}
+/* Chế độ Locator: tiêu đề nhóm đã có tên vị trí -> ẩn chữ locator lặp ở từng dòng (dòng quét sai vị trí vẫn hiện ô chọn) */
+.kt-locmode td[data-label="Locator"] .loc-text{display:none;}
+.kt-locmode th.cc-loc-sort-th{font-size:0;} .kt-locmode th.cc-loc-sort-th span{font-size:10px;}
+.v5-kt-csum{display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin:4px 0 12px; font-size:13px;}
+.v5-kt-csum .s{padding:4px 11px; border-radius:99px; border:1px solid var(--line);} .v5-kt-csum .ok{color:var(--teal);} .v5-kt-csum .bad{color:#FF6B7A;} .v5-kt-csum .over{color:#F5A623;}
+.v5-kt-only{display:inline-flex; align-items:center; gap:6px; margin-left:auto; cursor:pointer; color:var(--muted);}
+.v5-kt-stale{font-size:11.5px; margin:-2px 0 8px; padding:6px 10px; border-radius:8px; line-height:1.4;}
+.v5-kt-stale.warn{background:rgba(245,166,35,.12); color:#F5C26B;} .v5-kt-stale.warn b{color:#F5A623;} .v5-kt-stale.ok{background:rgba(14,143,118,.12); color:var(--teal);}
+@media (max-width:760px){
+  /* Nút đầu khối Đề xuất xếp 1 hàng */
+  div:has(> #btn-reset-kiemke-all){flex-wrap:nowrap !important; width:100%;}
+  div:has(> #btn-reset-kiemke-all) > button{flex:1 1 0; min-width:0; white-space:normal !important; font-size:11.5px; padding:8px 8px; justify-content:center; text-align:center;}
+  .v5-kt-bar{flex:1 1 100%;}
+  /* Thẻ kiểm gọn: Item + SL / PO + OQC / ô đếm */
+  .kt-mode-table tbody tr:not(.kt-loc-header-row){display:grid !important; grid-template-columns:1fr auto; gap:2px 10px; padding:9px 12px 8px !important; margin-bottom:7px !important;}
+  .kt-mode-table tbody tr:not(.kt-loc-header-row) > td{display:block !important; border:0 !important; padding:0 !important; width:auto !important;}
+  .kt-mode-table tbody tr > td[data-label]::before{content:none !important;}
+  .kt-mode-table tbody tr:not(.kt-loc-header-row) > td.col-kho.kt-card-hide{display:none !important;}
+  .kt-mode-table td[data-label="Item No."]{grid-column:1; grid-row:1;}
+  .kt-mode-table td[data-label="SL tồn"]{grid-column:2; grid-row:1; text-align:right;}
+  .kt-mode-table td[data-label="Cust PO"]{grid-column:1; grid-row:2; font-size:12px; color:var(--muted);} .kt-mode-table td[data-label="Cust PO"]::after{content:"";}
+  .kt-mode-table td[data-label="OQC"]{grid-column:2; grid-row:2; text-align:right;}
+  .kt-mode-table td[data-label="Locator"]{grid-column:1 / -1; grid-row:3; font-family:var(--mono); font-size:12px; border-left:0 !important; padding-left:0 !important;}
+  .kt-mode-table.kt-locmode tr:not(.row-scanned-extra) td[data-label="Locator"]{display:none !important;}
+  .kt-mode-table td.kt-calc-cell{grid-column:1 / -1; grid-row:4; padding-top:6px !important; border-top:1px dashed var(--line-soft) !important; margin-top:4px;}
+  .kt-mode-table .kt-calc-row{display:flex; flex-wrap:wrap; align-items:center; gap:6px;}
+  .kt-mode-table .kt-match-btn{margin-left:auto; padding:5px 12px; font-size:12px;}
+  .kt-mode-table .kt-calc-toggle{margin-left:0 !important;}
+  .kt-mode-table .kt-confirm-btn{padding:5px 10px !important; font-size:12px !important; margin-left:0 !important;}
+  .kt-mode-table tr.kt-loc-header-row{display:block !important; margin:12px 0 6px !important; padding:0 !important; border:0 !important; background:none !important; box-shadow:none !important;}
+  .kt-mode-table tr.kt-loc-header-row > td{display:block !important; border-radius:10px; padding:8px 12px !important;}
+  .v5-kt-only{margin-left:0;}
+}
