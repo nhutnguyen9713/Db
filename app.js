@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.60';
+const APP_VERSION = 'v5.70';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4197,6 +4197,10 @@ function renderContainerPickingOverview(){
   // thể là 2 lượt xuất khác nhau (ngày/giờ khác nhau) và phải được coi là 2 container RIÊNG BIỆT,
   // không gộp SL kế hoạch / trạng thái pick của 2 lượt đó làm một.
   const contMap = new Map();
+  // v5.70: mỗi CR (CSR) chỉ có 1 lượng hàng đã pick cho 1 mã — nếu Plan ghi cùng mã + CSR thành nhiều
+  // dòng (VD 1,284 + 666), chia lần lượt lượng đã pick cho các dòng thay vì mỗi dòng đều được tính đủ
+  // (trước đây 1,668 đã pick bị tính thành 1,284 + 666 = 1,950 -> báo 100% sai).
+  const pickLeft = new Map();
 
   loadedTypes.forEach(type => {
     const rows = (planData[type].detailRows) || [];
@@ -4211,10 +4215,12 @@ function renderContainerPickingOverview(){
       let passQty = 0;
       if(csrKey){
         const lookupKey = itemKey + '|' + csrKey;
-        passQty = pickingIdx[lookupKey] || 0;
+        if(!pickLeft.has(lookupKey)) pickLeft.set(lookupKey, pickingIdx[lookupKey] || 0);
+        passQty = pickLeft.get(lookupKey);
       }
       const planQty = r.qty || 0;
       let contribution = planQty > 0 ? Math.min(passQty, planQty) : 0;
+      if(csrKey) pickLeft.set(itemKey + '|' + csrKey, Math.max(0, passQty - contribution));
       // Mã SPP (không có GI nên không thể tự tính qua CSR/PASS) đã được tick "Đủ hàng" thủ công
       // -> coi như đã pick đủ phần kế hoạch của mã này, để % Picking Status của container nhảy theo.
       // SỬA (lỗi thật đã gặp): khi Cust PO rỗng, popup Nhóm SPP chuẩn hoá key thành '(Khong co)'
@@ -5420,6 +5426,7 @@ function renderPlanPanel(){
     }
     const contColorMap = new Map();
     let lastContainer = null;
+    const pickLeft = new Map(); // v5.70: chia lượng đã pick theo CR cho các dòng trùng mã (xem renderContainerPickingOverview)
     const cardGroups = []; let cardGroup = null; // v5.40: gom theo container để vẽ chế độ Thẻ
     const rowsHtml = rows.map(r => {
       const cNo = r.containerNo || '—';
@@ -5447,7 +5454,9 @@ function renderPlanPanel(){
       let passQty = 0;
       if(csrKey){
         const lookupKey = itemKey + '|' + csrKey;
-        passQty = pickingIdx[lookupKey] || 0;
+        if(!pickLeft.has(lookupKey)) pickLeft.set(lookupKey, pickingIdx[lookupKey] || 0);
+        passQty = pickLeft.get(lookupKey);
+        pickLeft.set(lookupKey, Math.max(0, passQty - Math.min(passQty, r.qty || 0)));
       }
       // Không có fallback sang PICK
       const planQty = r.qty || 0;
@@ -18856,7 +18865,9 @@ function v5RouteBuild(r){
     buildItemLocatorDetail(it.item, it.po).forEach(l => {
       if(String(l.oqc || '').toUpperCase() !== 'PASS' || LOADING_LOCATOR_RE.test(String(l.locator || '').trim())) return;
       const key = l.locator;
-      if(!stops.has(key)) stops.set(key, { kho: l.kho, locator: l.locator, lines: [] });
+      if(!stops.has(key)) stops.set(key, { kho: l.kho, locator: l.locator, lines: [], keys: [] });
+      const ik = String(it.item).toLowerCase() + '|' + String(it.po || '').toLowerCase();
+      if(stops.get(key).keys.indexOf(ik) < 0) stops.get(key).keys.push(ik);
       stops.get(key).lines.push({ item: it.item, po: it.po, qty: l.qty, need, pallets: palCnt.get(String(it.item).toLowerCase() + '|' + String(it.po || '').trim().toLowerCase() + '|' + l.locator) || 0 });
     });
   });
@@ -18872,7 +18883,8 @@ function v5RouteShow(key){
   const btn = document.querySelector('.sidebar-nav-btn[data-page="sodo3b"]');
   if(btn) btn.click();
   v5RouteRenderBar();
-  setTimeout(() => { v5RouteApply(); const first = document.querySelector('.wh3b-box.v5-route'); if(first) first.scrollIntoView({ behavior: 'smooth', block: 'center' }); else { const bar = document.getElementById('v5-route-bar'); if(bar) bar.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 350);
+  v5RouteApply();
+  setTimeout(() => { const bar = document.getElementById('v5-route-bar'); if(bar) bar.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 200);
 }
 function v5RouteRenderBar(){
   const page = document.getElementById('page-sodo3b');
@@ -18885,23 +18897,12 @@ function v5RouteRenderBar(){
     <div class="v5-rb-list">${st.map(s => `<button type="button" class="v5-rb-stop" data-v5-route-loc="${escAttr(s.locator)}"><i>${s.step}</i><span><b>${escHtml(s.locator)}</b><em>${escHtml(String(s.kho).replace('Kho ', ''))}</em></span><small>${s.lines.map(l => `${escHtml(l.item)} · ${fmt(l.qty)} pcs${l.pallets ? ' · ' + l.pallets + ' pl' : ''}`).join('<br>')}</small></button>`).join('')}</div>`;
 }
 function v5RouteApply(){
-  const page = document.getElementById('page-sodo3b');
-  if(!page) return;
-  page.classList.toggle('v5-route-on', !!v5Route);
-  const map = new Map((v5Route ? v5Route.stops : []).map(s => [String(s.locator).toUpperCase(), s]));
-  const found = new Set();
-  page.querySelectorAll('.wh3b-box[data-locator]').forEach(b => {
-    // bỏ qua ô nằm trong lưới đang bị ẩn (VD: lưới mặc định khi kho đó đang dùng lưới tuỳ chỉnh)
-    const hid = b.parentElement && b.parentElement.closest('[style*="display:none"], [style*="display: none"]');
-    const s = (hid && hid !== page) ? null : map.get(String(b.dataset.locator).toUpperCase());
-    if(s){
-      found.add(s.locator);
-      if(!b.classList.contains('v5-route')) b.classList.add('v5-route');
-      if(b.getAttribute('data-v5-step') !== String(s.step)) b.setAttribute('data-v5-step', s.step);
-      const panel = b.closest('.cc-collapse-panel'); if(panel && !panel.classList.contains('open')) ccSetCollapsePanelOpen(panel, true);
-    } else if(b.classList.contains('v5-route')){ b.classList.remove('v5-route'); b.removeAttribute('data-v5-step'); }
-  });
-  document.querySelectorAll('#v5-route-bar .v5-rb-stop').forEach(x => x.classList.toggle('nomap', !found.has(x.dataset.v5RouteLoc)));
+  // v5.70: đường pick vẽ trên SƠ ĐỒ CHI TIẾT (so-do-kho.html nhúng trong trang) thay cho sơ đồ cũ
+  const sdk = v5SdkApi();
+  if(sdk){
+    try{ sdk.setRoute(v5Route ? { title: v5Route.title, stops: v5Route.stops.map(x => ({ kho: x.kho, locator: x.locator, step: x.step, keys: x.keys || [] })) } : null); }catch(e){ console.error(e); }
+    document.querySelectorAll('#v5-route-bar .v5-rb-stop').forEach(x => { const st = v5Route && v5Route.stops.find(q => q.locator === x.dataset.v5RouteLoc); let on = true; try{ on = st ? sdk.onMap(st.kho, st.locator) : true; }catch(e){} x.classList.toggle('nomap', !on); });
+  }
 }
 var v5RouteObsT = 0;
 (function(){
@@ -18919,8 +18920,69 @@ document.addEventListener('click', e => {
   if(e.target.closest('[data-v5-route-off]')){ v5Route = null; v5RouteRenderBar(); v5RouteApply(); return; }
   const stop = e.target.closest('[data-v5-route-loc]');
   if(stop){
-    const loc = String(stop.dataset.v5RouteLoc).toUpperCase();
-    const b = [...document.querySelectorAll('#page-sodo3b .wh3b-box.v5-route')].find(x => String(x.dataset.locator).toUpperCase() === loc);
-    if(b){ b.scrollIntoView({ behavior: 'smooth', block: 'center' }); b.classList.remove('v5-flash'); void b.offsetWidth; b.classList.add('v5-flash'); setTimeout(() => b.classList.remove('v5-flash'), 2000); }
+    const st = v5Route && v5Route.stops.find(q => q.locator === stop.dataset.v5RouteLoc);
+    const sdk = v5SdkApi(), fr = document.getElementById('v5-sdk-frame');
+    if(st && sdk && fr){
+      let pos = null; try{ pos = sdk.goTo(st.kho, st.locator); }catch(e){}
+      if(pos){ const top = fr.getBoundingClientRect().top + window.scrollY + pos.top - Math.max(160, window.innerHeight / 2 - pos.height / 2); window.scrollTo({ top, behavior: 'smooth' }); }
+    }
   }
 }, true);
+
+
+// ===== v5.70: trang "Sơ đồ kho" dùng SƠ ĐỒ CHI TIẾT (so-do-kho.html) nhúng thẳng trong trang, thay cho
+// sơ đồ cũ. Dữ liệu (tồn kho đang mở, lưới tuỳ chỉnh, sức chứa) đẩy trực tiếp từ dashboard -> luôn khớp.
+// Sơ đồ cũ vẫn giữ (ẩn) để SỬA LƯỚI — bấm "✏️ Sửa lưới sơ đồ" mới hiện. =====
+function v5SdkApi(){ try{ const f = document.getElementById('v5-sdk-frame'); return f && f.contentWindow && f.contentWindow.sdkEmbed || null; }catch(e){ return null; } }
+function v5SdkEnsure(){
+  const page = document.getElementById('page-sodo3b');
+  if(!page) return null;
+  page.classList.add('v5-sdk-mode');
+  let wrap = document.getElementById('v5-sdk-wrap');
+  if(!wrap){
+    wrap = document.createElement('div');
+    wrap.id = 'v5-sdk-wrap'; wrap.className = 'v5-sdk-wrap';
+    wrap.innerHTML = `<div class="v5-sdk-bar"><span class="v5-sdk-t">🗺️ Sơ đồ kho chi tiết</span><span class="v5-sdk-s">Mỗi ô nhỏ = 1 pallet · dữ liệu theo file tồn kho đang mở</span>
+      <button type="button" class="v5-sdk-btn" data-v5-sdk-edit="1" title="Hiện sơ đồ cũ để thêm/sửa/di chuyển ô trên lưới">✏️ Sửa lưới sơ đồ</button>
+      <a class="v5-sdk-btn" href="so-do-kho.html" target="_blank" rel="noopener" title="Mở sơ đồ ở tab riêng">↗ Mở tab riêng</a></div>
+      <iframe id="v5-sdk-frame" class="v5-sdk-frame" title="Sơ đồ kho chi tiết" src="so-do-kho.html?embed=1" loading="eager"></iframe>`;
+    const bar = document.getElementById('v5-route-bar');
+    if(bar && bar.parentNode === page) page.insertBefore(wrap, bar.nextSibling); else page.insertBefore(wrap, page.firstChild);
+  }
+  return wrap;
+}
+var v5SdkPushT = 0;
+function v5SdkPush(){
+  const sdk = v5SdkApi();
+  if(!sdk) return;
+  try{
+    // Lưới gửi BẢN SAO — so-do-kho.html có sửa tại chỗ (VD bỏ trống ô TG/ITN), không được đụng lưới thật của dashboard.
+    const grids = JSON.parse(JSON.stringify(typeof khoGridLayouts !== 'undefined' ? khoGridLayouts : {}));
+    const cap = typeof whLoadCapOverrides === 'function' ? (whLoadCapOverrides() || {}) : {};
+    const theme = document.body.getAttribute('data-theme') || 'light';
+    sdk.setData(currentData || null, grids, JSON.parse(JSON.stringify(cap)), { updatedAtText: (currentData && currentData.updatedAtText) || '' }, theme);
+    if(v5Route) v5RouteApply();
+  }catch(e){ console.error('v5SdkPush', e); }
+}
+function v5SdkSchedulePush(){ clearTimeout(v5SdkPushT); v5SdkPushT = setTimeout(v5SdkPush, 120); }
+if(typeof renderSodo3B === 'function'){
+  const _rs3b = renderSodo3B;
+  renderSodo3B = function(){
+    _rs3b.apply(this, arguments);
+    const page = document.getElementById('page-sodo3b');
+    if(page && page.style.display !== 'none'){ v5SdkEnsure(); v5SdkSchedulePush(); }
+    else if(document.getElementById('v5-sdk-frame')) v5SdkSchedulePush();
+  };
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-v5-sdk-edit]');
+  if(!b) return;
+  const page = document.getElementById('page-sodo3b');
+  const on = !page.classList.contains('v5-sdk-editing');
+  page.classList.toggle('v5-sdk-editing', on);
+  b.textContent = on ? '✕ Đóng sửa lưới' : '✏️ Sửa lưới sơ đồ';
+  if(!on) v5SdkSchedulePush(); // vừa sửa lưới xong -> cập nhật sơ đồ chi tiết
+  else { const lock = document.getElementById('khogrid-lock-bar'); if(lock) lock.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+});
+// đổi theme ở dashboard -> đổi luôn trong sơ đồ
+if(typeof MutationObserver === 'function') new MutationObserver(() => { if(document.getElementById('v5-sdk-frame')) v5SdkSchedulePush(); }).observe(document.body, { attributes: true, attributeFilter: ['data-theme'] });

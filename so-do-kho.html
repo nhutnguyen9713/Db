@@ -281,6 +281,20 @@
     body{padding:12px 10px 40px;}
     .sdk-tab{padding:8px 10px;}
   }
+
+  /* ===== v5.70: chế độ nhúng + đường pick ===== */
+  html.sdk-embed body{padding:0 !important; margin:0; background:transparent !important; min-height:0 !important;}
+  html.sdk-embed .sdk-shell{max-width:none; padding:0; margin:0;}
+  html.sdk-embed .sdk-logo, html.sdk-embed #sdk-disconnect-btn, html.sdk-embed #sdk-refresh-btn, html.sdk-embed .khogrid-lock-bar, html.sdk-embed #sdk-theme-btn, html.sdk-embed #v5-bg{display:none !important;}
+  #sdk-grid.sdk-route-on .wh3b-box[data-locator]:not(.sdk-route){opacity:.25; filter:grayscale(.7);}
+  #sdk-grid .wh3b-box.sdk-route{position:relative; z-index:2; outline:2.5px solid #2F6FEB; outline-offset:1px; box-shadow:0 0 0 6px rgba(47,111,235,.22), 0 8px 22px rgba(47,111,235,.35);}
+  #sdk-grid .wh3b-box.sdk-route::after{content:attr(data-route-step); position:absolute; top:-10px; left:-10px; min-width:22px; height:22px; padding:0 6px; border-radius:999px; background:#2F6FEB; color:#fff; font:800 12px/22px Inter, sans-serif; text-align:center; box-shadow:0 2px 6px rgba(0,0,0,.3); z-index:3; pointer-events:none;}
+  #sdk-grid .sdk-slot.sdk-route-slot{outline:2px solid #2F6FEB; outline-offset:1px; z-index:1; box-shadow:0 0 6px rgba(47,111,235,.8);}
+  #sdk-grid .wh3b-box.sdk-route-flash{animation:sdkRouteFlash 1.6s ease-out;}
+  @keyframes sdkRouteFlash{0%{box-shadow:0 0 0 14px rgba(47,111,235,.45);} 100%{box-shadow:0 0 0 6px rgba(47,111,235,.22);}}
+  #sdk-grid.sdk-route-on .sdk-zone-card:not(.sdk-route-zone){opacity:.35;}
+  #sdk-grid .sdk-zone-card.sdk-route-zone{box-shadow:0 0 0 3px #2F6FEB; position:relative;}
+  #sdk-grid .sdk-zone-card.sdk-route-zone::after{content:attr(data-route-n); position:absolute; top:8px; right:10px; font:800 11px Inter, sans-serif; color:#fff; background:#2F6FEB; padding:3px 8px; border-radius:999px;}
 </style>
 </head>
 <body>
@@ -2348,8 +2362,83 @@
   });
   $('sdk-demo-btn').addEventListener('click', startDemo);
 
+  /* ============ v5.70: CHẾ ĐỘ NHÚNG trong trang "Sơ đồ kho" của TN5 Dashboard (?embed=1) ============
+     Dashboard (cùng origin) đẩy thẳng dữ liệu đang mở (tồn kho, lưới, sức chứa) qua window.sdkEmbed —
+     không cần kết nối Cloud riêng, số liệu luôn khớp đúng file tồn kho đang xem trên dashboard.
+     Đường pick: dashboard gửi danh sách điểm lấy hàng (kho + locator + mã/PO) -> tô sáng ô + pallet, đánh số. */
+  var EMBED = /[?&]embed=1\b/.test(location.search);
+  state.route = null;
+  function routeStopsOf(kho){ return state.route ? state.route.stops.filter(function(s){ return s.kho === kho; }) : []; }
+  function applyRoute(){
+    var grid = $('sdk-grid'); if(!grid) return;
+    grid.classList.toggle('sdk-route-on', !!state.route);
+    var stops = routeStopsOf(state.activeKho), byLoc = {};
+    stops.forEach(function(s){ byLoc[String(s.locator).toUpperCase()] = s; });
+    grid.querySelectorAll('.wh3b-box[data-locator]').forEach(function(el){
+      var s = byLoc[String(el.getAttribute('data-locator')).toUpperCase()];
+      el.classList.toggle('sdk-route', !!s);
+      if(s) el.setAttribute('data-route-step', s.step); else el.removeAttribute('data-route-step');
+      if(!state.route) return;
+      el.querySelectorAll('.sdk-slot.filled').forEach(function(sl){
+        var ok = !!s && s.keys.indexOf(String(sl.getAttribute('data-item')).toLowerCase() + '|' + String(sl.getAttribute('data-po') || '').toLowerCase()) !== -1 && sl.getAttribute('data-ng') !== '1';
+        sl.classList.toggle('sdk-route-slot', ok);
+        sl.classList.toggle('sdk-slot-dim', !ok);
+      });
+    });
+    grid.querySelectorAll('.sdk-zone-card').forEach(function(card){
+      var z = card.getAttribute('data-zone');
+      var n = stops.filter(function(s){ return zoneOf(state.activeKho, s.locator) === z; }).length;
+      card.classList.toggle('sdk-route-zone', !!state.route && n > 0);
+      card.setAttribute('data-route-n', n ? n + ' điểm pick' : '');
+    });
+  }
+  var _render0 = render; render = function(){ _render0.apply(this, arguments); applyRoute(); };
+  var _filter0 = applyFilter; applyFilter = function(){ _filter0.apply(this, arguments); applyRoute(); };
+  window.sdkEmbed = {
+    setData: function(inv, grids, cap, meta, theme){
+      state.demo = false;
+      state.inventory = inv || null; state.grids = grids || {}; state.capOverride = cap || {}; state.meta = meta || {};
+      if(theme !== undefined){ if(theme && theme !== 'light') document.body.setAttribute('data-theme', theme); else document.body.removeAttribute('data-theme'); }
+      buildByKho(); showApp(); render();
+    },
+    setRoute: function(route){
+      state.route = route && route.stops ? route : null;
+      if(state.route){
+        state.pick = null;
+        var first = state.route.stops[0];
+        if(first && first.kho && KHO[first.kho] && state.activeKho !== first.kho){ state.activeKho = first.kho; state.zone = null; }
+        if(first && ZONES[state.activeKho]) state.zone = zoneOf(state.activeKho, first.locator);
+      }
+      render();
+    },
+    // Chuyển tới đúng kho/khu chứa locator, trả về vị trí ô (toạ độ trong iframe) để dashboard cuộn tới.
+    goTo: function(kho, loc){
+      if(kho && KHO[kho] && state.activeKho !== kho){ state.activeKho = kho; state.zone = null; render(); }
+      goToLocator(loc);
+      var el = document.querySelector('#sdk-grid .wh3b-box[data-locator="' + (window.CSS && CSS.escape ? CSS.escape(loc) : loc) + '"]');
+      if(!el) return null;
+      el.classList.remove('sdk-route-flash'); void el.offsetWidth; el.classList.add('sdk-route-flash');
+      var r = el.getBoundingClientRect(); return { top: r.top + window.scrollY, height: r.height };
+    },
+    // Locator này có ô trên sơ đồ của kho không (lưới tuỳ chỉnh / bố cục mặc định)
+    onMap: function(kho, loc){
+      var by = state.byKho[kho] || {}; var set = mapLocSetOf(kho);
+      return set ? !!set[loc] : Object.prototype.hasOwnProperty.call(by, loc);
+    }
+  };
+  if(EMBED){
+    document.documentElement.classList.add('sdk-embed');
+    // Tự giãn chiều cao khung iframe theo nội dung (không có thanh cuộn lồng nhau).
+    var fitH = function(){ try{ if(window.frameElement) window.frameElement.style.height = Math.max(400, document.documentElement.scrollHeight) + 'px'; }catch(e){} };
+    if(typeof ResizeObserver === 'function') new ResizeObserver(fitH).observe(document.body);
+    setInterval(fitH, 1500);
+  }
+
   /* ============ Khởi động ============ */
   syncThemeBtn();
+  if(EMBED){
+    try{ if(window.parent && window.parent.v5SdkPush){ window.parent.v5SdkPush(); return; } }catch(e){}
+  }
   if(/[?&]demo=1\b/.test(location.search)){ startDemo(); return; }
   var found = null;
   try{
