@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.16';
+const APP_VERSION = 'v6.17';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18998,30 +18998,33 @@ function v5ShiftReportCanvas(){
   });
   // bảng cont rớt + trong ca
   let y = tableTop;
-  txt('Chi tiết ' + [late.length ? 'cont rớt' : '', 'cont trong ca', nextStarted.length ? 'cont ca sau đã pick' : ''].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' và $1'), PAD, y, F(800, 16), '#111827');
-  y += 16;
-  const cols = [['Nhóm', 0], ['Plan', 90], ['Cont', 150], ['Ngày · Giờ', 330], ['Invoice', 480], ['Kho', 600], ['% pick', 680], ['Trạng thái', 770], ['Ghi chú', 900]];
+  // v6.17: bỏ dòng tiêu đề bảng; tách Ngày / Giờ thành 2 cột; vạch ngăn giữa các nhóm (Rớt / Trong ca / Ca sau)
+  y -= 4;
+  const cols = [['Nhóm', 0], ['Plan', 90], ['Cont', 150], ['Ngày', 330], ['Giờ', 440], ['Invoice', 520], ['Kho', 640], ['% pick', 710], ['Trạng thái', 800], ['Ghi chú', 930]];
+  const hhmm = t => { const m = String(t || '').split(',')[0].trim().match(/^(\d{1,2}):(\d{2})/); return m ? `${v5Pad(+m[1])}:${m[2]}` : String(t || '').split(',')[0]; };
   rr(PAD, y, W - PAD * 2, 30, 8, '#E8EDF6');
   cols.forEach(([h, dx]) => txt(h, PAD + 12 + dx, y + 20, F(700, 12), '#4B5563'));
   y += 30;
   if(!listRows.length){ txt('Không có cont rớt hay cont trong ca.', PAD + 12, y + 28, F(500, 13), '#6B7485'); y += 40; }
   listRows.forEach(([g, r], i) => {
     if(i % 2) { c.fillStyle = '#FFFFFF'; c.fillRect(PAD, y, W - PAD * 2, 34); }
+    if(i && listRows[i - 1][0] !== g){ c.fillStyle = g === 'next' ? '#7C5CFF' : '#2F6FEB'; c.fillRect(PAD, y - 1, W - PAD * 2, 2); }
     const yy = y + 22;
     txt(g === 'late' ? 'Rớt' : g === 'next' ? 'Ca sau' : 'Trong ca', PAD + 12, yy, F(700, 12.5), g === 'late' ? '#E5484D' : g === 'next' ? '#7C5CFF' : '#2F6FEB');
     txt(fit(r.type, 56, F(600, 13)), PAD + 102, yy, F(600, 13), '#111827');
     txt(fit(r.cNo, 170, F(700, 13)), PAD + 162, yy, F(700, 13), '#111827');
-    txt(`${String(r.loadDate).split(',')[0]} ${String(r.planTime).split(',')[0]}`, PAD + 342, yy, F(500, 13), '#374151');
-    txt(fit(String(r.invoice).split(',')[0], 110, F(500, 13)), PAD + 492, yy, F(500, 13), '#374151');
-    txt(String(r.topKho || '—').replace('Kho ', ''), PAD + 612, yy, F(600, 13), '#374151');
+    txt(String(r.loadDate).split(',')[0], PAD + 342, yy, F(500, 13), '#374151');
+    txt(hhmm(r.planTime), PAD + 452, yy, F(700, 13), '#111827');
+    txt(fit(String(r.invoice).split(',')[0], 110, F(500, 13)), PAD + 532, yy, F(500, 13), '#374151');
+    txt(String(r.topKho || '—').replace('Kho ', ''), PAD + 652, yy, F(600, 13), '#374151');
     const pc = r.pct || 0;
-    txt(pickPctLabel(pc), PAD + 692, yy, F(700, 13), pc >= 99.995 ? '#0E8F76' : pc > 0 ? '#D98A0B' : '#6B7485');
+    txt(pickPctLabel(pc), PAD + 722, yy, F(700, 13), pc >= 99.995 ? '#0E8F76' : pc > 0 ? '#D98A0B' : '#6B7485');
     const st = contPickStatusLabel(r);
-    txt(st, PAD + 782, yy, F(600, 13), r.isShipDone ? '#7C5CFF' : (r.status === 'done' || r.status === 'manualDone') ? '#0E8F76' : r.status === 'inProgress' ? '#D98A0B' : '#6B7485');
+    txt(st, PAD + 812, yy, F(600, 13), r.isShipDone ? '#7C5CFF' : (r.status === 'done' || r.status === 'manualDone') ? '#0E8F76' : r.status === 'inProgress' ? '#D98A0B' : '#6B7485');
     // Ghi chú lấy trực tiếp từ ô Ghi chú của cont (r.comment chỉ cập nhật khi bảng vẽ lại)
     const cmt = (r.instanceKey && contPickComments[r.instanceKey]) || r.comment || '';
-    const note = [r.shortItems && r.shortItems.length ? `Thiếu ${r.shortItems.length} mã` : '', cmt].filter(Boolean).join(' · ');
-    txt(fit(note, W - PAD * 2 - 920, F(600, 12.5)), PAD + 912, yy, F(600, 12.5), '#E5484D');
+    // v6.17: chỉ hiện ghi chú tự điền, không tự thêm "Thiếu x mã"
+    txt(fit(cmt, W - PAD * 2 - 950, F(600, 12.5)), PAD + 942, yy, F(600, 12.5), '#E5484D');
     y += 34;
   });
   if(noteLines.length){
