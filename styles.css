@@ -2341,9 +2341,10 @@
   .v5-shift em{display:block; font-style:normal; font-weight:500; font-size:11.5px; color:var(--muted-2); margin-top:3px;}
   .v5-shift .v5-prog i{background:linear-gradient(90deg, #FFB547, #FF7A59);}
   .v5-h-snap{margin-top:12px;}
-  .v5-h-snap .snapshot{box-shadow:none; background:transparent !important; border:none; padding:0;}
-  .v5-h-snap .snapshot b{font-size:14px; display:inline; margin-left:6px;}
-  .v5-h-snap .snapshot br{display:none;}
+  /* v6.02: Ngày chốt dữ liệu thành thẻ nổi, chữ to giống thẻ TRANSACTION */
+  .v5-h-snap .snapshot{display:inline-block; min-width:240px; max-width:100%; padding:10px 16px; border:1px solid var(--line); border-radius:14px; background:var(--panel); box-shadow:0 6px 18px rgba(15,23,42,.10); font-size:11px; letter-spacing:.04em; color:var(--muted-2);}
+  .v5-h-snap .snapshot b{display:block; margin:2px 0 4px; font-family:var(--mono); font-size:20px; font-weight:700; letter-spacing:0; color:var(--text);}
+  .v5-h-snap .snapshot .updated-at{margin-top:2px; font-size:11px; letter-spacing:0;}
 
   .v5-h-ring{position:relative; display:flex; flex-direction:column; align-items:center;}
   .v5-ring{width:170px; height:170px; transform:rotate(-90deg);}
