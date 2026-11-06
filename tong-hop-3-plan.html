@@ -304,6 +304,47 @@
   }
   .ph-pick-kho-hdr{justify-content:flex-start;}
   .ph-pick-kho-hdr > span{flex:1 1 auto;}
+
+  /* ===== v4.30: tab Tìm mã hàng ===== */
+  .ph-isticky{position:sticky; top:0; z-index:30; background:#f4f5f7; padding:6px 0 8px;}
+  .ph-isticky .ph-item-search-row{margin-bottom:0; flex-wrap:nowrap;}
+  .ph-isearch-wrap{position:relative; flex:1 1 auto; min-width:0;}
+  .ph-isticky #ph-item-search{max-width:none; padding:10px 38px 10px 12px; font-size:15px; border-radius:10px;}
+  .ph-iclear{position:absolute; right:6px; top:50%; transform:translateY(-50%); width:28px; height:28px; border-radius:50%; border:none; background:#e5e8ee; color:#55637C; font-size:14px; cursor:pointer; display:none;}
+  .ph-iclear.show{display:block;}
+  .ph-recent{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; font-size:12px; color:#8a97ac; align-items:center;}
+  .ph-recent button{padding:5px 10px; border-radius:999px; border:1px solid #d7dae0; background:#fff; font:inherit; font-size:12.5px; font-family:ui-monospace,monospace; color:#374151; cursor:pointer;}
+  .ph-res-head{display:flex; align-items:center; gap:8px; margin:8px 0 10px; font-size:13px; color:#55637C;}
+  .ph-res-head > span{flex:1 1 auto;}
+  .ph-res-head .ph-icon-btn{width:34px; height:34px; font-size:15px;}
+  .ph-search-result-card{border:1px solid #e2e5ea; border-radius:10px;}
+  .ph-search-hdr{padding:10px 12px;}
+  .ph-sh-top{display:flex; align-items:baseline; gap:6px 10px; flex-wrap:wrap;}
+  .ph-sh-top b{font-family:ui-monospace,monospace; font-size:15px; color:#12161F;}
+  .ph-sh-po{font-family:ui-monospace,monospace; font-size:12.5px; color:#55637C;}
+  .ph-sh-sum{margin-left:auto; font-size:12.5px; white-space:nowrap;}
+  .ph-sh-sum .ph-sum-pass{color:#0B7A3B; font-weight:700;}
+  .ph-sh-sum .ph-sum-ng{color:#B42318; font-weight:700;}
+  .ph-sh-chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+  .ph-need-list{margin-top:8px; display:flex; flex-direction:column; gap:4px;}
+  .ph-need-cont{display:flex; align-items:center; gap:6px; flex-wrap:wrap; width:100%; text-align:left; padding:6px 9px; border-radius:8px; border:1px solid #f0d58a; background:#fff8e1; font:inherit; font-size:12.5px; color:#5c4200; cursor:pointer;}
+  .ph-need-cont.ph-need-done{border-color:#b9e3c8; background:#eef9f1; color:#0B5A2E;}
+  .ph-need-cont b{font-family:ui-monospace,monospace;}
+  .ph-need-cont .ph-need-go{margin-left:auto; color:#2c6fcb; font-weight:600;}
+  .ph-pick-sec .ph-pick-kho-hdr{cursor:pointer; font-size:12px; padding:8px 10px 8px 12px;}
+  .ph-pick-sec .ph-pick-kho-hdr > span::before{content:'▾ '; color:#55637C;}
+  .ph-pick-sec.ph-collapsed .ph-pick-kho-hdr > span::before{content:'▸ ';}
+  .ph-pick-sec.ph-collapsed .ph-locs-scroll{display:none;}
+  .ph-pick-sec .ph-pick-shot-btn{font-size:14px; padding:2px 8px;}
+  .ph-pick-sec .ph-sec-ng{color:#B42318; text-transform:none;}
+  .ph-locs tr.ph-loc-ng > td{background:#FDECEC;}
+  .ph-locs tr.ph-loc-ng > td.ph-num, .ph-locs tr.ph-loc-ng > td.ph-oqc-ng{color:#B42318; font-weight:700;}
+  .ph-locs tr.ph-loc-click > td:first-child{white-space:nowrap;}
+  /* Mã chỉ có 1 PO -> ẩn cột PO (PO đã ghi ở đầu thẻ), mũi tên ▸ chuyển sang cột Locator */
+  .ph-single-po .ph-locs .ph-po-col{display:none;}
+  .ph-single-po .ph-locs tr.ph-loc-click > td:nth-child(2)::before{content:'▸'; display:inline-block; width:12px; color:#8a97ac; font-size:10px; transition:transform .15s;}
+  .ph-single-po .ph-locs tr.ph-loc-click.ph-loc-open > td:nth-child(2)::before{transform:rotate(90deg);}
+  .ph-card.ph-flash{box-shadow:0 0 0 3px #2c6fcb;}
 </style>
 </head>
 <body>
@@ -370,13 +411,16 @@
     </div>
 
     <div id="ph-tab-search" style="display:none;">
+      <div class="ph-isticky">
       <div class="ph-item-search-row">
-        <input id="ph-item-search" type="text" placeholder="Nhập mã hàng cần tìm (VD: 095079971)...">
+        <div class="ph-isearch-wrap"><input id="ph-item-search" type="text" placeholder="🔍 Mã hàng (VD: 095079971)..." autocomplete="off"><button type="button" class="ph-iclear" id="ph-iclear" title="Xoá">✕</button></div>
         <div class="ph-oqc-filter" id="ph-oqc-filter" role="group" aria-label="Lọc theo OQC">
           <button type="button" data-oqc="ALL" class="ph-oqc-active">All</button>
           <button type="button" data-oqc="PASS">Pass</button>
           <button type="button" data-oqc="NG">NG</button>
         </div>
+      </div>
+      <div class="ph-recent" id="ph-recent"></div>
       </div>
       <div id="ph-item-search-result"></div>
     </div>
@@ -392,7 +436,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v4.29';
+  var PH_VERSION = 'v4.30';
   var PH_VERSION_DATE = '05/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -789,7 +833,7 @@
     var pct = row.planQty > 0 ? Math.min(100, (row.picked || 0) / row.planQty * 100) : 0;
     var picking = row.status === 'inProgress';
     var hay = [row.type, row.invoice, row.csr, row.loadDate, row.planTime, kho].concat(row.items.map(function(it){ return it.item + ' ' + it.po + ' ' + (it.ebPo || ''); })).join(' ').toLowerCase();
-    return '<div class="ph-card ' + (row.short ? 'ph-st-short' : 'ph-st-ok') + '" data-type="' + phEsc(row.type) + '" data-day="' + phEsc(row.loadDate) + '" data-short="' + (row.short ? 1 : 0) + '" data-picking="' + (picking ? 1 : 0) + '" data-hay="' + phEsc(hay) + '">' +
+    return '<div class="ph-card ' + (row.short ? 'ph-st-short' : 'ph-st-ok') + '" data-ckey="' + phEsc(row.type + '|' + row.cNo + '|' + row.loadDate + '|' + row.planTime) + '" data-type="' + phEsc(row.type) + '" data-day="' + phEsc(row.loadDate) + '" data-short="' + (row.short ? 1 : 0) + '" data-picking="' + (picking ? 1 : 0) + '" data-hay="' + phEsc(hay) + '">' +
       '<div class="ph-card-head" data-target="' + detailId + '">' +
         '<div class="ph-l1"><span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span>' +
           '<span class="ph-vnc">' + phEsc(row.invoice) + '</span><span class="ph-time">' + phEsc(row.planTime || '—') + '</span>' +
@@ -867,28 +911,41 @@
   // theo TỪNG VỊ TRÍ (kho + locator + PO), hiện thành 1 danh sách LIỀN MẠCH đã mở sẵn (không cần bấm
   // mở từng ô), sắp theo đúng thứ tự kho rồi tới locator tăng dần để đi lấy hàng theo 1 đường thẳng,
   // không phải đi qua đi lại tìm. Có cột PO ở từng dòng + tổng riêng theo từng PO để tiện đối chiếu.
+  var phLastRows = [];
+  // Mã hàng -> các container đang chờ cần mã đó (để hiện "Cần cho VNC… · Pick thiếu N").
+  var phNeedsForItem = function(item){
+    var k = String(item || '').toLowerCase(), out = [];
+    (phLastRows || []).forEach(function(row){
+      row.items.forEach(function(it){ if(String(it.item || '').toLowerCase() === k) out.push({ row: row, it: it }); });
+    });
+    return out;
+  };
   var phBuildItemPickListHtml = function(item, entries, khoMeta){
-    var totalQty = entries.reduce(function(s, e){ return s + (e.qty || 0); }, 0);
-    var poTotals = {};
-    var poOrder = [];
+    var totalQty = 0, passQty = 0, ngQty = 0;
+    var poTotals = {}, poOrder = [];
     entries.forEach(function(e){
+      var q = e.qty || 0, o = String(e.oqc || '').toUpperCase();
+      totalQty += q; if(o === 'PASS') passQty += q; else if(o === 'NG') ngQty += q;
       var poKey = String(e.custpo || '').trim() || '—';
       if(poTotals[poKey] === undefined){ poTotals[poKey] = 0; poOrder.push(poKey); }
-      poTotals[poKey] += (e.qty || 0);
+      poTotals[poKey] += q;
     });
     poOrder.sort(function(a, b){ return a.localeCompare(b, 'vi', { numeric: true }); });
-    var poSummaryHtml = poOrder.map(function(po){ return '<div class="ph-pick-po-line">' + phEsc(po) + ': ' + phFmt(poTotals[po]) + '</div>'; }).join('');
-
+    var singlePo = poOrder.length <= 1;
+    var poLine = singlePo ? (poOrder[0] ? '<span class="ph-sh-po">PO ' + phEsc(poOrder[0]) + '</span>' : '')
+      : '<span class="ph-sh-po">' + poOrder.map(function(po){ return 'PO ' + phEsc(po) + ': ' + phFmt(poTotals[po]); }).join(' · ') + '</span>';
     var groups = phKhoGroups(entries, khoMeta.khoLabels);
-    var sectionsHtml = khoMeta.khoLabels.map(function(label){
+    var chips = '';
+    var sectionsHtml = khoMeta.khoLabels.map(function(label, li){
       var g = groups[label];
       if(!g.qty) return '';
+      var secNg = 0;
       var byLocPo = {};
       g.locs.forEach(function(l){
+        if(String(l.oqc || '').toUpperCase() === 'NG') secNg += (l.qty || 0);
         var poKey = String(l.custpo || '').trim() || '—';
-        // Locator Loading tách theo từng CR (mỗi CR 1 dòng) để hiện đúng (CR - VNC); locator khác gộp như cũ.
         var crPart = phIsLoadingLocator(l.locator) ? phLoadingCrCodes(l.ref).join('|') : '';
-        var lk = String(l.locator || '') + '␟' + poKey + '␟' + crPart;
+        var lk = String(l.locator || '') + '␟' + poKey + '␟' + crPart + '␟' + String(l.oqc || '');
         if(!byLocPo[lk]) byLocPo[lk] = { locator: l.locator, po: poKey, oqc: l.oqc, qty: 0, ref: l.ref, src: [] };
         byLocPo[lk].qty += (l.qty || 0);
         byLocPo[lk].src.push(l);
@@ -897,14 +954,30 @@
       rowsList.sort(function(a, b){
         return String(a.locator).localeCompare(String(b.locator), 'vi', { numeric: true }) || a.po.localeCompare(b.po, 'vi', { numeric: true });
       });
-      var rowsHtml = rowsList.map(function(l){ return '<tr' + phLocClickAttrs(l.src) + '><td>' + phEsc(l.po) + '</td><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + '</td><td>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>'; }).join('');
-      return '<div class="ph-pick-kho-hdr" style="background:' + khoMeta.khoColors[label] + ';"><span>' + phEsc(label) + ' · ' + phFmt(g.qty) + '</span><button class="ph-pick-shot-btn" type="button" title="Lưu ảnh danh sách vị trí kho này">📷</button><button class="ph-pick-shot-btn" data-share="1" type="button" title="Chia sẻ ảnh danh sách vị trí kho này">📤</button></div>' +
-        '<div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th>PO</th><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div>';
+      var secId = 'ps' + (phPickSecSeq++);
+      chips += '<button type="button" class="ph-chip ph-sec-jump" data-sec="' + secId + '" style="background:' + khoMeta.khoColors[label] + ';">' + phEsc(label) + ' <b>' + phFmt(g.qty) + '</b>' + (secNg > 0 ? '<span class="ph-chip-ng">NG ' + phFmt(secNg) + '</span>' : '') + '</button>';
+      var rowsHtml = rowsList.map(function(l){
+        var isNg = String(l.oqc || '').toUpperCase() === 'NG';
+        var attrs = phLocClickAttrs(l.src);
+        if(isNg) attrs = attrs.replace('class="ph-loc-click"', 'class="ph-loc-click ph-loc-ng"');
+        return '<tr' + attrs + '><td class="ph-po-col">' + phEsc(l.po) + '</td><td>' + phEsc(phLocatorLabel(l.locator, l.ref)) + '</td><td' + (isNg ? ' class="ph-oqc-ng"' : '') + '>' + phEsc(l.oqc || '—') + '</td><td class="ph-num">' + phFmt(l.qty) + '</td></tr>';
+      }).join('');
+      return '<div class="ph-pick-sec" id="' + secId + '"><div class="ph-pick-kho-hdr" style="background:' + khoMeta.khoColors[label] + ';"><span>' + phEsc(label) + ' · ' + phFmt(g.qty) + (secNg > 0 ? ' <em class="ph-sec-ng">(NG ' + phFmt(secNg) + ')</em>' : '') + ' · ' + rowsList.length + ' vị trí</span>' +
+        '<button class="ph-pick-shot-btn" type="button" title="Lưu ảnh danh sách vị trí kho này">📷</button><button class="ph-pick-shot-btn" data-share="1" type="button" title="Chia sẻ ảnh danh sách vị trí kho này">📤</button></div>' +
+        '<div class="ph-locs-scroll"><table class="ph-locs"><thead><tr><th class="ph-po-col">PO</th><th>Locator</th><th>OQC</th><th style="text-align:right;">SL tồn</th></tr></thead><tbody>' + rowsHtml + '</tbody></table></div></div>';
     }).join('');
-    return '<div class="ph-search-result-card"><div class="ph-search-hdr"><b>' + phEsc(item) + '</b> · Tổng SL tồn: ' + phFmt(totalQty) +
-      (poSummaryHtml ? '<div class="ph-pick-po-summary">Theo PO:' + poSummaryHtml + '</div>' : '') +
-      '</div>' + sectionsHtml + '</div>';
+    var needs = phNeedsForItem(item);
+    var needHtml = needs.length ? '<div class="ph-need-list">' + needs.map(function(n){
+      var need = n.it.need || 0;
+      return '<button type="button" class="ph-need-cont' + (need > 0 ? '' : ' ph-need-done') + '" data-goto-vnc="' + phEsc(n.row.invoice) + '" data-goto-key="' + phEsc(n.row.type + '|' + n.row.cNo + '|' + n.row.loadDate + '|' + n.row.planTime) + '">' +
+        '<span>Cần cho <b>' + phEsc(n.row.invoice) + '</b> · ' + phEsc(n.row.loadDate) + ' ' + phEsc(n.row.planTime) + (n.it.po && !singlePo ? ' · PO ' + phEsc(n.it.po) : '') + '</span>' +
+        '<span>' + (need > 0 ? 'Pick thiếu <b>' + phFmt(need) + '</b>' : '✓ Đã pick đủ') + '</span><span class="ph-need-go">Xem ›</span></button>';
+    }).join('') + '</div>' : '';
+    var sumHtml = '<span class="ph-sh-sum">Tổng <b>' + phFmt(totalQty) + '</b> · <span class="ph-sum-pass">PASS ' + phFmt(passQty) + '</span>' + (ngQty > 0 ? ' · <span class="ph-sum-ng">NG ' + phFmt(ngQty) + '</span>' : '') + '</span>';
+    return '<div class="ph-search-result-card' + (singlePo ? ' ph-single-po' : '') + '"><div class="ph-search-hdr"><div class="ph-sh-top"><b>' + phEsc(item) + '</b>' + poLine + sumHtml + '</div>' +
+      '<div class="ph-sh-chips">' + chips + '</div>' + needHtml + '</div>' + sectionsHtml + '</div>';
   };
+  var phPickSecSeq = 0;
   // Cú pháp tìm: dấu PHẨY (,) tách nhiều NHÓM tìm riêng biệt (OR — khớp 1 trong các nhóm là được,
   // dùng để tìm gộp nhiều mã khác nhau cùng lúc); trong 1 nhóm, các từ cách nhau bằng dấu CÁCH phải
   // khớp HẾT (AND — dùng để gõ thêm từ khoá lọc bớt kết quả, VD "<mã hàng> 3a rack" hay "<mã hàng>
@@ -952,8 +1025,8 @@
       return phBuildItemPickListHtml(entries[0].item, entries, khoMeta);
     }).join('');
     if(!cardsHtml.trim()) return '<div class="ph-empty-note">Không tìm thấy mã hàng nào khớp "' + phEsc(query) + '"' + oqcNote + ' trong dữ liệu tồn kho.</div>';
-    return '<div class="ph-meta">Tìm thấy ' + phFmt(matchedKeys.length) + ' mã hàng khớp "' + phEsc(query) + '"' + oqcNote + ' — mỗi mã liệt kê đủ vị trí theo thứ tự kho · locator để đi lấy hàng.' +
-      '<button class="ph-pick-shot-all-btn" type="button">📷 Lưu ảnh toàn bộ kết quả</button><button class="ph-pick-shot-all-btn" data-share="1" type="button">📤 Chia sẻ toàn bộ kết quả</button></div>' + cardsHtml;
+    return '<div class="ph-res-head"><span>Tìm thấy <b>' + phFmt(matchedKeys.length) + '</b> mã khớp "' + phEsc(query) + '"' + oqcNote + '</span>' +
+      '<button class="ph-pick-shot-all-btn ph-icon-btn" type="button" title="Lưu ảnh toàn bộ kết quả">📷</button><button class="ph-pick-shot-all-btn ph-icon-btn" data-share="1" type="button" title="Chia sẻ toàn bộ kết quả">📤</button></div>' + cardsHtml;
   };
   var phRenderItemSearch = function(){
     var input = document.getElementById('ph-item-search');
@@ -961,6 +1034,27 @@
     if(!input || !resultEl) return;
     if(!phLastKhoMeta){ resultEl.innerHTML = '<div class="ph-empty-note">Chưa có dữ liệu tồn kho trên Cloud.</div>'; return; }
     resultEl.innerHTML = phBuildInventorySearchResultHtml(input.value, phLastKhoMeta, phLastInvIdx);
+    phRenderRecent();
+  };
+  // Mã tìm gần đây (tối đa 6, nhớ trên máy) — hiện khi ô tìm đang trống.
+  var PH_RECENT_KEY = 'tp3_item_recent_v1';
+  var phRecent = [];
+  try{ phRecent = JSON.parse(localStorage.getItem(PH_RECENT_KEY) || '[]') || []; }catch(e){ phRecent = []; }
+  var phRememberSearch = function(q){
+    q = String(q || '').trim();
+    if(q.length < 3) return;
+    if(!document.querySelector('#ph-item-search-result .ph-search-result-card')) return;
+    phRecent = [q].concat(phRecent.filter(function(x){ return x !== q; })).slice(0, 6);
+    try{ localStorage.setItem(PH_RECENT_KEY, JSON.stringify(phRecent)); }catch(e){}
+  };
+  var phRenderRecent = function(){
+    var box = document.getElementById('ph-recent'), input = document.getElementById('ph-item-search');
+    var clr = document.getElementById('ph-iclear');
+    if(clr) clr.classList.toggle('show', !!input.value);
+    if(!box) return;
+    if(input.value.trim() || !phRecent.length){ box.innerHTML = ''; box.style.display = 'none'; return; }
+    box.style.display = '';
+    box.innerHTML = 'Gần đây:' + phRecent.map(function(q){ return '<button type="button" data-recent="' + phEsc(q) + '">' + phEsc(q) + '</button>'; }).join('');
   };
 
   // Chỉ gọi ĐÚNG 1 khoá con mỗi lần (không phải cả node dashboard_data) — node đó còn chứa rất nhiều
@@ -1009,6 +1103,7 @@
       })() : [];
 
       phLastKhoMeta = khoMeta;
+      phLastRows = rows;
       phLastInvIdx = invIdx;
       phRenderItemSearch();
 
@@ -1132,7 +1227,56 @@
     var pop = document.getElementById('ph-menu-pop');
     if(pop && !e.target.closest('.ph-menu')) pop.style.display = 'none';
   });
-  document.getElementById('ph-item-search').addEventListener('input', phRenderItemSearch);
+  (function(){
+    var inp = document.getElementById('ph-item-search'), t = null;
+    inp.addEventListener('input', function(){
+      phRenderItemSearch();
+      clearTimeout(t); t = setTimeout(function(){ phRememberSearch(inp.value); }, 1500);
+    });
+    inp.addEventListener('keydown', function(e){ if(e.key === 'Enter'){ phRememberSearch(inp.value); inp.blur(); } });
+    document.getElementById('ph-iclear').addEventListener('click', function(){ inp.value = ''; phRenderItemSearch(); inp.focus(); });
+    document.getElementById('ph-recent').addEventListener('click', function(e){
+      var b = e.target.closest('button[data-recent]'); if(!b) return;
+      inp.value = b.dataset.recent; phRenderItemSearch(); phRememberSearch(inp.value);
+    });
+    phRenderRecent();
+  })();
+  var phSwitchTab = function(tab){
+    document.querySelectorAll('.ph-tab-btn').forEach(function(b){ b.classList.toggle('ph-tab-active', b.dataset.tab === tab); });
+    document.getElementById('ph-tab-cont').style.display = (tab === 'cont') ? '' : 'none';
+    document.getElementById('ph-tab-search').style.display = (tab === 'search') ? '' : 'none';
+    window.scrollTo(0, 0);
+  };
+  document.addEventListener('click', function(e){
+    // Chip kho ở đầu thẻ -> mở + cuộn tới đúng khu
+    var jump = e.target.closest('.ph-sec-jump');
+    if(jump){
+      var sec = document.getElementById(jump.dataset.sec);
+      if(sec){ sec.classList.remove('ph-collapsed'); var st = document.querySelector('.ph-isticky'); var off = st ? st.offsetHeight : 0;
+        window.scrollTo({ top: sec.getBoundingClientRect().top + window.scrollY - off - 6, behavior: 'smooth' }); }
+      return;
+    }
+    // Bấm tiêu đề khu (không phải nút 📷/📤) -> thu gọn / mở
+    var hdr = e.target.closest('.ph-pick-sec > .ph-pick-kho-hdr');
+    if(hdr && !e.target.closest('.ph-pick-shot-btn')){ hdr.parentElement.classList.toggle('ph-collapsed'); return; }
+    // "Cần cho VNC…" -> sang tab Container, tìm đúng cont đó và mở thẻ
+    var go = e.target.closest('.ph-need-cont');
+    if(go){
+      phFilters = { day: '', types: [], short: false, picking: false };
+      try{ localStorage.setItem(PH_FILTER_KEY, JSON.stringify(phFilters)); }catch(err){}
+      var sInp = document.getElementById('ph-search'); sInp.value = go.dataset.gotoVnc || '';
+      phSwitchTab('cont');
+      phApplyFilters();
+      var card = document.querySelector('.ph-card[data-ckey="' + (window.CSS && CSS.escape ? CSS.escape(go.dataset.gotoKey) : go.dataset.gotoKey) + '"]');
+      if(card){
+        var head = card.querySelector('.ph-card-head'), body = document.getElementById(head.dataset.target);
+        if(body && body.style.display === 'none'){ body.style.display = ''; card.classList.add('ph-open'); }
+        var st2 = document.getElementById('ph-sticky');
+        window.scrollTo({ top: card.getBoundingClientRect().top + window.scrollY - (st2 ? st2.offsetHeight : 0) - 6 });
+        card.classList.add('ph-flash'); setTimeout(function(){ card.classList.remove('ph-flash'); }, 1600);
+      }
+    }
+  });
   (function(){
     var box = document.getElementById('ph-oqc-filter');
     var sync = function(){ box.querySelectorAll('button').forEach(function(b){ b.classList.toggle('ph-oqc-active', b.dataset.oqc === phItemOqcFilter); }); };
