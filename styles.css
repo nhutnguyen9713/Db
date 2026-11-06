@@ -2570,3 +2570,28 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
 .v5-il-tbl tr:hover td{background:rgba(127,127,127,.07);}
 .v5-il-kho{display:inline-block; font-size:11px; font-weight:800; padding:2px 8px; border-radius:6px; background:rgba(94,168,255,.15); color:var(--blue);}
 .v5-il-ref{display:block; font-size:11px; color:var(--amber-bright); margin-top:2px;}
+
+/* ===== v5.60: Báo cáo ca + Đường pick trên sơ đồ kho ===== */
+.v5-sh-report{margin-left:auto; border:1px solid var(--line); background:var(--panel); color:var(--text); font-family:var(--sans); font-size:12px; font-weight:700; padding:6px 12px; border-radius:10px; cursor:pointer;}
+.v5-sh-report:hover{border-color:var(--blue); color:var(--blue);}
+.v5-pc-route{margin-top:10px; width:100%; border:1px dashed color-mix(in srgb, var(--c) 55%, var(--line)); background:transparent; color:var(--text); font-family:var(--sans); font-size:12px; font-weight:700; padding:7px 10px; border-radius:10px; cursor:pointer;}
+.v5-pc-route:hover{background:color-mix(in srgb, var(--c) 12%, transparent);}
+.v5-nx-route{grid-column:1 / -1; justify-self:start; margin-top:6px; border:1px solid var(--line); background:transparent; color:var(--muted); font-family:var(--sans); font-size:11.5px; font-weight:700; padding:4px 10px; border-radius:999px; cursor:pointer;}
+.v5-nx-route:hover{color:var(--blue); border-color:var(--blue);}
+.v5-route-bar{position:sticky; top:8px; z-index:30; margin-bottom:14px; border:1px solid color-mix(in srgb, var(--blue) 45%, var(--line)); border-radius:16px; background:color-mix(in srgb, var(--panel) 92%, var(--blue)); box-shadow:0 10px 30px rgba(0,0,0,.18); padding:12px 14px; font-family:var(--sans); backdrop-filter:blur(8px);}
+.v5-rb-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+.v5-rb-t{font-size:14px; font-weight:800; color:var(--text);}
+.v5-rb-n{font-size:12px; color:var(--muted);}
+.v5-rb-off{margin-left:auto; border:1px solid var(--line); background:transparent; color:var(--muted); font-weight:700; font-size:12px; padding:5px 10px; border-radius:9px; cursor:pointer;}
+.v5-rb-list{display:flex; gap:8px; overflow-x:auto; padding:10px 2px 2px;}
+.v5-rb-stop{flex:none; display:grid; grid-template-columns:auto 1fr; gap:2px 8px; align-items:center; text-align:left; border:1px solid var(--line); background:var(--panel); color:var(--text); border-radius:12px; padding:7px 10px; cursor:pointer; max-width:260px;}
+.v5-rb-stop i{grid-row:1 / 3; font-style:normal; width:24px; height:24px; border-radius:50%; display:grid; place-items:center; background:var(--blue); color:#fff; font-weight:800; font-size:12px;}
+.v5-rb-stop b{font-size:12.5px;} .v5-rb-stop em{font-style:normal; font-size:10.5px; color:var(--muted); margin-left:6px;}
+.v5-rb-stop small{font-size:11px; color:var(--muted); line-height:1.35;}
+.v5-rb-stop.nomap{opacity:.6; border-style:dashed;} .v5-rb-stop.nomap i{background:var(--muted-2);}
+.v5-rb-stop.nomap b:after{content:" · không có trên sơ đồ"; font-weight:500; color:var(--muted); font-size:10.5px;}
+#page-sodo3b.v5-route-on .wh3b-box:not(.v5-route){opacity:.28; filter:grayscale(.6);}
+#page-sodo3b .wh3b-box.v5-route{position:relative; z-index:2; outline:2.5px solid var(--blue); outline-offset:1px; box-shadow:0 0 0 6px color-mix(in srgb, var(--blue) 22%, transparent), 0 8px 22px rgba(47,111,235,.35); animation:v5RoutePulse 1.8s ease-in-out infinite;}
+#page-sodo3b .wh3b-box.v5-route::after{content:attr(data-v5-step); position:absolute; top:-9px; left:-9px; min-width:20px; height:20px; padding:0 5px; border-radius:999px; background:var(--blue); color:#fff; font:800 11px/20px var(--sans); text-align:center; box-shadow:0 2px 6px rgba(0,0,0,.3); pointer-events:none;}
+@keyframes v5RoutePulse{0%,100%{box-shadow:0 0 0 4px color-mix(in srgb, var(--blue) 18%, transparent), 0 8px 22px rgba(47,111,235,.3);} 50%{box-shadow:0 0 0 9px color-mix(in srgb, var(--blue) 8%, transparent), 0 8px 22px rgba(47,111,235,.4);}}
+@media (prefers-reduced-motion: reduce){ #page-sodo3b .wh3b-box.v5-route{animation:none;} }

@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.51';
+const APP_VERSION = 'v5.60';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18402,7 +18402,7 @@ function v5RenderHero(){
   if(v5NextInfo){
     const r = v5NextInfo.r;
     nextEl.innerHTML = `<div class="v5-nx-l">Cont kế tiếp</div><div class="v5-nx-t">${escHtml(r.type)} · ${escHtml(String(r.cNo))} <span>${escHtml(String(r.invoice).split(',')[0])}</span></div>
-      <div class="v5-nx-m">${escHtml(r.loadDate)} ${escHtml(r.planTime)} · ${escHtml((r.topKho || '').replace('Kho ', 'Kho '))} · ${pickPctLabel(r.pct)}</div><div class="v5-nx-cd" id="v5-nx-cd"></div>`;
+      <div class="v5-nx-m">${escHtml(r.loadDate)} ${escHtml(r.planTime)} · ${escHtml((r.topKho || '').replace('Kho ', 'Kho '))} · ${pickPctLabel(r.pct)}</div><div class="v5-nx-cd" id="v5-nx-cd"></div><button type="button" class="v5-nx-route" data-v5-route="${escAttr(r.instanceKey || '')}" title="Tô sáng locator cần lấy trên Sơ đồ kho">🗺️ Đường pick</button>`;
     nextEl.style.display = '';
   } else nextEl.style.display = 'none';
   v5RenderShiftStats();
@@ -18591,6 +18591,7 @@ function v5PlanCardsHtml(type, groups, theadHtml){
       <div class="v5-pc-meta"><div><b>${fmt(tq)}</b><span>Tổng QTY</span></div><div><b>${g.items.length}</b><span>Mã hàng</span></div><div><b>${fmt(ctn)}</b><span>CTN</span></div><div><b>${fmtDec(cbm, 1)}</b><span>CBM</span></div></div>
       <div class="v5-pc-items">${g.items.map(i => `<div class="v5-pc-it"><span><span class="item-link" data-item="${i.item}" data-po="${i.po}">${i.item}</span> <small>${i.po}</small></span><span class="q">${fmt(i.pass)} / ${fmt(i.qty)}</span><div class="tr"><div style="width:${i.pct}%;background:${i.barColor}"></div></div></div>`).join('')}</div>
       <div class="v5-pc-foot"><span>${g.csr ? 'CSR ' + g.csr : 'Chưa có CSR'}</span><span>${fmt(pk)} / ${fmt(tq)} pcs · ${pctTxt}</span></div>
+      <button type="button" class="v5-pc-route" data-v5-route="${escAttr(contInstanceKey(type, g.cNo, g.date, g.time))}" title="Tô sáng các locator cần lấy hàng cho cont này trên Sơ đồ kho">🗺️ Đường pick trên sơ đồ kho</button>
       <div class="v5-pc-detail">${open ? `<div class="plan-table-wrap"><table class="plan-detail-table"><thead>${theadHtml}</thead><tbody>${g.trs.join('')}</tbody></table></div>` : ''}</div>
     </div>`;
   });
@@ -18610,7 +18611,7 @@ document.addEventListener('click', (e) => {
     return;
   }
   const card = e.target.closest('.v5-pc');
-  if(!card || e.target.closest('.item-link') || e.target.closest('.v5-pc-detail')) return;
+  if(!card || e.target.closest('.item-link') || e.target.closest('.v5-pc-detail') || e.target.closest('[data-v5-route]')) return;
   const k = card.dataset.v5Pc;
   const det = card.querySelector('.v5-pc-detail');
   if(v5PlanOpenSet().has(k)){ v5PlanOpenSet().delete(k); card.classList.remove('open'); if(det) det.innerHTML = ''; }
@@ -18685,14 +18686,7 @@ function v5RenderShiftStats(){
   if(!rows.length){ el.innerHTML = ''; el.style.display = 'none'; return; }
   el.style.display = '';
   const hm = t => { const d = new Date(t); return `${v5Pad(d.getHours())}:${v5Pad(d.getMinutes())} ${v5Pad(d.getDate())}/${v5Pad(d.getMonth() + 1)}`; };
-  const late = [], inShift = [], next = [];
-  rows.forEach(r => {
-    const ts = ovParseDateTimeSortKey(r.loadDate, r.planTime);
-    if(!isFinite(ts)) return;
-    if(ts < sh.start){ if(!r.isShipDone) late.push(r); }
-    else if(ts < sh.end) inShift.push(r);
-    else next.push(r);
-  });
+  const { late, inShift, next } = v5ShiftGroups(sh);
   const card = (cls, title, sub, list, c) => {
     const n = s => list.filter(r => r.status === s).length;
     const done = list.filter(r => r.status === 'done' || r.status === 'manualDone').length;
@@ -18705,7 +18699,7 @@ function v5RenderShiftStats(){
       <div class="v5-sh-pal"><span>Pallet đã pick <b>${fmt(pal.picked)}</b></span><span>Pallet đã load <b>${pal.loaded === null ? '—' : fmt(pal.loaded)}</b></span></div>
     </div>`;
   };
-  el.innerHTML = `<div class="v5-sh-head">Thống kê theo ca <em>${sh.day ? '☀️ Ca ngày' : '🌙 Ca đêm'} · ${hm(sh.start)} → ${hm(sh.end)}</em></div>
+  el.innerHTML = `<div class="v5-sh-head">Thống kê theo ca <em>${sh.day ? '☀️ Ca ngày' : '🌙 Ca đêm'} · ${hm(sh.start)} → ${hm(sh.end)}</em><button type="button" class="v5-sh-report" data-v5-shift-report="1" title="Xuất ảnh tổng kết ca để gửi bàn giao">📸 Báo cáo ca</button></div>
     <div class="v5-sh-grid">
       ${card('late', 'Cont rớt', `giờ plan trước ${hm(sh.start)}, chưa load xong`, late, 'var(--red)')}
       ${card('cur', 'Cont trong ca', `${hm(sh.start)} – ${hm(sh.end)}`, inShift, 'var(--blue)')}
@@ -18747,3 +18741,186 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   v5OpenItemLocPopup(link.dataset.item, link.dataset.po || '');
 });
+
+
+// ===== v5.60: nhóm cont theo ca (dùng chung cho thẻ Thống kê theo ca và Báo cáo ca) =====
+function v5ShiftGroups(sh){
+  const late = [], inShift = [], next = [];
+  (contPickAllRows || []).forEach(r => {
+    const ts = ovParseDateTimeSortKey(r.loadDate, r.planTime);
+    if(!isFinite(ts)) return;
+    if(ts < sh.start){ if(!r.isShipDone) late.push(r); }
+    else if(ts < sh.end) inShift.push(r);
+    else next.push(r);
+  });
+  const byTs = (a, b) => ovParseDateTimeSortKey(a.loadDate, a.planTime) - ovParseDateTimeSortKey(b.loadDate, b.planTime);
+  late.sort(byTs); inShift.sort(byTs); next.sort(byTs);
+  return { late, inShift, next };
+}
+
+// ===== v5.60: Báo cáo ca 1 chạm — vẽ ảnh PNG (canvas) để gửi Zalo bàn giao ca =====
+function v5ShiftReportCanvas(){
+  const sh = v5ShiftInfo();
+  const { late, inShift, next } = v5ShiftGroups(sh);
+  const p2 = v5Pad, now = new Date();
+  const hm = t => { const d = new Date(t); return `${p2(d.getHours())}:${p2(d.getMinutes())} ${p2(d.getDate())}/${p2(d.getMonth() + 1)}`; };
+  const W = 1180, S = 2, PAD = 36;
+  const listRows = [].concat(late.map(r => ['late', r]), inShift.map(r => ['cur', r]));
+  const H = 330 + 52 + listRows.length * 34 + (listRows.length ? 0 : 40) + 90;
+  const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
+  const c = cv.getContext('2d'); c.scale(S, S);
+  const F = (w, px) => `${w} ${px}px Inter, "Segoe UI", Arial, sans-serif`;
+  const rr = (x, y, w, h, r, fill, stroke) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); if(fill){ c.fillStyle = fill; c.fill(); } if(stroke){ c.strokeStyle = stroke; c.lineWidth = 1; c.stroke(); } };
+  const txt = (t, x, y, font, color, align) => { c.font = font; c.fillStyle = color; c.textAlign = align || 'left'; c.fillText(String(t), x, y); };
+  const fit = (t, max, font) => { c.font = font; t = String(t); if(c.measureText(t).width <= max) return t; while(t.length > 1 && c.measureText(t + '…').width > max) t = t.slice(0, -1); return t + '…'; };
+  // nền + tiêu đề
+  c.fillStyle = '#F4F6FB'; c.fillRect(0, 0, W, H);
+  const grd = c.createLinearGradient(0, 0, W, 0); grd.addColorStop(0, '#0F1B33'); grd.addColorStop(1, '#1E3A6E');
+  c.fillStyle = grd; c.fillRect(0, 0, W, 104);
+  txt('BÁO CÁO CA · TN5', PAD, 46, F(800, 26), '#FFFFFF');
+  txt(`${sh.day ? 'Ca ngày' : 'Ca đêm'}  ${hm(sh.start)} → ${hm(sh.end)}`, PAD, 78, F(600, 16), '#B8C7E6');
+  txt(`Xuất lúc ${p2(now.getHours())}:${p2(now.getMinutes())} ${p2(now.getDate())}/${p2(now.getMonth() + 1)}/${now.getFullYear()}`, W - PAD, 46, F(600, 14), '#B8C7E6', 'right');
+  const allTs = (contPickAllRows || []).length;
+  txt(`Tổng ${allTs} cont trong Plan`, W - PAD, 78, F(600, 14), '#B8C7E6', 'right');
+  // 3 ô nhóm
+  const groups = [['Cont rớt', late, '#E5484D', `trước ${hm(sh.start)}, chưa load xong`], ['Cont trong ca', inShift, '#2F6FEB', `${hm(sh.start)} – ${hm(sh.end)}`], ['Cont ca sau', next, '#7C5CFF', `từ ${hm(sh.end)}`]];
+  const gw = (W - PAD * 2 - 24) / 3;
+  groups.forEach(([title, list, col, sub], i) => {
+    const x = PAD + i * (gw + 12), y = 124;
+    rr(x, y, gw, 186, 14, '#FFFFFF', '#DDE3EE');
+    c.fillStyle = col; c.fillRect(x, y + 14, 4, 158);
+    txt(title, x + 20, y + 32, F(800, 17), col);
+    txt(sub, x + 20, y + 52, F(500, 12), '#6B7485');
+    txt(list.length, x + 20, y + 102, F(800, 44), title === 'Cont rớt' && list.length ? col : '#111827');
+    txt('cont', x + 22 + c.measureText(String(list.length)).width + 6, y + 102, F(600, 15), '#6B7485');
+    const cnt = st => list.filter(r => r.status === st).length;
+    const done = list.filter(r => r.status === 'done' || r.status === 'manualDone').length, ship = list.filter(r => r.isShipDone).length;
+    txt(`Chưa ${cnt('notStarted')} · Đang ${cnt('inProgress')} · Xong ${done} · Load ${ship}`, x + 20, y + 132, F(600, 13), '#374151');
+    const pal = v5PalletSum(list);
+    txt(`Pallet pick ${fmt(pal.picked)} · load ${pal.loaded === null ? '—' : fmt(pal.loaded)}`, x + 20, y + 160, F(700, 13), '#111827');
+  });
+  // bảng cont rớt + trong ca
+  let y = 340;
+  txt('Chi tiết cont rớt và cont trong ca', PAD, y, F(800, 16), '#111827');
+  y += 16;
+  const cols = [['Nhóm', 0], ['Plan', 90], ['Cont', 150], ['Ngày · Giờ', 330], ['Invoice', 480], ['Kho', 600], ['% pick', 680], ['Trạng thái', 770], ['Ghi chú', 900]];
+  rr(PAD, y, W - PAD * 2, 30, 8, '#E8EDF6');
+  cols.forEach(([h, dx]) => txt(h, PAD + 12 + dx, y + 20, F(700, 12), '#4B5563'));
+  y += 30;
+  if(!listRows.length){ txt('Không có cont rớt hay cont trong ca.', PAD + 12, y + 28, F(500, 13), '#6B7485'); y += 40; }
+  listRows.forEach(([g, r], i) => {
+    if(i % 2) { c.fillStyle = '#FFFFFF'; c.fillRect(PAD, y, W - PAD * 2, 34); }
+    const yy = y + 22;
+    txt(g === 'late' ? 'Rớt' : 'Trong ca', PAD + 12, yy, F(700, 12.5), g === 'late' ? '#E5484D' : '#2F6FEB');
+    txt(fit(r.type, 56, F(600, 13)), PAD + 102, yy, F(600, 13), '#111827');
+    txt(fit(r.cNo, 170, F(700, 13)), PAD + 162, yy, F(700, 13), '#111827');
+    txt(`${String(r.loadDate).split(',')[0]} ${String(r.planTime).split(',')[0]}`, PAD + 342, yy, F(500, 13), '#374151');
+    txt(fit(String(r.invoice).split(',')[0], 110, F(500, 13)), PAD + 492, yy, F(500, 13), '#374151');
+    txt(String(r.topKho || '—').replace('Kho ', ''), PAD + 612, yy, F(600, 13), '#374151');
+    const pc = r.pct || 0;
+    txt(pickPctLabel(pc), PAD + 692, yy, F(700, 13), pc >= 99.995 ? '#0E8F76' : pc > 0 ? '#D98A0B' : '#6B7485');
+    const st = contPickStatusLabel(r);
+    txt(st, PAD + 782, yy, F(600, 13), r.isShipDone ? '#7C5CFF' : (r.status === 'done' || r.status === 'manualDone') ? '#0E8F76' : r.status === 'inProgress' ? '#D98A0B' : '#6B7485');
+    const note = [r.shortItems && r.shortItems.length ? `Thiếu ${r.shortItems.length} mã` : '', r.comment || ''].filter(Boolean).join(' · ');
+    txt(fit(note, W - PAD * 2 - 920, F(600, 12.5)), PAD + 912, yy, F(600, 12.5), '#E5484D');
+    y += 34;
+  });
+  txt('Dashboard TN5 · ' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''), PAD, H - 30, F(500, 12), '#9AA3B2');
+  return { cv, name: `Bao-cao-ca_${sh.day ? 'ngay' : 'dem'}_${p2(new Date(sh.start).getDate())}-${p2(new Date(sh.start).getMonth() + 1)}.png` };
+}
+async function v5ShiftReport(){
+  try{
+    const { cv, name } = v5ShiftReportCanvas();
+    const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+    if(!blob) throw new Error('Không tạo được ảnh');
+    const file = (typeof File === 'function') ? new File([blob], name, { type: 'image/png' }) : null;
+    if(file && navigator.canShare && navigator.canShare({ files: [file] }) && IS_TOUCH_DEVICE){
+      try{ await navigator.share({ files: [file], title: 'Báo cáo ca' }); return; }catch(e){ if(e && e.name === 'AbortError') return; }
+    }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  }catch(e){ console.error(e); alert('Không xuất được báo cáo ca: ' + (e && e.message || e)); }
+}
+document.addEventListener('click', e => { if(e.target.closest('[data-v5-shift-report]')) v5ShiftReport(); });
+
+// ===== v5.60: Đường pick trên Sơ đồ kho — bấm 1 cont -> tô sáng các locator còn hàng PASS (ngoài khu
+// Loading) của đúng mã + PO cont còn thiếu, đánh số thứ tự theo kho/locator, làm mờ các ô khác. =====
+var v5Route = null;
+function v5RouteBuild(r){
+  const stops = new Map();
+  const palCnt = new Map();
+  try{ getRawRows(currentData).forEach(rw => { if(String(rw[4] || '').toUpperCase() !== 'PASS') return; const k = (String(rw[1]).toLowerCase()) + '|' + String(rw[2] || '').trim().toLowerCase() + '|' + rw[3]; palCnt.set(k, (palCnt.get(k) || 0) + 1); }); }catch(e){}
+  (r.items || []).forEach(it => {
+    const need = Math.max(0, (it.qty || 0) - (it.picked || 0));
+    if(need <= 0) return;
+    buildItemLocatorDetail(it.item, it.po).forEach(l => {
+      if(String(l.oqc || '').toUpperCase() !== 'PASS' || LOADING_LOCATOR_RE.test(String(l.locator || '').trim())) return;
+      const key = l.locator;
+      if(!stops.has(key)) stops.set(key, { kho: l.kho, locator: l.locator, lines: [] });
+      stops.get(key).lines.push({ item: it.item, po: it.po, qty: l.qty, need, pallets: palCnt.get(String(it.item).toLowerCase() + '|' + String(it.po || '').trim().toLowerCase() + '|' + l.locator) || 0 });
+    });
+  });
+  const khoOrd = { 'Kho 3B': 0, 'Kho 3A': 1, 'Kho 2B': 2, 'Kho DG1': 3 };
+  const list = [...stops.values()].sort((a, b) => (khoOrd[a.kho] ?? 9) - (khoOrd[b.kho] ?? 9) || String(a.locator).localeCompare(String(b.locator), undefined, { numeric: true }));
+  list.forEach((s, i) => s.step = i + 1);
+  return list;
+}
+function v5RouteShow(key){
+  const r = (contPickAllRows || []).find(x => x.instanceKey === key);
+  if(!r){ alert('Không tìm thấy cont này trong Plan hiện tại.'); return; }
+  v5Route = { key, title: `${r.type} · Cont ${r.cNo} · ${String(r.loadDate).split(',')[0]} ${String(r.planTime).split(',')[0]}`, stops: v5RouteBuild(r) };
+  const btn = document.querySelector('.sidebar-nav-btn[data-page="sodo3b"]');
+  if(btn) btn.click();
+  v5RouteRenderBar();
+  setTimeout(() => { v5RouteApply(); const first = document.querySelector('.wh3b-box.v5-route'); if(first) first.scrollIntoView({ behavior: 'smooth', block: 'center' }); else { const bar = document.getElementById('v5-route-bar'); if(bar) bar.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, 350);
+}
+function v5RouteRenderBar(){
+  const page = document.getElementById('page-sodo3b');
+  if(!page) return;
+  let bar = document.getElementById('v5-route-bar');
+  if(!v5Route){ if(bar) bar.remove(); return; }
+  if(!bar){ bar = document.createElement('div'); bar.id = 'v5-route-bar'; bar.className = 'v5-route-bar'; page.insertBefore(bar, page.firstChild); }
+  const st = v5Route.stops;
+  bar.innerHTML = `<div class="v5-rb-head"><span class="v5-rb-t">🗺️ Đường pick · ${escHtml(v5Route.title)}</span><span class="v5-rb-n">${st.length ? `${st.length} locator cần lấy` : 'Không còn mã nào cần pick (hoặc không có tồn PASS ngoài Loading)'}</span><button type="button" class="v5-rb-off" data-v5-route-off="1">✕ Tắt</button></div>
+    <div class="v5-rb-list">${st.map(s => `<button type="button" class="v5-rb-stop" data-v5-route-loc="${escAttr(s.locator)}"><i>${s.step}</i><span><b>${escHtml(s.locator)}</b><em>${escHtml(String(s.kho).replace('Kho ', ''))}</em></span><small>${s.lines.map(l => `${escHtml(l.item)} · ${fmt(l.qty)} pcs${l.pallets ? ' · ' + l.pallets + ' pl' : ''}`).join('<br>')}</small></button>`).join('')}</div>`;
+}
+function v5RouteApply(){
+  const page = document.getElementById('page-sodo3b');
+  if(!page) return;
+  page.classList.toggle('v5-route-on', !!v5Route);
+  const map = new Map((v5Route ? v5Route.stops : []).map(s => [String(s.locator).toUpperCase(), s]));
+  const found = new Set();
+  page.querySelectorAll('.wh3b-box[data-locator]').forEach(b => {
+    // bỏ qua ô nằm trong lưới đang bị ẩn (VD: lưới mặc định khi kho đó đang dùng lưới tuỳ chỉnh)
+    const hid = b.parentElement && b.parentElement.closest('[style*="display:none"], [style*="display: none"]');
+    const s = (hid && hid !== page) ? null : map.get(String(b.dataset.locator).toUpperCase());
+    if(s){
+      found.add(s.locator);
+      if(!b.classList.contains('v5-route')) b.classList.add('v5-route');
+      if(b.getAttribute('data-v5-step') !== String(s.step)) b.setAttribute('data-v5-step', s.step);
+      const panel = b.closest('.cc-collapse-panel'); if(panel && !panel.classList.contains('open')) ccSetCollapsePanelOpen(panel, true);
+    } else if(b.classList.contains('v5-route')){ b.classList.remove('v5-route'); b.removeAttribute('data-v5-step'); }
+  });
+  document.querySelectorAll('#v5-route-bar .v5-rb-stop').forEach(x => x.classList.toggle('nomap', !found.has(x.dataset.v5RouteLoc)));
+}
+var v5RouteObsT = 0;
+(function(){
+  const page = document.getElementById('page-sodo3b');
+  if(!page || typeof MutationObserver !== 'function') return;
+  new MutationObserver(muts => {
+    if(!v5Route) return;
+    if(muts.every(m => m.target.closest && m.target.closest('#v5-route-bar'))) return;
+    clearTimeout(v5RouteObsT); v5RouteObsT = setTimeout(v5RouteApply, 60);
+  }).observe(page, { childList: true, subtree: true });
+})();
+document.addEventListener('click', e => {
+  const rb = e.target.closest('[data-v5-route]');
+  if(rb){ e.preventDefault(); e.stopPropagation(); v5RouteShow(rb.dataset.v5Route); return; }
+  if(e.target.closest('[data-v5-route-off]')){ v5Route = null; v5RouteRenderBar(); v5RouteApply(); return; }
+  const stop = e.target.closest('[data-v5-route-loc]');
+  if(stop){
+    const loc = String(stop.dataset.v5RouteLoc).toUpperCase();
+    const b = [...document.querySelectorAll('#page-sodo3b .wh3b-box.v5-route')].find(x => String(x.dataset.locator).toUpperCase() === loc);
+    if(b){ b.scrollIntoView({ behavior: 'smooth', block: 'center' }); b.classList.remove('v5-flash'); void b.offsetWidth; b.classList.add('v5-flash'); setTimeout(() => b.classList.remove('v5-flash'), 2000); }
+  }
+}, true);
