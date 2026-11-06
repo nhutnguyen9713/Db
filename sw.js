@@ -6,8 +6,12 @@
 // (2) bỏ query ?_t=... khỏi khoá cache (trước đây mỗi lần mở tạo thêm 1 mục không bao giờ bị dọn, và mở
 // offline không khớp được); (3) thêm doi-chieu.html / tong-hop-3-plan.html vào precache và
 // cài từng file riêng để 1 file lỗi không làm hỏng cả lô.
-const CACHE_NAME = 'tn5-dashboard-v8';
-const NETWORK_TIMEOUT_MS = 4000;
+// v9 (app v6.04): app.js ~1.2MB, wifi kho chậm >4s là F5 ra bản CŨ trong cache, mà bản mới tải ngầm lại không
+// chắc được ghi vào cache (SW có thể bị dừng) -> F5 mãi ra bản cũ, chỉ Ctrl+Shift+R mới thấy bản mới.
+// Sửa: chờ mạng lâu hơn (12s), ghi cache trong event.waitUntil, và nếu đã phải dùng bản cache mà bản
+// mạng về sau KHÁC thì báo trang hiện thanh "Có bản cập nhật mới — Bấm để tải lại".
+const CACHE_NAME = 'tn5-dashboard-v9';
+const NETWORK_TIMEOUT_MS = 12000;
 const CORE_ASSETS = [
   './', './index.html', './app.js', './styles.css', './manifest.json', './icon-192.png', './icon-512.png',
   './icon-512-maskable.png', './doi-chieu.html', './tong-hop-3-plan.html', './so-do-kho.html'
@@ -50,20 +54,29 @@ self.addEventListener('fetch', (event) => {
   // cache:'no-cache' — luôn hỏi lại máy chủ (ETag, trả 304 rất nhẹ nếu không đổi) thay vì lấy bản trong
   // HTTP cache của trình duyệt: GitHub Pages cho cache 10 phút, nên trước đây F5 vẫn ra app.js cũ dù đã
   // cập nhật (chỉ Ctrl+Shift+R mới thấy bản mới).
-  const network = fetch(req, { cache: 'no-cache' }).then((res) => {
-    if (res && res.ok) {
-      const resClone = res.clone();
-      caches.open(CACHE_NAME).then((cache) => cache.put(key, resClone)).catch(() => {});
-    }
-    return res;
-  });
+  const network = fetch(req, { cache: 'no-cache' });
   network.catch(() => {}); // tránh cảnh báo 'unhandled rejection' khi bản cache đã thắng cuộc đua
+  let servedFromCache = false;
+  // Ghi bản mạng vào cache TRONG waitUntil để SW không bị dừng giữa chừng; nếu trang đang chạy bản cache
+  // mà bản mạng khác (ETag / Last-Modified / độ dài) -> nhắn trang hiện thanh cập nhật.
+  event.waitUntil(network.then(async (res) => {
+    if (!res || !res.ok) return;
+    const copy = res.clone(); // clone NGAY (trước khi trang đọc body), không thì clone lỗi "body used"
+    const cache = await caches.open(CACHE_NAME);
+    const old = await cache.match(key);
+    await cache.put(key, copy);
+    if (!servedFromCache || !old) return;
+    const sig = (r) => [r.headers.get('etag'), r.headers.get('last-modified'), r.headers.get('content-length')].join('|');
+    if (sig(old) === sig(res)) return;
+    const list = await self.clients.matchAll({ type: 'window' });
+    list.forEach((c) => c.postMessage({ type: 'tn5-sw-updated', url: key }));
+  }).catch(() => {}));
   // Mạng quá chậm -> dùng bản đã lưu (nếu có); không có bản đã lưu thì cứ chờ mạng.
   const timeout = new Promise((resolve) => setTimeout(() => resolve(null), NETWORK_TIMEOUT_MS));
 
   event.respondWith(
     Promise.race([network, timeout])
-      .then((res) => res || fromCache().then((cached) => cached || network))
+      .then((res) => res || fromCache().then((cached) => { if (cached) { servedFromCache = true; return cached; } return network; }))
       .catch(() => fromCache().then((cached) => {
         if (cached) return cached;
         // CHỈ dự phòng về index.html khi chính request đang điều hướng vào trang chủ (index.html/./)
