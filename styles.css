@@ -2529,3 +2529,28 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
 .grid > *{min-width:0;}
 @media (max-width:760px){ .plan-card-kpis{grid-template-columns:repeat(2, 1fr);} .v5-pc-meta b{font-size:14px;} }
 @media (max-width:760px){ #plan-overview-row{padding-left:10px; padding-right:10px;} #plan-overview-row .plan-card{padding-left:10px; padding-right:10px;} .v5-pc{padding:12px 12px 10px 15px;} .v5-pc-meta span{font-size:10px;} }
+
+/* ===== v5.50: pallet đã pick/load + thống kê theo ca ===== */
+.v5-ring-sub .v5-pal-l{display:flex; justify-content:space-between; gap:10px; font-size:12px; color:var(--muted); line-height:1.6;}
+.v5-ring-sub .v5-pal-l b{font-family:var(--mono); color:var(--text); font-size:13px;}
+.v5-ring-sub .v5-prog{margin-top:4px;}
+.v5-h-shiftstats{grid-column:1 / -1; padding-top:12px; border-top:1px solid var(--line);}
+.v5-sh-head{font-family:var(--sans); font-size:13px; font-weight:800; color:var(--text); margin-bottom:10px; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap;}
+.v5-sh-head em{font-style:normal; font-weight:600; font-size:12px; color:var(--muted);}
+.v5-sh-grid{display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px;}
+.v5-sh{position:relative; border:1px solid var(--line); border-radius:14px; padding:12px 14px 12px 16px; background:color-mix(in srgb, var(--sc) 6%, transparent); overflow:hidden; font-family:var(--sans);}
+.v5-sh:before{content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--sc);}
+.v5-sh-h{display:flex; flex-direction:column; gap:1px;}
+.v5-sh-t{font-size:13px; font-weight:800; color:var(--sc);}
+.v5-sh-s{font-size:11px; color:var(--muted);}
+.v5-sh-n{display:flex; align-items:baseline; gap:6px; margin:6px 0 8px;}
+.v5-sh-n b{font-family:var(--mono); font-size:30px; font-weight:700; color:var(--text); line-height:1;}
+.v5-sh-n span{font-size:12px; color:var(--muted);}
+.v5-sh.late .v5-sh-n b{color:var(--red);}
+.v5-sh-chips{display:flex; flex-wrap:wrap; gap:5px;}
+.v5-sh-chips span{font-size:11px; font-weight:600; color:var(--muted); padding:3px 8px; border-radius:999px; background:rgba(127,127,127,.12);}
+.v5-sh-chips span b{font-family:var(--mono); color:var(--text); margin-left:3px;}
+.v5-sh-chips .c1 b{color:var(--amber-bright);} .v5-sh-chips .c2 b{color:var(--teal);} .v5-sh-chips .c3 b{color:var(--violet);}
+.v5-sh-pal{display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:9px; padding-top:8px; border-top:1px dashed var(--line); font-size:12px; color:var(--muted);}
+.v5-sh-pal b{font-family:var(--mono); color:var(--text); font-size:13px; margin-left:3px;}
+@media (max-width:900px){ .v5-sh-grid{grid-template-columns:1fr;} }
