@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.01';
+const APP_VERSION = 'v5.10';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -13992,7 +13992,9 @@ function updateSearchFabLabel(){
   const sidebarEl = document.querySelector('.sidebar');
   if(!stickyEl) return;
   function applyStickyOffset(){
-    const h = sidebarEl ? Math.ceil(sidebarEl.getBoundingClientRect().height) : 0;
+    // v5.10: màn hình rộng dùng menu dọc bên trái -> không còn thanh menu trên đầu che phần ghim.
+    const vertical = window.matchMedia && window.matchMedia('(min-width:901px)').matches;
+    const h = (sidebarEl && !vertical) ? Math.ceil(sidebarEl.getBoundingClientRect().height) : 0;
     stickyEl.style.top = `${h + 12}px`;
   }
   applyStickyOffset();
@@ -17643,7 +17645,7 @@ FileVault.registerReloader(initComparePage);
 // giao diện của máy này — không phải dữ liệu đồng bộ giữa các máy, nên persist:false, khỏi ghi đè
 // ngược lại localStorage bằng giá trị vừa đọc ra từ chính localStorage).
 FileVault.registerReloader(function(){
-  if(typeof tn5ApplyTheme === 'function') tn5ApplyTheme(LS.getItem('tn5_theme') || 'light', { persist: false });
+  if(typeof tn5ApplyTheme === 'function') tn5ApplyTheme(LS.getItem('tn5_theme') || 'dark', { persist: false });
 });
 
 // Khởi động FileVault + CloudVault sau khi mọi module đã đăng ký hàm nạp lại (reloader)
@@ -18110,4 +18112,34 @@ document.addEventListener('click', (e) => {
   let t = null;
   window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(v5RenderTimeline, 150); });
   if((contPickAllRows || []).length) v5RenderPickViews();
+})();
+
+
+/* ============================================================
+   v5.10 — Menu dọc bên trái (màn hình rộng), thu gọn được; nền tối mặc định (chuyển 1 lần).
+   ============================================================ */
+(function v5InitSideNav(){
+  const sb = document.getElementById('sidebar');
+  if(!sb) return;
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'v5-collapse-btn';
+  btn.title = 'Thu gọn / mở rộng menu';
+  btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg><span class="nav-label">Thu gọn menu</span>';
+  const nav = sb.querySelector('.sidebar-nav');
+  if(nav) nav.parentNode.insertBefore(btn, nav.nextSibling);
+  btn.addEventListener('click', () => {
+    const on = document.body.classList.toggle('v5-nav-collapsed');
+    try{ localStorage.setItem('tn5_v5_nav_collapsed', on ? '1' : '0'); }catch(e){}
+    setTimeout(() => { try{ window.dispatchEvent(new Event('resize')); }catch(e){} }, 220);
+  });
+  // Tooltip chữ cho nút khi menu thu gọn
+  sb.querySelectorAll('.sidebar-nav-btn[data-page]').forEach(b => { const l = b.querySelector('.nav-label'); if(l && !b.getAttribute('title')) b.setAttribute('title', l.textContent); });
+  // Chuyển sang nền Tối 1 lần cho máy chưa qua v5.10
+  try{
+    if(!localStorage.getItem('tn5_v510_dark')){
+      localStorage.setItem('tn5_v510_dark', '1');
+      const cur = (typeof LS !== 'undefined' && LS.getItem) ? LS.getItem('tn5_theme') : localStorage.getItem('tn5_theme');
+      if(!cur || cur === 'light'){ if(typeof tn5ApplyTheme === 'function') tn5ApplyTheme('dark'); }
+    }
+  }catch(e){}
 })();
