@@ -2468,3 +2468,64 @@
   .kho-tab{font-family:var(--sans) !important; font-weight:700 !important; border-radius:10px 10px 0 0 !important; letter-spacing:0 !important;}
   .cc-collapse-hint{font-family:var(--sans);}
   @media (min-width:901px){ body{padding-bottom:16px;} .main-area{padding-bottom:44px;} .app-shell{min-height:calc(100vh - 32px);} }
+
+/* ===== v5.40: Chi tiết kế hoạch xuất dạng Thẻ container ===== */
+.v5-pv-bar{display:flex; align-items:center; gap:10px; margin:2px 0 10px; flex-wrap:wrap;}
+.v5-pv-note{font-family:var(--sans); font-size:12px; color:var(--muted);}
+.plan-card.v5-pv-card .v5-plan-tablewrap{display:none;}
+.plan-card:not(.v5-pv-card) .v5-pc-grid{display:none;}
+.v5-pc-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:14px; margin-bottom:16px;}
+.v5-pc-day{grid-column:1/-1; display:flex; align-items:center; gap:10px; font-family:var(--sans); font-size:13px; font-weight:800; color:var(--text); margin-top:4px;}
+.v5-pc-day:before{content:"📅"; font-size:13px;}
+.v5-pc-day:after{content:""; flex:1; height:1px; background:var(--line);}
+.v5-pc{position:relative; border:1px solid var(--line); border-radius:16px; background:var(--panel); padding:14px 16px 12px 18px; box-shadow:0 6px 22px rgba(16,24,40,.08); overflow:hidden; font-family:var(--sans); cursor:pointer; transition:transform .15s, box-shadow .15s, border-color .15s;}
+.v5-pc:before{content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:var(--c);}
+.v5-pc:hover{transform:translateY(-2px); box-shadow:0 12px 28px rgba(16,24,40,.14); border-color:color-mix(in srgb, var(--c) 45%, var(--line));}
+.v5-pc.open{grid-column:1/-1; cursor:default; transform:none;}
+.v5-pc.open .v5-pc-top, .v5-pc.open .v5-pc-chev{cursor:pointer;}
+.v5-pc-top{display:flex; align-items:center; gap:12px;}
+.v5-pc-ring{width:56px; height:56px; flex:none;}
+.v5-pc-ring circle{fill:none; stroke-width:6;}
+.v5-pc-ring .trk{stroke:var(--line);}
+.v5-pc-ring .val{stroke-linecap:round; transition:stroke-dasharray .6s;}
+.v5-pc-ring text{font-family:var(--sans); font-size:12.5px; font-weight:800; fill:var(--text);}
+.v5-pc-head{min-width:0; flex:1;}
+.v5-pc-no{display:flex; align-items:center; gap:8px; font-size:19px; font-weight:800; color:var(--text); letter-spacing:-.01em; flex-wrap:wrap;}
+.v5-pc-dot{width:10px; height:10px; border-radius:50%; background:var(--c); flex:none;}
+.v5-pc-st{font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:999px; letter-spacing:0;}
+.v5-pc-st.idle{background:rgba(127,127,127,.15); color:var(--muted);}
+.v5-pc-st.prog{background:rgba(245,166,35,.18); color:#D98A0B;}
+.v5-pc-st.done{background:rgba(14,143,118,.16); color:var(--teal);}
+.v5-pc-st.ship{background:rgba(59,130,246,.16); color:#3B82F6;}
+.v5-pc-sub{font-size:12px; color:var(--muted); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.v5-pc-chev{color:var(--muted); font-size:14px; transition:transform .2s; align-self:flex-start;}
+.v5-pc.open .v5-pc-chev{transform:rotate(180deg);}
+.v5-pc-meta{display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin:12px 0 10px;}
+.v5-pc-meta div{background:rgba(127,127,127,.08); border-radius:10px; padding:6px 9px;}
+.v5-pc-meta b{display:block; font-size:15px; font-weight:800; color:var(--text);}
+.v5-pc-meta span{font-size:10.5px; color:var(--muted);}
+.v5-pc-items{display:flex; flex-direction:column; gap:7px; max-height:168px; overflow:auto; padding-right:2px;}
+.v5-pc.open .v5-pc-items{display:none;}
+.v5-pc-it{display:grid; grid-template-columns:1fr auto; gap:3px 10px; font-size:12px; color:var(--text);}
+.v5-pc-it small{color:var(--muted); font-size:11px;}
+.v5-pc-it .q{font-variant-numeric:tabular-nums; color:var(--muted);}
+.v5-pc-it .tr{grid-column:1/-1; height:5px; border-radius:9px; background:rgba(127,127,127,.18); overflow:hidden;}
+.v5-pc-it .tr div{height:100%; border-radius:9px;}
+.v5-pc-foot{display:flex; justify-content:space-between; gap:8px; margin-top:10px; padding-top:8px; border-top:1px dashed var(--line); font-size:11.5px; color:var(--muted);}
+.v5-pc-detail:empty{display:none;}
+.v5-pc-detail{margin-top:12px; cursor:auto;}
+.v5-pc.v5-flash{box-shadow:0 0 0 2px var(--c), 0 12px 28px rgba(16,24,40,.14);}
+body[data-theme] .v5-pc{background:rgba(255,255,255,.035); box-shadow:0 8px 26px rgba(0,0,0,.25);}
+body[data-theme] .v5-pc-st.prog{color:#F5B547;}
+@media (max-width:760px){ .v5-pc-grid{grid-template-columns:1fr;} }
+
+/* ===== v5.40: ô thời tiết ở theme tối — nền trắng mờ cũ làm chữ sáng khó đọc ===== */
+body[data-theme] .tn5-forecast{background:rgba(255,255,255,.05); border-color:var(--line);}
+body[data-theme] .tn5-fc-now .fc-temp, body[data-theme] .tn5-fc-hour b{color:var(--text);}
+body[data-theme] .tn5-fc-now .fc-sub{color:var(--muted);}
+body[data-theme] .tn5-fc-hour{color:var(--muted);}
+body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rain{color:#7DB7FF;}
+/* v5.40: ô trong .grid không được nở rộng hơn cột (bảng Plan rộng làm trang điện thoại bị tràn ngang) */
+.grid > *{min-width:0;}
+@media (max-width:760px){ .plan-card-kpis{grid-template-columns:repeat(2, 1fr);} .v5-pc-meta b{font-size:14px;} }
+@media (max-width:760px){ #plan-overview-row{padding-left:10px; padding-right:10px;} #plan-overview-row .plan-card{padding-left:10px; padding-right:10px;} .v5-pc{padding:12px 12px 10px 15px;} .v5-pc-meta span{font-size:10px;} }
