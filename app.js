@@ -1427,8 +1427,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v4.36';
-const APP_VERSION_DATE = '05/11/2026';
+const APP_VERSION = 'v5.00';
+const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -3583,7 +3583,7 @@ function contPickStatusLabel(row){
   if(row && row.isShipDone) return 'Load xong';
   return CONT_PICK_STATUS_LABEL[row && row.status] || (row && row.status) || '';
 }
-const CONT_PICK_STATUS_COLOR = { notStarted: 'var(--red)', inProgress: 'var(--amber-bright)', done: 'var(--teal)', manualDone: 'var(--violet)' };
+const CONT_PICK_STATUS_COLOR = { notStarted: 'var(--muted)', inProgress: 'var(--amber-bright)', done: 'var(--teal)', manualDone: 'var(--violet)' };
 const CONT_PICK_STATUS_ORDER = { notStarted: 0, inProgress: 1, done: 2, manualDone: 2 };
 
 // Khoá định danh 1 "LƯỢT XUẤT" container — ghép Loại Plan + Số cont + Ngày Load + Giờ Plan.
@@ -3985,6 +3985,8 @@ function renderContPickTable(){
   if(!rows.length){
     detailTbody.innerHTML = `<tr><td colspan="11" style="text-align:center; color:var(--muted-2); padding:16px; font-style:italic;">Không có dòng nào khớp với bộ lọc</td></tr>`;
   } else {
+    const v5Band = !contPickSort.col || contPickSort.col === 'loadDate';
+    let v5LastDay = null;
     detailTbody.innerHTML = rows.map((row, idx) => {
       const hasShort = row.shortItems && row.shortItems.length > 0;
       const shortBadge = hasShort
@@ -4019,14 +4021,17 @@ function renderContPickTable(){
           else loadingHtml = `<span style="color:var(--amber-bright); font-weight:600;">Đang Load (${shipPct.toFixed(0)}%)</span>${khoSuffix}`;
         }
       }
-      return `
+      let v5BandHtml = '';
+      const v5Day = String(row.loadDate || '').split(',')[0].trim();
+      if(v5Band && v5Day !== v5LastDay){ v5LastDay = v5Day; v5BandHtml = v5DayBandHtml(v5Day, rows); }
+      return v5BandHtml + `
       <tr class="cont-pick-row${row.isManual ? ' cpt-row-manual' : ''}" style="cursor:pointer;" data-row-idx="${idx}" data-cont-jump="${contDomId(row.type, row.cNo, row.loadDate, row.planTime)}">
         <td>${row.type}</td>
         <td>${changeBadge}${escHtml(String(row.cNo))}
           ${shortBadge}
         </td>
         <td>${escHtml(row.loadDate)}</td>
-        <td>${escHtml(row.planTime)}</td>
+        <td>${escHtml(row.planTime)}${v5CountdownChip(row)}</td>
         <td>${escHtml(row.invoice)}
           <button type="button" class="cpt-pick-slip-btn" data-pick-type="${escAttr(row.type)}" data-pick-cno="${escAttr(String(row.cNo))}" data-pick-instance="${escAttr(row.instanceKey)}" title="Xem gợi ý pick hàng cho container này">🖨</button>
         </td>
@@ -4039,7 +4044,7 @@ function renderContPickTable(){
           </div>
         </td>
         <td>
-          <span style="color:${CONT_PICK_STATUS_COLOR[row.status]}; font-weight:600;">${contPickStatusLabel(row)}</span>
+          <span class="v5-pill v5-st-${row.isShipDone ? 'ship' : row.status}">${contPickStatusLabel(row)}</span>
           <button type="button" class="cpt-mark-btn${row.isManual ? ' marked' : ''}" data-mark-type="${escAttr(row.type)}" data-mark-cno="${escAttr(String(row.cNo))}" data-mark-loaddate="${escAttr(row.loadDateKey || '')}" data-mark-plantime="${escAttr(row.planTimeKey || '')}" title="${row.isManual ? 'Bỏ đánh dấu thủ công' : 'Đánh dấu thủ công là đã pick xong — không đụng tới số liệu tồn kho'}">${row.isManual ? '↺' : '✓'}</button>
           <button type="button" class="cpt-delete-btn" data-delete-type="${escAttr(row.type)}" data-delete-cno="${escAttr(String(row.cNo))}" data-delete-loaddate="${escAttr(row.loadDateKey || '')}" data-delete-plantime="${escAttr(row.planTimeKey || '')}" title="Xoá container này khỏi Plan (chỉ ẩn khỏi dashboard, không sửa file Excel gốc — sẽ hỏi xác nhận trước)">🗑</button>
         </td>
@@ -4102,7 +4107,7 @@ function renderKhoContSummary(detailRows){
       <div class="kcs-kho-name">${escHtml(kho.replace('Kho ', 'KHO '))}</div>
       <div class="kcs-total">${fmt(rows.length)}</div>
       <div class="kcs-total-label">container cần đóng</div>
-      <div class="kcs-status-row"><span class="kcs-dot bad"></span>Chưa pick<b>${fmt(notStarted)}</b></div>
+      <div class="kcs-status-row"><span class="kcs-dot idle"></span>Chưa pick<b>${fmt(notStarted)}</b></div>
       <div class="kcs-status-row"><span class="kcs-dot accent"></span>Đang pick<b>${fmt(inProgress)}</b></div>
       <div class="kcs-status-row"><span class="kcs-dot good"></span>Pick xong<b>${fmt(done)}</b></div>
     </div>`;
@@ -4380,7 +4385,7 @@ function renderContainerPickingOverview(){
   panelEl.style.display = '';
   kpiEl.innerHTML = `
     <div class="kpi cont-kpi-tile" data-cont-kpi="all" title="Bấm để xem danh sách & xuất Excel"><div class="label">TỔNG CONTAINER ▸</div><div class="value">${fmt(total)}</div><div class="foot">Có gán số container trong Plan đã tải</div></div>
-    <div class="kpi bad cont-kpi-tile" data-cont-kpi="notStarted" title="Bấm để xem danh sách & xuất Excel"><div class="label">CHƯA PICK ▸</div><div class="value">${fmt(notStarted)}</div><div class="foot">Picking Status = 0%</div></div>
+    <div class="kpi cont-kpi-tile" data-cont-kpi="notStarted" title="Bấm để xem danh sách & xuất Excel"><div class="label">CHƯA PICK ▸</div><div class="value">${fmt(notStarted)}</div><div class="foot">Picking Status = 0%</div></div>
     <div class="kpi accent cont-kpi-tile" data-cont-kpi="inProgress" title="Bấm để xem danh sách & xuất Excel"><div class="label">ĐANG PICK ▸</div><div class="value">${fmt(inProgress)}</div><div class="foot">Picking Status &gt; 0% và &lt; 100%</div></div>
     <div class="kpi good cont-kpi-tile" data-cont-kpi="done" title="Bấm để xem danh sách & xuất Excel"><div class="label">PICK XONG ▸</div><div class="value">${fmt(done)}</div><div class="foot">Picking Status = 100% hoặc đã đánh dấu thủ công</div></div>
   `;
@@ -17888,4 +17893,96 @@ function tn5PresenceStop(){
     if(e.target && e.target.closest && e.target.closest('.sidebar-nav-btn[data-page]')) setTimeout(tn5PresenceBeat, 150);
   });
   document.addEventListener('visibilitychange', () => { if(!document.hidden) tn5PresenceBeat(); });
+})();
+
+
+/* ============================================================
+   v5.00 — giao diện mới: hàng số liệu tổng đầu trang Picking, dải theo ngày + đếm ngược giờ load
+   trong bảng Picking Status, nút ⓘ thu gọn đoạn hướng dẫn dài.
+   ============================================================ */
+const V5_KHO_COLOR = { 'Kho 2B': '#5B9AE8', 'Kho 3A': '#2FBE9E', 'Kho 3B': '#F5A623', 'Kho DG1': '#A48CFF' };
+function v5Pad(n){ return String(n).padStart(2, '0'); }
+function v5TodayStr(off){ const d = new Date(); d.setDate(d.getDate() + (off || 0)); return v5Pad(d.getDate()) + '/' + v5Pad(d.getMonth() + 1) + '/' + d.getFullYear(); }
+function v5IsDone(r){ return r.status === 'done' || r.status === 'manualDone' || r.isShipDone; }
+function v5FmtLeft(ms){
+  const m = Math.round(Math.abs(ms) / 60000), hh = Math.floor(m / 60), mm = m % 60;
+  return hh ? (hh >= 24 ? Math.floor(hh / 24) + ' ngày' : hh + 'g' + (mm ? v5Pad(mm) : '')) : mm + 'p';
+}
+function v5CountdownChip(row){
+  if(v5IsDone(row)) return '';
+  const ts = ovParseDateTimeSortKey(row.loadDate, row.planTime);
+  if(!isFinite(ts)) return '';
+  const diff = ts - Date.now();
+  if(diff > 24 * 3600000) return '';
+  if(diff < 0) return `<span class="v5-cd late" title="Đã quá giờ Plan mà chưa pick xong">Trễ ${v5FmtLeft(diff)}</span>`;
+  return `<span class="v5-cd${diff <= 3600000 ? ' soon' : ''}" title="Thời gian còn lại tới giờ Plan">Còn ${v5FmtLeft(diff)}</span>`;
+}
+function v5DayBandHtml(day, rows){
+  const same = rows.filter(r => String(r.loadDate || '').split(',')[0].trim() === day);
+  const done = same.filter(v5IsDone).length;
+  const short = same.filter(r => !v5IsDone(r) && r.shortItems && r.shortItems.length).length;
+  let tag = '', cls = '';
+  if(day === v5TodayStr(0)){ tag = 'Hôm nay'; cls = ' today'; }
+  else if(day === v5TodayStr(1)) tag = 'Ngày mai';
+  else if(day === v5TodayStr(-1)) tag = 'Hôm qua';
+  const dm = day.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const wd = dm ? ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][new Date(+dm[3], +dm[2] - 1, +dm[1]).getDay()] + ' · ' : '';
+  return `<tr class="cpt-day-band${cls}"><td colspan="11"><span class="v5-band-day">${wd}${escHtml(day || 'Chưa có ngày')}</span>${tag ? `<span class="v5-band-tag">${tag}</span>` : ''}<span class="v5-band-meta">${same.length} cont · ${done} xong${short ? ` · <b class="v5-ng">${short} thiếu hàng</b>` : ''}</span></td></tr>`;
+}
+function v5RenderSummary(){
+  const el = document.getElementById('v5-summary');
+  if(!el) return;
+  if(!currentData || !currentData.kho_detail){ el.style.display = 'none'; return; }
+  const order = (currentData.kho_order && currentData.kho_order.length) ? currentData.kho_order : Object.keys(currentData.kho_detail);
+  const tiles = [];
+  order.forEach(k => {
+    let pass = 0, ng = 0;
+    (currentData.kho_detail[k] || []).forEach(r => {
+      if(isLoadingCommittedStock(r[2], r[5])) return;
+      const q = Number(r[4]) || 0, o = String(r[3] || '').trim().toUpperCase();
+      if(o === 'NG') ng += q; else if(o === 'PASS') pass += q;
+    });
+    tiles.push(`<div class="v5-tile" style="--tile-accent:${V5_KHO_COLOR[k] || 'var(--line)'}"><div class="t">${escHtml(k)}</div><div class="v">${fmt(pass)}</div><div class="s">PASS · <span class="${ng > 0 ? 'v5-ng' : ''}">NG ${fmt(ng)}</span></div></div>`);
+  });
+  const rows = contPickAllRows || [];
+  if(rows.length){
+    const today = v5TodayStr(0);
+    const tRows = rows.filter(r => String(r.loadDate || '').split(',')[0].trim() === today);
+    const tDone = tRows.filter(v5IsDone).length;
+    const short = rows.filter(r => !v5IsDone(r) && r.shortItems && r.shortItems.length).length;
+    const pending = rows.filter(r => !v5IsDone(r)).map(r => ({ r, ts: ovParseDateTimeSortKey(r.loadDate, r.planTime) })).filter(x => isFinite(x.ts)).sort((x, y) => x.ts - y.ts);
+    const pct = tRows.length ? Math.round(tDone / tRows.length * 100) : 0;
+    tiles.push(`<div class="v5-tile click" data-v5-jump="1" style="--tile-accent:var(--blue)"><div class="t">Cont hôm nay</div><div class="v">${fmt(tDone)}<span class="v5-of">/${fmt(tRows.length)}</span></div><div class="v5-prog"><i style="width:${pct}%"></i></div><div class="s">đã pick xong</div></div>`);
+    tiles.push(`<div class="v5-tile click" data-v5-jump="1" style="--tile-accent:${short ? 'var(--red)' : 'var(--teal)'}"><div class="t">Cont thiếu hàng</div><div class="v${short ? ' v5-ng' : ''}">${fmt(short)}</div><div class="s">${short ? 'chưa đủ tồn PASS để pick' : 'tất cả cont đủ hàng'}</div></div>`);
+    if(pending.length){
+      const n = pending[0], diff = n.ts - Date.now();
+      const when = diff < 0 ? `<span class="v5-ng">Trễ ${v5FmtLeft(diff)}</span>` : `Còn ${v5FmtLeft(diff)}`;
+      tiles.push(`<div class="v5-tile click wide" data-v5-jump="1" style="--tile-accent:${diff < 0 ? 'var(--red)' : 'var(--amber-bright)'}"><div class="t">Cont kế tiếp</div><div class="v sm">${escHtml(n.r.type)} · ${escHtml(String(n.r.invoice).split(',')[0])}</div><div class="s">${escHtml(n.r.loadDate)} ${escHtml(n.r.planTime)} · ${when}</div></div>`);
+    }
+  }
+  el.innerHTML = tiles.join('');
+  el.style.display = tiles.length ? '' : 'none';
+}
+document.addEventListener('click', (e) => {
+  if(!e.target.closest('[data-v5-jump]')) return;
+  const t = document.getElementById('cont-picking-overview');
+  if(t && t.style.display !== 'none') t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+(function v5HookSummary(){
+  const orig = renderContainerPickingOverview;
+  renderContainerPickingOverview = function(){ const r = orig.apply(this, arguments); try{ v5RenderSummary(); }catch(e){ console.error(e); } return r; };
+  try{ v5RenderSummary(); }catch(e){}
+  setInterval(() => {
+    const pg = document.getElementById('page-picking');
+    if(pg && pg.style.display !== 'none' && !document.hidden){ try{ v5RenderSummary(); renderContPickTable(); }catch(e){} }
+  }, 60000);
+})();
+(function v5InitHints(){
+  document.querySelectorAll('.v5-hint').forEach(h => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'v5-hint-btn';
+    b.textContent = 'ⓘ ' + (h.dataset.hintLabel || 'Hướng dẫn');
+    b.addEventListener('click', (e) => { e.stopPropagation(); const on = h.classList.toggle('v5-hint-open'); b.classList.toggle('on', on); });
+    h.parentNode.insertBefore(b, h);
+  });
 })();
