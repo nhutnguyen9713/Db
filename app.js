@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.70';
+const APP_VERSION = 'v5.80';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -2247,8 +2247,8 @@ function ovOverviewForLocs(khoLabel, locs, counts){
     pallets, capacity, positions: locs.length, bucketMode: 4,
     buckets: groups.map(g => g.length), bucketLocators: groups, bucketTotal: locs.length,
     miniKpis: [
-      { v: pallets, l: 'PALLET ĐANG CHỨA' },
-      { v: capacity, l: 'TỔNG SỨC CHỨA CHUẨN' }
+      { v: pallets, l: 'Pallet đang chứa' },
+      { v: capacity, l: 'Sức chứa chuẩn' }
     ]
   };
 }
@@ -4797,7 +4797,7 @@ function cptToggleColumnFilterDropdown(col, btn){
   const panel = document.createElement('div');
   panel.className = 'tx-filter-dropdown';
   const left = Math.max(8, Math.min(rect.left, window.innerWidth - 260));
-  panel.style.cssText = `position:fixed; top:${rect.bottom+4}px; left:${left}px; width:240px; max-height:340px; overflow:auto; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.18); z-index:9999; padding:10px; font-family:var(--mono);`;
+  panel.style.cssText = `position:fixed; top:${rect.bottom+4}px; left:${left}px; width:240px; max-height:340px; overflow:auto; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.18); z-index:9999; padding:10px; font-family:var(--mono);`;
 
   const isAllSelected = !currentSet;
   const checklistHtml = values.map(v => {
@@ -8338,7 +8338,7 @@ function createSearchController(ids){
     const panel = document.createElement('div');
     panel.className = 'tx-filter-dropdown';
     const left = Math.max(8, Math.min(rect.left, window.innerWidth - 260));
-    panel.style.cssText = `position:fixed; top:${rect.bottom+4}px; left:${left}px; width:240px; max-height:340px; overflow:auto; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.18); z-index:9999; padding:10px; font-family:var(--mono);`;
+    panel.style.cssText = `position:fixed; top:${rect.bottom+4}px; left:${left}px; width:240px; max-height:340px; overflow:auto; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.18); z-index:9999; padding:10px; font-family:var(--mono);`;
 
     const isAllSelected = !currentSet;
     const checklistHtml = values.map(v => {
@@ -14943,8 +14943,8 @@ function renderMasterTable(){
 
   tbody.innerHTML = entries.map(([user, kho]) => `
     <tr data-user="${escAttr(user)}">
-      <td><input type="text" class="tx-master-user" value="${escAttr(user)}" style="width:100%; border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; background:#fff;"></td>
-      <td><input type="text" class="tx-master-kho" value="${escAttr(kho)}" style="width:100%; border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; background:#fff;"></td>
+      <td><input type="text" class="tx-master-user" value="${escAttr(user)}" style="width:100%; border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; background:var(--panel); color:var(--text);"></td>
+      <td><input type="text" class="tx-master-kho" value="${escAttr(kho)}" style="width:100%; border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; background:var(--panel); color:var(--text);"></td>
       <td style="text-align:center;">
         <button class="tx-master-del" title="Xoá user" type="button" style="border:none;background:none;cursor:pointer;color:#d6394b;padding:4px;">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
@@ -16690,7 +16690,7 @@ function txToggleColumnFilterDropdown(kind, col, btn){
   const panel = document.createElement('div');
   panel.className = 'tx-filter-dropdown';
   const left = Math.max(8, Math.min(rect.left, window.innerWidth - 260));
-  panel.style.cssText = `position:fixed; top:${rect.bottom+4}px; left:${left}px; width:240px; max-height:340px; overflow:auto; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.18); z-index:9999; padding:10px; font-family:var(--mono);`;
+  panel.style.cssText = `position:fixed; top:${rect.bottom+4}px; left:${left}px; width:240px; max-height:340px; overflow:auto; background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 32px rgba(0,0,0,0.18); z-index:9999; padding:10px; font-family:var(--mono);`;
 
   const isAllSelected = !currentSet;
   const checklistHtml = values.map(v => {
@@ -18986,3 +18986,39 @@ document.addEventListener('click', e => {
 });
 // đổi theme ở dashboard -> đổi luôn trong sơ đồ
 if(typeof MutationObserver === 'function') new MutationObserver(() => { if(document.getElementById('v5-sdk-frame')) v5SdkSchedulePush(); }).observe(document.body, { attributes: true, attributeFilter: ['data-theme'] });
+
+
+// ===== v5.80: rà soát giao diện =====
+// (5) Bảng Master Transaction: khi thu gọn thì ẩn luôn đoạn giải thích dài + nút
+if(typeof txSetMasterCollapsed === 'function'){
+  const _txSMC = txSetMasterCollapsed;
+  txSetMasterCollapsed = function(collapsed){
+    _txSMC.apply(this, arguments);
+    const p = document.getElementById('tx-panel-master'); if(p) p.classList.toggle('v5-collapsed', !!collapsed);
+  };
+  (function(){ const p = document.getElementById('tx-panel-master'); if(p) p.classList.toggle('v5-collapsed', typeof txMasterCollapsed === 'undefined' ? true : !!txMasterCollapsed); })();
+}
+// (6) Bong bóng mèo: tối đa 3,5 giây, cuộn trang là ẩn
+if(typeof showTn5Bubble === 'function'){
+  const _sTB = showTn5Bubble;
+  showTn5Bubble = function(text, ms){ return _sTB.call(this, text, Math.min(ms || 3500, 3500)); };
+  window.addEventListener('scroll', () => {
+    const b = document.getElementById('tn5-fortune-bubble');
+    if(b && b.classList.contains('show')){ b.classList.remove('show'); try{ clearTimeout(_tn5BubbleHideTimer); }catch(e){} }
+  }, { passive: true });
+}
+// (2) Thanh tab dưới đáy (điện thoại): tab đang mở luôn nằm trong tầm nhìn
+document.addEventListener('click', e => {
+  const b = e.target.closest('.sidebar-nav-btn[data-page]');
+  if(b && window.matchMedia('(max-width:760px)').matches) setTimeout(() => { const nav = b.parentElement; if(nav && nav.scrollWidth > nav.clientWidth) nav.scrollTo({ left: b.offsetLeft - (nav.clientWidth - b.offsetWidth) / 2, behavior: 'smooth' }); }, 50);
+});
+// (7) Bảng số liệu: ô bằng 0 hiện "–" mờ cho dễ đọc (chỉ đổi hiển thị, số liệu/Excel không đổi)
+var v5ZeroT = 0;
+function v5ZeroScan(){
+  document.querySelectorAll('table.plan-detail-table:not(.plan-detail-table-edit) td, table.tx-sum-table td, table.ngp-table td, table.compare-table td').forEach(td => {
+    if(td.firstElementChild || td.dataset.v5z) return;
+    const t = td.textContent.trim();
+    if(t === '0' || t === '0.0' || t === '0%'){ td.dataset.v5z = '1'; td.title = td.title || '0'; td.innerHTML = '<span class="v5-zero">–</span>'; }
+  });
+}
+if(typeof MutationObserver === 'function') new MutationObserver(() => { clearTimeout(v5ZeroT); v5ZeroT = setTimeout(v5ZeroScan, 80); }).observe(document.body, { childList: true, subtree: true });
