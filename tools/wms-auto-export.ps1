@@ -21,7 +21,7 @@ $IntervalMin = 5                       # chạy lại sau mỗi bao nhiêu phút
 $Forms = @(
   @{ Name = 'Locator Allocate Query (ton kho)'; Run = $true
      Find = @(1130, 124); Export = @(1050, 161); WaitFind = 25; WaitExport = 20 },
-  @{ Name = 'Locator Transaction (giao dich)'; Run = $true
+  @{ Name = 'Locator Transaction (giao dich)'; Run = $false   # chỉ cần form Locator Allocate Query
      Find = @(1044, 628); Export = @(1123, 593); WaitFind = 15; WaitExport = 15 }
 )
 
