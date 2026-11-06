@@ -1427,8 +1427,8 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.11';
-const APP_VERSION_DATE = '06/11/2026';
+const APP_VERSION = 'v6.12';
+const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
 // vừa lưu) thì phải LẤY bản đó thay vì lỡ tay đẩy bản CŨ đang cache trên máy này đè lên Cloud.
@@ -18228,6 +18228,8 @@ function v5RenderKanban(){
     return `<div class="v5-kcol v5-kcol-${k}"><div class="v5-kcol-head"><span class="v5-kdot"></span>${label}<b>${list.length}</b></div><div class="v5-kcol-body">${cards || '<div class="v5-kempty">Không có cont</div>'}</div></div>`;
   }).join('');
 }
+// v6.12: VNC (Invoice) hiện trên thẻ dòng thời gian — nhiều VNC thì hiện cái đầu + "+n"
+function v5TlVnc(r){ const a = String(r.invoice || '').split(',').map(x => x.trim()).filter(Boolean); return a.length ? a[0] + (a.length > 1 ? ' +' + (a.length - 1) : '') : '—'; }
 let v5TlZoom = 0, v5TlAutoScrolled = '';
 var V5_TL_ZOOMS = [0, 110, 170, 260];
 function v5RenderTimeline(){
@@ -18255,7 +18257,7 @@ function v5RenderTimeline(){
   const scroller = el.querySelector('.v5-tl-scroll'), inner = el.querySelector('.v5-tl-inner');
   const LBL = 64, span = h1 - h0, avail = Math.max(300, (scroller.clientWidth || 1000) - LBL - 8);
   const pph = V5_TL_ZOOMS[v5TlZoom] ? Math.max(V5_TL_ZOOMS[v5TlZoom], avail / span) : avail / span;
-  const W = span * pph, BW = 112, ROW = 46;
+  const W = span * pph, BW = 156, ROW = 62; // v6.12: thẻ rộng/cao hơn để đủ số cont + VNC
   inner.style.width = (LBL + W + 8) + 'px';
   const xOf = ts => LBL + ((ts - d0) / 3600000 - h0) * pph;
   const khoOrder = ['Kho 2B', 'Kho 3A', 'Kho 3B', 'Kho DG1'];
@@ -18281,7 +18283,7 @@ function v5RenderTimeline(){
       const short = !v5IsDone(r) && r.shortItems && r.shortItems.length;
       const late = !v5IsDone(r) && x.ts < Date.now();
       html += `<div class="v5-tl-blk v5-tl-${st}${short ? ' short' : ''}${late ? ' late' : ''}${attrs ? ' cont-pick-row' : ''}"${attrs} style="left:${left}px; top:${y + 4 + sl * ROW}px; width:${BW}px" title="${escAttr(r.type + ' · ' + r.cNo + ' · ' + r.invoice + ' · ' + r.planTime)}">
-        <b>${escHtml(r.type)} ${escHtml(String(r.cNo))}</b><span>${escHtml(String(r.planTime).split(',')[0])} · ${pickPctLabel(r.pct)}${short ? ' · ⚠' : ''}</span><i style="width:${Math.min(100, r.pct || 0)}%"></i></div>`;
+        <b>${escHtml(r.type)} ${escHtml(String(r.cNo))}</b><em>${escHtml(v5TlVnc(r))}</em><span>${escHtml(String(r.planTime).split(',')[0])} · ${pickPctLabel(r.pct)}${short ? ' · ⚠' : ''}</span>${r.isShipDone ? '<u class="v5-tl-ok" title="Load xong">✓</u>' : ''}<i style="width:${Math.min(100, r.pct || 0)}%"></i></div>`;
     });
     y += laneH;
   });
