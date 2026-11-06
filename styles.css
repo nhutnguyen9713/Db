@@ -2805,3 +2805,6 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
 .v5-ukho.odd{border-color:#D6394B; background:rgba(214,57,75,.14); color:#FF8A95; font-weight:700;}
 .v5-unote{font-size:12px; color:var(--muted); margin-top:6px;}
 #tx-chart-popup-table.v5-upop td{white-space:nowrap;}
+/* v5.92 — popup không tràn khỏi màn hình khi bảng rộng: bảng tự cuộn ngang bên trong */
+#kho-modal-overlay .kho-modal{min-width:0; max-width:min(1120px, 100%);}
+#kho-modal-overlay .kho-modal-body{overflow:auto; min-width:0;}
