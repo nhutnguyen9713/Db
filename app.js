@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.13';
+const APP_VERSION = 'v6.14';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18827,12 +18827,10 @@ function v5RenderShiftStats(){
     const n = s => list.filter(r => r.status === s).length;
     const done = list.filter(r => r.status === 'done' || r.status === 'manualDone').length;
     const ship = list.filter(r => r.isShipDone).length;
-    const pal = v5PalletSum(list);
     return `<div class="v5-sh ${cls}" style="--sc:${c}">
       <div class="v5-sh-h"><span class="v5-sh-t">${title}</span><span class="v5-sh-s">${sub}</span></div>
       <div class="v5-sh-n"><b>${fmt(list.length)}</b><span>cont</span></div>
       <div class="v5-sh-chips"><span class="c0">Chưa pick <b>${fmt(n('notStarted'))}</b></span><span class="c1">Đang pick <b>${fmt(n('inProgress'))}</b></span><span class="c2">Pick xong <b>${fmt(done)}</b></span><span class="c3">Load xong <b>${fmt(ship)}</b></span></div>
-      <div class="v5-sh-pal"><span>Pallet đã pick <b>${fmt(pal.picked)}</b></span><span>Pallet đã load <b>${pal.loaded === null ? '—' : fmt(pal.loaded)}</b></span></div>
       ${v5ShiftKhoLine(list)}
     </div>`;
   };
@@ -18840,7 +18838,7 @@ function v5RenderShiftStats(){
     <div class="v5-sh-grid">
       ${card('late', 'Cont rớt', `giờ plan trước ${hm(sh.start)}, chưa load xong`, late, 'var(--red)')}
       ${card('cur', 'Cont trong ca', `${hm(sh.start)} – ${hm(sh.end)}`, inShift, 'var(--blue)')}
-      ${card('next', 'Cont ca sau', `từ ${hm(sh.end)} trở đi`, next, 'var(--violet)')}
+      ${card('next', 'Cont ca sau', `${hm(sh.end)} – ${hm(sh.end + 43200000)}`, next, 'var(--violet)')}
     </div>
     <div class="v5-sh-note"><label for="v5-sh-note-in">📝 Ghi chú giao ca</label>
       <textarea id="v5-sh-note-in" rows="2" maxlength="600" placeholder="VD: cont VNC… còn thiếu 2 pallet ở 3A Rack, ca sau pick tiếp; xe nâng số 2 hỏng…">${escHtml(v5ShiftNoteGet(sh.key))}</textarea>
@@ -18888,12 +18886,22 @@ document.addEventListener('click', (e) => {
 const V5_SH_KHO_ORDER = ['Kho 3B', 'Kho 3A', 'Kho 2B', 'Kho DG1'];
 function v5ShiftKhoCounts(list){
   const m = new Map();
-  list.forEach(r => { const k = r.topKho || 'Khác'; const e = m.get(k) || { n: 0, done: 0 }; e.n++; if(r.status === 'done' || r.status === 'manualDone' || r.isShipDone) e.done++; m.set(k, e); });
+  list.forEach(r => {
+    const k = r.topKho || 'Khác'; const e = m.get(k) || { n: 0, done: 0, prog: 0, todo: 0, ship: 0 }; e.n++;
+    if(r.status === 'done' || r.status === 'manualDone' || r.isShipDone) e.done++;
+    else if(r.status === 'inProgress') e.prog++; else e.todo++;
+    if(r.isShipDone) e.ship++;
+    m.set(k, e);
+  });
   return [...m.entries()].sort((a, b) => (V5_SH_KHO_ORDER.indexOf(a[0]) + 1 || 99) - (V5_SH_KHO_ORDER.indexOf(b[0]) + 1 || 99));
 }
 function v5ShiftKhoLine(list){
   const ks = v5ShiftKhoCounts(list); if(!ks.length) return '';
-  return `<div class="v5-sh-kho">${ks.map(([k, e]) => `<span style="--kc:${(typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR[k]) || 'var(--muted-2)'}" title="${escAttr(k)}: ${e.n} cont, đã pick xong ${e.done}"><i></i>${escHtml(k.replace('Kho ', ''))} <b>${fmt(e.n)}</b> cont${e.done ? ` <em>(${fmt(e.done)} xong)</em>` : ''}</span>`).join('')}</div>`;
+  // v6.14: mỗi kho 1 dòng to rõ — số cont + Chưa / Đang / Xong (Load xong) của kho đó
+  return `<div class="v5-sh-kho v5-sh-kho-lg">${ks.map(([k, e]) => `<div class="v5-shk-row" style="--kc:${(typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR[k]) || 'var(--muted-2)'}">
+    <span class="v5-shk-name"><i></i>${escHtml(k.replace('Kho ', ''))}</span><span class="v5-shk-n"><b>${fmt(e.n)}</b> cont</span>
+    <span class="v5-shk-st">${e.todo ? `<span class="c0">Chưa <b>${fmt(e.todo)}</b></span>` : ''}${e.prog ? `<span class="c1">Đang <b>${fmt(e.prog)}</b></span>` : ''}${e.done ? `<span class="c2">Xong <b>${fmt(e.done)}</b>${e.ship ? ` <em>(load ${fmt(e.ship)})</em>` : ''}</span>` : ''}</span>
+  </div>`).join('')}</div>`;
 }
 function v5ShiftGroups(sh){
   const late = [], inShift = [], next = [];
@@ -18902,7 +18910,7 @@ function v5ShiftGroups(sh){
     if(!isFinite(ts)) return;
     if(ts < sh.start){ if(!r.isShipDone) late.push(r); }
     else if(ts < sh.end) inShift.push(r);
-    else next.push(r);
+    else if(ts < sh.end + 43200000) next.push(r); // v6.14: ca sau = đúng 12 tiếng (43200000 ms) kế tiếp (VD 07:00 → 19:00)
   });
   const byTs = (a, b) => ovParseDateTimeSortKey(a.loadDate, a.planTime) - ovParseDateTimeSortKey(b.loadDate, b.planTime);
   late.sort(byTs); inShift.sort(byTs); next.sort(byTs);
@@ -18916,7 +18924,9 @@ function v5ShiftReportCanvas(){
   const p2 = v5Pad, now = new Date();
   const hm = t => { const d = new Date(t); return `${p2(d.getHours())}:${p2(d.getMinutes())} ${p2(d.getDate())}/${p2(d.getMonth() + 1)}`; };
   const W = 1180, S = 2, PAD = 36;
-  const listRows = [].concat(late.map(r => ['late', r]), inShift.map(r => ['cur', r]));
+  // v6.14: thêm cont ca sau đã bắt đầu pick (Đang pick / Pick xong / Load xong) vào bảng chi tiết
+  const nextStarted = next.filter(r => r.isShipDone || r.status === 'inProgress' || r.status === 'done' || r.status === 'manualDone');
+  const listRows = [].concat(late.map(r => ['late', r]), inShift.map(r => ['cur', r]), nextStarted.map(r => ['next', r]));
   const noteText = v5ShiftNoteGet(sh.key).trim();
   const noteLines = [];
   if(noteText){
@@ -18941,7 +18951,7 @@ function v5ShiftReportCanvas(){
   const allTs = (contPickAllRows || []).length;
   txt(`Tổng ${allTs} cont trong Plan`, W - PAD, 78, F(600, 14), '#B8C7E6', 'right');
   // 3 ô nhóm
-  const groups = [['Cont rớt', late, '#E5484D', `trước ${hm(sh.start)}, chưa load xong`], ['Cont trong ca', inShift, '#2F6FEB', `${hm(sh.start)} – ${hm(sh.end)}`], ['Cont ca sau', next, '#7C5CFF', `từ ${hm(sh.end)}`]];
+  const groups = [['Cont rớt', late, '#E5484D', `trước ${hm(sh.start)}, chưa load xong`], ['Cont trong ca', inShift, '#2F6FEB', `${hm(sh.start)} – ${hm(sh.end)}`], ['Cont ca sau', next, '#7C5CFF', `${hm(sh.end)} – ${hm(sh.end + 43200000)}`]];
   const gw = (W - PAD * 2 - 24) / 3;
   groups.forEach(([title, list, col, sub], i) => {
     const x = PAD + i * (gw + 12), y = 124;
@@ -18976,7 +18986,7 @@ function v5ShiftReportCanvas(){
   });
   // bảng cont rớt + trong ca
   let y = 368;
-  txt('Chi tiết cont rớt và cont trong ca', PAD, y, F(800, 16), '#111827');
+  txt(nextStarted.length ? 'Chi tiết cont rớt, cont trong ca và cont ca sau đã pick' : 'Chi tiết cont rớt và cont trong ca', PAD, y, F(800, 16), '#111827');
   y += 16;
   const cols = [['Nhóm', 0], ['Plan', 90], ['Cont', 150], ['Ngày · Giờ', 330], ['Invoice', 480], ['Kho', 600], ['% pick', 680], ['Trạng thái', 770], ['Ghi chú', 900]];
   rr(PAD, y, W - PAD * 2, 30, 8, '#E8EDF6');
@@ -18986,7 +18996,7 @@ function v5ShiftReportCanvas(){
   listRows.forEach(([g, r], i) => {
     if(i % 2) { c.fillStyle = '#FFFFFF'; c.fillRect(PAD, y, W - PAD * 2, 34); }
     const yy = y + 22;
-    txt(g === 'late' ? 'Rớt' : 'Trong ca', PAD + 12, yy, F(700, 12.5), g === 'late' ? '#E5484D' : '#2F6FEB');
+    txt(g === 'late' ? 'Rớt' : g === 'next' ? 'Ca sau' : 'Trong ca', PAD + 12, yy, F(700, 12.5), g === 'late' ? '#E5484D' : g === 'next' ? '#7C5CFF' : '#2F6FEB');
     txt(fit(r.type, 56, F(600, 13)), PAD + 102, yy, F(600, 13), '#111827');
     txt(fit(r.cNo, 170, F(700, 13)), PAD + 162, yy, F(700, 13), '#111827');
     txt(`${String(r.loadDate).split(',')[0]} ${String(r.planTime).split(',')[0]}`, PAD + 342, yy, F(500, 13), '#374151');
@@ -18996,7 +19006,9 @@ function v5ShiftReportCanvas(){
     txt(pickPctLabel(pc), PAD + 692, yy, F(700, 13), pc >= 99.995 ? '#0E8F76' : pc > 0 ? '#D98A0B' : '#6B7485');
     const st = contPickStatusLabel(r);
     txt(st, PAD + 782, yy, F(600, 13), r.isShipDone ? '#7C5CFF' : (r.status === 'done' || r.status === 'manualDone') ? '#0E8F76' : r.status === 'inProgress' ? '#D98A0B' : '#6B7485');
-    const note = [r.shortItems && r.shortItems.length ? `Thiếu ${r.shortItems.length} mã` : '', r.comment || ''].filter(Boolean).join(' · ');
+    // Ghi chú lấy trực tiếp từ ô Ghi chú của cont (r.comment chỉ cập nhật khi bảng vẽ lại)
+    const cmt = (r.instanceKey && contPickComments[r.instanceKey]) || r.comment || '';
+    const note = [r.shortItems && r.shortItems.length ? `Thiếu ${r.shortItems.length} mã` : '', cmt].filter(Boolean).join(' · ');
     txt(fit(note, W - PAD * 2 - 920, F(600, 12.5)), PAD + 912, yy, F(600, 12.5), '#E5484D');
     y += 34;
   });
