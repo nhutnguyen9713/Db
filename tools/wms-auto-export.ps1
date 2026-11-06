@@ -15,6 +15,8 @@ param([switch]$ToaDo, [switch]$MotLuot)
 # ----------------------------- CÀI ĐẶT ---------------------------------------
 $OracleTitle = 'Oracle Applications'   # 1 phần tiêu đề cửa sổ Oracle
 $IntervalMin = 5                       # chạy lại sau mỗi bao nhiêu phút
+$IdleSec     = 60                      # chỉ chạy khi chuột/bàn phím đã ĐỨNG YÊN ít nhất bấy nhiêu giây
+                                       # (đang có người dùng máy thì chờ, không bấm)
 
 # Toạ độ MÀN HÌNH (cửa sổ Oracle phóng to) — lấy bằng Lay-Toa-Do.bat.
 # Quy trình 1 lượt: Find → chờ WaitFind giây → Export → chờ WaitDecision giây → bấm
@@ -58,6 +60,13 @@ public static class TN5W {
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
   [DllImport("user32.dll")] public static extern void mouse_event(int f, int x, int y, int d, int e);
+  [StructLayout(LayoutKind.Sequential)] public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+  [DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LASTINPUTINFO i);
+  public static double IdleSeconds() {
+    var i = new LASTINPUTINFO(); i.cbSize = (uint)Marshal.SizeOf(i);
+    if (!GetLastInputInfo(ref i)) return 0;
+    return ((uint)Environment.TickCount - i.dwTime) / 1000.0;
+  }
   public static IntPtr Find(string part) {
     IntPtr found = IntPtr.Zero;
     EnumWindows((h, p) => {
@@ -85,8 +94,21 @@ function Focus-Oracle($h) {
   [void][TN5W]::SetForegroundWindow($h)
   Start-Sleep -Milliseconds 500
 }
+# Nếu chuột đã bị di chuyển khỏi chỗ script đặt lần trước = có người đang dùng máy → dừng lượt này
+$script:LastPos = $null
+function Assert-NotTouched {
+  if ($null -eq $script:LastPos) { return }
+  $p = New-Object TN5W+POINT; [void][TN5W]::GetCursorPos([ref]$p)
+  if ([Math]::Abs($p.X - $script:LastPos[0]) -gt 3 -or [Math]::Abs($p.Y - $script:LastPos[1]) -gt 3) { throw 'USER_ACTIVE' }
+}
+function Wait-Sec($sec) {   # chờ nhưng vẫn canh: ai đụng chuột là dừng ngay
+  $end = (Get-Date).AddSeconds($sec)
+  while ((Get-Date) -lt $end) { Assert-NotTouched; Start-Sleep -Milliseconds 500 }
+}
 function Click-At($h, $xy) {
+  Assert-NotTouched
   [void][TN5W]::SetCursorPos($xy[0], $xy[1])
+  $script:LastPos = @($xy[0], $xy[1])
   Start-Sleep -Milliseconds 150
   [TN5W]::mouse_event(0x02, 0, 0, 0, 0); Start-Sleep -Milliseconds 60; [TN5W]::mouse_event(0x04, 0, 0, 0, 0)
   Start-Sleep -Milliseconds 400
@@ -123,6 +145,7 @@ function Set-DateFrom($h) {
   Start-Sleep -Milliseconds 300
 }
 function Run-Cycle {
+  $script:LastPos = $null
   $h = Get-Oracle
   if ($h -eq [IntPtr]::Zero) { Log 'Khong thay cua so Oracle - bo qua luot nay'; return }
   foreach ($f in $Forms) {
@@ -130,11 +153,11 @@ function Run-Cycle {
     Focus-Oracle $h
     if ($UpdateDateFrom -and $f.Name -like '*Transaction*') { Set-DateFrom $h }
     Click-At $h $f.Find
-    Start-Sleep -Seconds $f.WaitFind
+    Wait-Sec $f.WaitFind
     Focus-Oracle $h
     Click-At $h $f.Export
     if ($f.ContinueToEnd) {
-      Start-Sleep -Seconds $f.WaitDecision
+      Wait-Sec $f.WaitDecision
       Click-At $h $f.ContinueToEnd     # hộp thoại "Decision" → Continue to End
       Log "  -> da bam Continue to End, cho $($f.WaitExport) giay tai file"
     }
@@ -159,10 +182,25 @@ if ($ToaDo) {
 }
 
 if ($SaveDir -and -not (Test-Path $SaveDir)) { New-Item -ItemType Directory -Path $SaveDir | Out-Null }
-if ($MotLuot) { Run-Cycle; return }
-Log "Bat dau - moi $IntervalMin phut tu Find + Export. Dong cua so nay de dung."
+if ($MotLuot) {
+  try { Run-Cycle } catch { if ($_.Exception.Message -like '*USER_ACTIVE*') { Log 'Co nguoi dung chuot giua chung - da dung luot thu' } else { Log ("Loi: " + $_.Exception.Message) } }
+  return
+}
+Log "Bat dau - moi $IntervalMin phut tu Find + Export (chi khi chuot dung yen >= $IdleSec giay). Dong cua so nay de dung."
 Start-Sleep -Seconds 5
 while ($true) {
-  try { Run-Cycle } catch { Log ("Loi: " + $_.Exception.Message) }
-  Start-Sleep -Seconds ($IntervalMin * 60)
+  $idle = [TN5W]::IdleSeconds()
+  if ($idle -lt $IdleSec) {
+    Write-Host ("`rDang co nguoi dung may (chuot/phim cach day {0:N0}s) - cho...        " -f $idle) -NoNewline
+    Start-Sleep -Seconds 10
+    continue
+  }
+  Write-Host ''
+  $ok = $true
+  try { Run-Cycle }
+  catch {
+    if ($_.Exception.Message -like '*USER_ACTIVE*') { Log 'Co nguoi dung chuot giua chung - dung luot nay, se thu lai khi may ranh'; $ok = $false }
+    else { Log ("Loi: " + $_.Exception.Message) }
+  }
+  if ($ok) { Start-Sleep -Seconds ($IntervalMin * 60) } else { Start-Sleep -Seconds 30 }
 }
