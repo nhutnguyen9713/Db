@@ -436,7 +436,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v4.31';
+  var PH_VERSION = 'v4.32';
   var PH_VERSION_DATE = '05/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -1374,7 +1374,6 @@
     });
     var z = function(n){ return String(n).padStart(2, '0'); }, nw = new Date();
     meta.push(rows.length + ' vị trí');
-    meta.push('Xuất ' + z(nw.getHours()) + ':' + z(nw.getMinutes()) + ' ' + z(nw.getDate()) + '/' + z(nw.getMonth() + 1) + '/' + nw.getFullYear());
     var subTitle = meta.join(' · ');
 
     var scale = 2, padX = 14, rowH = 28, headH = 30, titleH = 52, cellPad = 10;
@@ -1389,7 +1388,6 @@
     mctx.font = '12px system-ui, sans-serif'; var sW = mctx.measureText(subTitle).width;
     var totals = [['TỔNG PASS', sumPass, '#E3F5EA', '#0B7A3B']];
     if(sumNg > 0) totals.push(['TỔNG NG', sumNg, '#FDECEC', '#B42318']);
-    if(skipLoad > 0) totals.push(['Đã pick (Loading CR/VNC, không tính)', skipLoad, '#F1F3F6', '#6b7280']);
     var width = Math.ceil(Math.max(tableW + padX * 2, tW + padX * 2 + 4, sW + padX * 2 + 4, 300));
     tableW = width - padX * 2; // giãn cột Locator cho kín bề ngang
     var extra = tableW - colW.reduce(function(a, b){ return a + b; }, 0);
