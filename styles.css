@@ -2302,3 +2302,20 @@
   .v5-bg-option.active .theme-option-check{visibility:visible;}
   .v5-bg-option.active{color:var(--text); font-weight:700;}
   .theme-panel{max-height:80vh; overflow-y:auto;}
+
+  /* ===== v5.21: Menu sáng cho giao diện Sáng ===== */
+  body:not([data-theme]) .sidebar{
+    background:linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,253,.94));
+    border:1px solid var(--line); box-shadow:0 1px 2px rgba(16,24,40,.04), 0 10px 30px rgba(16,24,40,.08);
+  }
+  body:not([data-theme]) .sidebar-nav-btn{color:#55637C;}
+  body:not([data-theme]) .sidebar-nav-btn:hover:not(.active){background:#EEF2F8; color:#16202E;}
+  body:not([data-theme]) .sidebar-nav-btn.active{background:linear-gradient(90deg, rgba(44,111,203,.14), rgba(44,111,203,.04)); color:#1F4FA3; box-shadow:inset 3px 0 0 #2C6FCB;}
+  body:not([data-theme]) .sidebar-logo::after{color:#16202E;}
+  body:not([data-theme]) .v5-collapse-btn{border-color:rgba(22,32,46,.15); color:#7E8CA3;}
+  body:not([data-theme]) .v5-collapse-btn:hover{color:#16202E; border-color:rgba(22,32,46,.3);}
+  body:not([data-theme]) .notif-badge{box-shadow:0 0 0 2px #fff;}
+  body:not([data-theme]) .theme-badge{border-color:#fff;}
+  body:not([data-theme]) .dock-ground{background:rgba(22,32,46,.15);}
+  body:not([data-theme]) .dock-pier{background:rgba(22,32,46,.2);}
+  @media (max-width:760px){ body:not([data-theme]) .sidebar-nav{border-top-color:rgba(22,32,46,.08);} }
