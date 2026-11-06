@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.19';
+const APP_VERSION = 'v6.20';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -19789,4 +19789,72 @@ if(txState){ try{ renderTransactionPage(); }catch(e){ console.error(e); } }
     }catch(e){ console.error(e); }
     location.reload();
   });
+})();
+
+
+// ===== v6.20: TỰ CẬP NHẬT TỒN KHO TỪ THƯ MỤC DOWNLOADS =====
+// Script tools/wms-auto-export.ps1 cứ 5 phút bấm Find + Export trên Oracle → file fnd_gfm_*.tsv rơi vào
+// Downloads. Bật nút này (chọn thư mục Downloads 1 lần) thì cứ 30 giây trang tự tìm file fnd_gfm mới nhất,
+// nếu là file TỒN KHO (có cột Onhand Qty, không phải file Transaction) và mới hơn lần trước thì nạp vào
+// đúng như bấm chữ TN5 chọn file tay → dashboard cập nhật + tự lưu Cloud. Chỉ chạy khi tab đang mở.
+(function tn5AutoInventory(){
+  const btn = document.getElementById('tn5-autoinv-btn');
+  if(!btn || typeof window.showDirectoryPicker !== 'function'){ if(btn) btn.style.display = 'none'; return; }
+  const K_DIR = 'tn5_autoinv_dir', K_ON = 'tn5_autoinv_on', K_LAST = 'tn5_autoinv_last';
+  const lsGet = k => { try{ return localStorage.getItem(k); }catch(e){ return null; } };
+  const lsSet = (k, v) => { try{ localStorage.setItem(k, v); }catch(e){} };
+  let dir = null, timer = null, busy = false;
+  const setBtn = (state, extra) => {
+    const txt = { off: 'TẮT', on: 'BẬT', need: 'bấm để bật lại' }[state];
+    btn.innerHTML = `📂 Tự cập nhật từ Downloads: <b>${txt}</b>${extra ? ` <span>${escHtml(extra)}</span>` : ''}`;
+    btn.classList.toggle('on', state === 'on'); btn.classList.toggle('need', state === 'need');
+  };
+  async function isInventoryFile(file){
+    const head = await file.slice(0, 4000).text();
+    const first = head.split(/\r?\n/)[0] || '';
+    return /onhand/i.test(first) && !/transaction\s*set/i.test(first);
+  }
+  async function scan(){
+    if(busy || !dir) return;
+    busy = true;
+    try{
+      let best = null;
+      for await (const [name, h] of dir.entries()){
+        if(h.kind !== 'file' || !/^fnd_gfm.*\.(tsv|txt|csv)$/i.test(name)) continue;
+        const f = await h.getFile();
+        if(!best || f.lastModified > best.lastModified) best = f;
+      }
+      const last = Number(lsGet(K_LAST) || 0);
+      if(best && best.lastModified > last && Date.now() - best.lastModified > 5000){
+        if(await isInventoryFile(best)){
+          lsSet(K_LAST, String(best.lastModified));
+          const dt = new DataTransfer(); dt.items.add(best);
+          fileInput.files = dt.files;
+          fileInput.dispatchEvent(new Event('change'));
+          if(typeof showAppToast === 'function') showAppToast(`📂 Tự cập nhật tồn kho từ "${best.name}" — đang lưu Cloud…`);
+        } else lsSet(K_LAST, String(best.lastModified)); // file Transaction → bỏ qua, không đọc lại
+      }
+      const t = new Date(); setBtn('on', `· kiểm tra lúc ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`);
+    }catch(e){ console.error(e); setBtn('need'); stop(); }
+    busy = false;
+  }
+  function start(){ stop(); scan(); timer = setInterval(scan, 30000); lsSet(K_ON, '1'); }
+  function stop(){ if(timer) clearInterval(timer); timer = null; }
+  btn.addEventListener('click', async () => {
+    try{
+      if(timer){ stop(); lsSet(K_ON, '0'); setBtn('off'); return; }
+      if(dir && (await dir.requestPermission({ mode: 'read' })) === 'granted'){ start(); return; }
+      dir = await window.showDirectoryPicker({ id: 'tn5-downloads', startIn: 'downloads', mode: 'read' });
+      await fvIdbSet(K_DIR, dir);
+      start();
+    }catch(e){ if(e && e.name !== 'AbortError') alert('Không bật được: ' + (e.message || e)); }
+  });
+  setBtn('off');
+  (async () => {
+    if(lsGet(K_ON) !== '1') return;
+    dir = await fvIdbGet(K_DIR);
+    if(!dir) return;
+    try{ if((await dir.queryPermission({ mode: 'read' })) === 'granted'){ start(); return; } }catch(e){}
+    setBtn('need'); // Chrome cần 1 cú bấm để cấp lại quyền đọc thư mục sau khi mở lại trình duyệt
+  })();
 })();

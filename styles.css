@@ -3014,3 +3014,9 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
 .v5-txh-tb span{display:block; height:100%; border-radius:3px;}
 .v5-txh-tp{font-size:11px; color:var(--muted); font-weight:600;}
 .v5-txh-foot th, .v5-txh-foot td{background:var(--panel-2); font-weight:800; font-variant-numeric:tabular-nums; border-top:2px solid var(--line);}
+
+/* v6.20: nút Tự cập nhật từ Downloads */
+.tn5-autoinv-btn{margin-top:8px; display:block; width:100%; text-align:left; padding:6px 10px; border-radius:8px; border:1px solid var(--line); background:var(--panel); color:var(--muted); font-family:var(--sans); font-size:11.5px; cursor:pointer;}
+.tn5-autoinv-btn b{color:var(--text);} .tn5-autoinv-btn span{color:var(--muted-2);}
+.tn5-autoinv-btn.on{border-color:var(--teal); background:color-mix(in srgb, var(--teal) 10%, transparent);} .tn5-autoinv-btn.on b{color:var(--teal);}
+.tn5-autoinv-btn.need{border-color:var(--amber-bright);} .tn5-autoinv-btn.need b{color:var(--amber-bright);}

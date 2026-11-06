@@ -16,11 +16,15 @@ param([switch]$ToaDo, [switch]$MotLuot)
 $OracleTitle = 'Oracle Applications'   # 1 phần tiêu đề cửa sổ Oracle
 $IntervalMin = 5                       # chạy lại sau mỗi bao nhiêu phút
 
-# Toạ độ tính từ góc trên-trái cửa sổ Oracle (lấy bằng Lay-Toa-Do.bat).
-# Run = $false để bỏ qua form đó. WaitFind/WaitExport = số giây chờ.
+# Toạ độ MÀN HÌNH (cửa sổ Oracle phóng to) — lấy bằng Lay-Toa-Do.bat.
+# Quy trình 1 lượt: Find → chờ WaitFind giây → Export → chờ WaitDecision giây → bấm
+# "Continue to End" ở hộp thoại Decision → chờ WaitExport giây để file fnd_gfm_*.tsv tải
+# về thư mục Downloads. Dashboard (nút "📂 Tự cập nhật từ Downloads") tự đọc file đó + lưu Cloud.
+# Run = $false để bỏ qua form đó.
 $Forms = @(
   @{ Name = 'Locator Allocate Query (ton kho)'; Run = $true
-     Find = @(1130, 124); Export = @(1050, 161); WaitFind = 25; WaitExport = 20 },
+     Find = @(1130, 124); Export = @(1050, 161); WaitFind = 7
+     ContinueToEnd = @(1103, 569); WaitDecision = 7; WaitExport = 60 },
   @{ Name = 'Locator Transaction (giao dich)'; Run = $false   # chỉ cần form Locator Allocate Query
      Find = @(1044, 628); Export = @(1123, 593); WaitFind = 15; WaitExport = 15 }
 )
@@ -32,7 +36,7 @@ $DateFromXY     = @(680, 627)
 
 # Sau khi Export, nếu hiện hộp thoại lưu file thì tự gõ tên file kèm giờ vào thư
 # mục này rồi Enter. Để '' = chỉ bấm Enter (lưu theo tên/thư mục mặc định).
-$SaveDir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'WMS_Export'
+$SaveDir = ''   # file tự tải về Downloads, không cần đổi tên
 $SaveDialogTitles = @('Save As', 'Lưu', 'Export', 'File Download', 'Tải xuống')
 # -----------------------------------------------------------------------------
 
@@ -82,8 +86,7 @@ function Focus-Oracle($h) {
   Start-Sleep -Milliseconds 500
 }
 function Click-At($h, $xy) {
-  $r = New-Object TN5W+RECT; [void][TN5W]::GetWindowRect($h, [ref]$r)
-  [void][TN5W]::SetCursorPos($r.L + $xy[0], $r.T + $xy[1])
+  [void][TN5W]::SetCursorPos($xy[0], $xy[1])
   Start-Sleep -Milliseconds 150
   [TN5W]::mouse_event(0x02, 0, 0, 0, 0); Start-Sleep -Milliseconds 60; [TN5W]::mouse_event(0x04, 0, 0, 0, 0)
   Start-Sleep -Milliseconds 400
@@ -130,6 +133,11 @@ function Run-Cycle {
     Start-Sleep -Seconds $f.WaitFind
     Focus-Oracle $h
     Click-At $h $f.Export
+    if ($f.ContinueToEnd) {
+      Start-Sleep -Seconds $f.WaitDecision
+      Click-At $h $f.ContinueToEnd     # hộp thoại "Decision" → Continue to End
+      Log "  -> da bam Continue to End, cho $($f.WaitExport) giay tai file"
+    }
     Handle-SaveDialog $f.Name $f.WaitExport
   }
   Focus-Oracle $h
@@ -144,7 +152,7 @@ if ($ToaDo) {
     if ($h -eq [IntPtr]::Zero) { Write-Host "`rKhong thay cua so Oracle...            " -NoNewline }
     else {
       $r = New-Object TN5W+RECT; [void][TN5W]::GetWindowRect($h, [ref]$r)
-      Write-Host ("`rToa do trong cua so Oracle: @({0}, {1})        " -f ($p.X - $r.L), ($p.Y - $r.T)) -NoNewline
+      Write-Host ("`rToa do man hinh: @({0}, {1})        " -f $p.X, $p.Y) -NoNewline
     }
     Start-Sleep -Milliseconds 300
   }
