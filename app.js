@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.18';
+const APP_VERSION = 'v6.19';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -19335,22 +19335,34 @@ renderTxChart = function(){
   const khos = TX_CHART_KHO_ORDER.filter(kho => Object.values(cell[kho]).some(c => c.parts.some(p => p.total > 0)));
   const usedCols = cols.filter(c => khos.some(k => cell[k][c.label] && cell[k][c.label].parts.some(p => p.total > 0)));
   if(!khos.length){ wrap.innerHTML = '<div class="kho-empty" style="padding:24px 0;">Không có giao dịch nào trong file.</div>'; return; }
-  const partHtml = (p, kho, max, showLabel) => {
-    const w = max > 0 ? Math.max(p.total > 0 ? 6 : 0, Math.round(p.total / max * 100)) : 0;
-    return `<div class="v5-txm-p${p.total ? '' : ' zero'}" data-chart-kind="${p.key}" data-chart-kho="${escHtml(kho)}" title="${escHtml((p.label ? p.label + ' · ' : '') + fmt(p.rows || p.rowsCount || 0) + ' dòng — bấm để xem chi tiết')}">` +
-      `<span class="n">${showLabel && p.label ? `<i>${escHtml(p.label)}</i>` : ''}${p.total ? fmt(p.total) : '–'}</span><span class="b"><span style="width:${w}%;background:${p.color}"></span></span></div>`;
+  // v6.19: dạng BẢN ĐỒ NHIỆT — ô càng đậm màu = càng nhiều lượt (so với kho lớn nhất cùng cột); số to = tổng
+  // ô, ô tách 2 phần (Xuất/Nhận, Lên/Xuống, Floor/Rack) hiện thêm 2 nhãn nhỏ có chấm màu; ô trống để trắng.
+  // Cột Tổng lượt có thanh % trên tổng các kho; dòng cuối = tổng theo cột.
+  const tint = (color, ratio) => `color-mix(in srgb, ${color} ${Math.round(6 + 30 * Math.min(1, ratio))}%, transparent)`;
+  const cellTot = x => x ? x.parts.reduce((t, p) => t + (p.total || 0), 0) : 0;
+  const colTotMax = {};
+  usedCols.forEach(c => { colTotMax[c.label] = Math.max(0, ...khos.map(k => cellTot(cell[k][c.label]))); });
+  const rowTots = {}; khos.forEach(k => { rowTots[k] = usedCols.reduce((t, c) => t + cellTot(cell[k][c.label]), 0); });
+  const grand = khos.reduce((t, k) => t + rowTots[k], 0);
+  const partTitle = p => escHtml((p.label ? p.label + ' · ' : '') + fmt(p.rows || p.rowsCount || 0) + ' dòng — bấm để xem chi tiết');
+  const cellHtml = (x, c, kho) => {
+    const tot = cellTot(x);
+    if(!x || !tot) return '<td class="na"></td>';
+    const bg = tint(c.color, colTotMax[c.label] ? tot / colTotMax[c.label] : 0);
+    const split = x.parts.length > 1;
+    const single = !split ? ` data-chart-kind="${x.parts[0].key}" data-chart-kho="${escHtml(kho)}" title="${partTitle(x.parts[0])}"` : '';
+    const subs = split ? `<div class="v5-txh-subs">${x.parts.filter(p => p.total > 0).map(p => `<span class="v5-txh-sub" data-chart-kind="${p.key}" data-chart-kho="${escHtml(kho)}" title="${partTitle(p)}"><i style="background:${p.color}"></i>${escHtml(p.label)} <b>${fmt(p.total)}</b></span>`).join('')}</div>` : '';
+    return `<td class="v5-txh-c${split ? '' : ' one'}" style="--hc:${c.color}; background:${bg};"${single}><div class="v5-txh-n">${fmt(tot)}</div>${subs}${x.cont ? `<div class="v5-txm-cont">${fmt(x.cont)} cont</div>` : ''}</td>`;
   };
-  wrap.innerHTML = `<div class="v5-txm-scroll"><table class="v5-txm"><thead><tr><th>Kho</th>${usedCols.map(c => `<th><span class="dot" style="background:${c.color}"></span>${escHtml(c.label)}</th>`).join('')}<th class="tot">Tổng lượt</th></tr></thead><tbody>` +
+  const khoColor = k => (typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR['Kho ' + k]) || 'var(--muted-2)';
+  wrap.innerHTML = `<div class="v5-txm-scroll"><table class="v5-txm v5-txh"><thead><tr><th>Kho</th>${usedCols.map(c => `<th style="--hc:${c.color}"><span class="dot" style="background:${c.color}"></span>${escHtml(c.label)}</th>`).join('')}<th class="tot">Tổng lượt</th></tr></thead><tbody>` +
     khos.map(kho => {
-      let rowTot = 0;
-      const tds = usedCols.map(c => {
-        const x = cell[kho][c.label];
-        if(!x) return '<td class="na">·</td>';
-        x.parts.forEach(p => { rowTot += p.total; });
-        return `<td>${x.parts.map(p => partHtml(p, kho, colMax[c.label], x.parts.length > 1)).join('')}${x.cont ? `<div class="v5-txm-cont">${fmt(x.cont)} cont</div>` : ''}</td>`;
-      }).join('');
-      return `<tr><th class="kho">Kho ${escHtml(kho)}</th>${tds}<td class="tot">${fmt(rowTot)}</td></tr>`;
-    }).join('') + '</tbody></table></div><div class="v5-txm-hint">Bấm vào số bất kỳ để xem chi tiết từng dòng · thanh màu so với kho lớn nhất cùng cột</div>';
+      const rt = rowTots[kho], pct = grand ? rt / grand * 100 : 0;
+      return `<tr><th class="kho"><span class="v5-txh-kho" style="--kc:${khoColor(kho)}">${escHtml(kho)}</span></th>${usedCols.map(c => cellHtml(cell[kho][c.label], c, kho)).join('')}` +
+        `<td class="tot"><div class="v5-txh-tn">${fmt(rt)}</div><div class="v5-txh-tb"><span style="width:${pct.toFixed(1)}%; background:${khoColor(kho)}"></span></div><div class="v5-txh-tp">${pct.toFixed(0)}% tổng</div></td></tr>`;
+    }).join('') +
+    `<tr class="v5-txh-foot"><th class="kho">Tổng</th>${usedCols.map(c => { const t = khos.reduce((s2, k) => s2 + cellTot(cell[k][c.label]), 0); return `<td>${t ? fmt(t) : ''}</td>`; }).join('')}<td class="tot">${fmt(grand)}</td></tr>` +
+    '</tbody></table></div><div class="v5-txm-hint">Ô càng đậm màu = càng nhiều lượt (so với kho lớn nhất cùng cột) · bấm vào ô hoặc nhãn để xem chi tiết từng dòng</div>';
 };
 
 // (3) Mục lục dính + thu gọn mục không có giao dịch
