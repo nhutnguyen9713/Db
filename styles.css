@@ -2556,7 +2556,7 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
 .v5-sh-chips{display:flex; flex-wrap:wrap; gap:5px;}
 .v5-sh-chips span{font-size:11px; font-weight:600; color:var(--muted); padding:3px 8px; border-radius:999px; background:rgba(127,127,127,.12);}
 .v5-sh-chips span b{font-family:var(--mono); color:var(--text); margin-left:3px;}
-.v5-sh-chips .c1 b{color:var(--amber-bright);} .v5-sh-chips .c2 b{color:var(--teal);} .v5-sh-chips .c3 b{color:var(--violet);}
+.v5-sh-chips .c1 b{color:var(--amber-bright);} .v5-sh-chips .c2 b{color:var(--teal);} .v5-sh-chips .c3 b{color:var(--violet);} .v5-sh-chips .c4 b{color:var(--blue);}
 .v5-sh-pal{display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:9px; padding-top:8px; border-top:1px dashed var(--line); font-size:12px; color:var(--muted);}
 .v5-sh-pal b{font-family:var(--mono); color:var(--text); font-size:13px; margin-left:3px;}
 @media (max-width:900px){ .v5-sh-grid, .v5-sh-grid.v5-sh-grid-2{grid-template-columns:1fr;} }
@@ -2996,7 +2996,7 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
 .v5-shk-st{display:flex; flex-wrap:wrap; gap:6px; margin-left:auto;}
 .v5-shk-st > span{padding:2px 8px; border-radius:99px; background:var(--bg-2, rgba(127,127,127,.1)); font-size:12px; color:var(--muted);}
 .v5-shk-st b{font-family:var(--mono); font-size:13px; color:var(--text);}
-.v5-shk-st .c1 b{color:var(--amber-bright);} .v5-shk-st .c2 b{color:var(--teal);} .v5-shk-st .c3 b{color:var(--violet);} .v5-shk-st em{font-style:normal; color:var(--violet);}
+.v5-shk-st .c1 b{color:var(--amber-bright);} .v5-shk-st .c2 b{color:var(--teal);} .v5-shk-st .c3 b{color:var(--violet);} .v5-shk-st em{font-style:normal; color:var(--violet);} .v5-shk-st .c4 b{color:var(--blue);}
 
 /* v6.19: Grand Total Transaction dạng bản đồ nhiệt */
 .v5-txh td.na{background:transparent;}

@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.23';
+const APP_VERSION = 'v6.24';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4390,6 +4390,8 @@ function renderContainerPickingOverview(){
     const changeInfo = planContainerChangeInfo[instanceKey];
     detailRows.push({
       type: entry.type, cNo: entry.cNo, pct, status, autoStatus, autoPct: pct, isManual, isShipDone,
+      // v6.24: trạng thái Load theo file Ship, tính cả khi cont đã đánh dấu tay — 'done' | 'inProgress' | 'notStarted' | 'none'
+      ...contShipKeyPct(entry.csrs, entry.planQty),
       changeStatus: changeInfo ? changeInfo.status : null,
       comment: contPickComments[instanceKey] || '',
       instanceKey, planQty: entry.planQty,
@@ -4461,6 +4463,14 @@ function contKpiPickerMap(){
 }
 // Trạng thái Load của 1 container — cùng cách tính với cột Loading của bảng Picking Status
 // (SL Ship khớp CR / SL Plan).
+// v6.24: { shipKey, shipPct } của 1 cont theo file Ship (cùng cách tính cột Loading), kể cả khi cont đã tick tay.
+function contShipKeyPct(csrsSet, planQty){
+  if(!contShipData || !contShipData.byRef || !contShipData.byRef.size || !csrsSet || !csrsSet.size) return { shipKey: 'none', shipPct: 0 };
+  let shipQty = 0;
+  csrsSet.forEach(csr => { shipQty += contShipData.byRef.get(String(csr || '').trim().toUpperCase().replace(/[;,.\s]+$/, '')) || 0; });
+  const shipPct = planQty > 0 ? shipQty / planQty * 100 : 0;
+  return { shipKey: shipQty > 0 ? (shipPct >= 99.995 ? 'done' : 'inProgress') : 'notStarted', shipPct };
+}
 function contKpiLoadStatus(csr, planQty){
   if(!contShipData || !contShipData.byRef || !contShipData.byRef.size) return { loadStatus: 'Chưa tải file Ship', loadKey: 'none' };
   const refs = String(csr || '').split(',').map(s => s.trim().toUpperCase().replace(/[;,.\s]+$/, '')).filter(Boolean);
@@ -18824,13 +18834,11 @@ function v5RenderShiftStats(){
   const hm = t => { const d = new Date(t); return `${v5Pad(d.getHours())}:${v5Pad(d.getMinutes())} ${v5Pad(d.getDate())}/${v5Pad(d.getMonth() + 1)}`; };
   const { late, inShift, next } = v5ShiftGroups(sh);
   const card = (cls, title, sub, list, c) => {
-    const n = s => list.filter(r => r.status === s).length;
-    const done = list.filter(r => r.status === 'done' || r.status === 'manualDone').length;
-    const ship = list.filter(r => r.isShipDone).length;
+    const n = s => list.filter(r => v5ShiftSt(r) === s).length;
     return `<div class="v5-sh ${cls}" style="--sc:${c}">
       <div class="v5-sh-h"><span class="v5-sh-t">${title}</span><span class="v5-sh-s">${sub}</span></div>
       <div class="v5-sh-n"><b>${fmt(list.length)}</b><span>cont</span></div>
-      <div class="v5-sh-chips"><span class="c0">Chưa pick <b>${fmt(n('notStarted'))}</b></span><span class="c1">Đang pick <b>${fmt(n('inProgress'))}</b></span><span class="c2">Pick xong <b>${fmt(done)}</b></span><span class="c3">Load xong <b>${fmt(ship)}</b></span></div>
+      <div class="v5-sh-chips"><span class="c0">Chưa pick <b>${fmt(n('todo'))}</b></span><span class="c1">Đang pick <b>${fmt(n('prog'))}</b></span><span class="c2">Pick xong <b>${fmt(n('done'))}</b></span>${n('loading') ? `<span class="c4">Đang load <b>${fmt(n('loading'))}</b></span>` : ''}<span class="c3">Load xong <b>${fmt(n('load'))}</b></span></div>
       ${v5ShiftKhoLine(list)}
     </div>`;
   };
@@ -18887,10 +18895,12 @@ const V5_SH_KHO_ORDER = ['Kho 3B', 'Kho 3A', 'Kho 2B', 'Kho DG1'];
 function v5ShiftKhoCounts(list){
   const m = new Map();
   list.forEach(r => {
-    const k = r.topKho || 'Khác'; const e = m.get(k) || { n: 0, done: 0, prog: 0, todo: 0, ship: 0 }; e.n++;
-    if(r.status === 'done' || r.status === 'manualDone' || r.isShipDone) e.done++;
-    else if(r.status === 'inProgress') e.prog++; else e.todo++;
-    if(r.isShipDone) e.ship++;
+    const k = r.topKho || 'Khác'; const e = m.get(k) || { n: 0, done: 0, prog: 0, todo: 0, ship: 0, loading: 0 }; e.n++;
+    const st = v5ShiftSt(r);
+    if(st === 'done' || st === 'load' || st === 'loading') e.done++;
+    else if(st === 'prog') e.prog++; else e.todo++;
+    if(st === 'load') e.ship++;
+    if(st === 'loading') e.loading++;
     m.set(k, e);
   });
   return [...m.entries()].sort((a, b) => (V5_SH_KHO_ORDER.indexOf(a[0]) + 1 || 99) - (V5_SH_KHO_ORDER.indexOf(b[0]) + 1 || 99));
@@ -18900,8 +18910,16 @@ function v5ShiftKhoLine(list){
   // v6.14: mỗi kho 1 dòng to rõ — số cont + Chưa / Đang / Xong (Load xong) của kho đó
   return `<div class="v5-sh-kho v5-sh-kho-lg">${ks.map(([k, e]) => `<div class="v5-shk-row" style="--kc:${(typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR[k]) || 'var(--muted-2)'}">
     <span class="v5-shk-name"><i></i>${escHtml(k.replace('Kho ', ''))}</span><span class="v5-shk-n"><b>${fmt(e.n)}</b> cont</span>
-    <span class="v5-shk-st">${e.todo ? `<span class="c0">Chưa Pick <b>${fmt(e.todo)}</b></span>` : ''}${e.prog ? `<span class="c1">Picking <b>${fmt(e.prog)}</b></span>` : ''}${e.done ? `<span class="c2">Pick Done <b>${fmt(e.done)}</b></span>` : ''}${e.ship ? `<span class="c3">Load Done <b>${fmt(e.ship)}</b></span>` : ''}</span>
+    <span class="v5-shk-st">${e.todo ? `<span class="c0">Chưa Pick <b>${fmt(e.todo)}</b></span>` : ''}${e.prog ? `<span class="c1">Picking <b>${fmt(e.prog)}</b></span>` : ''}${e.done ? `<span class="c2">Pick Done <b>${fmt(e.done)}</b></span>` : ''}${e.loading ? `<span class="c4">Loading <b>${fmt(e.loading)}</b></span>` : ''}${e.ship ? `<span class="c3">Load Done <b>${fmt(e.ship)}</b></span>` : ''}</span>
   </div>`).join('')}</div>`;
+}
+// v6.24: trạng thái 1 cont trong báo cáo ca. Cont ĐANG LOAD (đã có SL Ship khớp CR) xếp "Loading" chứ không
+// phải "Picking": hàng scan lên xe sẽ mất khỏi tồn kho nên % pick tụt xuống, nhìn như đang pick dở.
+function v5ShiftSt(r){
+  if(r.isShipDone || r.shipKey === 'done') return 'load';
+  if(r.shipKey === 'inProgress') return 'loading';
+  if(r.status === 'done' || r.status === 'manualDone') return 'done';
+  return r.status === 'inProgress' ? 'prog' : 'todo';
 }
 function v5ShiftGroups(sh){
   const late = [], inShift = [], next = [];
@@ -18958,9 +18976,9 @@ function v5ShiftReportCanvas(){
   txt(`Tổng ${allTs} cont trong Plan`, W - PAD, 78, F(600, 14), '#B8C7E6', 'right');
   // v6.18: trực quan hơn — mỗi thẻ có THANH TIẾN ĐỘ xếp chồng (Load Done / Pick Done / Picking / Chưa Pick,
   // 4 nhóm KHÔNG trùng nhau), mỗi kho 1 dòng có thanh riêng; bảng chia theo nhóm ca, tô màu theo trạng thái.
-  const ST = [['load', 'Load Done', '#7C5CFF'], ['done', 'Pick Done', '#12A37F'], ['prog', 'Picking', '#F0A020'], ['todo', 'Chưa Pick', '#C9D0DC']];
-  const stOf = r => r.isShipDone ? 'load' : (r.status === 'done' || r.status === 'manualDone') ? 'done' : r.status === 'inProgress' ? 'prog' : 'todo';
-  const tally = list => { const t = { load: 0, done: 0, prog: 0, todo: 0 }; list.forEach(r => t[stOf(r)]++); return t; };
+  const ST = [['load', 'Load Done', '#7C5CFF'], ['loading', 'Loading', '#3E7BFA'], ['done', 'Pick Done', '#12A37F'], ['prog', 'Picking', '#F0A020'], ['todo', 'Chưa Pick', '#C9D0DC']];
+  const stOf = v5ShiftSt;
+  const tally = list => { const t = { load: 0, loading: 0, done: 0, prog: 0, todo: 0 }; list.forEach(r => t[stOf(r)]++); return t; };
   const stackBar = (x, y, w, h, t, total, font) => {
     rr(x, y, w, h, h / 2, '#EEF1F6');
     if(!total) return;
@@ -18987,13 +19005,14 @@ function v5ShiftReportCanvas(){
     txt('cont', x + 22 + c.measureText(String(list.length)).width + 6, y + 102, F(600, 15), '#6B7485');
     const t = tally(list);
     // % hoàn thành = (Pick Done + Load Done) / tổng — số to bên phải
-    const fin = list.length ? Math.round((t.load + t.done) / list.length * 100) : 0;
+    const fin = list.length ? Math.round((t.load + t.loading + t.done) / list.length * 100) : 0;
     txt(`${fin}%`, x + gw - 20, y + 96, F(800, 30), fin >= 100 ? '#12A37F' : '#111827', 'right');
     txt('đã pick xong', x + gw - 20, y + 114, F(600, 11.5), '#6B7485', 'right');
     stackBar(x + 20, y + 126, gw - 40, 24, t, list.length, F(800, 13));
     // chú thích màu
     let lx = x + 20;
     ST.forEach(([k, lb, cc]) => {
+      if(k === 'loading' && !t[k]) return; // chỉ hiện chú thích Loading khi có cont đang load
       c.beginPath(); c.arc(lx + 5, y + 170, 5, 0, Math.PI * 2); c.fillStyle = cc; c.fill();
       const s = `${lb} ${t[k]}`; txt(s, lx + 14, y + 174.5, F(t[k] ? 700 : 500, 12), t[k] ? '#111827' : '#9AA3B2');
       c.font = F(700, 12); lx += 14 + c.measureText(s).width + 16;
@@ -19019,7 +19038,7 @@ function v5ShiftReportCanvas(){
   y += 34;
   if(!listRows.length){ txt('Không có cont rớt hay cont trong ca.', PAD + 12, y + 28, F(500, 13), '#6B7485'); y += 40; }
   const BAND = { late: ['CONT RỚT', '#E5484D', `trước ${hm(sh.start)}`], cur: ['TRONG CA', '#2F6FEB', `${hm(sh.start)} – ${hm(sh.end)}`], next: ['CA SAU · đã bắt đầu pick', '#7C5CFF', `${hm(sh.end)} – ${hm(sh.end + 43200000)}`] };
-  const ROWBG = { load: '#F1EDFF', done: '#E9F8F2', prog: '#FFF6E5', todo: '#FFFFFF' };
+  const ROWBG = { load: '#F1EDFF', loading: '#EAF1FF', done: '#E9F8F2', prog: '#FFF6E5', todo: '#FFFFFF' };
   const STCOL = Object.fromEntries(ST.map(([k, , cc]) => [k, cc]));
   listRows.forEach(([g, r], i) => {
     if(!i || listRows[i - 1][0] !== g){
@@ -19043,10 +19062,11 @@ function v5ShiftReportCanvas(){
     const kho = r.topKho || '—', kc = (typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR[kho]) || '#9AA3B2';
     rr(PAD + 532, y + 7, 40, 19, 9.5, kc); txt(String(kho).replace('Kho ', ''), PAD + 552, y + 21, F(800, 12), '#FFFFFF', 'center');
     // tiến độ: thanh + %. Cont đã Load xong thì tồn đã rời kho (% pick về 0) → hiện thanh đầy màu tím "Đã load"
-    const pc = s === 'load' ? 100 : Math.min(100, r.pct || 0), bx = PAD + 604, bw2 = 120;
+    // v6.24: cont Đang load → thanh xanh dương theo % đã load (hàng scan lên xe đã rời tồn nên % pick không còn đúng)
+    const pc = s === 'load' ? 100 : s === 'loading' ? Math.min(100, r.shipPct || 0) : Math.min(100, r.pct || 0), bx = PAD + 604, bw2 = 120;
     rr(bx, y + 11, bw2, 10, 5, '#E3E8F0');
-    if(pc > 0) rr(bx, y + 11, Math.max(10, bw2 * pc / 100), 10, 5, s === 'load' ? '#7C5CFF' : pc >= 99.995 ? '#12A37F' : '#F0A020');
-    txt(s === 'load' ? 'Đã load' : pickPctLabel(r.pct || 0), bx + bw2 + 10, yy, F(800, 12.5), s === 'load' ? '#7C5CFF' : pc >= 99.995 ? '#0E8F76' : pc > 0 ? '#C77D00' : '#6B7485');
+    if(pc > 0) rr(bx, y + 11, Math.max(10, bw2 * pc / 100), 10, 5, s === 'load' ? '#7C5CFF' : s === 'loading' ? '#3E7BFA' : pc >= 99.995 ? '#12A37F' : '#F0A020');
+    txt(s === 'load' ? 'Đã load' : s === 'loading' ? `Load ${Math.floor(pc)}%` : pickPctLabel(r.pct || 0), bx + bw2 + 10, yy, F(800, 12.5), s === 'load' ? '#7C5CFF' : s === 'loading' ? '#2A62D9' : pc >= 99.995 ? '#0E8F76' : pc > 0 ? '#C77D00' : '#6B7485');
     // trạng thái: nhãn màu nền đặc
     const lb = ST.find(x => x[0] === s)[1];
     c.font = F(800, 12); const lw = c.measureText(lb).width + 20;
