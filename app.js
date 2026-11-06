@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.22';
+const APP_VERSION = 'v6.23';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -19797,6 +19797,12 @@ if(txState){ try{ renderTransactionPage(); }catch(e){ console.error(e); } }
 // Downloads. Bật nút này (chọn thư mục Downloads 1 lần) thì cứ 30 giây trang tự tìm file fnd_gfm mới nhất,
 // nếu là file TỒN KHO (có cột Onhand Qty, không phải file Transaction) và mới hơn lần trước thì nạp vào
 // đúng như bấm chữ TN5 chọn file tay → dashboard cập nhật + tự lưu Cloud. Chỉ chạy khi tab đang mở.
+// v6.23: file fnd_gfm của Oracle có thể là UTF-16 (có byte 0 xen giữa chữ) → phải giải mã bằng
+// decodeTextBuffer như lúc tải tay, nếu đọc kiểu UTF-8 thì không thấy chữ "Onhand" và file bị bỏ qua.
+function tn5IsInventoryHead(buf){
+  const lines = decodeTextBuffer(buf).replace(/\u0000/g, '').split(/\r?\n/).slice(0, 5).join(' ');
+  return /on\s*-?\s*hand/i.test(lines) && !/transaction\s*set/i.test(lines);
+}
 (function tn5AutoInventory(){
   const btn = document.getElementById('tn5-autoinv-btn');
   if(!btn || typeof window.showDirectoryPicker !== 'function'){ if(btn) btn.style.display = 'none'; return; }
@@ -19809,11 +19815,7 @@ if(txState){ try{ renderTransactionPage(); }catch(e){ console.error(e); } }
     btn.innerHTML = `📂 Tự cập nhật file WMS: <b>${txt}</b>${extra ? ` <span>${escHtml(extra)}</span>` : ''}`;
     btn.classList.toggle('on', state === 'on'); btn.classList.toggle('need', state === 'need');
   };
-  async function isInventoryFile(file){
-    const head = await file.slice(0, 4000).text();
-    const first = head.split(/\r?\n/)[0] || '';
-    return /onhand/i.test(first) && !/transaction\s*set/i.test(first);
-  }
+  async function isInventoryFile(file){ return tn5IsInventoryHead(await file.slice(0, 8000).arrayBuffer()); }
   async function scan(){
     if(busy || !dir) return;
     busy = true;
@@ -19891,10 +19893,9 @@ if(txState){ try{ renderTransactionPage(); }catch(e){ console.error(e); } }
       if(!box || !box.gz || Number(box.ts) !== ts) return;
       const bin = Uint8Array.from(atob(box.gz), c => c.charCodeAt(0));
       const buf = await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
-      const head = new TextDecoder().decode(buf.slice(0, 4000)).split(/\r?\n/)[0] || '';
       try{ localStorage.setItem('tn5_autoinv_last', String(ts)); }catch(e){}
       await fetch(base() + '/done.json' + q(), { method: 'PUT', body: String(ts) });
-      if(!/onhand/i.test(head) || /transaction\s*set/i.test(head)) return; // không phải file tồn kho
+      if(!tn5IsInventoryHead(buf.slice(0, 8000))) return; // không phải file tồn kho
       const file = new File([buf], box.name || 'fnd_gfm.tsv', { lastModified: ts });
       const dt = new DataTransfer(); dt.items.add(file);
       fileInput.files = dt.files;
