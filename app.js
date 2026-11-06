@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.50';
+const APP_VERSION = 'v5.51';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5490,7 +5490,8 @@ function renderPlanPanel(){
         <td>${r.csr || '—'}</td>
         <td>${barHtml}</td>
       </tr>`;
-      cardGroup.trs.push(trHtml);
+      // v5.51: thẻ cont xổ bảng GỌN — bỏ Cont/Ngày load/Giờ plan/Type/Invoice/CSR (đã có trên tiêu đề thẻ)
+      cardGroup.trs.push(`<tr><td><span class="item-link" data-item="${r.item}" data-po="${r.custPo || ''}">${r.item} <span class="item-link-arrow">▸</span></span></td><td>${r.custPo || '—'}</td><td class="num">${fmt(r.qty)}</td><td class="num">${fmtDec(r.ctn, 0)}</td><td class="num">${fmtDec(r.cbm, 2)}</td>${locCells}<td>${barHtml}</td></tr>`);
       return trHtml;
     }).join('');
     const compare = buildCompareTable(type);
@@ -5517,7 +5518,7 @@ function renderPlanPanel(){
       </div>
       <div class="plan-card-chart-label">Chi tiết kế hoạch xuất (${rows.length} dòng) &nbsp; <span class="compare-summary" style="font-family:var(--mono); font-size:10px; color:var(--muted-2);">Mỗi màu = 1 container</span></div>
       ${v5PlanViewBarHtml(type, cardGroups.length)}
-      ${v5PlanCardsHtml(type, cardGroups, theadHtml)}
+      ${v5PlanCardsHtml(type, cardGroups, `<tr><th>TTI Model</th><th>Customer PO</th><th style="text-align:right">QTY</th><th style="text-align:right">CTN</th><th style="text-align:right">CBM</th>${locCols.map(name=>`<th style="text-align:right" class="loc-head">${name}</th>`).join('')}<th>Picking Status</th></tr>`)}
       <div class="plan-table-wrap v5-plan-tablewrap">
         <table class="plan-detail-table" data-colspan="${detailColCount}">
           <thead>${theadHtml}</thead>
@@ -18590,12 +18591,12 @@ function v5PlanCardsHtml(type, groups, theadHtml){
       <div class="v5-pc-meta"><div><b>${fmt(tq)}</b><span>Tổng QTY</span></div><div><b>${g.items.length}</b><span>Mã hàng</span></div><div><b>${fmt(ctn)}</b><span>CTN</span></div><div><b>${fmtDec(cbm, 1)}</b><span>CBM</span></div></div>
       <div class="v5-pc-items">${g.items.map(i => `<div class="v5-pc-it"><span><span class="item-link" data-item="${i.item}" data-po="${i.po}">${i.item}</span> <small>${i.po}</small></span><span class="q">${fmt(i.pass)} / ${fmt(i.qty)}</span><div class="tr"><div style="width:${i.pct}%;background:${i.barColor}"></div></div></div>`).join('')}</div>
       <div class="v5-pc-foot"><span>${g.csr ? 'CSR ' + g.csr : 'Chưa có CSR'}</span><span>${fmt(pk)} / ${fmt(tq)} pcs · ${pctTxt}</span></div>
-      <div class="v5-pc-detail">${open ? `<div class="plan-table-wrap"><table class="plan-detail-table"><thead>${theadHtml}</thead><tbody>${g.trs.join('').replace(/ id="plan-cont-row-[^"]*"/g, '')}</tbody></table></div>` : ''}</div>
+      <div class="v5-pc-detail">${open ? `<div class="plan-table-wrap"><table class="plan-detail-table"><thead>${theadHtml}</thead><tbody>${g.trs.join('')}</tbody></table></div>` : ''}</div>
     </div>`;
   });
   // lưu sẵn HTML chi tiết để xổ thẻ không cần vẽ lại cả bảng
   v5PlanCardsHtml._cache = v5PlanCardsHtml._cache || {};
-  groups.forEach(g => { v5PlanCardsHtml._cache[type + '|' + g.key] = `<div class="plan-table-wrap"><table class="plan-detail-table"><thead>${theadHtml}</thead><tbody>${g.trs.join('').replace(/ id="plan-cont-row-[^"]*"/g, '')}</tbody></table></div>`; });
+  groups.forEach(g => { v5PlanCardsHtml._cache[type + '|' + g.key] = `<div class="plan-table-wrap"><table class="plan-detail-table"><thead>${theadHtml}</thead><tbody>${g.trs.join('')}</tbody></table></div>`; });
   return `<div class="v5-pc-grid">${html}</div>`;
 }
 function escapeAttrV5(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
@@ -18711,3 +18712,38 @@ function v5RenderShiftStats(){
       ${card('next', 'Cont ca sau', `từ ${hm(sh.end)} trở đi`, next, 'var(--violet)')}
     </div>`;
 }
+
+
+// v5.51: bấm mã hàng trong thẻ container -> popup danh sách Locator của mã + PO đó (dùng lại nội dung
+// "Chi tiết mã hàng" của bảng: kho, locator, PO, OQC, SL tồn).
+function v5OpenItemLocPopup(item, po){
+  let ov = document.getElementById('v5-itemloc-overlay');
+  if(!ov){
+    ov = document.createElement('div');
+    ov.id = 'v5-itemloc-overlay'; ov.className = 'pick-slip-overlay';
+    ov.innerHTML = `<div class="pick-slip-box" style="width:min(720px, 100%);"><div class="pick-slip-toolbar"><div style="font-weight:800; font-size:15px; margin-right:auto;" id="v5-itemloc-title"></div>
+      <button type="button" class="btn-update btn-ghost-outline" data-v5-itemloc-close="1"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>Đóng</button></div>
+      <div class="v5-il-content" id="v5-itemloc-content"></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', e => { if(e.target === ov || e.target.closest('[data-v5-itemloc-close]')) ov.classList.remove('show'); });
+    document.addEventListener('keydown', e => { if(e.key === 'Escape') ov.classList.remove('show'); });
+  }
+  document.getElementById('v5-itemloc-title').innerHTML = `📍 Locator · ${escHtml(item)}${po ? ` <span style="font-weight:600; color:var(--muted); font-size:12.5px;">PO ${escHtml(po)}</span>` : ''}`;
+  const rows = buildItemLocatorDetail(item, po);
+  const crInvMap = txBuildCrInvoiceMap();
+  const total = rows.reduce((t, r) => t + (r.qty || 0), 0);
+  document.getElementById('v5-itemloc-content').innerHTML = rows.length
+    ? `<div class="v5-il-sum">${rows.length} vị trí · tổng <b>${fmt(total)}</b> Pcs</div>
+      <table class="v5-il-tbl"><thead><tr><th>Kho</th><th>Locator</th><th>Cust PO</th><th>OQC</th><th class="num">SL tồn</th></tr></thead><tbody>${rows.map(r => {
+        const ref = loadingRefHtml(r, crInvMap).replace(/<[^>]+>/g, '').trim();
+        return `<tr><td><span class="v5-il-kho">${escHtml(String(r.kho).replace('Kho ', ''))}</span></td><td><b>${escHtml(r.locator)}</b>${ref ? `<span class="v5-il-ref">${escHtml(ref)}</span>` : ''}</td><td>${escHtml(r.custpo || '—')}</td><td>${oqcBadge(r.oqc)}</td><td class="num">${fmt(r.qty)}</td></tr>`;
+      }).join('')}</tbody></table>`
+    : `<div class="v5-il-sum">Không tìm thấy tồn kho cho mã này${po ? ' ở đúng PO ' + escHtml(po) : ''}.</div>`;
+  ov.classList.add('show');
+}
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('.v5-pc .item-link');
+  if(!link) return;
+  e.preventDefault();
+  v5OpenItemLocPopup(link.dataset.item, link.dataset.po || '');
+});
