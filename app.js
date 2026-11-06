@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.04';
+const APP_VERSION = 'v6.05';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18488,8 +18488,8 @@ function v5RenderHero(){
   const ringEl = document.getElementById('v5-h-ring');
   if(!ringEl) return;
   const rows = contPickAllRows || [];
-  const today = v5TodayStr(0);
-  const tRows = rows.filter(r => String(r.loadDate || '').split(',')[0].trim() === today);
+  // v6.05: vòng tròn tính theo CONT TRONG CA (giờ plan trong ca hiện tại) thay vì cont hôm nay
+  const tRows = rows.length ? v5ShiftGroups(v5ShiftInfo()).inShift : [];
   const tDone = tRows.filter(v5IsDone).length;
   const tPal = v5PalletSum(tRows);
   const pct = tRows.length ? tDone / tRows.length : 0;
@@ -18497,7 +18497,7 @@ function v5RenderHero(){
   ringEl.innerHTML = rows.length ? `
     <svg viewBox="0 0 132 132" class="v5-ring"><defs><linearGradient id="v5rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2FD5A8"/><stop offset="1" stop-color="#5EA8FF"/></linearGradient></defs>
       <circle cx="66" cy="66" r="54" class="trk"/><circle cx="66" cy="66" r="54" class="val" style="stroke-dasharray:${C};stroke-dashoffset:${C * (1 - pct)}"/></svg>
-    <div class="v5-ring-c"><b>${fmt(tDone)}<span>/${fmt(tRows.length)}</span></b><em>cont hôm nay xong</em></div>
+    <div class="v5-ring-c"><b>${fmt(tDone)}<span>/${fmt(tRows.length)}</span></b><em>cont trong ca xong</em></div>
     <div class="v5-ring-sub"><div class="v5-pal-l"><span>Pallet đã pick</span><b>${fmt(tPal.picked)}</b></div><div class="v5-pal-l"><span>Pallet đã load xong</span><b>${tPal.loaded === null ? '—' : fmt(tPal.loaded)}</b></div><div class="v5-prog"><i style="width:${tPal.picked ? Math.round((tPal.loaded || 0) / tPal.picked * 100) : 0}%"></i></div></div>`
     : `<div class="v5-ring-empty"><div class="sk sk-ring"></div><em>Chưa tải Plan</em></div>`;
   const cnt = s => rows.filter(r => r.status === s).length;
@@ -18534,7 +18534,7 @@ function v5HeroTick(){
   const h = now.getHours() + now.getMinutes() / 60, dayShift = h >= 7 && h < 19;
   const into = dayShift ? h - 7 : (h >= 19 ? h - 19 : h + 5);
   document.getElementById('v5-shift').innerHTML = `<span>${dayShift ? '☀️ Ca ngày · 07:00–19:00' : '🌙 Ca đêm · 19:00–07:00'}</span><div class="v5-prog"><i style="width:${Math.round(into / 12 * 100)}%"></i></div><em>còn ${v5FmtLeft((12 - into) * 3600000)} hết ca</em>`;
-  if(v5ShiftInfo().key !== v5ShiftKeyShown) v5RenderShiftStats(); // sang ca mới -> tính lại 3 nhóm
+  if(v5ShiftInfo().key !== v5ShiftKeyShown) { v5RenderShiftStats(); v5RenderHero(); } // sang ca mới -> tính lại 3 nhóm + vòng cont trong ca
   const cd = document.getElementById('v5-nx-cd');
   if(cd && v5NextInfo){
     const diff = v5NextInfo.ts - Date.now(), s = Math.floor(Math.abs(diff) / 1000);
