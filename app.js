@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.14';
+const APP_VERSION = 'v6.15';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18835,8 +18835,8 @@ function v5RenderShiftStats(){
     </div>`;
   };
   el.innerHTML = `<div class="v5-sh-head">Thống kê theo ca <em>${sh.day ? '☀️ Ca ngày' : '🌙 Ca đêm'} · ${hm(sh.start)} → ${hm(sh.end)}</em><button type="button" class="v5-sh-report" data-v5-shift-report="1" title="Xuất ảnh tổng kết ca để gửi bàn giao">📸 Báo cáo ca</button></div>
-    <div class="v5-sh-grid">
-      ${card('late', 'Cont rớt', `giờ plan trước ${hm(sh.start)}, chưa load xong`, late, 'var(--red)')}
+    <div class="v5-sh-grid${late.length ? '' : ' v5-sh-grid-2'}">
+      ${late.length ? card('late', 'Cont rớt', `giờ plan trước ${hm(sh.start)}, chưa load xong`, late, 'var(--red)') : ''}
       ${card('cur', 'Cont trong ca', `${hm(sh.start)} – ${hm(sh.end)}`, inShift, 'var(--blue)')}
       ${card('next', 'Cont ca sau', `${hm(sh.end)} – ${hm(sh.end + 43200000)}`, next, 'var(--violet)')}
     </div>
@@ -18934,7 +18934,12 @@ function v5ShiftReportCanvas(){
     noteText.split(/\n/).forEach(par => { let line = ''; par.split(/\s+/).forEach(w => { const t = line ? line + ' ' + w : w; if(mc.measureText(t).width > 1180 - 36 * 2 - 40 && line){ noteLines.push(line); line = w; } else line = t; }); noteLines.push(line); });
   }
   const noteH = noteLines.length ? 56 + noteLines.length * 22 : 0;
-  const H = 358 + 52 + listRows.length * 34 + (listRows.length ? 0 : 40) + 90 + noteH;
+  // v6.15: thẻ ca giống thẻ trên web — chip trạng thái + mỗi kho 1 dòng; ẩn Cont rớt nếu = 0
+  const groups = [['Cont rớt', late, '#E5484D', `trước ${hm(sh.start)}, chưa load xong`], ['Cont trong ca', inShift, '#2F6FEB', `${hm(sh.start)} – ${hm(sh.end)}`], ['Cont ca sau', next, '#7C5CFF', `${hm(sh.end)} – ${hm(sh.end + 43200000)}`]].filter(g => g[0] !== 'Cont rớt' || g[1].length);
+  const maxKho = Math.max(0, ...groups.map(g => v5ShiftKhoCounts(g[1]).length));
+  const cardH = 172 + maxKho * 44;
+  const tableTop = 124 + cardH + 30;
+  const H = tableTop - 10 + 52 + listRows.length * 34 + (listRows.length ? 0 : 40) + 90 + noteH;
   const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
   const c = cv.getContext('2d'); c.scale(S, S);
   const F = (w, px) => `${w} ${px}px Inter, "Segoe UI", Arial, sans-serif`;
@@ -18950,43 +18955,49 @@ function v5ShiftReportCanvas(){
   txt(`Xuất lúc ${p2(now.getHours())}:${p2(now.getMinutes())} ${p2(now.getDate())}/${p2(now.getMonth() + 1)}/${now.getFullYear()}`, W - PAD, 46, F(600, 14), '#B8C7E6', 'right');
   const allTs = (contPickAllRows || []).length;
   txt(`Tổng ${allTs} cont trong Plan`, W - PAD, 78, F(600, 14), '#B8C7E6', 'right');
-  // 3 ô nhóm
-  const groups = [['Cont rớt', late, '#E5484D', `trước ${hm(sh.start)}, chưa load xong`], ['Cont trong ca', inShift, '#2F6FEB', `${hm(sh.start)} – ${hm(sh.end)}`], ['Cont ca sau', next, '#7C5CFF', `${hm(sh.end)} – ${hm(sh.end + 43200000)}`]];
-  const gw = (W - PAD * 2 - 24) / 3;
+  // 3 ô nhóm (2 ô nếu không có cont rớt)
+  const gw = (W - PAD * 2 - 12 * (groups.length - 1)) / groups.length;
+  const chip = (x, y, label, val, valCol) => {
+    c.font = F(600, 12); const lw = c.measureText(label + ' ').width; c.font = F(800, 12.5); const vw = c.measureText(String(val)).width;
+    const w = lw + vw + 20; rr(x, y, w, 24, 12, '#EEF1F6');
+    txt(label, x + 10, y + 16.5, F(600, 12), '#4B5563'); txt(val, x + 10 + lw, y + 16.5, F(800, 12.5), valCol);
+    return w;
+  };
   groups.forEach(([title, list, col, sub], i) => {
     const x = PAD + i * (gw + 12), y = 124;
-    rr(x, y, gw, 214, 14, '#FFFFFF', '#DDE3EE');
-    c.fillStyle = col; c.fillRect(x, y + 14, 4, 186);
+    rr(x, y, gw, cardH, 14, '#FFFFFF', '#DDE3EE');
+    c.fillStyle = col; c.fillRect(x, y + 14, 4, cardH - 28);
     txt(title, x + 20, y + 32, F(800, 17), col);
     txt(sub, x + 20, y + 52, F(500, 12), '#6B7485');
     txt(list.length, x + 20, y + 102, F(800, 44), title === 'Cont rớt' && list.length ? col : '#111827');
     txt('cont', x + 22 + c.measureText(String(list.length)).width + 6, y + 102, F(600, 15), '#6B7485');
     const cnt = st => list.filter(r => r.status === st).length;
     const done = list.filter(r => r.status === 'done' || r.status === 'manualDone').length, ship = list.filter(r => r.isShipDone).length;
-    txt(`Chưa ${cnt('notStarted')} · Đang ${cnt('inProgress')} · Xong ${done} · Load ${ship}`, x + 20, y + 132, F(600, 13), '#374151');
-    const pal = v5PalletSum(list);
-    txt(`Pallet pick ${fmt(pal.picked)} · load ${pal.loaded === null ? '—' : fmt(pal.loaded)}`, x + 20, y + 160, F(700, 13), '#111827');
-    // v6.07: số cont theo kho pick chính, VD "● 3B: 3 cont (2 xong)  ● 2B: 5 cont"
-    const ks = v5ShiftKhoCounts(list);
-    if(ks.length){
-      const fontK = F(700, 13), maxW = gw - 40;
-      const label = (k, e, withDone) => `${k.replace('Kho ', '')}: ${e.n} cont${withDone && e.done ? ` (${e.done} xong)` : ''}`;
-      c.font = fontK;
-      const totalW = wd => ks.reduce((t, [k, e]) => t + 14 + c.measureText(label(k, e, wd)).width + 14, 0);
-      const withDone = totalW(true) <= maxW;
-      let kx = x + 20;
-      ks.forEach(([k, e]) => {
-        const t = label(k, e, withDone); c.font = fontK; const tw = c.measureText(t).width;
-        if(kx + 14 + tw > x + gw - 16) return;
-        c.beginPath(); c.arc(kx + 5, y + 189, 5, 0, Math.PI * 2); c.fillStyle = (typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR[k]) || '#9AA3B2'; c.fill();
-        txt(t, kx + 14, y + 194, fontK, '#111827');
-        kx += 14 + tw + 14;
+    let cx = x + 20;
+    [['Chưa pick', cnt('notStarted'), '#111827'], ['Đang pick', cnt('inProgress'), '#D98A0B'], ['Pick xong', done, '#0E8F76'], ['Load xong', ship, '#7C5CFF']].forEach(([l, v, vc]) => { cx += chip(cx, y + 118, l, v, vc) + 6; });
+    // mỗi kho 1 dòng: tên kho · số cont · Chưa / Đang / Xong (load)
+    v5ShiftKhoCounts(list).forEach(([k, e], j) => {
+      const ry = y + 158 + j * 44, kc = (typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR[k]) || '#9AA3B2';
+      rr(x + 16, ry, gw - 32, 38, 10, '#F5F7FB', '#E3E8F0');
+      c.fillStyle = kc; c.fillRect(x + 16, ry + 4, 4, 30);
+      c.beginPath(); c.arc(x + 34, ry + 19, 5, 0, Math.PI * 2); c.fillStyle = kc; c.fill();
+      txt(k.replace('Kho ', ''), x + 46, ry + 25, F(800, 15), '#111827');
+      txt(e.n, x + 100, ry + 26, F(800, 18), '#111827');
+      txt('cont', x + 106 + c.measureText(String(e.n)).width, ry + 25, F(600, 13), '#6B7485');
+      const parts = [];
+      if(e.todo) parts.push(['Chưa', e.todo, '#111827']);
+      if(e.prog) parts.push(['Đang', e.prog, '#D98A0B']);
+      if(e.done) parts.push([e.ship ? `Xong` : 'Xong', e.done + (e.ship ? ` (load ${e.ship})` : ''), '#0E8F76']);
+      let rx = x + gw - 24;
+      parts.reverse().forEach(([l, v, vc]) => {
+        c.font = F(600, 12); const lw = c.measureText(l + ' ').width; c.font = F(800, 12.5); const vw = c.measureText(String(v)).width;
+        const w = lw + vw + 20; rx -= w; chip(rx, ry + 7, l, v, vc); rx -= 6;
       });
-    }
+    });
   });
   // bảng cont rớt + trong ca
-  let y = 368;
-  txt(nextStarted.length ? 'Chi tiết cont rớt, cont trong ca và cont ca sau đã pick' : 'Chi tiết cont rớt và cont trong ca', PAD, y, F(800, 16), '#111827');
+  let y = tableTop;
+  txt('Chi tiết ' + [late.length ? 'cont rớt' : '', 'cont trong ca', nextStarted.length ? 'cont ca sau đã pick' : ''].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' và $1'), PAD, y, F(800, 16), '#111827');
   y += 16;
   const cols = [['Nhóm', 0], ['Plan', 90], ['Cont', 150], ['Ngày · Giờ', 330], ['Invoice', 480], ['Kho', 600], ['% pick', 680], ['Trạng thái', 770], ['Ghi chú', 900]];
   rr(PAD, y, W - PAD * 2, 30, 8, '#E8EDF6');
