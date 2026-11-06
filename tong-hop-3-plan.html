@@ -473,7 +473,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v5.81';
+  var PH_VERSION = 'v5.82';
   var PH_VERSION_DATE = '06/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -937,8 +937,17 @@
   // rồi xuất 1 ảnh chung (cont · mã · locator lầu/rack · SL) để gửi tổ pick làm trước. =====
   var PH_HARD_LABELS = ['3A lầu', '3A Rack'];
   var phHardSel = {};
+  // Chỉ ĐỀ XUẤT đủ số vị trí để lấy đủ SL cần pick (không liệt kê hết mọi vị trí còn hàng):
+  // có 1 vị trí đủ SL -> lấy vị trí nhỏ nhất mà vẫn đủ; không thì lấy lần lượt vị trí nhiều hàng nhất.
+  var phHardSuggest = function(locs, need){
+    var enough = locs.filter(function(l){ return l.qty >= need; }).sort(function(a, b){ return a.qty - b.qty; });
+    if(enough.length) return [enough[0]];
+    var out = [], got = 0;
+    locs.slice().sort(function(a, b){ return b.qty - a.qty; }).some(function(l){ out.push(l); got += l.qty; return got >= need; });
+    return out;
+  };
   var phHardInfo = function(row){
-    var lines = [], qty = 0;
+    var lines = [], need = 0, nLoc = 0;
     (row.items || []).forEach(function(it){
       if(!(it.need > 0)) return;
       var locs = [], other = 0;
@@ -949,12 +958,14 @@
         else if(!/loading\s*$/i.test(String(l.locator || ''))) other += (l.qty || 0);
       });
       if(!locs.length) return;
-      locs.sort(function(a, b){ return a.label === b.label ? String(a.locator).localeCompare(String(b.locator), 'en', { numeric: true }) : (a.label === '3A lầu' ? -1 : 1); });
-      var q = locs.reduce(function(s, l){ return s + l.qty; }, 0);
-      qty += q;
-      lines.push({ item: it.item, po: it.po, need: it.need, locs: locs, hardQty: q, other: other });
+      var sugg = phHardSuggest(locs, it.need);
+      sugg.sort(function(a, b){ return a.label === b.label ? String(a.locator).localeCompare(String(b.locator), 'en', { numeric: true }) : (a.label === '3A lầu' ? -1 : 1); });
+      var sq = sugg.reduce(function(s, l){ return s + l.qty; }, 0);
+      var hardTotal = locs.reduce(function(s, l){ return s + l.qty; }, 0);
+      need += it.need; nLoc += sugg.length;
+      lines.push({ item: it.item, po: it.po, need: it.need, sugg: sugg, suggQty: sq, restN: locs.length - sugg.length, restQty: hardTotal - sq, other: other });
     });
-    return { lines: lines, qty: qty };
+    return { lines: lines, qty: need, nLoc: nLoc };
   };
   var phHardRows = function(){
     var out = [];
@@ -974,11 +985,11 @@
     var nSel = list.filter(function(x){ return phHardSel[x.key] !== false; }).length;
     el.innerHTML = '<div class="ph-hard-h"><b>🏗 Ưu tiên pick 3A lầu + Rack</b><span>Chọn cont cần làm trước rồi xuất ảnh gửi tổ pick</span></div>' +
       '<div class="ph-hard-list">' + list.map(function(x){
-        var r = x.row, on = phHardSel[x.key] !== false, nLoc = x.row.hard.lines.reduce(function(s, l){ return s + l.locs.length; }, 0);
+        var r = x.row, on = phHardSel[x.key] !== false, nLoc = r.hard.nLoc;
         return '<label class="ph-hard-row' + (on ? ' on' : '') + '"><input type="checkbox" data-hard-key="' + phEsc(x.key) + '"' + (on ? ' checked' : '') + '>' +
           '<span class="ph-badge" style="background:' + (PH_TYPE_COLORS[r.type] || '#8892A0') + ';">' + phEsc(r.type) + '</span>' +
           '<span class="ph-hard-vnc">' + phEsc(r.invoice) + '</span><span class="ph-hard-time">' + phEsc(String(r.loadDate).slice(0, 5)) + ' ' + phEsc(r.planTime || '—') + '</span>' +
-          '<span class="ph-hard-q">' + r.hard.lines.length + ' mã · ' + nLoc + ' vị trí · <b>' + phFmt(r.hard.qty) + '</b> pcs</span></label>';
+          '<span class="ph-hard-q">' + r.hard.lines.length + ' mã · ' + nLoc + ' vị trí · cần <b>' + phFmt(r.hard.qty) + '</b> pcs</span></label>';
       }).join('') + '</div>' +
       '<div class="ph-hard-act"><button type="button" data-hard-all="1">Chọn hết</button><button type="button" data-hard-all="0">Bỏ hết</button>' +
       '<span class="ph-hard-n">Đã chọn <b>' + nSel + '</b>/' + list.length + ' cont</span>' +
@@ -987,50 +998,55 @@
   var phSaveHardImage = function(share){
     var list = phHardRows().filter(function(x){ return phHardSel[x.key] !== false; });
     if(!list.length) return;
-    var W = 980, S = 2, PAD = 24, RH = 26, CH = 44, IH = 24;
+    var W = 1000, S = 2, PAD = 24, CH = 46, IH = 30, NC = 3, GAP = 8, CW = (W - PAD * 2 - 24 - GAP * (NC - 1)) / NC, RH = 30;
     var H = 96;
-    list.forEach(function(x){ H += CH + 8; x.row.hard.lines.forEach(function(l){ H += IH + l.locs.length * RH; }); H += 14; });
+    list.forEach(function(x){ H += CH + 6; x.row.hard.lines.forEach(function(l){ H += IH + Math.ceil(l.sugg.length / NC) * (RH + 4) + 8; }); H += 12; });
     H += 30;
     var cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
     var g = cv.getContext('2d'); g.scale(S, S); g.textBaseline = 'middle';
     var F = function(w, px){ return w + ' ' + px + 'px system-ui, "Segoe UI", Arial, sans-serif'; };
     var T = function(t, x, y, f, c, a){ g.font = f; g.fillStyle = c; g.textAlign = a || 'left'; g.fillText(String(t), x, y); };
+    var RR = function(x, y, w, hh, r, fill, stroke){ g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + hh, r); g.arcTo(x + w, y + hh, x, y + hh, r); g.arcTo(x, y + hh, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); if(fill){ g.fillStyle = fill; g.fill(); } if(stroke){ g.strokeStyle = stroke; g.lineWidth = 1; g.stroke(); } };
     g.fillStyle = '#F4F6FB'; g.fillRect(0, 0, W, H);
     g.fillStyle = '#1F2A44'; g.fillRect(0, 0, W, 72);
     var now = new Date(), p = function(n){ return String(n).padStart(2, '0'); };
-    var totalQ = list.reduce(function(s, x){ return s + x.row.hard.qty; }, 0);
+    var totalNeed = list.reduce(function(s, x){ return s + x.row.hard.qty; }, 0), totalLoc = list.reduce(function(s, x){ return s + x.row.hard.nLoc; }, 0);
     T('ƯU TIÊN PICK · 3A LẦU + 3A RACK', PAD, 28, F(800, 20), '#FFFFFF');
-    T(list.length + ' cont · ' + phFmt(totalQ) + ' pcs tồn ở lầu/rack · xuất lúc ' + p(now.getHours()) + ':' + p(now.getMinutes()) + ' ' + p(now.getDate()) + '/' + p(now.getMonth() + 1), PAD, 52, F(500, 13), '#C9D3E6');
-    var cols = [0, 150, 290, 420, 520, 860]; // mã, PO, cần pick, khu, locator, SL (phải)
+    T(list.length + ' cont · cần pick ' + phFmt(totalNeed) + ' pcs · ' + totalLoc + ' vị trí đề xuất · xuất lúc ' + p(now.getHours()) + ':' + p(now.getMinutes()) + ' ' + p(now.getDate()) + '/' + p(now.getMonth() + 1), PAD, 52, F(500, 13), '#C9D3E6');
     var y = 88;
     list.forEach(function(x, ci){
       var r = x.row;
-      g.fillStyle = '#FFFFFF'; g.fillRect(PAD, y, W - PAD * 2, CH);
-      g.fillStyle = PH_TYPE_COLORS[r.type] || '#8892A0'; g.fillRect(PAD, y, 6, CH);
+      RR(PAD, y, W - PAD * 2, CH, 10, '#FFFFFF', '#DDE3EE');
+      g.fillStyle = PH_TYPE_COLORS[r.type] || '#8892A0'; g.fillRect(PAD, y + 8, 5, CH - 16);
       T((ci + 1) + '. ' + r.type + ' · ' + r.invoice, PAD + 16, y + 16, F(800, 15), '#12161F');
       T('Load ' + r.loadDate + ' ' + (r.planTime || '—') + '  ·  CSR ' + r.csr, PAD + 16, y + 34, F(500, 12), '#55637C');
-      T('Tồn lầu/rack ' + phFmt(r.hard.qty), W - PAD - 12, y + 22, F(800, 14), '#B76E00', 'right');
-      y += CH;
-      g.fillStyle = '#EEF1F6'; g.fillRect(PAD, y, W - PAD * 2, 8); y += 8;
+      T('Cần pick ' + phFmt(r.hard.qty) + ' · ' + r.hard.nLoc + ' vị trí', W - PAD - 14, y + CH / 2, F(800, 14), '#B76E00', 'right');
+      y += CH + 6;
       r.hard.lines.forEach(function(l){
-        g.fillStyle = '#F8FAFD'; g.fillRect(PAD, y, W - PAD * 2, IH);
-        T(l.item, PAD + 12 + cols[0], y + IH / 2, F(800, 13), '#12161F');
-        T('PO ' + (l.po || '—'), PAD + 12 + cols[1], y + IH / 2, F(500, 12.5), '#374151');
-        T('Cần pick ' + phFmt(l.need), PAD + 12 + cols[2], y + IH / 2, F(700, 12.5), '#B42318');
-        if(l.other > 0) T('(khu khác còn ' + phFmt(l.other) + ')', PAD + 12 + cols[4], y + IH / 2, F(500, 12), '#8a97ac');
+        T(l.item, PAD + 12, y + IH / 2, F(800, 13.5), '#12161F');
+        g.font = F(800, 13.5); var x1 = PAD + 12 + g.measureText(l.item).width + 12;
+        T('PO ' + (l.po || '—'), x1, y + IH / 2, F(500, 12.5), '#55637C');
+        g.font = F(500, 12.5); x1 += g.measureText('PO ' + (l.po || '—')).width + 14;
+        T('Cần pick ' + phFmt(l.need), x1, y + IH / 2, F(800, 13), '#B42318');
+        var extra = [];
+        if(l.restN > 0) extra.push('lầu/rack còn ' + l.restN + ' vị trí khác (' + phFmt(l.restQty) + ')');
+        if(l.suggQty < l.need) extra.push('lầu/rack chỉ có ' + phFmt(l.suggQty) + ', thiếu ' + phFmt(l.need - l.suggQty));
+        if(l.other > 0) extra.push('khu khác còn ' + phFmt(l.other));
+        if(extra.length) T(extra.join(' · '), W - PAD - 12, y + IH / 2, F(500, 11.5), '#8a97ac', 'right');
         y += IH;
-        l.locs.forEach(function(lc, li){
-          g.fillStyle = li % 2 ? '#FAFBFC' : '#FFFFFF'; g.fillRect(PAD, y, W - PAD * 2, RH);
-          g.fillStyle = lc.label === '3A lầu' ? '#ede3f5' : '#dceef5'; g.fillRect(PAD + 12 + cols[3], y + 4, 74, RH - 8);
-          T(lc.label, PAD + 12 + cols[3] + 37, y + RH / 2, F(700, 12), '#374151', 'center');
-          T(lc.locator, PAD + 12 + cols[4], y + RH / 2, F(700, 13), '#12161F');
-          T(phFmt(lc.qty), W - PAD - 14, y + RH / 2, F(700, 13), '#12161F', 'right');
-          y += RH;
+        l.sugg.forEach(function(lc, k){
+          var cx = PAD + 12 + (k % NC) * (CW + GAP), cy = y + Math.floor(k / NC) * (RH + 4);
+          var lau = lc.label === '3A lầu';
+          RR(cx, cy, CW, RH, 8, lau ? '#F6F0FC' : '#EEF6FB', lau ? '#D9C6F0' : '#C6DFEE');
+          T(lau ? 'Lầu' : 'Rack', cx + 10, cy + RH / 2, F(800, 11), lau ? '#6E4FE0' : '#2C6FCB');
+          T(lc.locator, cx + 52, cy + RH / 2, F(800, 13), '#12161F');
+          T(phFmt(lc.qty), cx + CW - 10, cy + RH / 2, F(700, 13), '#12161F', 'right');
         });
+        y += Math.ceil(l.sugg.length / NC) * (RH + 4) + 8;
       });
-      y += 14;
+      y += 12;
     });
-    T('Tổng hợp 3 Plan · ' + PH_VERSION, PAD, H - 16, F(500, 11), '#9AA3B2');
+    T('Tổng hợp 3 Plan · ' + PH_VERSION + ' · chỉ liệt kê đủ vị trí để lấy đủ SL cần pick (ưu tiên ít pallet nhất)', PAD, H - 16, F(500, 11), '#9AA3B2');
     phDeliverCanvas(cv, 'UuTien_3A_Lau_Rack_' + p(now.getDate()) + p(now.getMonth() + 1) + '_' + p(now.getHours()) + p(now.getMinutes()), share);
   };
   document.addEventListener('change', function(e){
