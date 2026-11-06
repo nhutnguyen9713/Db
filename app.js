@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.21';
+const APP_VERSION = 'v6.22';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -19861,4 +19861,49 @@ if(txState){ try{ renderTransactionPage(); }catch(e){ console.error(e); } }
     try{ if((await dir.queryPermission({ mode: 'read' })) === 'granted'){ start(); return; } }catch(e){}
     setBtn('need'); // Chrome cần 1 cú bấm để cấp lại quyền đọc thư mục sau khi mở lại trình duyệt
   })();
+})();
+
+// ===== v6.22: NHẬN FILE WMS DO SCRIPT POWERSHELL ĐẨY LÊN FIREBASE (node wms_inbox) =====
+// tools/wms-auto-export.ps1 (khi điền $FirebaseUrl + $FirebaseSecret) nén gzip file fnd_gfm tồn kho rồi ghi vào
+// <Database URL>/wms_inbox = {name, ts, gz}. Bất kỳ Dashboard nào đang mở và đã kết nối Cloud (máy nào cũng
+// được, kể cả điện thoại) cứ 60 giây xem wms_inbox/ts; có file mới thì giải nén, nạp như bấm TN5 chọn file
+// tay (tính tồn + lưu Cloud), rồi ghi wms_inbox/done = ts để các máy khác khỏi làm lại.
+(function tn5WmsInbox(){
+  if(typeof DecompressionStream !== 'function') return;
+  let busy = false;
+  const base = () => (CloudVault.url || '').replace(/\/+$/, '') + '/wms_inbox';
+  const q = () => '?auth=' + encodeURIComponent(CloudVault.token);
+  async function getJson(path){
+    const r = await fetch(base() + path + '.json' + q() + '&_=' + Date.now(), { cache: 'no-store' });
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+  async function check(){
+    if(busy || !CloudVault.url || !CloudVault.token || document.hidden) return;
+    busy = true;
+    try{
+      const ts = Number(await getJson('/ts') || 0);
+      if(!ts) return;
+      const done = Number(await getJson('/done') || 0);
+      let last = 0; try{ last = Number(localStorage.getItem('tn5_autoinv_last') || 0); }catch(e){}
+      if(ts <= done || ts <= last) return;
+      const box = await getJson('');
+      if(!box || !box.gz || Number(box.ts) !== ts) return;
+      const bin = Uint8Array.from(atob(box.gz), c => c.charCodeAt(0));
+      const buf = await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+      const head = new TextDecoder().decode(buf.slice(0, 4000)).split(/\r?\n/)[0] || '';
+      try{ localStorage.setItem('tn5_autoinv_last', String(ts)); }catch(e){}
+      await fetch(base() + '/done.json' + q(), { method: 'PUT', body: String(ts) });
+      if(!/onhand/i.test(head) || /transaction\s*set/i.test(head)) return; // không phải file tồn kho
+      const file = new File([buf], box.name || 'fnd_gfm.tsv', { lastModified: ts });
+      const dt = new DataTransfer(); dt.items.add(file);
+      fileInput.files = dt.files;
+      fileInput.dispatchEvent(new Event('change'));
+      if(typeof showAppToast === 'function') showAppToast(`☁️ Tự cập nhật tồn kho từ "${file.name}" (script WMS) — đang lưu Cloud…`);
+    }catch(e){ console.warn('wms_inbox:', e); }
+    finally{ busy = false; }
+  }
+  setTimeout(check, 8000);
+  setInterval(check, 60000);
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) check(); });
 })();
