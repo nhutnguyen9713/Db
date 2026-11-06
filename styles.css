@@ -2181,3 +2181,68 @@
   .v5-tl-blk.late:not(.short){border-left-color:var(--red);}
   .v5-tl-blk.late b{color:var(--red);}
   .v5-tl-empty{position:absolute; left:0; right:0; top:30px; text-align:center; font-size:12.5px; color:var(--muted-2); font-style:italic;}
+
+  /* ==================================================================================
+     v5.10 — MENU DỌC BÊN TRÁI + NỀN TỐI KIỂU PHÒNG ĐIỀU KHIỂN
+     ================================================================================== */
+  body[data-theme="dark"]{
+    --bg:#0A0F1C; --panel:#111A2C; --panel-2:#152036; --line:#22304B; --line-soft:#1B2740;
+    --text:#E8EEF9; --muted:#9AA8C2; --muted-2:#6B7A96;
+    --amber:#FFB547; --amber-bright:#FFB547; --teal:#2FD5A8; --red:#FF5C6F; --blue:#5EA8FF; --violet:#A78BFF;
+    --shadow:0 0 0 1px rgba(94,168,255,.04), 0 10px 30px rgba(0,0,0,.35);
+    background:
+      radial-gradient(1000px 500px at 15% -10%, rgba(94,168,255,.12), transparent 60%),
+      radial-gradient(800px 500px at 100% 0%, rgba(167,139,255,.10), transparent 60%),
+      radial-gradient(700px 500px at 50% 110%, rgba(47,213,168,.06), transparent 60%),
+      var(--bg);
+    background-attachment:fixed;
+  }
+  body[data-theme="dark"] .panel, body[data-theme="dark"] .plan-bar, body[data-theme="dark"] .kcs-panel,
+  body[data-theme="dark"] .v5-tile, body[data-theme="dark"] .kpi, body[data-theme="dark"] .snapshot{
+    background:linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0) 40%), var(--panel);
+    border-color:var(--line);
+  }
+  body[data-theme="dark"] .v5-tile .v, body[data-theme="dark"] .kpi .value{text-shadow:0 0 18px rgba(94,168,255,.18);}
+  body[data-theme="dark"] .sidebar{background:linear-gradient(180deg, #0E1628 0%, #0B1222 100%); box-shadow:0 0 0 1px #1C2842, 0 20px 40px rgba(0,0,0,.45);}
+  body[data-theme="dark"] .sidebar-nav-btn.active{background:linear-gradient(90deg, rgba(94,168,255,.22), rgba(94,168,255,.06)); color:#fff; box-shadow:inset 3px 0 0 #5EA8FF;}
+  body[data-theme="dark"] .plan-detail-table thead th, body[data-theme="dark"] .kho-detail-table thead th{background:#14203A;}
+
+  .v5-collapse-btn{display:none;}
+
+  @media (min-width:901px){
+    body{padding:16px 22px 60px 16px;}
+    .app-shell{flex-direction:row; align-items:flex-start; max-width:none; gap:22px;}
+    .main-area{flex:1; min-width:0; max-width:1560px;}
+    .sidebar{
+      width:232px; position:sticky; top:16px; height:calc(100vh - 32px); align-self:flex-start;
+      display:grid; grid-template-columns:repeat(5, 1fr); grid-template-rows:auto auto auto 1fr auto;
+      align-items:center; gap:6px 4px; padding:16px 12px 14px; border-radius:22px; overflow:visible;
+      transition:width .2s ease;
+    }
+    .sidebar-logo{grid-column:1 / -1; margin:0 0 12px 4px; position:relative; width:44px; height:44px;}
+    .sidebar-logo::after{content:'Dashboard'; position:absolute; left:56px; top:50%; transform:translateY(-50%); color:#fff; font-family:var(--sans); font-size:16px; font-weight:800; letter-spacing:-.01em; white-space:nowrap;}
+    .sidebar-nav{grid-column:1 / -1; flex-direction:column; align-items:stretch; flex-wrap:nowrap; gap:2px; overflow:visible;}
+    .sidebar-nav-btn[data-page]{width:100%; height:42px; justify-content:flex-start; padding:0 14px; gap:12px; border-radius:11px;}
+    .sidebar-nav-btn[data-page] svg{width:18px; height:18px;}
+    .nav-label{font-size:13.5px;}
+    .sidebar-spacer{grid-column:1 / -1; height:100%; min-height:30px; align-self:stretch;}
+    .sidebar-spacer .dock-scene{top:auto; bottom:6px; height:44px; display:block;}
+    .sidebar > .sidebar-nav-btn:not([data-page]){width:100%; height:40px; border-radius:11px;}
+    .v5-collapse-btn{
+      grid-column:1 / -1; display:flex; align-items:center; gap:12px; height:36px; padding:0 14px; margin-top:6px;
+      border:1px dashed rgba(255,255,255,.12); border-radius:11px; background:transparent; color:#7F8BA5; cursor:pointer;
+    }
+    .v5-collapse-btn:hover{color:#fff; border-color:rgba(255,255,255,.25);}
+    .v5-collapse-btn svg{transition:transform .2s ease; flex-shrink:0;}
+    .notif-panel, .theme-panel{top:auto; bottom:14px; right:auto; left:calc(100% + 12px);}
+
+    /* Thu gọn: chỉ còn icon */
+    body.v5-nav-collapsed .sidebar{width:72px; grid-template-columns:1fr; padding:16px 10px 14px;}
+    body.v5-nav-collapsed .sidebar-logo{margin:0 auto 12px;}
+    body.v5-nav-collapsed .sidebar-logo::after, body.v5-nav-collapsed .sidebar .nav-label{display:none;}
+    body.v5-nav-collapsed .sidebar-nav-btn[data-page]{justify-content:center; padding:0;}
+    body.v5-nav-collapsed .v5-collapse-btn{justify-content:center; padding:0;}
+    body.v5-nav-collapsed .v5-collapse-btn svg{transform:rotate(180deg);}
+    body.v5-nav-collapsed .sidebar-spacer .dock-scene{display:none;}
+  }
+  @media (min-width:901px){ #desktop-mode-toggle{left:auto; right:62px; bottom:14px;} }

@@ -95,8 +95,11 @@
       // FileVault). "light" (mặc định) không gắn data-theme; giá trị khác 'light' áp thẳng luôn — an
       // toàn với MỌI id trong thư viện giao diện (kể cả id thêm sau này), không chỉ riêng 'dark', vì lúc
       // này (đầu trang) THEME_LIBRARY chưa kịp định nghĩa nên không kiểm tra hợp lệ được ở đây.
-      const saved = localStorage.getItem('tn5_theme');
+      let saved = localStorage.getItem('tn5_theme');
+      // v5.10: nền tối là mặc định — máy nào chưa từng qua bản này thì chuyển sang Tối 1 lần (sau đó vẫn tự chọn lại được).
+      if(!localStorage.getItem('tn5_v510_dark') && (!saved || saved === 'light')) saved = 'dark';
       if(saved && saved !== 'light'){ document.body.setAttribute('data-theme', saved); }
+      if(localStorage.getItem('tn5_v5_nav_collapsed') === '1') document.body.classList.add('v5-nav-collapsed');
     }catch(e){}
   })();
 </script>
