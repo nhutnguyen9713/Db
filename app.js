@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.90';
+const APP_VERSION = 'v5.91';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -19276,4 +19276,68 @@ function v5TxEnhance(){
   let v5TxEnT = 0;
   const pg = document.getElementById('page-transaction');
   if(pg && typeof MutationObserver === 'function') new MutationObserver(() => { clearTimeout(v5TxEnT); v5TxEnT = setTimeout(() => { try{ v5TxEnhance(); }catch(e){} }, 60); }).observe(pg, { childList: true, subtree: true });
+}
+
+// v5.91 — Bấm tên (hoặc chấm kho) ở Bảng xếp hạng → popup mọi giao dịch của người đó, để soi người làm 1 kho nhưng có lượt ở kho khác (scan sai vị trí?)
+const V5_TX_KIND_LABEL = { receive: 'Receive', putaway: 'Put Away', picking: 'Picking', transfer: 'Transfer xuất', transferNhap: 'Transfer nhận',
+  movePallet: 'Move Pallet', updownUp: 'Lên lầu', updownDown: 'Xuống lầu', rackUp: 'Lên rack', rackDown: 'Xuống rack', reworkXuat: 'Rework xuất', reworkNhap: 'Rework nhập' };
+const V5_TX_USER_COLS = [
+  { key: 'khoXuat', label: 'Kho' }, { key: 'kindLabel', label: 'Loại' }, { key: 'item', label: 'Item' },
+  { key: 'locatorXuat', label: 'Locator xuất' }, { key: 'locatorDen', label: 'Locator đến' }, { key: 'reference', label: 'Reference' },
+  { key: 'qty', label: 'Số lượng', num: true }, { key: 'total', label: 'Lượt', num: true }
+];
+function v5TxOpenUserPopup(user, onlyKho){
+  if(!txState) return;
+  const all = [];
+  V5_TX_RANK_COLS.forEach(col => col.kinds.forEach(k => ((txState[k]) || []).forEach(r => {
+    if(String(r.user || '').trim() !== user) return;
+    all.push({ ...r, kind: k, kindLabel: V5_TX_KIND_LABEL[k] || k, khoXuat: r.khoXuat || '—',
+      locatorDen: r.locatorDen || (k === 'receive' ? r.locator : '') || '', locatorXuat: r.locatorXuat || '' });
+  })));
+  const byKho = new Map();
+  all.forEach(r => byKho.set(r.khoXuat, (byKho.get(r.khoXuat) || 0) + (r.total || 0)));
+  // Kho ít lượt nhất lên đầu — thường là chỗ scan nhầm vị trí
+  const order = [...byKho.entries()].sort((a, b) => a[1] - b[1]).map(e => e[0]);
+  let rows = onlyKho ? all.filter(r => r.khoXuat === onlyKho) : all;
+  rows.sort((a, b) => order.indexOf(a.khoXuat) - order.indexOf(b.khoXuat) || a.kindLabel.localeCompare(b.kindLabel) || String(a.item || '').localeCompare(String(b.item || '')));
+  txChartPopupCols = V5_TX_USER_COLS;
+  txChartPopupRows = rows;
+  txChartPopupContRows = []; txChartPopupContAllRows = [];
+  ['tx-chart-popup-cont-wrap', 'tx-chart-popup-contall-wrap'].forEach(id => { const w = document.getElementById(id); if(w) w.style.display = 'none'; });
+  const tot = [...byKho.values()].reduce((s, v) => s + v, 0) || 1;
+  document.getElementById('tx-chart-popup-title').textContent = `Giao dịch của ${user}${onlyKho ? ' — Kho ' + onlyKho : ''}`;
+  document.getElementById('tx-chart-popup-desc').innerHTML = 'Theo kho: ' +
+    [...byKho.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => {
+      const p = Math.round(v / tot * 100);
+      return `<span class="v5-ukho${p < 15 && byKho.size > 1 ? ' odd' : ''}" data-v5-tx-user="${escHtml(user)}" data-v5-tx-ukho="${escHtml(k)}"><i class="v5-kdot k${escHtml(k)}">${escHtml(k)}</i> ${fmt(v)} lượt · ${p}%</span>`;
+    }).join(' ') + (onlyKho ? ` <span class="v5-ukho" data-v5-tx-user="${escHtml(user)}">Xem tất cả</span>` : '') +
+    (byKho.size > 1 ? '<div class="v5-unote">Kho có ít lượt (tô đỏ) xếp lên đầu bảng — kiểm tra xem có scan sai vị trí không.</div>' : '');
+  document.getElementById('tx-chart-popup-thead').innerHTML = `<tr>${V5_TX_USER_COLS.map(c => `<th${c.num ? ' style="text-align:right"' : ''}>${escHtml(c.label)}</th>`).join('')}</tr>`;
+  const si = document.getElementById('tx-chart-popup-search'); si.value = '';
+  document.getElementById('tx-chart-popup-table').classList.add('v5-upop');
+  txChartPopupRenderRows(rows);
+  document.getElementById('kho-modal-overlay').classList.add('show');
+}
+{ const _ocp = txOpenChartPopup; txOpenChartPopup = function(){ const t = document.getElementById('tx-chart-popup-table'); if(t) t.classList.remove('v5-upop'); return _ocp.apply(this, arguments); }; }
+document.addEventListener('click', e => {
+  const u = e.target.closest('[data-v5-tx-user]');
+  if(!u) return;
+  e.stopPropagation();
+  v5TxOpenUserPopup(u.dataset.v5TxUser, u.dataset.v5TxUkho || '');
+}, true);
+{
+  const _rr = v5TxRenderRank;
+  v5TxRenderRank = function(){
+    const r = _rr.apply(this, arguments);
+    document.querySelectorAll('#v5-tx-rank td.u').forEach(td => {
+      if(td.dataset.v5u) return;
+      const name = (td.firstChild && td.firstChild.nodeType === 3) ? td.firstChild.textContent : '';
+      if(!name) return;
+      td.dataset.v5u = '1';
+      const s = document.createElement('span'); s.className = 'v5-uname'; s.dataset.v5TxUser = name; s.title = 'Bấm để xem giao dịch của ' + name; s.textContent = name;
+      td.replaceChild(s, td.firstChild);
+      td.querySelectorAll('.kh .v5-kdot').forEach(d => { d.dataset.v5TxUser = name; d.dataset.v5TxUkho = d.textContent.trim(); d.title = 'Xem giao dịch kho ' + d.textContent.trim(); d.style.cursor = 'pointer'; });
+    });
+    return r;
+  };
 }
