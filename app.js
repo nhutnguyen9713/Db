@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.27';
+const APP_VERSION = 'v6.28';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4029,7 +4029,7 @@ function renderContPickTable(){
           const khoLabel = contShipKhoLabelForRefs(matchedRefs, contShipData.byRefLocators);
           const khoSuffix = khoLabel ? ` <span style="color:var(--muted-2); font-weight:400;">· ${escHtml(khoLabel)}</span>` : '';
           if(shipPct >= 99.995) loadingHtml = `<span style="color:var(--teal); font-weight:600;">Đã Load Xong</span>${khoSuffix}`;
-          else loadingHtml = `<span style="color:var(--amber-bright); font-weight:600;">Đang Load (${shipPct.toFixed(0)}%)</span>${khoSuffix}`;
+          else loadingHtml = `<span style="color:var(--amber-bright); font-weight:600;">Đang Load (${shipPct.toFixed(0)}%)</span> <span style="font-weight:700;" title="Đã load / SL Plan của cont">${fmt(shipQty)}/${fmt(row.planQty)}</span>${khoSuffix}`;
         }
       }
       let v5BandHtml = '';
@@ -4472,7 +4472,7 @@ function contShipKeyPct(csrsSet, planQty){
   let shipQty = 0;
   csrsSet.forEach(csr => { shipQty += contShipData.byRef.get(String(csr || '').trim().toUpperCase().replace(/[;,.\s]+$/, '')) || 0; });
   const shipPct = planQty > 0 ? shipQty / planQty * 100 : 0;
-  return { shipKey: shipQty > 0 ? (shipPct >= 99.995 ? 'done' : 'inProgress') : 'notStarted', shipPct };
+  return { shipKey: shipQty > 0 ? (shipPct >= 99.995 ? 'done' : 'inProgress') : 'notStarted', shipPct, shipQty };
 }
 function contKpiLoadStatus(csr, planQty){
   if(!contShipData || !contShipData.byRef || !contShipData.byRef.size) return { loadStatus: 'Chưa tải file Ship', loadKey: 'none' };
@@ -19785,14 +19785,14 @@ function v5ContPopClose(){ const ov = document.getElementById('v5-cont-pop'); if
 function v5ContPopOpen(row, data){
   v5ContPopClose();
   const r = data.row || data;
-  const st = r.isShipDone ? '<span class="v5cp-st ship">✓ Load xong</span>' : (r.status === 'done' || r.status === 'manualDone') ? '<span class="v5cp-st done">Pick xong</span>' : r.status === 'inProgress' ? '<span class="v5cp-st prog">Đang pick</span>' : '<span class="v5cp-st">Chưa pick</span>';
+  const st = r.isShipDone ? '<span class="v5cp-st ship">✓ Load xong</span>' : r.shipKey === 'inProgress' ? '<span class="v5cp-st ship">Đang load</span>' : (r.status === 'done' || r.status === 'manualDone') ? '<span class="v5cp-st done">Pick xong</span>' : r.status === 'inProgress' ? '<span class="v5cp-st prog">Đang pick</span>' : '<span class="v5cp-st">Chưa pick</span>';
   const short = !v5IsDone(r) && r.shortItems && r.shortItems.length;
   const kv = (k, v) => v ? `<div><span>${k}</span><b>${escHtml(String(v))}</b></div>` : '';
   const ov = document.createElement('div');
   ov.id = 'v5-cont-pop'; ov.className = 'v5cp-ov';
   ov.innerHTML = `<div class="v5cp" role="dialog">
     <div class="v5cp-h"><div><b>${escHtml(r.type || '')} · ${escHtml(String(r.cNo || ''))}</b>${st}</div><button type="button" class="v5cp-x" title="Đóng">✕</button></div>
-    <div class="v5cp-kv">${kv('VNC', r.invoice)}${kv('CR', r.csr)}${kv('Ngày load', r.loadDate)}${kv('Giờ plan', r.planTime)}${kv('Kho', r.topKho ? r.topKho.replace('Kho ', '') : '')}${kv('Pick', pickPctLabel(r.pct))}</div>
+    <div class="v5cp-kv">${kv('VNC', r.invoice)}${kv('CR', r.csr)}${kv('Ngày load', r.loadDate)}${kv('Giờ plan', r.planTime)}${kv('Kho', r.topKho ? r.topKho.replace('Kho ', '') : '')}${kv('Pick', pickPctLabel(r.pct))}${r.shipKey === 'inProgress' || r.shipKey === 'done' ? kv('Đã load', `${fmt(r.shipQty || 0)}/${fmt(r.planQty || 0)} (${Math.floor(Math.min(100, r.shipPct || 0))}%)`) : ''}</div>
     ${short ? `<div class="v5cp-warn">⚠ Thiếu ${r.shortItems.length} mã</div>` : ''}${r.comment ? `<div class="v5cp-note">📝 ${escHtml(r.comment)}</div>` : ''}
     <div class="v5cp-body">${buildContPickTooltipHtml(data.items || r.items)}</div>
     <div class="v5cp-f"><button type="button" class="v5cp-go">📍 Tới dòng Plan</button></div></div>`;
