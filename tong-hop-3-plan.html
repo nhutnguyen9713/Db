@@ -452,7 +452,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v4.35';
+  var PH_VERSION = 'v4.36';
   var PH_VERSION_DATE = '05/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -1549,18 +1549,22 @@
       var groups = phKhoGroups(it.locs || [], khoMeta.khoLabels);
       var any = false;
       khoMeta.khoLabels.forEach(function(label){
-        (groups[label].locs || []).forEach(function(l){
+        var kLocs = groups[label].locs || [], kPass = 0, kNg = 0;
+        kLocs.forEach(function(l){
           any = true;
+          if(!l.picked){ if(String(l.oqc || '').toUpperCase() === 'NG') kNg += (l.qty || 0); else kPass += (l.qty || 0); }
           var tag = l.picked ? (it.need > 0 && phLoadingCrCodes(l.ref).some(function(cr){ var st = phCrStatus[cr]; return st && st !== 'done' && st !== 'manualDone'; }) ? 'Đang pick' : 'Pick xong') : '';
           lines.push({ t: 'loc', kho: label, color: khoMeta.khoColors[label] || '#eee', loc: phLocatorLabel(l.locator, l.ref) + (tag ? '  [' + tag + ']' : ''), oqc: l.oqc || '—', qty: l.picked ? '(' + phFmt(l.qty) + ')' : phFmt(l.qty), picked: !!l.picked, ng: !l.picked && String(l.oqc || '').toUpperCase() === 'NG' });
         });
+        // v4.36: dòng tổng tồn PASS / NG của từng kho (không tính dòng Loading đã pick)
+        if(kLocs.length) lines.push({ t: 'sum', kho: label, color: khoMeta.khoColors[label] || '#eee', label: 'Tồn ' + label, pass: 'PASS ' + phFmt(kPass), ng: 'NG ' + phFmt(kNg), hasNg: kNg > 0 });
       });
       if(!any) lines.push({ t: 'none' });
     });
     var scale = 2, padX = 14, titleH = 58, itemH = 32, rowH = 26, cp = 10;
     var FONT = '13px ui-monospace, Menlo, Consolas, monospace', FONTB = 'bold 13px ui-monospace, Menlo, Consolas, monospace';
     var m = document.createElement('canvas').getContext('2d');
-    var wK = 50, wL = 120, wO = 50, wQ = 60, wItem = 0;
+    var wK = 50, wL = 120, wO = 50, wQ = 60, wItem = 0, wSum = 0;
     lines.forEach(function(ln){
       if(ln.t === 'loc'){
         m.font = FONTB; wK = Math.max(wK, m.measureText(ln.kho).width + cp * 2);
@@ -1571,8 +1575,13 @@
         m.font = 'bold 14px ui-monospace, Menlo, Consolas, monospace'; var a = m.measureText(ln.left).width;
         m.font = 'bold 12.5px system-ui, sans-serif'; var b = m.measureText(ln.pick).width + m.measureText(ln.need).width + 50;
         wItem = Math.max(wItem, a + b + cp * 2);
+      } else if(ln.t === 'sum'){
+        m.font = FONTB; wK = Math.max(wK, m.measureText(ln.kho).width + cp * 2);
+        var sumW = m.measureText(ln.label).width + m.measureText(ln.pass).width + m.measureText(ln.ng).width + cp * 2 + 40;
+        wSum = Math.max(wSum, sumW);
       }
     });
+    if(wL + wO + wQ < wSum) wL += wSum - (wL + wO + wQ);
     m.font = 'bold 17px system-ui, sans-serif'; var tW = m.measureText(title).width + 130;
     m.font = '12.5px system-ui, sans-serif'; var sW = m.measureText(sub).width;
     var tableW = Math.max(wK + wL + wO + wQ, wItem, tW, sW + 4, 320);
@@ -1606,6 +1615,17 @@
         g.fillStyle = '#55637C'; g.textAlign = 'right'; g.fillText(ln.pick, x0 + tableW - cp - nW - 10, y + itemH / 2);
         y += itemH;
         return;
+      }
+      if(ln.t === 'sum'){
+        g.fillStyle = '#F7F8FB'; g.fillRect(x0, y, tableW, rowH);
+        g.fillStyle = ln.color; g.fillRect(x0, y, wK, rowH);
+        g.strokeStyle = '#B8C0CC'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0 + wK, y + 0.5); g.lineTo(x0 + tableW, y + 0.5); g.stroke();
+        g.strokeStyle = '#E3E7EE'; g.beginPath(); g.moveTo(x0, y + rowH - 0.5); g.lineTo(x0 + tableW, y + rowH - 0.5); g.stroke();
+        g.textAlign = 'left'; g.font = 'bold 13px system-ui, sans-serif'; g.fillStyle = '#374151'; g.fillText(ln.label, xs[1] + cp, y + rowH / 2);
+        g.textAlign = 'right'; g.fillStyle = ln.hasNg ? '#B42318' : '#9AA3B2'; g.fillText(ln.ng, x0 + tableW - cp, y + rowH / 2);
+        var ngW = g.measureText(ln.ng).width;
+        g.fillStyle = '#0B7A3B'; g.fillText(ln.pass, x0 + tableW - cp - ngW - 18, y + rowH / 2);
+        y += rowH; return;
       }
       if(ln.t === 'none'){
         g.fillStyle = '#9AA3B2'; g.font = 'italic 12.5px system-ui, sans-serif'; g.textAlign = 'left'; g.fillText('Không có tồn kho', x0 + cp, y + rowH / 2);
