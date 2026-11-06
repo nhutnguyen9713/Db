@@ -2985,3 +2985,14 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
 .v5cp-f{display:flex; justify-content:flex-end; padding:10px 16px; border-top:1px solid var(--line);}
 .v5cp-go{border:1px solid var(--line); background:transparent; color:var(--text); border-radius:8px; padding:6px 12px; font:inherit; font-size:12.5px; font-weight:600; cursor:pointer;}
 .v5cp-go:hover{border-color:var(--blue);}
+
+/* v6.14: Thống kê theo ca — số cont theo kho, mỗi kho 1 dòng to rõ */
+.v5-sh-kho-lg{display:flex; flex-direction:column; gap:6px; font-size:13px;}
+.v5-shk-row{display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px; padding:6px 10px; border-radius:10px; border:1px solid var(--line); border-left:4px solid var(--kc); background:color-mix(in srgb, var(--kc) 7%, transparent);}
+.v5-shk-name{display:inline-flex; align-items:center; gap:6px; font-weight:800; font-size:15px; color:var(--text); min-width:44px;}
+.v5-shk-name i{width:10px; height:10px; border-radius:50%; background:var(--kc);}
+.v5-shk-n{color:var(--muted);} .v5-shk-n b{font-family:var(--mono); font-size:18px; color:var(--text); margin-right:2px;}
+.v5-shk-st{display:flex; flex-wrap:wrap; gap:6px; margin-left:auto;}
+.v5-shk-st > span{padding:2px 8px; border-radius:99px; background:var(--bg-2, rgba(127,127,127,.1)); font-size:12px; color:var(--muted);}
+.v5-shk-st b{font-family:var(--mono); font-size:13px; color:var(--text);}
+.v5-shk-st .c1 b{color:var(--amber-bright);} .v5-shk-st .c2 b{color:var(--teal);} .v5-shk-st em{font-style:normal; color:var(--violet);}
