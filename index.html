@@ -65,7 +65,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js" crossorigin="anonymous"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js" crossorigin="anonymous"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <style>
 /* Dải KPI trang Transaction: 12 ô — chia đều 6 / 4 / 2 cột để hàng cuối luôn đầy, không bị ô trống xám */
@@ -109,28 +109,28 @@
     <div class="sidebar-logo" id="sidebar-logo-update" role="button" tabindex="0" aria-label="Cập nhật dữ liệu tồn kho" title="Cập nhật dữ liệu — bấm để chọn file tồn kho mới (.xlsx/.csv/.tsv)" style="cursor:pointer;">TN5</div>
     <nav class="sidebar-nav">
       <button class="sidebar-nav-btn active" data-page="overview" type="button" title="Overview" aria-label="Overview">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span class="nav-label">Tổng quan</span>
       </button>
       <button class="sidebar-nav-btn" data-page="ng" type="button" title="Hàng NG" aria-label="Hàng NG">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span class="nav-label">Hàng NG</span>
       </button>
       <button class="sidebar-nav-btn" data-page="picking" type="button" title="Picking Status" aria-label="Picking Status">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg><span class="nav-label">Picking</span>
       </button>
       <button class="sidebar-nav-btn" data-page="search" type="button" title="Tìm mã hàng" aria-label="Tìm mã hàng">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="nav-label">Tìm mã</span>
       </button>
       <button class="sidebar-nav-btn" data-page="kiemton" type="button" title="Kiểm tồn kho" aria-label="Kiểm tồn kho">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 3v2a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V3"/><path d="m9 13 2 2 4-4"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 3v2a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1V3"/><path d="m9 13 2 2 4-4"/></svg><span class="nav-label">Kiểm tồn</span>
       </button>
       <button class="sidebar-nav-btn" data-page="sodo3b" type="button" title="Sơ đồ kho 3B" aria-label="Sơ đồ kho 3B">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="nav-label">Sơ đồ kho</span>
       </button>
       <button class="sidebar-nav-btn" data-page="transaction" type="button" title="Transaction" aria-label="Transaction">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M21 7H9a4 4 0 0 0-4 4v1"/><path d="M7 21l-4-4 4-4"/><path d="M3 17h12a4 4 0 0 0 4-4v-1"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M21 7H9a4 4 0 0 0-4 4v1"/><path d="M7 21l-4-4 4-4"/><path d="M3 17h12a4 4 0 0 0 4-4v-1"/></svg><span class="nav-label">Transaction</span>
       </button>
       <button class="sidebar-nav-btn" data-page="compare" type="button" title="So sánh WMS vs ERP" aria-label="So sánh WMS vs ERP">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v18"/><path d="m5 7-4 4 4 4"/><path d="M15 3v18"/><path d="m19 7 4 4-4 4"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v18"/><path d="m5 7-4 4 4 4"/><path d="M15 3v18"/><path d="m19 7 4 4-4 4"/></svg><span class="nav-label">WMS–ERP</span>
       </button>
     </nav>
     <div class="sidebar-spacer">
@@ -621,6 +621,8 @@
     </div>
   </div>
 
+  <div class="v5-summary" id="v5-summary" style="display:none;"></div>
+
   <div class="plan-bar" id="plan-bar">
     <div class="plan-bar-label"><span class="tag">PLAN</span>Plan xuất cont</div>
     <div class="plan-buttons">
@@ -715,7 +717,7 @@
     <div class="panel search-panel search-sticky-controls" id="search-sticky-controls">
       <div class="kho-multi-wrap" style="padding:0 0 16px;">
         <div class="kho-multi-label">
-          <span><span class="badge-multi">MULTI</span>&nbsp; Mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng (quét cả 4 kho). Trong cùng 1 dòng, gõ cách nhau bằng khoảng trắng để <b>kết hợp nhiều điều kiện</b> (VD: mã hàng + CSR/Ref) trên cùng 1 dòng dữ liệu.</span>
+          <span class="v5-hint" data-hint-label="Cách tìm nhiều mã"><span class="badge-multi">MULTI</span>&nbsp; Mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng (quét cả 4 kho). Trong cùng 1 dòng, gõ cách nhau bằng khoảng trắng để <b>kết hợp nhiều điều kiện</b> (VD: mã hàng + CSR/Ref) trên cùng 1 dòng dữ liệu.</span>
           <button class="btn-clear-multi" id="btn-clear-multi" type="button">Xoá</button>
         </div>
         <textarea id="kho-multi-search" rows="2" placeholder="VD: 000123, 000456001DG9, 308398012 (mỗi dòng 1 lượt) — hoặc CR0163815 095079952 (kết hợp trên cùng 1 dòng)"></textarea>
@@ -730,7 +732,7 @@
       </div>
     </div>
 
-    <div class="panel search-panel cc-collapse-panel" id="kho-summary-panel" style="margin-top:16px;">
+    <div class="panel search-panel cc-collapse-panel open" id="kho-summary-panel" style="margin-top:16px;">
       <div class="cc-collapse-head" data-collapse-toggle>
         <div>
           <div class="brand-eyebrow"><span class="dot"></span>BẢNG TỔNG HỢP</div>
@@ -862,7 +864,7 @@
       <div>
         <div class="brand-eyebrow"><span class="dot"></span>KIỂM TỒN KHO</div>
         <h1>Kiểm tồn kho</h1>
-        <div class="sub">Tìm một hoặc nhiều mã hàng cùng lúc, quét trên cả 4 khu vực kho</div>
+        <div class="sub">Đề xuất vị trí cần kiểm mỗi ngày và ghi nhận kết quả kiểm thực tế</div>
       </div>
       <button type="button" class="btn-export-excel" id="btn-open-qr-scan" style="white-space:nowrap;" title="Quét mã vạch/QR trên tem pallet (nội dung là GI No.) để tự tìm đúng vị trí và cộng số lượng vào ô kiểm thực tế">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
@@ -881,7 +883,7 @@
         <div>
           <div class="brand-eyebrow"><span class="dot" style="background:var(--teal);box-shadow:0 0 8px var(--teal);"></span>ĐỀ XUẤT</div>
           <h1 style="font-size:17px;">Đề xuất kiểm hôm nay</h1>
-          <div class="sub" style="margin-top:2px;">Chọn kiểu tính (Mã hàng / Locator / Pallet) và % muốn kiểm cho từng kho, bấm "Tạo danh sách" để xếp hạng theo: lâu chưa kiểm · vận động nhanh (Transaction) · từng lệch WMS-ERP · SL tồn bất thường so với lịch sử. Tự động loại các vị trí PICK, Loading và PROD (khu trung chuyển/sản xuất) và loại nhóm SPP — các Item No. không bắt đầu bằng số 0. Yếu tố "SL tồn bất thường" cần vài lần cập nhật dữ liệu (khác ngày) mới đủ lịch sử để tính.</div>
+          <div class="sub v5-hint" data-hint-label="Cách tính đề xuất" style="margin-top:2px;">Chọn kiểu tính (Mã hàng / Locator / Pallet) và % muốn kiểm cho từng kho, bấm "Tạo danh sách" để xếp hạng theo: lâu chưa kiểm · vận động nhanh (Transaction) · từng lệch WMS-ERP · SL tồn bất thường so với lịch sử. Tự động loại các vị trí PICK, Loading và PROD (khu trung chuyển/sản xuất) và loại nhóm SPP — các Item No. không bắt đầu bằng số 0. Yếu tố "SL tồn bất thường" cần vài lần cập nhật dữ liệu (khác ngày) mới đủ lịch sử để tính.</div>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
           <button type="button" class="btn-export-excel" id="btn-reset-kiemke-all" style="white-space:nowrap; border-color:var(--red); color:var(--red);" title="Xoá SẠCH toàn bộ dữ liệu còn sót của đợt kiểm kê trước — CẢ danh sách Đề xuất kiểm (cả 3 kho, ô KT= đang nhập dở, dòng quét QR sai vị trí, lịch sử GI đã quét) LẪN danh sách Đã xác nhận — rồi đồng bộ ngay lên Cloud. Dùng khi bắt đầu ca/đợt kiểm kê mới mà bảng vẫn còn hiện số liệu ca trước.">
