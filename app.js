@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.21';
+const APP_VERSION = 'v5.30';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5421,7 +5421,7 @@ function renderPlanPanel(){
       // styles.css) tô ĐÚNG màu container đó thay vì 1 màu xám chung chung như trước — biến CSS đặt ở
       // <tr> vẫn tự "chảy" xuống các <td> con dù bảng dùng border-collapse (khác border thường không
       // ăn khi đặt trực tiếp trên <tr> có border-collapse).
-      const rowBg = hexToRgba(contColor, 0.16);
+      const rowBg = hexToRgba(contColor, 0.07); // v5.30: dịu màu dải container cho đồng bộ kiểu bảng mới
       const groupCls = isNewGroup ? 'cont-group-first' : '';
       const locCells = locCols.map(name => {
         const v = r.locations && Object.prototype.hasOwnProperty.call(r.locations, name) ? r.locations[name] : null;
@@ -17933,10 +17933,15 @@ function v5DayBandHtml(day, rows){
 }
 function v5RenderSummary(){
   const el = document.getElementById('v5-summary');
+  if(typeof v5RenderHero === 'function') v5RenderHero();
   if(!el) return;
-  if(!currentData || !currentData.kho_detail){ el.style.display = 'none'; return; }
+  if(!currentData || !currentData.kho_detail){
+    el.style.display = '';
+    el.innerHTML = Array.from({ length: 4 }, () => '<div class="v5-tile v5-skel"><div class="sk sk-t"></div><div class="sk sk-v"></div><div class="sk sk-s"></div></div>').join('');
+    return;
+  }
   const order = (currentData.kho_order && currentData.kho_order.length) ? currentData.kho_order : Object.keys(currentData.kho_detail);
-  const tiles = [];
+  const stats = {};
   order.forEach(k => {
     let pass = 0, ng = 0;
     (currentData.kho_detail[k] || []).forEach(r => {
@@ -17944,26 +17949,45 @@ function v5RenderSummary(){
       const q = Number(r[4]) || 0, o = String(r[3] || '').trim().toUpperCase();
       if(o === 'NG') ng += q; else if(o === 'PASS') pass += q;
     });
-    tiles.push(`<div class="v5-tile" style="--tile-accent:${V5_KHO_COLOR[k] || 'var(--line)'}"><div class="t">${escHtml(k)}</div><div class="v">${fmt(pass)}</div><div class="s">PASS · <span class="${ng > 0 ? 'v5-ng' : ''}">NG ${fmt(ng)}</span></div></div>`);
+    stats[k] = [pass, ng];
   });
-  const rows = contPickAllRows || [];
-  if(rows.length){
-    const today = v5TodayStr(0);
-    const tRows = rows.filter(r => String(r.loadDate || '').split(',')[0].trim() === today);
-    const tDone = tRows.filter(v5IsDone).length;
-    const short = rows.filter(r => !v5IsDone(r) && r.shortItems && r.shortItems.length).length;
-    const pending = rows.filter(r => !v5IsDone(r)).map(r => ({ r, ts: ovParseDateTimeSortKey(r.loadDate, r.planTime) })).filter(x => isFinite(x.ts)).sort((x, y) => x.ts - y.ts);
-    const pct = tRows.length ? Math.round(tDone / tRows.length * 100) : 0;
-    tiles.push(`<div class="v5-tile click" data-v5-jump="1" style="--tile-accent:var(--blue)"><div class="t">Cont hôm nay</div><div class="v">${fmt(tDone)}<span class="v5-of">/${fmt(tRows.length)}</span></div><div class="v5-prog"><i style="width:${pct}%"></i></div><div class="s">đã pick xong</div></div>`);
-    tiles.push(`<div class="v5-tile click" data-v5-jump="1" style="--tile-accent:${short ? 'var(--red)' : 'var(--teal)'}"><div class="t">Cont thiếu hàng</div><div class="v${short ? ' v5-ng' : ''}">${fmt(short)}</div><div class="s">${short ? 'chưa đủ tồn PASS để pick' : 'tất cả cont đủ hàng'}</div></div>`);
-    if(pending.length){
-      const n = pending[0], diff = n.ts - Date.now();
-      const when = diff < 0 ? `<span class="v5-ng">Trễ ${v5FmtLeft(diff)}</span>` : `Còn ${v5FmtLeft(diff)}`;
-      tiles.push(`<div class="v5-tile click wide" data-v5-jump="1" style="--tile-accent:${diff < 0 ? 'var(--red)' : 'var(--amber-bright)'}"><div class="t">Cont kế tiếp</div><div class="v sm">${escHtml(n.r.type)} · ${escHtml(String(n.r.invoice).split(',')[0])}</div><div class="s">${escHtml(n.r.loadDate)} ${escHtml(n.r.planTime)} · ${when}</div></div>`);
-    }
+  const hist = v5HistUpdate(stats);
+  const days = Object.keys(hist).sort();
+  el.style.display = '';
+  // Giữ nguyên thẻ cũ để số "chạy" từ giá trị trước sang giá trị mới
+  const keyStr = order.join('|');
+  if(el.dataset.v5keys !== keyStr || !el.querySelector('.v5-tile[data-kho]')){
+    el.dataset.v5keys = keyStr;
+    el.innerHTML = order.map(k => `<div class="v5-tile" data-kho="${escAttr(k)}" style="--tile-accent:${V5_KHO_COLOR[k] || 'var(--line)'}">
+      <div class="t">${escHtml(k)}<span class="v5-delta"></span></div>
+      <div class="v" data-v5num="0">0</div>
+      <div class="s"><span>PASS</span> · <span class="v5-ngv">NG 0</span></div>
+      <svg class="v5-spark" viewBox="0 0 100 28" preserveAspectRatio="none"></svg>
+    </div>`).join('');
   }
-  el.innerHTML = tiles.join('');
-  el.style.display = tiles.length ? '' : 'none';
+  order.forEach(k => {
+    const tile = el.querySelector(`.v5-tile[data-kho="${CSS.escape(k)}"]`);
+    if(!tile) return;
+    const [pass, ng] = stats[k];
+    v5CountUp(tile.querySelector('.v'), pass);
+    const ngEl = tile.querySelector('.v5-ngv');
+    ngEl.textContent = 'NG ' + fmt(ng); ngEl.className = 'v5-ngv' + (ng > 0 ? ' v5-ng' : '');
+    const series = days.map(d => (hist[d][k] || [0])[0]);
+    const dEl = tile.querySelector('.v5-delta');
+    if(series.length >= 2){
+      const diff = series[series.length - 1] - series[series.length - 2];
+      dEl.textContent = diff === 0 ? '= hôm qua' : (diff > 0 ? '▲ ' : '▼ ') + fmt(Math.abs(diff));
+      dEl.className = 'v5-delta ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : '');
+      dEl.title = 'So với ngày ' + days[days.length - 2];
+    } else { dEl.textContent = ''; }
+    const svg = tile.querySelector('.v5-spark');
+    if(series.length >= 2){
+      const mx = Math.max.apply(null, series), mn = Math.min.apply(null, series), rg = (mx - mn) || 1;
+      const pts = series.map((v, i) => `${(i / (series.length - 1) * 100).toFixed(1)},${(24 - (v - mn) / rg * 20).toFixed(1)}`);
+      svg.innerHTML = `<polyline points="0,28 ${pts.join(' ')} 100,28" class="area"/><polyline points="${pts.join(' ')}" class="line"/>`;
+      svg.style.display = '';
+    } else svg.style.display = 'none';
+  });
 }
 document.addEventListener('click', (e) => {
   if(!e.target.closest('[data-v5-jump]')) return;
@@ -18044,6 +18068,8 @@ function v5RenderKanban(){
     return `<div class="v5-kcol v5-kcol-${k}"><div class="v5-kcol-head"><span class="v5-kdot"></span>${label}<b>${list.length}</b></div><div class="v5-kcol-body">${cards || '<div class="v5-kempty">Không có cont</div>'}</div></div>`;
   }).join('');
 }
+let v5TlZoom = 0, v5TlAutoScrolled = '';
+var V5_TL_ZOOMS = [0, 110, 170, 260];
 function v5RenderTimeline(){
   const el = document.getElementById('v5-timeline');
   if(!el) return;
@@ -18056,47 +18082,66 @@ function v5RenderTimeline(){
     .sort((x, y) => x.ts - y.ts);
   const dm = day.split('/');
   const d0 = new Date(+dm[2], +dm[1] - 1, +dm[0]).getTime();
-  let h0 = 0, h1 = 24;
+  let h0 = 6, h1 = 18;
   if(items.length){
     const hs = items.map(x => (x.ts - d0) / 3600000);
     h0 = Math.max(0, Math.floor(Math.min.apply(null, hs)) - 1);
     h1 = Math.min(24, Math.ceil(Math.max.apply(null, hs)) + 2);
-    if(v5TlDayOff === 0){ const nh = (Date.now() - d0) / 3600000; if(nh >= 0 && nh < 24){ h0 = Math.min(h0, Math.floor(nh)); h1 = Math.max(h1, Math.min(24, Math.ceil(nh) + 1)); } }
-    if(h1 - h0 < 8){ h1 = Math.min(24, h0 + 8); h0 = Math.max(0, h1 - 8); }
   }
+  if(v5TlDayOff === 0){ const nh = (Date.now() - d0) / 3600000; if(nh >= 0 && nh < 24){ h0 = Math.min(h0, Math.floor(nh)); h1 = Math.max(h1, Math.min(24, Math.ceil(nh) + 1)); } }
+  if(h1 - h0 < 8){ h1 = Math.min(24, h0 + 8); h0 = Math.max(0, h1 - 8); }
   const done = items.filter(x => v5IsDone(x.r)).length;
-  const head = `<div class="v5-tl-head"><div class="v5-tl-title">Dòng thời gian cont<span>${items.length} cont · ${done} xong</span></div>
-    <div class="v5-seg"><button type="button" data-v5-tlday="0" class="${v5TlDayOff === 0 ? 'on' : ''}">Hôm nay</button><button type="button" data-v5-tlday="1" class="${v5TlDayOff === 1 ? 'on' : ''}">Ngày mai</button></div></div>`;
-  el.innerHTML = head + `<div class="v5-tl-track" id="v5-tl-track"></div>`;
-  const track = document.getElementById('v5-tl-track');
-  const W = track.clientWidth || 1000, BW = 118, span = h1 - h0;
-  const posPx = ts => ((ts - d0) / 3600000 - h0) / span * W;
-  let ticks = '';
-  const step = Math.max(1, Math.ceil(span / Math.max(1, Math.floor(W / 70))));
-  for(let h = h0; h <= h1; h += step){ const x = (h - h0) / span * 100; ticks += `<div class="v5-tl-tick" style="left:${x}%"><span>${v5Pad(h)}:00</span></div>`; }
-  const laneEnd = [];
-  let blocks = '';
-  items.forEach(x => {
-    let left = Math.max(0, Math.min(W - BW, posPx(x.ts) - 6));
-    let lane = laneEnd.findIndex(e => e <= left);
-    if(lane < 0){ lane = laneEnd.length; laneEnd.push(0); }
-    laneEnd[lane] = left + BW + 6;
-    const r = x.r, st = v5StKey(r);
-    const short = !v5IsDone(r) && r.shortItems && r.shortItems.length;
-    const late = !v5IsDone(r) && x.ts < Date.now();
-    const kho = r.topKho ? r.topKho.replace('Kho ', '') : '';
-    blocks += `<div class="v5-tl-blk v5-tl-${st}${short ? ' short' : ''}${late ? ' late' : ''}${v5RowAttrs(r) ? ' cont-pick-row' : ''}"${v5RowAttrs(r)} style="left:${left}px; top:${lane * 50 + 30}px; width:${BW}px" title="${escAttr(r.type + ' · ' + r.cNo + ' · ' + r.invoice + ' · ' + r.planTime)}">
-      <b>${escHtml(r.type)} ${escHtml(String(r.cNo))}</b><span>${escHtml(String(r.planTime).split(',')[0])}${kho ? ' · ' + escHtml(kho) : ''}${short ? ' · ⚠' : ''}</span><i style="width:${Math.min(100, r.pct || 0)}%"></i></div>`;
+  const prevScroll = (el.querySelector('.v5-tl-scroll') || {}).scrollLeft;
+  el.innerHTML = `<div class="v5-tl-head"><div class="v5-tl-title">Dòng thời gian cont<span>${items.length} cont · ${done} xong</span></div>
+    <div class="v5-tl-ctrl"><div class="v5-seg"><button type="button" data-v5-tlday="0" class="${v5TlDayOff === 0 ? 'on' : ''}">Hôm nay</button><button type="button" data-v5-tlday="1" class="${v5TlDayOff === 1 ? 'on' : ''}">Ngày mai</button></div>
+    <div class="v5-seg"><button type="button" data-v5-tlzoom="-1" title="Thu nhỏ">−</button><button type="button" data-v5-tlzoom="1" title="Phóng to">+</button></div></div></div>
+    <div class="v5-tl-scroll"><div class="v5-tl-inner"></div></div>`;
+  const scroller = el.querySelector('.v5-tl-scroll'), inner = el.querySelector('.v5-tl-inner');
+  const LBL = 64, span = h1 - h0, avail = Math.max(300, (scroller.clientWidth || 1000) - LBL - 8);
+  const pph = V5_TL_ZOOMS[v5TlZoom] ? Math.max(V5_TL_ZOOMS[v5TlZoom], avail / span) : avail / span;
+  const W = span * pph, BW = 112, ROW = 46;
+  inner.style.width = (LBL + W + 8) + 'px';
+  const xOf = ts => LBL + ((ts - d0) / 3600000 - h0) * pph;
+  const khoOrder = ['Kho 2B', 'Kho 3A', 'Kho 3B', 'Kho DG1'];
+  const laneOf = r => khoOrder.includes(r.topKho) ? r.topKho : 'Khác';
+  const lanes = khoOrder.concat(['Khác']).filter(k => items.some(x => laneOf(x.r) === k));
+  let y = 26, html = '';
+  const step = Math.max(1, Math.ceil(70 / pph));
+  for(let h = h0; h <= h1; h += step){ html += `<div class="v5-tl-tick" style="left:${LBL + (h - h0) * pph}px"><span>${v5Pad(h)}:00</span></div>`; }
+  lanes.forEach((k, li) => {
+    const ends = [];
+    const blocks = [];
+    items.filter(x => laneOf(x.r) === k).forEach(x => {
+      const left = Math.max(LBL + 2, xOf(x.ts) - 6);
+      let sl = ends.findIndex(e => e <= left);
+      if(sl < 0){ sl = ends.length; ends.push(0); }
+      ends[sl] = left + BW + 6;
+      blocks.push({ x, left, sl });
+    });
+    const laneH = Math.max(1, ends.length) * ROW + 8;
+    html += `<div class="v5-tl-lane${li % 2 ? ' alt' : ''}" style="top:${y}px; height:${laneH}px"><span class="v5-tl-lbl" style="--kc:${V5_KHO_COLOR[k] || 'var(--muted-2)'}">${escHtml(k.replace('Kho ', ''))}</span></div>`;
+    blocks.forEach(({ x, left, sl }) => {
+      const r = x.r, st = v5StKey(r), attrs = v5RowAttrs(r);
+      const short = !v5IsDone(r) && r.shortItems && r.shortItems.length;
+      const late = !v5IsDone(r) && x.ts < Date.now();
+      html += `<div class="v5-tl-blk v5-tl-${st}${short ? ' short' : ''}${late ? ' late' : ''}${attrs ? ' cont-pick-row' : ''}"${attrs} style="left:${left}px; top:${y + 4 + sl * ROW}px; width:${BW}px" title="${escAttr(r.type + ' · ' + r.cNo + ' · ' + r.invoice + ' · ' + r.planTime)}">
+        <b>${escHtml(r.type)} ${escHtml(String(r.cNo))}</b><span>${escHtml(String(r.planTime).split(',')[0])} · ${pickPctLabel(r.pct)}${short ? ' · ⚠' : ''}</span><i style="width:${Math.min(100, r.pct || 0)}%"></i></div>`;
+    });
+    y += laneH;
   });
-  let now = '';
-  const nowTs = Date.now();
+  if(!items.length){ html += `<div class="v5-tl-empty">Không có cont nào load ${v5TlDayOff ? 'ngày mai' : 'hôm nay'}</div>`; y = 80; }
+  let nowX = null;
   if(v5TlDayOff === 0){
-    const nx = posPx(nowTs);
-    if(nx >= 0 && nx <= W) now = `<div class="v5-tl-now" style="left:${nx}px"><span>${v5Pad(new Date().getHours())}:${v5Pad(new Date().getMinutes())}</span></div>`;
+    const nx = xOf(Date.now());
+    if(nx >= LBL && nx <= LBL + W){ nowX = nx; html += `<div class="v5-tl-now" style="left:${nx}px"><span>${v5Pad(new Date().getHours())}:${v5Pad(new Date().getMinutes())}</span></div>`; }
   }
-  const lanes = Math.max(1, laneEnd.length);
-  track.style.height = (lanes * 50 + 36) + 'px';
-  track.innerHTML = ticks + now + (items.length ? blocks : `<div class="v5-tl-empty">Không có cont nào load ${v5TlDayOff ? 'ngày mai' : 'hôm nay'}</div>`);
+  inner.style.height = (y + 4) + 'px';
+  inner.innerHTML = html;
+  const autoKey = day + '|' + v5TlZoom;
+  if(v5TlAutoScrolled !== autoKey){
+    v5TlAutoScrolled = autoKey;
+    scroller.scrollLeft = nowX != null ? Math.max(0, nowX - scroller.clientWidth / 3) : 0;
+  } else if(prevScroll != null) scroller.scrollLeft = prevScroll;
 }
 function v5RenderPickViews(){ try{ v5EnsureShell(); v5ApplyView(); v5RenderTimeline(); v5RenderKanban(); }catch(e){ console.error(e); } }
 document.addEventListener('click', (e) => {
@@ -18104,7 +18149,9 @@ document.addEventListener('click', (e) => {
   if(vb){ v5View = vb.dataset.v5View; try{ localStorage.setItem(V5_VIEW_KEY, v5View); }catch(err){} v5ApplyView(); return; }
   if(e.target.closest('.sidebar-nav-btn[data-page="picking"]')) setTimeout(v5RenderTimeline, 60);
   const db = e.target.closest('[data-v5-tlday]');
-  if(db){ v5TlDayOff = +db.dataset.v5Tlday; v5RenderTimeline(); }
+  if(db){ v5TlDayOff = +db.dataset.v5Tlday; v5RenderTimeline(); return; }
+  const zb = e.target.closest('[data-v5-tlzoom]');
+  if(zb){ v5TlZoom = Math.max(0, Math.min(V5_TL_ZOOMS.length - 1, v5TlZoom + (+zb.dataset.v5Tlzoom))); v5RenderTimeline(); }
 });
 (function v5HookViews(){
   const orig = renderContPickTable;
@@ -18235,3 +18282,230 @@ function v5ApplyBg(id, persist){
   v5ApplyBg(v5BgCurrent(), false);
   window.addEventListener('resize', () => { const cv = document.querySelector('#v5-bg canvas'); if(cv && cv._v5Resize) cv._v5Resize(); });
 })();
+
+
+/* ============================================================
+   v5.30 — Khu đầu trang kiểu trung tâm điều hành (đồng hồ, ca, vòng tiến độ, trạng thái cont, cont kế
+   tiếp đếm ngược), số chạy + biểu đồ mini từng kho, ô tìm nhanh Ctrl+K, hiệu ứng chuyển trang.
+   ============================================================ */
+var V5_HIST_KEY = 'tn5_v5_kho_hist';
+function v5HistUpdate(stats){
+  let h = {};
+  try{ h = JSON.parse(localStorage.getItem(V5_HIST_KEY) || '{}') || {}; }catch(e){ h = {}; }
+  const d = new Date(), key = d.getFullYear() + '-' + v5Pad(d.getMonth() + 1) + '-' + v5Pad(d.getDate());
+  h[key] = stats;
+  const keys = Object.keys(h).sort();
+  while(keys.length > 14) delete h[keys.shift()];
+  try{ localStorage.setItem(V5_HIST_KEY, JSON.stringify(h)); }catch(e){}
+  return h;
+}
+function v5CountUp(el, to){
+  if(!el) return;
+  const from = Number(el.dataset.v5num || 0);
+  el.dataset.v5num = String(to);
+  if(from === to){ el.textContent = fmt(to); return; }
+  const t0 = performance.now(), dur = 800;
+  const tick = (t) => {
+    const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = fmt(Math.round(from + (to - from) * e));
+    if(k < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+var v5NextInfo = null;
+function v5BuildHero(){
+  const page = document.getElementById('page-picking');
+  if(!page || document.getElementById('v5-hero')) return;
+  const snap = page.querySelector('.snapshot');
+  const topRow = snap ? snap.parentElement : null;
+  const hero = document.createElement('div');
+  hero.id = 'v5-hero'; hero.className = 'v5-hero';
+  hero.innerHTML = `
+    <div class="v5-h-left">
+      <div class="v5-clock" id="v5-clock">--:--<small>:--</small></div>
+      <div class="v5-date" id="v5-date"></div>
+      <div class="v5-shift" id="v5-shift"></div>
+      <div class="v5-h-snap" id="v5-h-snap"></div>
+    </div>
+    <div class="v5-h-ring" id="v5-h-ring"></div>
+    <div class="v5-h-right">
+      <div class="v5-h-stats" id="v5-h-stats"></div>
+      <div class="v5-h-next" id="v5-h-next"></div>
+    </div>
+    <div class="v5-h-foot" id="v5-h-foot"><button type="button" class="v5-cmdk-btn" data-v5-cmdk="1"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Tìm nhanh mã hàng, cont, CR, locator…<kbd>Ctrl K</kbd></button></div>`;
+  if(topRow){
+    topRow.parentNode.insertBefore(hero, topRow);
+    hero.querySelector('#v5-h-snap').appendChild(snap);
+    const foot = hero.querySelector('#v5-h-foot');
+    ['#snapshot-plan-actions', '#tn5-presence', '#tn5-forecast-wrap'].forEach(sel => { const n = topRow.querySelector(sel); if(n) foot.appendChild(n); });
+    topRow.classList.add('v5-old-top');
+  } else page.insertBefore(hero, page.firstChild);
+}
+function v5RenderHero(){
+  v5BuildHero();
+  const ringEl = document.getElementById('v5-h-ring');
+  if(!ringEl) return;
+  const rows = contPickAllRows || [];
+  const today = v5TodayStr(0);
+  const tRows = rows.filter(r => String(r.loadDate || '').split(',')[0].trim() === today);
+  const tDone = tRows.filter(v5IsDone).length;
+  let pq = 0, pp = 0;
+  tRows.forEach(r => (r.items || []).forEach(it => { pq += it.qty || 0; pp += Math.min(it.qty || 0, it.picked || 0); }));
+  const pct = tRows.length ? tDone / tRows.length : 0;
+  const C = 2 * Math.PI * 54;
+  ringEl.innerHTML = rows.length ? `
+    <svg viewBox="0 0 132 132" class="v5-ring"><defs><linearGradient id="v5rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2FD5A8"/><stop offset="1" stop-color="#5EA8FF"/></linearGradient></defs>
+      <circle cx="66" cy="66" r="54" class="trk"/><circle cx="66" cy="66" r="54" class="val" style="stroke-dasharray:${C};stroke-dashoffset:${C * (1 - pct)}"/></svg>
+    <div class="v5-ring-c"><b>${fmt(tDone)}<span>/${fmt(tRows.length)}</span></b><em>cont hôm nay xong</em></div>
+    <div class="v5-ring-sub">Pcs đã pick <b>${fmt(pp)}</b> / ${fmt(pq)}<div class="v5-prog"><i style="width:${pq ? Math.round(pp / pq * 100) : 0}%"></i></div></div>`
+    : `<div class="v5-ring-empty"><div class="sk sk-ring"></div><em>Chưa tải Plan</em></div>`;
+  const cnt = s => rows.filter(r => r.status === s).length;
+  const doneAll = rows.filter(r => r.status === 'done' || r.status === 'manualDone').length;
+  const ship = rows.filter(r => r.isShipDone).length;
+  const short = rows.filter(r => !v5IsDone(r) && r.shortItems && r.shortItems.length).length;
+  const statsEl = document.getElementById('v5-h-stats');
+  statsEl.innerHTML = rows.length ? [
+    ['all', 'Tổng cont', rows.length, 'var(--blue)'],
+    ['notStarted', 'Chưa pick', cnt('notStarted'), 'var(--muted-2)'],
+    ['inProgress', 'Đang pick', cnt('inProgress'), 'var(--amber-bright)'],
+    ['done', 'Pick xong', doneAll, 'var(--teal)']
+  ].map(([k, l, n, c]) => `<button type="button" class="v5-stat" data-cont-kpi="${k}" style="--sc:${c}" title="Bấm để xem danh sách & xuất Excel"><b>${fmt(n)}</b><span>${l}</span></button>`).join('')
+    + `<div class="v5-stat-mini"><span style="--sc:var(--violet)">🚚 Load xong <b>${fmt(ship)}</b></span><span class="${short ? 'bad' : ''}" data-v5-jump="1" style="--sc:var(--red)">⚠ Thiếu hàng <b>${fmt(short)}</b></span></div>` : '';
+  const pending = rows.filter(r => !v5IsDone(r)).map(r => ({ r, ts: ovParseDateTimeSortKey(r.loadDate, r.planTime) })).filter(x => isFinite(x.ts)).sort((x, y) => x.ts - y.ts);
+  v5NextInfo = pending.length ? pending[0] : null;
+  const nextEl = document.getElementById('v5-h-next');
+  if(v5NextInfo){
+    const r = v5NextInfo.r;
+    nextEl.innerHTML = `<div class="v5-nx-l">Cont kế tiếp</div><div class="v5-nx-t">${escHtml(r.type)} · ${escHtml(String(r.cNo))} <span>${escHtml(String(r.invoice).split(',')[0])}</span></div>
+      <div class="v5-nx-m">${escHtml(r.loadDate)} ${escHtml(r.planTime)} · ${escHtml((r.topKho || '').replace('Kho ', 'Kho '))} · ${pickPctLabel(r.pct)}</div><div class="v5-nx-cd" id="v5-nx-cd"></div>`;
+    nextEl.style.display = '';
+  } else nextEl.style.display = 'none';
+  v5HeroTick();
+}
+function v5HeroTick(){
+  const now = new Date();
+  const c = document.getElementById('v5-clock');
+  if(!c) return;
+  c.innerHTML = `${v5Pad(now.getHours())}:${v5Pad(now.getMinutes())}<small>:${v5Pad(now.getSeconds())}</small>`;
+  const wd = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][now.getDay()];
+  document.getElementById('v5-date').textContent = `${wd}, ${v5TodayStr(0)}`;
+  const h = now.getHours() + now.getMinutes() / 60, dayShift = h >= 7 && h < 19;
+  const into = dayShift ? h - 7 : (h >= 19 ? h - 19 : h + 5);
+  document.getElementById('v5-shift').innerHTML = `<span>${dayShift ? '☀️ Ca ngày · 07:00–19:00' : '🌙 Ca đêm · 19:00–07:00'}</span><div class="v5-prog"><i style="width:${Math.round(into / 12 * 100)}%"></i></div><em>còn ${v5FmtLeft((12 - into) * 3600000)} hết ca</em>`;
+  const cd = document.getElementById('v5-nx-cd');
+  if(cd && v5NextInfo){
+    const diff = v5NextInfo.ts - Date.now(), s = Math.floor(Math.abs(diff) / 1000);
+    const txt = `${v5Pad(Math.floor(s / 3600))}:${v5Pad(Math.floor(s / 60) % 60)}:${v5Pad(s % 60)}`;
+    cd.className = 'v5-nx-cd' + (diff < 0 ? ' late' : diff < 3600000 ? ' soon' : '');
+    cd.innerHTML = diff < 0 ? `<em>Trễ</em>${txt}` : `<em>Còn</em>${txt}`;
+  }
+}
+setInterval(() => { if(!document.hidden) v5HeroTick(); }, 1000);
+
+/* ---- Ô tìm nhanh Ctrl+K ---- */
+let v5CmdkItems = [], v5CmdkSel = 0, v5CmdkShown = [];
+function v5CmdkBuild(){
+  const out = [];
+  document.querySelectorAll('.sidebar-nav-btn[data-page]').forEach(b => {
+    if(b.style.display === 'none') return;
+    const l = (b.querySelector('.nav-label') || {}).textContent || b.title;
+    out.push({ kind: 'Trang', title: l, sub: 'Mở trang', hay: ('trang ' + l).toLowerCase(), act: () => b.click() });
+  });
+  (contPickAllRows || []).forEach(r => {
+    out.push({ kind: 'Cont', title: `${r.type} · ${r.cNo} · ${String(r.invoice).split(',')[0]}`, sub: `${r.csr} · ${r.loadDate} ${r.planTime} · ${contPickStatusLabel(r)}`,
+      hay: [r.type, r.cNo, r.invoice, r.csr, r.loadDate, r.topKho].join(' ').toLowerCase(), act: () => v5CmdkGoCont(r) });
+  });
+  if(currentData && currentData.kho_detail){
+    const items = new Map(), locs = new Map(), pos = new Map();
+    Object.keys(currentData.kho_detail).forEach(k => (currentData.kho_detail[k] || []).forEach(rw => {
+      const [it, po, loc, oqc, qty] = rw, q = Number(qty) || 0, kk = k.replace('Kho ', '');
+      if(it){ const e = items.get(it) || {}; e[kk] = (e[kk] || 0) + q; items.set(it, e); }
+      if(loc){ const e = locs.get(loc) || { kho: kk, n: 0, q: 0 }; e.n++; e.q += q; locs.set(loc, e); }
+      if(po){ const e = pos.get(po) || new Set(); e.add(it); pos.set(po, e); }
+    }));
+    items.forEach((e, it) => out.push({ kind: 'Mã hàng', title: it, sub: Object.entries(e).map(([k, q]) => `${k} ${fmt(q)}`).join(' · '), hay: String(it).toLowerCase(), act: () => v5CmdkGoSearch(it) }));
+    pos.forEach((s, po) => out.push({ kind: 'PO', title: po, sub: `${s.size} mã hàng`, hay: String(po).toLowerCase(), act: () => v5CmdkGoSearch(po) }));
+    locs.forEach((e, loc) => out.push({ kind: 'Locator', title: loc, sub: `Kho ${e.kho} · ${e.n} dòng · ${fmt(e.q)} pcs`, hay: String(loc).toLowerCase(), act: () => v5CmdkGoSearch(loc) }));
+  }
+  v5CmdkItems = out;
+}
+function v5CmdkGoSearch(q){
+  const nb = document.querySelector('.sidebar-nav-btn[data-page="search"]');
+  if(nb && !nb.classList.contains('active')) nb.click();
+  setTimeout(() => {
+    const ta = document.getElementById('kho-multi-search');
+    if(ta){ ta.value = q; ta.dispatchEvent(new Event('input', { bubbles: true })); }
+    const kp = document.getElementById('kho-summary-panel');
+    if(kp){ ccSetCollapsePanelOpen(kp, true); kp.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  }, 80);
+}
+function v5CmdkGoCont(r){
+  const nb = document.querySelector('.sidebar-nav-btn[data-page="picking"]');
+  if(nb && !nb.classList.contains('active')) nb.click();
+  setTimeout(() => {
+    const id = contDomId(r.type, r.cNo, r.loadDate, r.planTime);
+    const cands = [...document.querySelectorAll(`#cont-picking-overview [data-cont-jump="${CSS.escape(id)}"]`)].filter(n => n.offsetParent !== null && !n.classList.contains('v5-tl-blk'));
+    const t = cands[0];
+    if(!t){ if(typeof showAppToast === 'function') showAppToast('Cont đang bị ẩn bởi bộ lọc'); return; }
+    t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    t.classList.remove('v5-flash'); void t.offsetWidth; t.classList.add('v5-flash');
+    setTimeout(() => t.classList.remove('v5-flash'), 2000);
+  }, 120);
+}
+function v5CmdkRender(q){
+  const list = document.getElementById('v5-cmdk-list');
+  const toks = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const order = ['Trang', 'Cont', 'Mã hàng', 'PO', 'Locator'];
+  let res = toks.length ? v5CmdkItems.filter(x => toks.every(t => x.hay.includes(t))) : v5CmdkItems.filter(x => x.kind === 'Trang' || x.kind === 'Cont').slice(0, 14);
+  res.sort((x, y) => order.indexOf(x.kind) - order.indexOf(y.kind) || (toks.length ? (x.hay.startsWith(toks[0]) ? 0 : 1) - (y.hay.startsWith(toks[0]) ? 0 : 1) : 0));
+  const per = {}; res = res.filter(x => (per[x.kind] = (per[x.kind] || 0) + 1) <= 8);
+  v5CmdkShown = res; v5CmdkSel = 0;
+  let last = '';
+  list.innerHTML = res.length ? res.map((x, i) => {
+    const hd = x.kind !== last ? `<div class="v5-ck-grp">${x.kind}</div>` : ''; last = x.kind;
+    return hd + `<button type="button" class="v5-ck-it${i === 0 ? ' sel' : ''}" data-ck="${i}"><b>${escHtml(String(x.title))}</b><span>${escHtml(String(x.sub || ''))}</span></button>`;
+  }).join('') : '<div class="v5-ck-empty">Không tìm thấy kết quả</div>';
+}
+function v5CmdkOpen(){
+  let ov = document.getElementById('v5-cmdk');
+  if(!ov){
+    ov = document.createElement('div'); ov.id = 'v5-cmdk'; ov.className = 'v5-cmdk';
+    ov.innerHTML = `<div class="v5-ck-box"><div class="v5-ck-in"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="v5-cmdk-input" type="text" placeholder="Gõ mã hàng, số cont, CR, invoice, PO, locator…" autocomplete="off"><kbd>Esc</kbd></div><div class="v5-ck-list" id="v5-cmdk-list"></div><div class="v5-ck-foot">↑↓ chọn · Enter mở · Esc đóng</div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', (e) => {
+      if(e.target === ov){ v5CmdkClose(); return; }
+      const it = e.target.closest('[data-ck]');
+      if(it){ const x = v5CmdkShown[+it.dataset.ck]; v5CmdkClose(); if(x) x.act(); }
+    });
+    const inp = ov.querySelector('input');
+    inp.addEventListener('input', () => v5CmdkRender(inp.value));
+    inp.addEventListener('keydown', (e) => {
+      if(e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+        e.preventDefault();
+        v5CmdkSel = Math.max(0, Math.min(v5CmdkShown.length - 1, v5CmdkSel + (e.key === 'ArrowDown' ? 1 : -1)));
+        ov.querySelectorAll('.v5-ck-it').forEach((b, i) => b.classList.toggle('sel', i === v5CmdkSel));
+        const s = ov.querySelector('.v5-ck-it.sel'); if(s) s.scrollIntoView({ block: 'nearest' });
+      } else if(e.key === 'Enter'){ const x = v5CmdkShown[v5CmdkSel]; v5CmdkClose(); if(x) x.act(); }
+      else if(e.key === 'Escape') v5CmdkClose();
+    });
+  }
+  v5CmdkBuild();
+  ov.classList.add('show');
+  const inp = document.getElementById('v5-cmdk-input');
+  inp.value = ''; v5CmdkRender('');
+  inp.focus(); setTimeout(() => inp.focus(), 30);
+}
+function v5CmdkClose(){ const ov = document.getElementById('v5-cmdk'); if(ov) ov.classList.remove('show'); }
+document.addEventListener('keydown', (e) => {
+  if((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')){ e.preventDefault(); v5CmdkOpen(); }
+});
+document.addEventListener('click', (e) => { if(e.target.closest('[data-v5-cmdk]')) v5CmdkOpen(); });
+
+/* ---- Hiệu ứng chuyển trang ---- */
+document.querySelectorAll('.sidebar-nav-btn[data-page]').forEach(btn => btn.addEventListener('click', () => {
+  const w = document.getElementById('page-' + btn.dataset.page);
+  if(!w) return;
+  w.classList.remove('v5-enter'); void w.offsetWidth; w.classList.add('v5-enter');
+  setTimeout(() => w.classList.remove('v5-enter'), 400);
+}));
+try{ v5RenderSummary(); }catch(e){ console.error(e); }
