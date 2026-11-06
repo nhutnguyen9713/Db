@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.96';
+const APP_VERSION = 'v5.97';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -19570,3 +19570,22 @@ function v5KtRenderStale(){
   let t = 0; const pg = document.getElementById('page-kiemton');
   if(pg && typeof MutationObserver === 'function') new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => { try{ v5KtDecorateAll(); }catch(e){} }, 80); }).observe(pg, { childList: true, subtree: true });
 }
+
+// v5.97 — Popup "N online" bị khung tiêu đề (overflow:hidden) cắt mất phần dưới -> hiện nổi theo vị trí nút (position:fixed)
+(function(){
+  const btn = document.getElementById('tn5-presence-btn'), pop = document.getElementById('tn5-presence-pop');
+  if(!btn || !pop) return;
+  const place = () => {
+    if(pop.style.display === 'none') return;
+    const r = btn.getBoundingClientRect(), vw = window.innerWidth, vh = window.innerHeight - (window.innerWidth <= 760 ? 76 : 0); // chừa thanh menu dưới đáy trên điện thoại
+    pop.classList.add('tn5-presence-pop-float');
+    const w = Math.min(Math.max(260, pop.offsetWidth), vw - 16);
+    pop.style.left = Math.max(8, Math.min(r.left, vw - w - 8)) + 'px';
+    const below = vh - r.bottom - 12, above = r.top - 12;
+    if(below >= 180 || below >= above){ pop.style.top = (r.bottom + 6) + 'px'; pop.style.bottom = ''; pop.style.maxHeight = Math.max(120, below) + 'px'; }
+    else { pop.style.top = ''; pop.style.bottom = (vh - r.top + 6) + 'px'; pop.style.maxHeight = Math.max(120, above) + 'px'; }
+  };
+  btn.addEventListener('click', () => setTimeout(place, 0));
+  window.addEventListener('resize', place);
+  window.addEventListener('scroll', () => { if(pop.style.display !== 'none') pop.style.display = 'none'; }, { passive: true });
+})();

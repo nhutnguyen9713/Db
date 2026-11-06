@@ -2950,3 +2950,5 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
   .kt-mode-table .kt-calc-inputs{white-space:nowrap;}
   #page-kiemton [id^="cc-loc-cards-"]{overflow-x:auto;}
 }
+/* v5.97 — popup online nổi trên mọi khung, cuộn được khi nhiều người */
+.tn5-presence-pop.tn5-presence-pop-float{position:fixed !important; margin-top:0; z-index:2000; overflow-y:auto;}
