@@ -436,7 +436,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v4.30';
+  var PH_VERSION = 'v4.31';
   var PH_VERSION_DATE = '05/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -1345,102 +1345,110 @@
   // ===== Nút "📷 Lưu ảnh" — chụp lại 1 bảng (Locator/OQC/SL tồn, hoặc PO/Locator/OQC/SL tồn, hoặc cả
   // danh sách gộp nhiều cột hơn) thành 1 file PNG tải về máy. Cột CUỐI luôn coi là cột số (căn phải),
   // các cột còn lại căn trái — số cột tuỳ theo headers.length, không cố định 3 cột như trước nữa. =====
+  // v4.31: ảnh Lưu/Chia sẻ vẽ theo form mới (dùng chung cho tab Container lẫn Tìm mã hàng): thanh tiêu đề
+  // đậm, cột nào mọi dòng cùng 1 giá trị (PO / Item / Kho) thì bỏ khỏi bảng và ghi 1 lần ở dòng phụ, dòng NG nền
+  // đỏ nhạt, dòng Loading đã gán CR/VNC (đã pick) chữ xám, cuối ảnh có ô Tổng PASS / NG.
   var phSaveDetailImage = function(title, headers, rows, share){
-    var scale = 2, padX = 16, padTop = 14, rowH = 26, headerH = 30;
-    var mctx = document.createElement('canvas').getContext('2d');
-    mctx.font = 'bold 14px system-ui, sans-serif';
-    var titleW = mctx.measureText(title).width;
-    mctx.font = 'bold 10.5px system-ui, sans-serif';
-    var colW = headers.map(function(h){ return mctx.measureText(h).width + 16; });
-    mctx.font = '12.5px ui-monospace, monospace';
-    for(var i = 0; i < rows.length; i++){
-      for(var c = 0; c < headers.length; c++){
-        colW[c] = Math.max(colW[c], mctx.measureText(String(rows[i][c] == null ? '' : rows[i][c])).width + 12);
+    headers = headers.slice(); rows = rows.map(function(r){ return r.slice(); });
+    var meta = [];
+    ['ITEM', 'KHO', 'PO'].forEach(function(h){
+      var i = headers.indexOf(h);
+      if(i < 0 || !rows.length) return;
+      var v0 = String(rows[0][i] == null ? '' : rows[0][i]);
+      if(rows.every(function(r){ return String(r[i] == null ? '' : r[i]) === v0; })){
+        if(v0 && title.indexOf(v0) === -1) meta.push((h === 'ITEM' ? '' : h + ' ') + v0);
+        headers.splice(i, 1); rows.forEach(function(r){ r.splice(i, 1); });
       }
-    }
-    var colX = []; var xAcc = padX;
-    for(var c2 = 0; c2 < headers.length; c2++){ colX.push(xAcc); xAcc += colW[c2]; }
-    var tableW = colW.reduce(function(s, w){ return s + w; }, 0);
-    var lastIdx = headers.length - 1;
-    var width = Math.max(titleW + padX * 2, tableW + padX * 2, 280);
-    var tableTop = padTop + 24 + headerH;
-    // Dòng tổng cuối bảng: Tổng PASS, và Tổng NG (chỉ khi có NG) — cộng theo cột OQC × cột SL cuối.
-    var oqcIdx = headers.indexOf('OQC');
-    var totals = [];
-    if(oqcIdx >= 0 && rows.length){
-      var sumPass = 0, sumNg = 0, skipLoad = 0;
-      var locIdx = headers.indexOf('LOCATOR');
-      rows.forEach(function(rw){
-        var q = parseFloat(String(rw[lastIdx] == null ? '' : rw[lastIdx]).replace(/[^0-9.\-]/g, '')) || 0;
-        var o = String(rw[oqcIdx] == null ? '' : rw[oqcIdx]).trim().toUpperCase();
-        // Locator Loading đã có số CR và VNC (VD "DG3-Loading (CR0167486 - VNC28202)") = hàng đã gán
-        // vào chuyến xuất → không tính vào tổng.
-        var loc = locIdx >= 0 ? String(rw[locIdx] == null ? '' : rw[locIdx]) : '';
-        if(/loading/i.test(loc) && /CR/i.test(loc) && /VNC/i.test(loc)){ skipLoad += q; return; }
-        if(o === 'PASS') sumPass += q; else if(o === 'NG') sumNg += q;
-      });
-      totals.push(['TỔNG PASS', sumPass]);
-      if(sumNg > 0) totals.push(['TỔNG NG', sumNg]);
-      if(skipLoad > 0) totals.push(['(đã trừ Loading CR/VNC)', skipLoad]);
-    }
-    var totalsH = totals.length ? totals.length * rowH + 6 : 0;
-    var height = tableTop + rowH * Math.max(rows.length, 1) + totalsH + 14;
+    });
+    var oqcIdx = headers.indexOf('OQC'), locIdx = headers.indexOf('LOCATOR'), lastIdx = headers.length - 1;
+    var numOf = function(v){ return parseFloat(String(v == null ? '' : v).replace(/[^0-9.\-]/g, '')) || 0; };
+    var isPickedRow = function(rw){
+      var loc = locIdx >= 0 ? String(rw[locIdx] == null ? '' : rw[locIdx]) : '';
+      return /loading/i.test(loc) && /CR/i.test(loc) && (/VNC/i.test(loc) || /^\(.*\)$/.test(String(rw[lastIdx]).trim()));
+    };
+    var sumPass = 0, sumNg = 0, skipLoad = 0;
+    rows.forEach(function(rw){
+      var q = numOf(rw[lastIdx]), o = oqcIdx >= 0 ? String(rw[oqcIdx] || '').trim().toUpperCase() : '';
+      if(isPickedRow(rw)){ skipLoad += q; return; }
+      if(o === 'PASS') sumPass += q; else if(o === 'NG') sumNg += q;
+    });
+    var z = function(n){ return String(n).padStart(2, '0'); }, nw = new Date();
+    meta.push(rows.length + ' vị trí');
+    meta.push('Xuất ' + z(nw.getHours()) + ':' + z(nw.getMinutes()) + ' ' + z(nw.getDate()) + '/' + z(nw.getMonth() + 1) + '/' + nw.getFullYear());
+    var subTitle = meta.join(' · ');
+
+    var scale = 2, padX = 14, rowH = 28, headH = 30, titleH = 52, cellPad = 10;
+    var FONT = '13px ui-monospace, Menlo, Consolas, monospace', FONTB = 'bold 13px ui-monospace, Menlo, Consolas, monospace';
+    var mctx = document.createElement('canvas').getContext('2d');
+    mctx.font = 'bold 11px system-ui, sans-serif';
+    var colW = headers.map(function(h){ return mctx.measureText(h).width + cellPad * 2; });
+    mctx.font = FONTB;
+    rows.forEach(function(r){ headers.forEach(function(h, c){ colW[c] = Math.max(colW[c], mctx.measureText(String(r[c] == null ? '' : r[c])).width + cellPad * 2); }); });
+    var tableW = colW.reduce(function(a, b){ return a + b; }, 0);
+    mctx.font = 'bold 16px system-ui, sans-serif'; var tW = mctx.measureText(title).width;
+    mctx.font = '12px system-ui, sans-serif'; var sW = mctx.measureText(subTitle).width;
+    var totals = [['TỔNG PASS', sumPass, '#E3F5EA', '#0B7A3B']];
+    if(sumNg > 0) totals.push(['TỔNG NG', sumNg, '#FDECEC', '#B42318']);
+    if(skipLoad > 0) totals.push(['Đã pick (Loading CR/VNC, không tính)', skipLoad, '#F1F3F6', '#6b7280']);
+    var width = Math.ceil(Math.max(tableW + padX * 2, tW + padX * 2 + 4, sW + padX * 2 + 4, 300));
+    tableW = width - padX * 2; // giãn cột Locator cho kín bề ngang
+    var extra = tableW - colW.reduce(function(a, b){ return a + b; }, 0);
+    colW[locIdx >= 0 ? locIdx : 0] += extra;
+    var colX = []; var xa = padX; colW.forEach(function(w){ colX.push(xa); xa += w; });
+    var tableTop = titleH + 10;
+    var bodyTop = tableTop + headH;
+    var totalsTop = bodyTop + rowH * Math.max(rows.length, 1) + 10;
+    var height = totalsTop + totals.length * (rowH + 4) + 10;
 
     var canvas = document.createElement('canvas');
-    canvas.width = Math.ceil(width * scale);
-    canvas.height = Math.ceil(height * scale);
+    canvas.width = Math.ceil(width * scale); canvas.height = Math.ceil(height * scale);
     var ctx = canvas.getContext('2d');
     ctx.scale(scale, scale);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, width, height);
-
-    ctx.fillStyle = '#12161F';
-    ctx.font = 'bold 14px system-ui, sans-serif';
-    ctx.fillText(title, padX, padTop + 14);
-
-    ctx.fillStyle = '#f8f9fb';
-    ctx.fillRect(padX - 8, tableTop - headerH, tableW + 16, headerH);
-    ctx.fillStyle = '#6b7280';
-    ctx.font = 'bold 10.5px system-ui, sans-serif';
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width, height);
+    ctx.textBaseline = 'middle';
+    // Thanh tiêu đề
+    ctx.fillStyle = '#1F2A44'; ctx.fillRect(0, 0, width, titleH);
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 16px system-ui, sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(title, padX, 18);
+    ctx.fillStyle = '#C9D3E6'; ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText(subTitle, padX, 38);
+    // Tiêu đề cột
+    ctx.fillStyle = '#EEF1F6'; ctx.fillRect(padX, tableTop, tableW, headH);
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5; ctx.strokeRect(padX, tableTop, tableW, headH + rowH * Math.max(rows.length, 1));
+    ctx.font = 'bold 11px system-ui, sans-serif'; ctx.fillStyle = '#55637C';
     headers.forEach(function(h, i){
-      if(i === lastIdx){ ctx.textAlign = 'right'; ctx.fillText(h, colX[i] + colW[i] - 6, tableTop - 11); ctx.textAlign = 'left'; }
-      else ctx.fillText(h, colX[i], tableTop - 11);
+      if(i === lastIdx){ ctx.textAlign = 'right'; ctx.fillText(h, colX[i] + colW[i] - cellPad, tableTop + headH / 2); }
+      else { ctx.textAlign = 'left'; ctx.fillText(h, colX[i] + cellPad, tableTop + headH / 2); }
     });
-
-    ctx.font = '12.5px ui-monospace, monospace';
-    if(!rows.length){
-      ctx.fillStyle = '#8a97ac';
-      ctx.fillText('(Không có dòng nào)', padX, tableTop + 17);
-    }
-    for(var r = 0; r < rows.length; r++){
-      var ry = tableTop + rowH * r;
-      if(r % 2 === 1){ ctx.fillStyle = '#fafbfc'; ctx.fillRect(padX - 8, ry, tableW + 16, rowH); }
-      ctx.fillStyle = '#12161F';
-      for(var c3 = 0; c3 < headers.length; c3++){
-        var val = String(rows[r][c3] == null ? '' : rows[r][c3]);
-        if(c3 === lastIdx){ ctx.textAlign = 'right'; ctx.fillText(val, colX[c3] + colW[c3] - 6, ry + 17); ctx.textAlign = 'left'; }
-        else ctx.fillText(val, colX[c3], ry + 17);
-      }
-    }
-
-    if(totals.length){
-      var ty = tableTop + rowH * Math.max(rows.length, 1) + 6;
-      ctx.fillStyle = '#e5e7eb';
-      ctx.fillRect(padX - 8, ty - 3, tableW + 16, 1.5);
-      totals.forEach(function(t, ti){
-        var yy = ty + rowH * ti;
-        var isNg = t[0] === 'TỔNG NG';
-        var isNote = t[0].charAt(0) === '(';
-        ctx.fillStyle = isNote ? '#f3f4f6' : (isNg ? '#fdecec' : '#e8f6ef');
-        ctx.fillRect(padX - 8, yy, tableW + 16, rowH);
-        ctx.fillStyle = isNote ? '#6b7280' : (isNg ? '#B42318' : '#0E8F76');
-        ctx.font = (isNote ? '' : 'bold ') + '12.5px ui-monospace, monospace';
-        ctx.fillText(t[0], colX[0], yy + 17);
-        ctx.textAlign = 'right';
-        ctx.fillText(t[1].toLocaleString('en-US'), colX[lastIdx] + colW[lastIdx] - 6, yy + 17);
-        ctx.textAlign = 'left';
+    ctx.beginPath(); ctx.moveTo(padX, bodyTop); ctx.lineTo(padX + tableW, bodyTop); ctx.stroke();
+    if(!rows.length){ ctx.fillStyle = '#8a97ac'; ctx.font = FONT; ctx.textAlign = 'left'; ctx.fillText('(Không có dòng nào)', padX + cellPad, bodyTop + rowH / 2); }
+    rows.forEach(function(rw, r){
+      var y = bodyTop + rowH * r;
+      var o = oqcIdx >= 0 ? String(rw[oqcIdx] || '').trim().toUpperCase() : '';
+      var picked = isPickedRow(rw), ng = o === 'NG' && !picked;
+      ctx.fillStyle = ng ? '#FDECEC' : (picked ? '#F4F5F7' : (r % 2 ? '#FAFBFC' : '#FFFFFF'));
+      ctx.fillRect(padX + 0.75, y, tableW - 1.5, rowH);
+      ctx.strokeStyle = '#E3E7EE'; ctx.lineWidth = 1;
+      if(r){ ctx.beginPath(); ctx.moveTo(padX, y + 0.5); ctx.lineTo(padX + tableW, y + 0.5); ctx.stroke(); }
+      headers.forEach(function(h, c){
+        var val = String(rw[c] == null ? '' : rw[c]);
+        ctx.fillStyle = picked ? '#9AA3B2' : ((ng && (c === oqcIdx || c === lastIdx)) ? '#B42318' : '#12161F');
+        ctx.font = (c === lastIdx || (ng && c === oqcIdx)) ? FONTB : FONT;
+        if(c === lastIdx){ ctx.textAlign = 'right'; ctx.fillText(val, colX[c] + colW[c] - cellPad, y + rowH / 2); }
+        else { ctx.textAlign = 'left'; ctx.fillText(val, colX[c] + cellPad, y + rowH / 2); }
       });
-    }
+    });
+    ctx.strokeStyle = '#222'; ctx.lineWidth = 1.5; ctx.strokeRect(padX, tableTop, tableW, headH + rowH * Math.max(rows.length, 1));
+    // Ô tổng
+    totals.forEach(function(t, i){
+      var y = totalsTop + i * (rowH + 4);
+      ctx.fillStyle = t[2]; ctx.fillRect(padX, y, tableW, rowH);
+      ctx.fillStyle = t[3]; ctx.font = 'bold 13px system-ui, sans-serif'; ctx.textAlign = 'left';
+      ctx.fillText(t[0], padX + cellPad, y + rowH / 2);
+      ctx.font = 'bold 14px ui-monospace, Menlo, Consolas, monospace'; ctx.textAlign = 'right';
+      ctx.fillText(Number(t[1]).toLocaleString('en-US'), padX + tableW - cellPad, y + rowH / 2);
+    });
+    ctx.textAlign = 'left';
 
     canvas.toBlob(function(blob){
       if(!blob) return;
