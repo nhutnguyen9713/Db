@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.02';
+const APP_VERSION = 'v6.03';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -19623,3 +19623,7 @@ function v5KtRenderStale(){
   window.addEventListener('resize', place);
   window.addEventListener('scroll', () => { if(pop.style.display !== 'none') pop.style.display = 'none'; }, { passive: true });
 })();
+
+// v6.03: initTransactionPage() khôi phục dữ liệu Transaction lúc tải trang CHẠY TRƯỚC các bản ghi đè v5.90 (v5.90+)
+// → F5 vẫn hiện biểu đồ cột cũ. Vẽ lại 1 lần bằng bản mới nếu đã có dữ liệu.
+if(txState){ try{ renderTransactionPage(); }catch(e){ console.error(e); } }
