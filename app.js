@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.17';
+const APP_VERSION = 'v6.18';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18937,9 +18937,10 @@ function v5ShiftReportCanvas(){
   // v6.15: thẻ ca giống thẻ trên web — chip trạng thái + mỗi kho 1 dòng; ẩn Cont rớt nếu = 0
   const groups = [['Cont rớt', late, '#E5484D', `trước ${hm(sh.start)}, chưa load xong`], ['Cont trong ca', inShift, '#2F6FEB', `${hm(sh.start)} – ${hm(sh.end)}`], ['Cont ca sau', next, '#7C5CFF', `${hm(sh.end)} – ${hm(sh.end + 43200000)}`]].filter(g => g[0] !== 'Cont rớt' || g[1].length);
   const maxKho = Math.max(0, ...groups.map(g => v5ShiftKhoCounts(g[1]).length));
-  const cardH = 172 + maxKho * 44;
+  const cardH = 204 + maxKho * 44;
   const tableTop = 124 + cardH + 30;
-  const H = tableTop - 10 + 52 + listRows.length * 34 + (listRows.length ? 0 : 40) + 90 + noteH;
+  const nBands = listRows.filter((x, i) => !i || listRows[i - 1][0] !== x[0]).length;
+  const H = tableTop - 4 + 34 + nBands * 42 + listRows.length * 33 + (listRows.length ? 0 : 40) + 90 + noteH;
   const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
   const c = cv.getContext('2d'); c.scale(S, S);
   const F = (w, px) => `${w} ${px}px Inter, "Segoe UI", Arial, sans-serif`;
@@ -18955,14 +18956,27 @@ function v5ShiftReportCanvas(){
   txt(`Xuất lúc ${p2(now.getHours())}:${p2(now.getMinutes())} ${p2(now.getDate())}/${p2(now.getMonth() + 1)}/${now.getFullYear()}`, W - PAD, 46, F(600, 14), '#B8C7E6', 'right');
   const allTs = (contPickAllRows || []).length;
   txt(`Tổng ${allTs} cont trong Plan`, W - PAD, 78, F(600, 14), '#B8C7E6', 'right');
-  // 3 ô nhóm (2 ô nếu không có cont rớt)
-  const gw = (W - PAD * 2 - 12 * (groups.length - 1)) / groups.length;
-  const chip = (x, y, label, val, valCol) => {
-    c.font = F(600, 12); const lw = c.measureText(label + ' ').width; c.font = F(800, 12.5); const vw = c.measureText(String(val)).width;
-    const w = lw + vw + 20; rr(x, y, w, 24, 12, '#EEF1F6');
-    txt(label, x + 10, y + 16.5, F(600, 12), '#4B5563'); txt(val, x + 10 + lw, y + 16.5, F(800, 12.5), valCol);
-    return w;
+  // v6.18: trực quan hơn — mỗi thẻ có THANH TIẾN ĐỘ xếp chồng (Load Done / Pick Done / Picking / Chưa Pick,
+  // 4 nhóm KHÔNG trùng nhau), mỗi kho 1 dòng có thanh riêng; bảng chia theo nhóm ca, tô màu theo trạng thái.
+  const ST = [['load', 'Load Done', '#7C5CFF'], ['done', 'Pick Done', '#12A37F'], ['prog', 'Picking', '#F0A020'], ['todo', 'Chưa Pick', '#C9D0DC']];
+  const stOf = r => r.isShipDone ? 'load' : (r.status === 'done' || r.status === 'manualDone') ? 'done' : r.status === 'inProgress' ? 'prog' : 'todo';
+  const tally = list => { const t = { load: 0, done: 0, prog: 0, todo: 0 }; list.forEach(r => t[stOf(r)]++); return t; };
+  const stackBar = (x, y, w, h, t, total, font) => {
+    rr(x, y, w, h, h / 2, '#EEF1F6');
+    if(!total) return;
+    c.save(); c.beginPath(); c.moveTo(x + h / 2, y); c.arcTo(x + w, y, x + w, y + h, h / 2); c.arcTo(x + w, y + h, x, y + h, h / 2); c.arcTo(x, y + h, x, y, h / 2); c.arcTo(x, y, x + w, y, h / 2); c.closePath(); c.clip();
+    let cx = x;
+    ST.forEach(([k, , col]) => {
+      const n = t[k]; if(!n) return;
+      const sw = w * n / total;
+      c.fillStyle = col; c.fillRect(cx, y, sw + 0.5, h);
+      c.font = font; const tw = c.measureText(String(n)).width;
+      if(sw >= tw + 8) txt(n, cx + sw / 2, y + h / 2 + 4.5, font, k === 'todo' ? '#374151' : '#FFFFFF', 'center');
+      cx += sw;
+    });
+    c.restore();
   };
+  const gw = (W - PAD * 2 - 12 * (groups.length - 1)) / groups.length;
   groups.forEach(([title, list, col, sub], i) => {
     const x = PAD + i * (gw + 12), y = 124;
     rr(x, y, gw, cardH, 14, '#FFFFFF', '#DDE3EE');
@@ -18971,61 +18985,76 @@ function v5ShiftReportCanvas(){
     txt(sub, x + 20, y + 52, F(500, 12), '#6B7485');
     txt(list.length, x + 20, y + 102, F(800, 44), title === 'Cont rớt' && list.length ? col : '#111827');
     txt('cont', x + 22 + c.measureText(String(list.length)).width + 6, y + 102, F(600, 15), '#6B7485');
-    const cnt = st => list.filter(r => r.status === st).length;
-    const done = list.filter(r => r.status === 'done' || r.status === 'manualDone').length, ship = list.filter(r => r.isShipDone).length;
-    let cx = x + 20;
-    [['Chưa pick', cnt('notStarted'), '#111827'], ['Đang pick', cnt('inProgress'), '#D98A0B'], ['Pick xong', done, '#0E8F76'], ['Load xong', ship, '#7C5CFF']].forEach(([l, v, vc]) => { cx += chip(cx, y + 118, l, v, vc) + 6; });
-    // mỗi kho 1 dòng: tên kho · số cont · Chưa / Đang / Xong (load)
-    v5ShiftKhoCounts(list).forEach(([k, e], j) => {
-      const ry = y + 158 + j * 44, kc = (typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR[k]) || '#9AA3B2';
-      rr(x + 16, ry, gw - 32, 38, 10, '#F5F7FB', '#E3E8F0');
+    const t = tally(list);
+    // % hoàn thành = (Pick Done + Load Done) / tổng — số to bên phải
+    const fin = list.length ? Math.round((t.load + t.done) / list.length * 100) : 0;
+    txt(`${fin}%`, x + gw - 20, y + 96, F(800, 30), fin >= 100 ? '#12A37F' : '#111827', 'right');
+    txt('đã pick xong', x + gw - 20, y + 114, F(600, 11.5), '#6B7485', 'right');
+    stackBar(x + 20, y + 126, gw - 40, 24, t, list.length, F(800, 13));
+    // chú thích màu
+    let lx = x + 20;
+    ST.forEach(([k, lb, cc]) => {
+      c.beginPath(); c.arc(lx + 5, y + 170, 5, 0, Math.PI * 2); c.fillStyle = cc; c.fill();
+      const s = `${lb} ${t[k]}`; txt(s, lx + 14, y + 174.5, F(t[k] ? 700 : 500, 12), t[k] ? '#111827' : '#9AA3B2');
+      c.font = F(700, 12); lx += 14 + c.measureText(s).width + 16;
+    });
+    // mỗi kho 1 dòng: tên kho · số cont · thanh tiến độ riêng
+    v5ShiftKhoCounts(list).forEach(([k], j) => {
+      const ry = y + 190 + j * 44, kc = (typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR[k]) || '#9AA3B2';
+      const kl = list.filter(r => (r.topKho || 'Khác') === k), kt = tally(kl);
+      rr(x + 16, ry, gw - 32, 38, 10, '#F7F9FC', '#E3E8F0');
       c.fillStyle = kc; c.fillRect(x + 16, ry + 4, 4, 30);
-      c.beginPath(); c.arc(x + 34, ry + 19, 5, 0, Math.PI * 2); c.fillStyle = kc; c.fill();
-      txt(k.replace('Kho ', ''), x + 46, ry + 25, F(800, 15), '#111827');
-      txt(e.n, x + 100, ry + 26, F(800, 18), '#111827');
-      txt('cont', x + 106 + c.measureText(String(e.n)).width, ry + 25, F(600, 13), '#6B7485');
-      const parts = [];
-      if(e.todo) parts.push(['Chưa Pick', e.todo, '#111827']);
-      if(e.prog) parts.push(['Picking', e.prog, '#D98A0B']);
-      if(e.done) parts.push(['Pick Done', e.done, '#0E8F76']);
-      if(e.ship) parts.push(['Load Done', e.ship, '#7C5CFF']);
-      let rx = x + gw - 24;
-      parts.reverse().forEach(([l, v, vc]) => {
-        c.font = F(600, 12); const lw = c.measureText(l + ' ').width; c.font = F(800, 12.5); const vw = c.measureText(String(v)).width;
-        const w = lw + vw + 20; rx -= w; chip(rx, ry + 7, l, v, vc); rx -= 6;
-      });
+      txt(k.replace('Kho ', ''), x + 32, ry + 25, F(800, 16), '#111827');
+      txt(kl.length, x + 84, ry + 26, F(800, 18), '#111827');
+      txt('cont', x + 90 + c.measureText(String(kl.length)).width, ry + 25, F(600, 12.5), '#6B7485');
+      stackBar(x + 150, ry + 10, gw - 32 - 150 + 16 - 14, 18, kt, kl.length, F(800, 11.5));
     });
   });
-  // bảng cont rớt + trong ca
-  let y = tableTop;
-  // v6.17: bỏ dòng tiêu đề bảng; tách Ngày / Giờ thành 2 cột; vạch ngăn giữa các nhóm (Rớt / Trong ca / Ca sau)
-  y -= 4;
-  const cols = [['Nhóm', 0], ['Plan', 90], ['Cont', 150], ['Ngày', 330], ['Giờ', 440], ['Invoice', 520], ['Kho', 640], ['% pick', 710], ['Trạng thái', 800], ['Ghi chú', 930]];
+  // bảng: chia băng theo nhóm (Rớt / Trong ca / Ca sau), tô nhẹ theo trạng thái, cột Tiến độ có thanh %
+  let y = tableTop - 4;
+  const cols = [['Plan', 0], ['Cont', 60], ['Ngày', 230], ['Giờ', 330], ['Invoice', 400], ['Kho', 520], ['Tiến độ pick', 590], ['Trạng thái', 790], ['Ghi chú', 920]];
   const hhmm = t => { const m = String(t || '').split(',')[0].trim().match(/^(\d{1,2}):(\d{2})/); return m ? `${v5Pad(+m[1])}:${m[2]}` : String(t || '').split(',')[0]; };
   rr(PAD, y, W - PAD * 2, 30, 8, '#E8EDF6');
-  cols.forEach(([h, dx]) => txt(h, PAD + 12 + dx, y + 20, F(700, 12), '#4B5563'));
-  y += 30;
+  cols.forEach(([h, dx]) => txt(h, PAD + 14 + dx, y + 20, F(700, 12), '#4B5563'));
+  y += 34;
   if(!listRows.length){ txt('Không có cont rớt hay cont trong ca.', PAD + 12, y + 28, F(500, 13), '#6B7485'); y += 40; }
+  const BAND = { late: ['CONT RỚT', '#E5484D', `trước ${hm(sh.start)}`], cur: ['TRONG CA', '#2F6FEB', `${hm(sh.start)} – ${hm(sh.end)}`], next: ['CA SAU · đã bắt đầu pick', '#7C5CFF', `${hm(sh.end)} – ${hm(sh.end + 43200000)}`] };
+  const ROWBG = { load: '#F1EDFF', done: '#E9F8F2', prog: '#FFF6E5', todo: '#FFFFFF' };
+  const STCOL = Object.fromEntries(ST.map(([k, , cc]) => [k, cc]));
   listRows.forEach(([g, r], i) => {
-    if(i % 2) { c.fillStyle = '#FFFFFF'; c.fillRect(PAD, y, W - PAD * 2, 34); }
-    if(i && listRows[i - 1][0] !== g){ c.fillStyle = g === 'next' ? '#7C5CFF' : '#2F6FEB'; c.fillRect(PAD, y - 1, W - PAD * 2, 2); }
-    const yy = y + 22;
-    txt(g === 'late' ? 'Rớt' : g === 'next' ? 'Ca sau' : 'Trong ca', PAD + 12, yy, F(700, 12.5), g === 'late' ? '#E5484D' : g === 'next' ? '#7C5CFF' : '#2F6FEB');
-    txt(fit(r.type, 56, F(600, 13)), PAD + 102, yy, F(600, 13), '#111827');
-    txt(fit(r.cNo, 170, F(700, 13)), PAD + 162, yy, F(700, 13), '#111827');
-    txt(String(r.loadDate).split(',')[0], PAD + 342, yy, F(500, 13), '#374151');
-    txt(hhmm(r.planTime), PAD + 452, yy, F(700, 13), '#111827');
-    txt(fit(String(r.invoice).split(',')[0], 110, F(500, 13)), PAD + 532, yy, F(500, 13), '#374151');
-    txt(String(r.topKho || '—').replace('Kho ', ''), PAD + 652, yy, F(600, 13), '#374151');
-    const pc = r.pct || 0;
-    txt(pickPctLabel(pc), PAD + 722, yy, F(700, 13), pc >= 99.995 ? '#0E8F76' : pc > 0 ? '#D98A0B' : '#6B7485');
-    const st = contPickStatusLabel(r);
-    txt(st, PAD + 812, yy, F(600, 13), r.isShipDone ? '#7C5CFF' : (r.status === 'done' || r.status === 'manualDone') ? '#0E8F76' : r.status === 'inProgress' ? '#D98A0B' : '#6B7485');
-    // Ghi chú lấy trực tiếp từ ô Ghi chú của cont (r.comment chỉ cập nhật khi bảng vẽ lại)
+    if(!i || listRows[i - 1][0] !== g){
+      const [bl, bc, bs] = BAND[g]; const n = listRows.filter(x => x[0] === g).length;
+      if(i) y += 8;
+      c.fillStyle = bc; c.fillRect(PAD, y, 5, 30);
+      txt(bl, PAD + 16, y + 20, F(800, 13.5), bc);
+      c.font = F(800, 13.5); const bw = c.measureText(bl).width;
+      txt(`${bs}  ·  ${n} cont`, PAD + 28 + bw, y + 20, F(600, 12.5), '#6B7485');
+      y += 34;
+    }
+    const s = stOf(r);
+    c.fillStyle = ROWBG[s]; c.fillRect(PAD, y, W - PAD * 2, 32);
+    c.fillStyle = '#E6EAF1'; c.fillRect(PAD, y + 32, W - PAD * 2, 1);
+    const yy = y + 21;
+    txt(fit(r.type, 50, F(700, 13)), PAD + 14, yy, F(700, 13), '#374151');
+    txt(fit(r.cNo, 160, F(800, 13.5)), PAD + 74, yy, F(800, 13.5), '#111827');
+    txt(String(r.loadDate).split(',')[0], PAD + 244, yy, F(500, 13), '#374151');
+    txt(hhmm(r.planTime), PAD + 344, yy, F(800, 13.5), '#111827');
+    txt(fit(String(r.invoice).split(',')[0], 110, F(500, 13)), PAD + 414, yy, F(500, 13), '#374151');
+    const kho = r.topKho || '—', kc = (typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR[kho]) || '#9AA3B2';
+    rr(PAD + 532, y + 7, 40, 19, 9.5, kc); txt(String(kho).replace('Kho ', ''), PAD + 552, y + 21, F(800, 12), '#FFFFFF', 'center');
+    // tiến độ: thanh + %. Cont đã Load xong thì tồn đã rời kho (% pick về 0) → hiện thanh đầy màu tím "Đã load"
+    const pc = s === 'load' ? 100 : Math.min(100, r.pct || 0), bx = PAD + 604, bw2 = 120;
+    rr(bx, y + 11, bw2, 10, 5, '#E3E8F0');
+    if(pc > 0) rr(bx, y + 11, Math.max(10, bw2 * pc / 100), 10, 5, s === 'load' ? '#7C5CFF' : pc >= 99.995 ? '#12A37F' : '#F0A020');
+    txt(s === 'load' ? 'Đã load' : pickPctLabel(r.pct || 0), bx + bw2 + 10, yy, F(800, 12.5), s === 'load' ? '#7C5CFF' : pc >= 99.995 ? '#0E8F76' : pc > 0 ? '#C77D00' : '#6B7485');
+    // trạng thái: nhãn màu nền đặc
+    const lb = ST.find(x => x[0] === s)[1];
+    c.font = F(800, 12); const lw = c.measureText(lb).width + 20;
+    rr(PAD + 802, y + 6, lw, 21, 10.5, STCOL[s]); txt(lb, PAD + 802 + lw / 2, y + 21, F(800, 12), s === 'todo' ? '#374151' : '#FFFFFF', 'center');
+    // Ghi chú: chỉ ghi chú tự điền của cont (đọc trực tiếp, r.comment chỉ cập nhật khi bảng vẽ lại)
     const cmt = (r.instanceKey && contPickComments[r.instanceKey]) || r.comment || '';
-    // v6.17: chỉ hiện ghi chú tự điền, không tự thêm "Thiếu x mã"
-    txt(fit(cmt, W - PAD * 2 - 950, F(600, 12.5)), PAD + 942, yy, F(600, 12.5), '#E5484D');
-    y += 34;
+    txt(fit(cmt, W - PAD * 2 - 950, F(700, 12.5)), PAD + 934, yy, F(700, 12.5), '#D92D35');
+    y += 33;
   });
   if(noteLines.length){
     y += 20;
