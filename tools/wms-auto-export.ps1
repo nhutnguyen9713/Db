@@ -46,6 +46,12 @@ $SaveDialogTitles = @('Save As', 'Lưu', 'Export', 'File Download', 'Tải xuố
 # Dashboard bấm "📂 Tự cập nhật file WMS" rồi chọn thư mục này (C:\Users\<tên>\TN5_WMS).
 $CopyDir  = Join-Path $env:USERPROFILE 'TN5_WMS'
 $KeepFiles = 30   # giữ lại bấy nhiêu file mới nhất trong TN5_WMS, file cũ hơn tự xoá
+
+# (Tuỳ chọn) Đẩy thẳng file lên Firebase — Dashboard đang mở ở BẤT KỲ máy nào (kể cả điện thoại) sẽ tự
+# nạp + lưu Cloud trong vòng 1 phút, không cần chọn thư mục. Dán 2 thông tin GIỐNG HỆT ô "Database URL"
+# và "Database secret" trong phần Cloud của Dashboard. Để '' = không đẩy.
+$FirebaseUrl    = ''   # vd: https://ten-du-an-default-rtdb.asia-southeast1.firebasedatabase.app/
+$FirebaseSecret = ''
 # -----------------------------------------------------------------------------
 
 Add-Type @"
@@ -159,12 +165,30 @@ function Copy-NewExport($since, $extraSec) {
         Log "  -> da chep $($f.Name) sang $CopyDir"
         Get-ChildItem -Path $CopyDir -File -Filter 'fnd_gfm*' | Sort-Object LastWriteTime -Descending |
           Select-Object -Skip $KeepFiles | Remove-Item -Force -ErrorAction SilentlyContinue
+        if ($FirebaseUrl -and $FirebaseSecret) { Send-ToFirebase $f }
         return
       } catch { }   # file còn đang ghi → thử lại
     }
     Start-Sleep -Seconds 3
   } while ((Get-Date) -lt $deadline)
   Log "  -> chua thay file fnd_gfm moi trong $dl"
+}
+# Nén gzip + base64 rồi ghi vào <FirebaseUrl>/wms_inbox. Dashboard (v6.22+) tự nhận, tính tồn và lưu Cloud.
+function Send-ToFirebase($f) {
+  try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $bytes = [IO.File]::ReadAllBytes($f.FullName)
+    $ms = New-Object IO.MemoryStream
+    $gz = New-Object IO.Compression.GZipStream($ms, [IO.Compression.CompressionMode]::Compress)
+    $gz.Write($bytes, 0, $bytes.Length); $gz.Close()
+    $b64 = [Convert]::ToBase64String($ms.ToArray())
+    $ts = [int64](($f.LastWriteTimeUtc - [datetime]'1970-01-01').TotalMilliseconds)
+    $name = $f.Name -replace '[\\"]', '_'
+    $body = '{"name":"' + $name + '","ts":' + $ts + ',"gz":"' + $b64 + '"}'
+    $url = $FirebaseUrl.TrimEnd('/') + '/wms_inbox.json?auth=' + [Uri]::EscapeDataString($FirebaseSecret)
+    [void](Invoke-RestMethod -Uri $url -Method Put -Body ([Text.Encoding]::UTF8.GetBytes($body)) -ContentType 'application/json' -TimeoutSec 120)
+    Log ("  -> da day len Firebase ({0:N0} KB) - Dashboard dang mo se tu cap nhat trong 1 phut" -f ($b64.Length / 1024))
+  } catch { Log ("  -> LOI day Firebase: " + $_.Exception.Message) }
 }
 function Set-DateFrom($h) {
   $now = Get-Date
