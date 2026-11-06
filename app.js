@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.12';
+const APP_VERSION = 'v6.13';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -5183,7 +5183,9 @@ let cptCtrlDown = false;
 // Nên toàn bộ popover hover chỉ bật trên thiết bị có chuột thật.
 const IS_TOUCH_DEVICE = (typeof window.matchMedia === 'function' && window.matchMedia('(hover: none), (pointer: coarse)').matches) || ('ontouchstart' in window);
 
-if(!IS_TOUCH_DEVICE){
+// v6.13: bỏ popover khi rê chuột (Drak) — thông tin cont giờ hiện trong popup khi BẤM (v5ContPopOpen)
+const CPT_HOVER_ENABLED = false;
+if(CPT_HOVER_ENABLED && !IS_TOUCH_DEVICE){
   document.addEventListener('mouseover', (e) => {
     if(cptPinned) return;
     const row = e.target.closest('.cont-pick-row');
@@ -18282,7 +18284,7 @@ function v5RenderTimeline(){
       const r = x.r, st = v5StKey(r), attrs = v5RowAttrs(r);
       const short = !v5IsDone(r) && r.shortItems && r.shortItems.length;
       const late = !v5IsDone(r) && x.ts < Date.now();
-      html += `<div class="v5-tl-blk v5-tl-${st}${short ? ' short' : ''}${late ? ' late' : ''}${attrs ? ' cont-pick-row' : ''}"${attrs} style="left:${left}px; top:${y + 4 + sl * ROW}px; width:${BW}px" title="${escAttr(r.type + ' · ' + r.cNo + ' · ' + r.invoice + ' · ' + r.planTime)}">
+      html += `<div class="v5-tl-blk v5-tl-${st}${short ? ' short' : ''}${late ? ' late' : ''}${attrs ? ' cont-pick-row' : ''}"${attrs} style="left:${left}px; top:${y + 4 + sl * ROW}px; width:${BW}px">
         <b>${escHtml(r.type)} ${escHtml(String(r.cNo))}</b><em>${escHtml(v5TlVnc(r))}</em><span>${escHtml(String(r.planTime).split(',')[0])} · ${pickPctLabel(r.pct)}${short ? ' · ⚠' : ''}</span>${r.isShipDone ? '<u class="v5-tl-ok" title="Load xong">✓</u>' : ''}<i style="width:${Math.min(100, r.pct || 0)}%"></i></div>`;
     });
     y += laneH;
@@ -19659,6 +19661,47 @@ function v5KtRenderStale(){
 })();
 
 // v6.11: bỏ bảng "Số liệu báo cáo ca" (v6.09–v6.10) theo yêu cầu.
+
+// v6.13: bấm vào cont (dòng Picking Status / thẻ Kanban / khối Dòng thời gian) → popup thông tin cont
+// (thay cho popover khi rê chuột). Nút "📍 Tới dòng Plan" trong popup giữ cách nhảy tới dòng/thẻ như cũ.
+let v5ContPopBypass = false;
+function v5ContPopClose(){ const ov = document.getElementById('v5-cont-pop'); if(ov) ov.remove(); }
+function v5ContPopOpen(row, data){
+  v5ContPopClose();
+  const r = data.row || data;
+  const st = r.isShipDone ? '<span class="v5cp-st ship">✓ Load xong</span>' : (r.status === 'done' || r.status === 'manualDone') ? '<span class="v5cp-st done">Pick xong</span>' : r.status === 'inProgress' ? '<span class="v5cp-st prog">Đang pick</span>' : '<span class="v5cp-st">Chưa pick</span>';
+  const short = !v5IsDone(r) && r.shortItems && r.shortItems.length;
+  const kv = (k, v) => v ? `<div><span>${k}</span><b>${escHtml(String(v))}</b></div>` : '';
+  const ov = document.createElement('div');
+  ov.id = 'v5-cont-pop'; ov.className = 'v5cp-ov';
+  ov.innerHTML = `<div class="v5cp" role="dialog">
+    <div class="v5cp-h"><div><b>${escHtml(r.type || '')} · ${escHtml(String(r.cNo || ''))}</b>${st}</div><button type="button" class="v5cp-x" title="Đóng">✕</button></div>
+    <div class="v5cp-kv">${kv('VNC', r.invoice)}${kv('CR', r.csr)}${kv('Ngày load', r.loadDate)}${kv('Giờ plan', r.planTime)}${kv('Kho', r.topKho ? r.topKho.replace('Kho ', '') : '')}${kv('Pick', pickPctLabel(r.pct))}</div>
+    ${short ? `<div class="v5cp-warn">⚠ Thiếu ${r.shortItems.length} mã</div>` : ''}${r.comment ? `<div class="v5cp-note">📝 ${escHtml(r.comment)}</div>` : ''}
+    <div class="v5cp-body">${buildContPickTooltipHtml(data.items || r.items)}</div>
+    <div class="v5cp-f"><button type="button" class="v5cp-go">📍 Tới dòng Plan</button></div></div>`;
+  document.body.appendChild(ov);
+  const jump = row.dataset.contJump;
+  ov.addEventListener('click', ev => {
+    if(ev.target === ov || ev.target.closest('.v5cp-x')){ v5ContPopClose(); return; }
+    if(ev.target.closest('.v5cp-go')){
+      v5ContPopClose();
+      const el = row.isConnected ? row : document.querySelector(`.cont-pick-row[data-cont-jump="${CSS.escape(jump || '')}"]`);
+      if(el){ v5ContPopBypass = true; try{ el.click(); } finally { v5ContPopBypass = false; } }
+    }
+  });
+}
+document.addEventListener('keydown', e => { if(e.key === 'Escape') v5ContPopClose(); });
+document.addEventListener('click', e => {
+  if(v5ContPopBypass) return;
+  const row = e.target.closest('.cont-pick-row');
+  if(!row || row.closest('#v5-cont-pop')) return;
+  if(e.target.closest('button, a, input, select, textarea, label, .item-link, [data-v5-route], .cpt-kho-manual-select, .cpt-comment-input')) return;
+  const data = (contPickRowsCache || [])[Number(row.dataset.rowIdx)];
+  if(!data) return;
+  e.stopPropagation(); e.preventDefault();
+  v5ContPopOpen(row, data);
+}, true);
 
 // v6.03: initTransactionPage() khôi phục dữ liệu Transaction lúc tải trang CHẠY TRƯỚC các bản ghi đè v5.90 (v5.90+)
 // → F5 vẫn hiện biểu đồ cột cũ. Vẽ lại 1 lần bằng bản mới nếu đã có dữ liệu.
