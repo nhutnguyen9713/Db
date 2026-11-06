@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.26';
+const APP_VERSION = 'v6.27';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18128,7 +18128,8 @@ function v5RenderSummary(){
     if(o === 'NG') st[1]++; else if(o === 'PASS') st[0]++;
   });
   const hist = v5HistUpdate(stats);
-  const days = Object.keys(hist).sort();
+  const days = Object.keys(hist).sort((a, b) => a - b);
+  const shLabel = k => { const d = new Date(+k), dayShift = d.getHours() === 7; return `${dayShift ? 'ca ngày' : 'ca đêm'} ${v5Pad(d.getDate())}/${v5Pad(d.getMonth() + 1)}`; };
   el.style.display = '';
   // Giữ nguyên thẻ cũ để số "chạy" từ giá trị trước sang giá trị mới
   const keyStr = order.join('|');
@@ -18152,9 +18153,9 @@ function v5RenderSummary(){
     const dEl = tile.querySelector('.v5-delta');
     if(series.length >= 2){
       const diff = series[series.length - 1] - series[series.length - 2];
-      dEl.textContent = diff === 0 ? '= hôm qua' : (diff > 0 ? '▲ ' : '▼ ') + fmt(Math.abs(diff));
+      dEl.textContent = diff === 0 ? '= ca trước' : (diff > 0 ? '▲ ' : '▼ ') + fmt(Math.abs(diff));
       dEl.className = 'v5-delta ' + (diff > 0 ? 'up' : diff < 0 ? 'down' : '');
-      dEl.title = 'So với ngày ' + days[days.length - 2];
+      dEl.title = 'So với cuối ' + shLabel(days[days.length - 2]) + ' · đường nhỏ = ' + series.length + ' ca gần nhất';
     } else { dEl.textContent = ''; }
     const svg = tile.querySelector('.v5-spark');
     if(series.length >= 2){
@@ -18462,14 +18463,13 @@ function v5ApplyBg(id, persist){
    v5.30 — Khu đầu trang kiểu trung tâm điều hành (đồng hồ, ca, vòng tiến độ, trạng thái cont, cont kế
    tiếp đếm ngược), số chạy + biểu đồ mini từng kho, ô tìm nhanh Ctrl+K, hiệu ứng chuyển trang.
    ============================================================ */
-var V5_HIST_KEY = 'tn5_v5_kho_hist_pallet'; // v6.13: đổi sang số pallet, không trộn lịch sử Pcs cũ
+var V5_HIST_KEY = 'tn5_v5_kho_hist_shift'; // v6.27: lịch sử theo CA (khoá = giờ bắt đầu ca, ms), trước đây theo ngày
 function v5HistUpdate(stats){
   let h = {};
   try{ h = JSON.parse(localStorage.getItem(V5_HIST_KEY) || '{}') || {}; }catch(e){ h = {}; }
-  const d = new Date(), key = d.getFullYear() + '-' + v5Pad(d.getMonth() + 1) + '-' + v5Pad(d.getDate());
-  h[key] = stats;
-  const keys = Object.keys(h).sort();
-  while(keys.length > 14) delete h[keys.shift()];
+  h[String(v5ShiftInfo().key)] = stats; // số cuối cùng của mỗi ca
+  const keys = Object.keys(h).sort((a, b) => a - b);
+  while(keys.length > 28) delete h[keys.shift()]; // giữ 14 ngày = 28 ca
   try{ localStorage.setItem(V5_HIST_KEY, JSON.stringify(h)); }catch(e){}
   return h;
 }
