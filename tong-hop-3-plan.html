@@ -473,7 +473,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v6.07';
+  var PH_VERSION = 'v6.08';
   var PH_VERSION_DATE = '06/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -667,7 +667,17 @@
     var pct = planQty > 0 ? (shipQty / planQty * 100) : 0;
     return pct >= 99.995;
   };
-  var phTopKho = function(items){
+  // v6.08: cont đã có hàng pick (tồn Loading mang CR của chính cont) -> kho = kho có nhiều hàng ĐÃ PICK nhất
+  // (VD đã pick xong ở 3B thì là 3B), chỉ khi chưa pick gì mới đoán theo kho có nhiều tồn nhất.
+  var phTopKho = function(items, crSet){
+    if(crSet){
+      var pickByKho = {}, anyPick = false;
+      items.forEach(function(it){ (it.locs || []).forEach(function(l){
+        if(!l.picked || !phLoadingCrCodes(l.ref).some(function(c){ return crSet[c]; })) return;
+        pickByKho[l.kho] = (pickByKho[l.kho] || 0) + (l.qty || 0); anyPick = true;
+      }); });
+      if(anyPick){ var bk = null, bq = 0; Object.keys(pickByKho).forEach(function(k){ if(pickByKho[k] > bq){ bk = k; bq = pickByKho[k]; } }); if(bk) return bk; }
+    }
     var qtyByKho = {};
     items.forEach(function(it){ (it.locs || []).forEach(function(l){ if(l.picked) return; qtyByKho[l.kho] = (qtyByKho[l.kho] || 0) + (l.qty || 0); }); });
     var topKho = null, topQty = 0;
@@ -784,7 +794,8 @@
 
       var manualKhoVal = manualKho && manualKho[instanceKey];
       var isManualKho = !!manualKhoVal;
-      var autoKho = phTopKho(items);
+      var crSet = {}; entry.csrs.forEach(function(csr){ phLoadingCrCodes(csr).forEach(function(c){ crSet[c] = 1; }); });
+      var autoKho = phTopKho(items, crSet);
       var topKho = isManualKho ? manualKhoVal : autoKho;
 
       var rowObj = {

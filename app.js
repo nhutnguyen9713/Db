@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.07';
+const APP_VERSION = 'v6.08';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4351,6 +4351,21 @@ function renderContainerPickingOverview(){
     items.forEach(it => it.locs.forEach(l => { qtyByKho[l.kho] = (qtyByKho[l.kho] || 0) + l.qty; }));
     let topKho = null, topKhoQty = 0;
     Object.entries(qtyByKho).forEach(([kho, qty]) => { if(qty > topKhoQty){ topKho = kho; topKhoQty = qty; } });
+    // v6.08 (Drak: cont đã pick xong ở 3B mà cột Kho lại ra 2B): cont đã có hàng PICK (tồn PASS mang CR của chính
+    // cont, thường ở locator Loading) -> kho = kho có nhiều hàng đã pick nhất. Chỉ khi chưa pick gì mới đoán theo tồn.
+    {
+      const pickByKho = {}, idx = getItemLocatorIndex();
+      entry.items.forEach(it => {
+        const crs = it.csrs; if(!crs || !crs.size) return;
+        (idx.get(String(it.item).toLowerCase()) || []).forEach(e => {
+          if(String(e.oqc || '').toUpperCase() !== 'PASS' || !e.ref || !crs.has(String(e.ref).trim().toLowerCase())) return;
+          pickByKho[e.kho] = (pickByKho[e.kho] || 0) + (Number(e.qty) || 0);
+        });
+      });
+      let pk = null, pq = 0;
+      Object.entries(pickByKho).forEach(([kho, qty]) => { if(qty > pq){ pk = kho; pq = qty; } });
+      if(pk){ topKho = pk; topKhoQty = qtyByKho[pk] || pq; }
+    }
 
     // Lựa chọn thủ công LUÔN được ưu tiên áp dụng (ghi đè Kho hệ thống tự xác định được) — không chỉ
     // dùng khi hệ thống không tự xác định được như trước, vì giờ cột Kho cho chọn tay ở MỌI dòng.
