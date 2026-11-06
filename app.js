@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.12';
+const APP_VERSION = 'v6.13';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18101,15 +18101,16 @@ function v5RenderSummary(){
     return;
   }
   const order = (currentData.kho_order && currentData.kho_order.length) ? currentData.kho_order : Object.keys(currentData.kho_detail);
+  // Đếm PALLET (v6.13, theo yêu cầu): mỗi dòng GI No. trong dữ liệu gốc (raw_rows) = 1 pallet, giống
+  // quy ước ở Sơ đồ kho. Vẫn bỏ tồn ở locator Loading đã có CR (đã pick).
   const stats = {};
-  order.forEach(k => {
-    let pass = 0, ng = 0;
-    (currentData.kho_detail[k] || []).forEach(r => {
-      if(isLoadingCommittedStock(r[2], r[5])) return;
-      const q = Number(r[4]) || 0, o = String(r[3] || '').trim().toUpperCase();
-      if(o === 'NG') ng += q; else if(o === 'PASS') pass += q;
-    });
-    stats[k] = [pass, ng];
+  order.forEach(k => { stats[k] = [0, 0]; });
+  getRawRows(currentData).forEach(r => {
+    const st = stats[r[RAW_KEY_IDX.kho]];
+    if(!st || !(Number(r[RAW_KEY_IDX.qty]) > 0)) return;
+    if(isLoadingCommittedStock(r[RAW_KEY_IDX.locator], r[RAW_KEY_IDX.ref])) return;
+    const o = String(r[RAW_KEY_IDX.oqc] || '').trim().toUpperCase();
+    if(o === 'NG') st[1]++; else if(o === 'PASS') st[0]++;
   });
   const hist = v5HistUpdate(stats);
   const days = Object.keys(hist).sort();
@@ -18121,7 +18122,7 @@ function v5RenderSummary(){
     el.innerHTML = order.map(k => `<div class="v5-tile" data-kho="${escAttr(k)}" style="--tile-accent:${V5_KHO_COLOR[k] || 'var(--line)'}">
       <div class="t">${escHtml(k)}<span class="v5-delta"></span></div>
       <div class="v" data-v5num="0">0</div>
-      <div class="s"><span>PASS</span> · <span class="v5-ngv">NG 0</span></div>
+      <div class="s"><span>Pallet PASS</span> · <span class="v5-ngv">NG 0</span></div>
       <svg class="v5-spark" viewBox="0 0 100 28" preserveAspectRatio="none"></svg>
     </div>`).join('');
   }
@@ -18446,7 +18447,7 @@ function v5ApplyBg(id, persist){
    v5.30 — Khu đầu trang kiểu trung tâm điều hành (đồng hồ, ca, vòng tiến độ, trạng thái cont, cont kế
    tiếp đếm ngược), số chạy + biểu đồ mini từng kho, ô tìm nhanh Ctrl+K, hiệu ứng chuyển trang.
    ============================================================ */
-var V5_HIST_KEY = 'tn5_v5_kho_hist';
+var V5_HIST_KEY = 'tn5_v5_kho_hist_pallet'; // v6.13: đổi sang số pallet, không trộn lịch sử Pcs cũ
 function v5HistUpdate(stats){
   let h = {};
   try{ h = JSON.parse(localStorage.getItem(V5_HIST_KEY) || '{}') || {}; }catch(e){ h = {}; }
