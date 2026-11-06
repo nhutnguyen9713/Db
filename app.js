@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.28';
+const APP_VERSION = 'v6.29';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4326,7 +4326,7 @@ function renderContainerPickingOverview(){
         : [];
       // v4.27: tồn PASS CÒN LẤY ĐƯỢC = bỏ phần đã gom ra locator Loading có CR (đã pick cho cont nào đó).
       const passFree = locs.reduce((s, l) => s + ((l.oqc === 'PASS' && !(LOADING_LOCATOR_RE.test(String(l.locator || '').trim()) && /CR\d+/i.test(String(l.ref || '')))) ? l.qty : 0), 0);
-      return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, picked: it.picked, locs, totalOnHand, passOnHand, passFree, pickExtra };
+      return { item: it.item, po: it.po, qty: it.qty, cbm: it.cbm, picked: it.picked, csrs: it.csrs, locs, totalOnHand, passOnHand, passFree, pickExtra };
     });
 
     // Mã hàng nào "Thiếu" TÍNH RIÊNG cho container này (không gộp với container khác dùng chung mã):
@@ -4467,6 +4467,20 @@ function contKpiPickerMap(){
 // Trạng thái Load của 1 container — cùng cách tính với cột Loading của bảng Picking Status
 // (SL Ship khớp CR / SL Plan).
 // v6.24: { shipKey, shipPct } của 1 cont theo file Ship (cùng cách tính cột Loading), kể cả khi cont đã tick tay.
+// v6.29: SL đã Load (Ship) của TỪNG MÃ trong cont = tổng SL Ship của mã đó ở các CR của cont (byRefItem).
+function contItemLoadedQty(it){
+  if(!contShipData || !contShipData.byRefItem || !it || !it.csrs) return 0;
+  let q = 0;
+  it.csrs.forEach(csr => { const m = contShipData.byRefItem.get(String(csr || '').trim().toUpperCase().replace(/[;,.\s]+$/, '')); if(m) q += Number(m.get(it.item) || m.get(String(it.item).trim()) || 0); });
+  return q;
+}
+function contItemLoadedHtml(it){
+  const q = contItemLoadedQty(it);
+  if(!(q > 0)) return '';
+  return q >= (it.qty || 0) - 0.0001
+    ? ` <span style="font-size:11px; font-weight:700; color:var(--violet);">· ✓ Load xong ${fmt(q)}/${fmt(it.qty)}</span>`
+    : ` <span style="font-size:11px; font-weight:700; color:var(--blue);">· đã load ${fmt(q)}/${fmt(it.qty)}</span>`;
+}
 function contShipKeyPct(csrsSet, planQty){
   if(!contShipData || !contShipData.byRef || !contShipData.byRef.size || !csrsSet || !csrsSet.size) return { shipKey: 'none', shipPct: 0 };
   let shipQty = 0;
@@ -5069,7 +5083,7 @@ function buildContPickTooltipHtml(items){
     return `<div class="cpt-item">
       <div class="cpt-item-head"><b>${escHtml(it.item)}</b>${it.po ? ` <span class="cpt-po">(PO ${escHtml(it.po)})</span>` : ''} <span class="cpt-kh">— KH ${fmt(it.qty)} Pcs</span>${(it.qty > 0 && (it.picked || 0) >= it.qty - 0.0001)
         ? ` <span class="cpt-done-badge">✓ Pick xong ${fmt(it.picked)}/${fmt(it.qty)}</span>`
-        : (it.picked ? ` <span style="font-size:11px; color:var(--amber-bright);">· đã pick ${fmt(it.picked)}/${fmt(it.qty)}</span>` : '')}</div>
+        : (it.picked ? ` <span style="font-size:11px; color:var(--amber-bright);">· đã pick ${fmt(it.picked)}/${fmt(it.qty)}</span>` : '')}${contItemLoadedHtml(it)}</div>
       ${locsHtml}
       ${extraHtml}
       ${khoBlockHtml}
