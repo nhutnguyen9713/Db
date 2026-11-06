@@ -361,6 +361,24 @@
   .ph-card-tools{flex-wrap:wrap;}
   .ph-card-tools .ph-ct-info{flex:1 1 auto;}
   .ph-card-tools .ph-icon-btn{width:34px; height:34px; font-size:15px;}
+
+  /* v5.81: Ưu tiên pick 3A lầu + Rack */
+  .ph-fchip[data-f="hard"].on{background:#6E4FE0; border-color:#6E4FE0;}
+  .ph-hard{background:#fff; border:1px solid #d9d2f5; border-radius:14px; padding:12px; margin:10px 0 12px; box-shadow:0 6px 18px rgba(110,79,224,.10);}
+  .ph-hard-h{display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px; margin-bottom:8px;}
+  .ph-hard-h b{font-size:15px; color:#12161F;} .ph-hard-h span{font-size:12px; color:#6b7485;}
+  .ph-hard-empty{font-size:13px; color:#6b7485; padding:6px 0;}
+  .ph-hard-list{display:flex; flex-direction:column; gap:4px; max-height:46vh; overflow:auto;}
+  .ph-hard-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:7px 9px; border:1px solid #e3e7ee; border-radius:10px; cursor:pointer; font-size:13px; opacity:.6;}
+  .ph-hard-row.on{opacity:1; border-color:#b9a8f0; background:#f6f3ff;}
+  .ph-hard-row input{width:18px; height:18px; accent-color:#6E4FE0; margin:0;}
+  .ph-hard-vnc{font-weight:800; color:#12161F;} .ph-hard-time{font-family:ui-monospace,monospace; color:#374151;}
+  .ph-hard-q{margin-left:auto; color:#55637C; font-size:12.5px;} .ph-hard-q b{color:#B76E00;}
+  .ph-hard-act{display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px;}
+  .ph-hard-act button{border:1px solid #d7dae0; background:#fff; border-radius:9px; padding:7px 11px; font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; color:#374151;}
+  .ph-hard-act .ph-hard-go{background:#6E4FE0; border-color:#6E4FE0; color:#fff;}
+  .ph-hard-act .ph-hard-go:disabled{opacity:.45; cursor:default;}
+  .ph-hard-n{font-size:12.5px; color:#55637C; margin-right:auto; margin-left:4px;}
 </style>
 </head>
 <body>
@@ -420,9 +438,12 @@
           <span class="ph-fsep"></span>
           <button type="button" class="ph-fchip" data-f="short">⚠ Chỉ cont Thiếu</button>
           <button type="button" class="ph-fchip" data-f="picking">⏳ Đang pick</button>
+          <span class="ph-fsep"></span>
+          <button type="button" class="ph-fchip" data-f="hard" title="Chỉ cont có hàng cần pick nằm ở 3A lầu / 3A Rack (pick lâu) — chọn cont rồi xuất ảnh ưu tiên">🏗 3A lầu + Rack</button>
         </div>
         <div class="ph-count" id="ph-count"></div>
       </div>
+      <div id="ph-hard-panel" class="ph-hard" style="display:none;"></div>
       <div id="ph-cont-list"></div>
     </div>
 
@@ -452,7 +473,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v5.80';
+  var PH_VERSION = 'v5.81';
   var PH_VERSION_DATE = '06/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -869,8 +890,9 @@
     var stCls = row.done ? 'ph-st-done' : (row.short ? 'ph-st-short' : 'ph-st-ok');
     var stBadge = row.done ? '<span class="ph-st ph-st-badge-done">' + (row.isShipDone ? '🚚 Load xong' : '✓ Pick xong') + '</span>'
       : '<span class="ph-st ' + (row.short ? 'ph-st-badge-short' : 'ph-st-badge-ok') + '">' + (row.short ? 'Thiếu' : 'Đủ') + '</span>';
+    row.hard = phHardInfo(row);
     var hay = [row.type, row.invoice, row.csr, row.loadDate, row.planTime, kho].concat(row.items.map(function(it){ return it.item + ' ' + it.po + ' ' + (it.ebPo || ''); })).join(' ').toLowerCase();
-    return '<div class="ph-card ' + stCls + '" data-ckey="' + phEsc(ckey) + '" data-type="' + phEsc(row.type) + '" data-day="' + phEsc(row.loadDate) + '" data-short="' + (row.short ? 1 : 0) + '" data-picking="' + (picking ? 1 : 0) + '" data-hay="' + phEsc(hay) + '">' +
+    return '<div class="ph-card ' + stCls + '" data-ckey="' + phEsc(ckey) + '" data-type="' + phEsc(row.type) + '" data-day="' + phEsc(row.loadDate) + '" data-short="' + (row.short ? 1 : 0) + '" data-picking="' + (picking ? 1 : 0) + '" data-hard="' + (row.hard.qty > 0 && !row.done ? 1 : 0) + '" data-hay="' + phEsc(hay) + '">' +
       '<div class="ph-card-head" data-target="' + detailId + '">' +
         '<div class="ph-l1"><span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span>' +
           '<span class="ph-vnc">' + phEsc(row.invoice) + '</span><span class="ph-time">' + phEsc(row.planTime || '—') + '</span>' +
@@ -911,6 +933,118 @@
   };
   var phDoneRows = [], phRowsByKey = {};
 
+  // ===== v5.81: Ưu tiên pick 3A lầu + 3A Rack (pick lâu) — lọc cont có hàng cần pick ở 2 khu này, chọn cont
+  // rồi xuất 1 ảnh chung (cont · mã · locator lầu/rack · SL) để gửi tổ pick làm trước. =====
+  var PH_HARD_LABELS = ['3A lầu', '3A Rack'];
+  var phHardSel = {};
+  var phHardInfo = function(row){
+    var lines = [], qty = 0;
+    (row.items || []).forEach(function(it){
+      if(!(it.need > 0)) return;
+      var locs = [], other = 0;
+      (it.locs || []).forEach(function(l){
+        if(l.picked || String(l.oqc || '').toUpperCase() !== 'PASS') return;
+        var lb = phEntryKhoLabel(l);
+        if(PH_HARD_LABELS.indexOf(lb) !== -1) locs.push({ label: lb, locator: l.locator, qty: l.qty || 0 });
+        else if(!/loading\s*$/i.test(String(l.locator || ''))) other += (l.qty || 0);
+      });
+      if(!locs.length) return;
+      locs.sort(function(a, b){ return a.label === b.label ? String(a.locator).localeCompare(String(b.locator), 'en', { numeric: true }) : (a.label === '3A lầu' ? -1 : 1); });
+      var q = locs.reduce(function(s, l){ return s + l.qty; }, 0);
+      qty += q;
+      lines.push({ item: it.item, po: it.po, need: it.need, locs: locs, hardQty: q, other: other });
+    });
+    return { lines: lines, qty: qty };
+  };
+  var phHardRows = function(){
+    var out = [];
+    document.querySelectorAll('#ph-cont-list .ph-day .ph-card').forEach(function(card){
+      if(card.style.display === 'none' || card.dataset.hard !== '1') return;
+      var row = phRowsByKey[card.dataset.ckey]; if(row) out.push({ key: card.dataset.ckey, row: row });
+    });
+    return out;
+  };
+  var phRenderHardPanel = function(){
+    var el = document.getElementById('ph-hard-panel');
+    if(!el) return;
+    if(!phFilters.hard){ el.style.display = 'none'; el.innerHTML = ''; return; }
+    var list = phHardRows();
+    el.style.display = '';
+    if(!list.length){ el.innerHTML = '<div class="ph-hard-h"><b>🏗 Ưu tiên pick 3A lầu + Rack</b></div><div class="ph-hard-empty">Không có cont nào (theo bộ lọc hiện tại) cần pick hàng ở 3A lầu / 3A Rack.</div>'; return; }
+    var nSel = list.filter(function(x){ return phHardSel[x.key] !== false; }).length;
+    el.innerHTML = '<div class="ph-hard-h"><b>🏗 Ưu tiên pick 3A lầu + Rack</b><span>Chọn cont cần làm trước rồi xuất ảnh gửi tổ pick</span></div>' +
+      '<div class="ph-hard-list">' + list.map(function(x){
+        var r = x.row, on = phHardSel[x.key] !== false, nLoc = x.row.hard.lines.reduce(function(s, l){ return s + l.locs.length; }, 0);
+        return '<label class="ph-hard-row' + (on ? ' on' : '') + '"><input type="checkbox" data-hard-key="' + phEsc(x.key) + '"' + (on ? ' checked' : '') + '>' +
+          '<span class="ph-badge" style="background:' + (PH_TYPE_COLORS[r.type] || '#8892A0') + ';">' + phEsc(r.type) + '</span>' +
+          '<span class="ph-hard-vnc">' + phEsc(r.invoice) + '</span><span class="ph-hard-time">' + phEsc(String(r.loadDate).slice(0, 5)) + ' ' + phEsc(r.planTime || '—') + '</span>' +
+          '<span class="ph-hard-q">' + r.hard.lines.length + ' mã · ' + nLoc + ' vị trí · <b>' + phFmt(r.hard.qty) + '</b> pcs</span></label>';
+      }).join('') + '</div>' +
+      '<div class="ph-hard-act"><button type="button" data-hard-all="1">Chọn hết</button><button type="button" data-hard-all="0">Bỏ hết</button>' +
+      '<span class="ph-hard-n">Đã chọn <b>' + nSel + '</b>/' + list.length + ' cont</span>' +
+      '<button type="button" class="ph-hard-go" data-hard-shot="0"' + (nSel ? '' : ' disabled') + '>📷 Lưu ảnh</button><button type="button" class="ph-hard-go" data-hard-shot="1"' + (nSel ? '' : ' disabled') + '>📤 Chia sẻ</button></div>';
+  };
+  var phSaveHardImage = function(share){
+    var list = phHardRows().filter(function(x){ return phHardSel[x.key] !== false; });
+    if(!list.length) return;
+    var W = 980, S = 2, PAD = 24, RH = 26, CH = 44, IH = 24;
+    var H = 96;
+    list.forEach(function(x){ H += CH + 8; x.row.hard.lines.forEach(function(l){ H += IH + l.locs.length * RH; }); H += 14; });
+    H += 30;
+    var cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
+    var g = cv.getContext('2d'); g.scale(S, S); g.textBaseline = 'middle';
+    var F = function(w, px){ return w + ' ' + px + 'px system-ui, "Segoe UI", Arial, sans-serif'; };
+    var T = function(t, x, y, f, c, a){ g.font = f; g.fillStyle = c; g.textAlign = a || 'left'; g.fillText(String(t), x, y); };
+    g.fillStyle = '#F4F6FB'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#1F2A44'; g.fillRect(0, 0, W, 72);
+    var now = new Date(), p = function(n){ return String(n).padStart(2, '0'); };
+    var totalQ = list.reduce(function(s, x){ return s + x.row.hard.qty; }, 0);
+    T('ƯU TIÊN PICK · 3A LẦU + 3A RACK', PAD, 28, F(800, 20), '#FFFFFF');
+    T(list.length + ' cont · ' + phFmt(totalQ) + ' pcs tồn ở lầu/rack · xuất lúc ' + p(now.getHours()) + ':' + p(now.getMinutes()) + ' ' + p(now.getDate()) + '/' + p(now.getMonth() + 1), PAD, 52, F(500, 13), '#C9D3E6');
+    var cols = [0, 150, 290, 420, 520, 860]; // mã, PO, cần pick, khu, locator, SL (phải)
+    var y = 88;
+    list.forEach(function(x, ci){
+      var r = x.row;
+      g.fillStyle = '#FFFFFF'; g.fillRect(PAD, y, W - PAD * 2, CH);
+      g.fillStyle = PH_TYPE_COLORS[r.type] || '#8892A0'; g.fillRect(PAD, y, 6, CH);
+      T((ci + 1) + '. ' + r.type + ' · ' + r.invoice, PAD + 16, y + 16, F(800, 15), '#12161F');
+      T('Load ' + r.loadDate + ' ' + (r.planTime || '—') + '  ·  CSR ' + r.csr, PAD + 16, y + 34, F(500, 12), '#55637C');
+      T('Tồn lầu/rack ' + phFmt(r.hard.qty), W - PAD - 12, y + 22, F(800, 14), '#B76E00', 'right');
+      y += CH;
+      g.fillStyle = '#EEF1F6'; g.fillRect(PAD, y, W - PAD * 2, 8); y += 8;
+      r.hard.lines.forEach(function(l){
+        g.fillStyle = '#F8FAFD'; g.fillRect(PAD, y, W - PAD * 2, IH);
+        T(l.item, PAD + 12 + cols[0], y + IH / 2, F(800, 13), '#12161F');
+        T('PO ' + (l.po || '—'), PAD + 12 + cols[1], y + IH / 2, F(500, 12.5), '#374151');
+        T('Cần pick ' + phFmt(l.need), PAD + 12 + cols[2], y + IH / 2, F(700, 12.5), '#B42318');
+        if(l.other > 0) T('(khu khác còn ' + phFmt(l.other) + ')', PAD + 12 + cols[4], y + IH / 2, F(500, 12), '#8a97ac');
+        y += IH;
+        l.locs.forEach(function(lc, li){
+          g.fillStyle = li % 2 ? '#FAFBFC' : '#FFFFFF'; g.fillRect(PAD, y, W - PAD * 2, RH);
+          g.fillStyle = lc.label === '3A lầu' ? '#ede3f5' : '#dceef5'; g.fillRect(PAD + 12 + cols[3], y + 4, 74, RH - 8);
+          T(lc.label, PAD + 12 + cols[3] + 37, y + RH / 2, F(700, 12), '#374151', 'center');
+          T(lc.locator, PAD + 12 + cols[4], y + RH / 2, F(700, 13), '#12161F');
+          T(phFmt(lc.qty), W - PAD - 14, y + RH / 2, F(700, 13), '#12161F', 'right');
+          y += RH;
+        });
+      });
+      y += 14;
+    });
+    T('Tổng hợp 3 Plan · ' + PH_VERSION, PAD, H - 16, F(500, 11), '#9AA3B2');
+    phDeliverCanvas(cv, 'UuTien_3A_Lau_Rack_' + p(now.getDate()) + p(now.getMonth() + 1) + '_' + p(now.getHours()) + p(now.getMinutes()), share);
+  };
+  document.addEventListener('change', function(e){
+    var cb = e.target.closest('[data-hard-key]');
+    if(!cb) return;
+    phHardSel[cb.dataset.hardKey] = cb.checked; phRenderHardPanel();
+  });
+  document.addEventListener('click', function(e){
+    var a = e.target.closest('[data-hard-all]');
+    if(a){ var v = a.dataset.hardAll === '1'; phHardRows().forEach(function(x){ phHardSel[x.key] = v; }); phRenderHardPanel(); return; }
+    var s = e.target.closest('[data-hard-shot]');
+    if(s){ phSaveHardImage(s.dataset.hardShot === '1'); }
+  });
+
   // ===== Bộ lọc nhanh + tìm kiếm (nhớ lựa chọn trên máy) =====
   var PH_FILTER_KEY = 'tp3_cont_filters_v1';
   var phFilters = { day: '', types: [], short: false, picking: false };
@@ -928,6 +1062,7 @@
           (!phFilters.types.length || phFilters.types.indexOf(card.dataset.type) !== -1) &&
           (!phFilters.short || card.dataset.short === '1') &&
           (!phFilters.picking || card.dataset.picking === '1') &&
+          (!phFilters.hard || card.dataset.hard === '1') &&
           terms.every(function(t){ return card.dataset.hay.indexOf(t) !== -1; });
         card.style.display = ok ? '' : 'none';
         if(ok){ any++; shown++; if(card.dataset.short === '1') shortShown++; }
@@ -942,6 +1077,7 @@
       card.style.display = ok ? '' : 'none';
       if(ok) doneShown++;
     });
+    if(phFilters.hard){ document.querySelectorAll('#ph-done-sec .ph-card').forEach(function(card){ card.style.display = 'none'; }); doneShown = 0; }
     var dn = document.getElementById('ph-done-n'); if(dn) dn.textContent = doneShown;
     var ds = document.getElementById('ph-done-sec'); if(ds) ds.style.display = doneShown ? '' : 'none';
     var emptyEl = document.getElementById('ph-filter-empty');
@@ -955,6 +1091,7 @@
       else on = !!phFilters[f];
       b.classList.toggle('on', on);
     });
+    phRenderHardPanel();
   };
   var phSyncStickyH = function(){
     var st = document.getElementById('ph-sticky');

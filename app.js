@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.80';
+const APP_VERSION = 'v5.81';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18713,7 +18713,10 @@ function v5RenderShiftStats(){
       ${card('late', 'Cont rớt', `giờ plan trước ${hm(sh.start)}, chưa load xong`, late, 'var(--red)')}
       ${card('cur', 'Cont trong ca', `${hm(sh.start)} – ${hm(sh.end)}`, inShift, 'var(--blue)')}
       ${card('next', 'Cont ca sau', `từ ${hm(sh.end)} trở đi`, next, 'var(--violet)')}
-    </div>`;
+    </div>
+    <div class="v5-sh-note"><label for="v5-sh-note-in">📝 Ghi chú giao ca</label>
+      <textarea id="v5-sh-note-in" rows="2" maxlength="600" placeholder="VD: cont VNC… còn thiếu 2 pallet ở 3A Rack, ca sau pick tiếp; xe nâng số 2 hỏng…">${escHtml(v5ShiftNoteGet(sh.key))}</textarea>
+      <span class="v5-sh-note-s">Tự đưa vào ảnh "Báo cáo ca" · lưu theo từng ca, bấm 💾 Lưu để đồng bộ Cloud</span></div>`;
 }
 
 
@@ -18775,7 +18778,14 @@ function v5ShiftReportCanvas(){
   const hm = t => { const d = new Date(t); return `${p2(d.getHours())}:${p2(d.getMinutes())} ${p2(d.getDate())}/${p2(d.getMonth() + 1)}`; };
   const W = 1180, S = 2, PAD = 36;
   const listRows = [].concat(late.map(r => ['late', r]), inShift.map(r => ['cur', r]));
-  const H = 330 + 52 + listRows.length * 34 + (listRows.length ? 0 : 40) + 90;
+  const noteText = v5ShiftNoteGet(sh.key).trim();
+  const noteLines = [];
+  if(noteText){
+    const mc = document.createElement('canvas').getContext('2d'); mc.font = '600 14px Inter, "Segoe UI", Arial, sans-serif';
+    noteText.split(/\n/).forEach(par => { let line = ''; par.split(/\s+/).forEach(w => { const t = line ? line + ' ' + w : w; if(mc.measureText(t).width > 1180 - 36 * 2 - 40 && line){ noteLines.push(line); line = w; } else line = t; }); noteLines.push(line); });
+  }
+  const noteH = noteLines.length ? 56 + noteLines.length * 22 : 0;
+  const H = 330 + 52 + listRows.length * 34 + (listRows.length ? 0 : 40) + 90 + noteH;
   const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
   const c = cv.getContext('2d'); c.scale(S, S);
   const F = (w, px) => `${w} ${px}px Inter, "Segoe UI", Arial, sans-serif`;
@@ -18834,6 +18844,13 @@ function v5ShiftReportCanvas(){
     txt(fit(note, W - PAD * 2 - 920, F(600, 12.5)), PAD + 912, yy, F(600, 12.5), '#E5484D');
     y += 34;
   });
+  if(noteLines.length){
+    y += 20;
+    rr(PAD, y, W - PAD * 2, noteH - 16, 12, '#FFF8E6', '#F2D48A');
+    txt('📝 Ghi chú giao ca', PAD + 20, y + 26, F(800, 15), '#8A5A00');
+    noteLines.forEach((ln, i) => txt(ln, PAD + 20, y + 52 + i * 22, F(600, 14), '#3D2E00'));
+    y += noteH - 16;
+  }
   txt('Dashboard TN5 · ' + (typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''), PAD, H - 30, F(500, 12), '#9AA3B2');
   return { cv, name: `Bao-cao-ca_${sh.day ? 'ngay' : 'dem'}_${p2(new Date(sh.start).getDate())}-${p2(new Date(sh.start).getMonth() + 1)}.png` };
 }
@@ -19022,3 +19039,33 @@ function v5ZeroScan(){
   });
 }
 if(typeof MutationObserver === 'function') new MutationObserver(() => { clearTimeout(v5ZeroT); v5ZeroT = setTimeout(v5ZeroScan, 80); }).observe(document.body, { childList: true, subtree: true });
+
+
+// ===== v5.81: Ghi chú giao ca — lưu theo khoá ca (LS -> Cloud khi bấm Lưu), hiện trong ảnh Báo cáo ca =====
+const V5_SHIFT_NOTE_KEY = 'tn5_v5_shift_notes_v1';
+try{ STORAGE_KEY_LABELS[V5_SHIFT_NOTE_KEY] = 'Ghi chú giao ca'; }catch(e){}
+function v5ShiftNotesAll(){ try{ return JSON.parse(LS.getItem(V5_SHIFT_NOTE_KEY) || '{}') || {}; }catch(e){ return {}; } }
+function v5ShiftNoteGet(key){ const m = v5ShiftNotesAll(); return String(m[key] || ''); }
+function v5ShiftNoteSet(key, text){
+  const m = v5ShiftNotesAll();
+  text = String(text || '').slice(0, 600);
+  if(text.trim()) m[key] = text; else delete m[key];
+  // giữ 60 ca gần nhất
+  const ks = Object.keys(m).sort(); while(ks.length > 60) delete m[ks.shift()];
+  LS.setItem(V5_SHIFT_NOTE_KEY, JSON.stringify(m));
+}
+var v5ShiftNoteT = 0;
+document.addEventListener('input', e => {
+  if(!e.target || e.target.id !== 'v5-sh-note-in') return;
+  const key = v5ShiftInfo().key, val = e.target.value;
+  clearTimeout(v5ShiftNoteT); v5ShiftNoteT = setTimeout(() => v5ShiftNoteSet(key, val), 400);
+});
+// đang gõ ghi chú thì không vẽ lại khối thống kê ca (tránh mất chữ / mất con trỏ)
+if(typeof v5RenderShiftStats === 'function'){
+  const _v5RSS = v5RenderShiftStats;
+  v5RenderShiftStats = function(){
+    const a = document.activeElement;
+    if(a && a.id === 'v5-sh-note-in'){ clearTimeout(v5ShiftNoteT); v5ShiftNoteSet(v5ShiftInfo().key, a.value); return; }
+    return _v5RSS.apply(this, arguments);
+  };
+}
