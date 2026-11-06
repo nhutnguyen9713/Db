@@ -348,6 +348,19 @@
   .ph-single-po .ph-locs tr.ph-loc-click > td:nth-child(2)::before{content:'▸'; display:inline-block; width:12px; color:#8a97ac; font-size:10px; transition:transform .15s;}
   .ph-single-po .ph-locs tr.ph-loc-click.ph-loc-open > td:nth-child(2)::before{transform:rotate(90deg);}
   .ph-card.ph-flash{box-shadow:0 0 0 3px #2c6fcb;}
+
+  /* ===== v4.35: mục Đã pick xong + ảnh cả thẻ cont ===== */
+  .ph-card.ph-st-done{border-left-color:#7b5cd6; background:#fbfaff;}
+  .ph-st-badge-done{color:#4b2fa8; background:#ece6fb;}
+  .ph-done-sec{margin-top:18px;}
+  .ph-done-hdr{display:flex; align-items:center; width:100%; padding:10px 12px; border-radius:8px; border:1px solid #d9d0f5; background:#efeafc; color:#3d2a8a; font:inherit; font-size:13.5px; font-weight:600; cursor:pointer; margin-bottom:8px;}
+  .ph-done-hdr > span:first-child{flex:1 1 auto; text-align:left;}
+  .ph-done-arrow{transition:transform .15s;}
+  .ph-done-sec:not(.ph-collapsed) .ph-done-arrow{transform:rotate(90deg);}
+  .ph-done-sec.ph-collapsed .ph-done-body{display:none;}
+  .ph-card-tools{flex-wrap:wrap;}
+  .ph-card-tools .ph-ct-info{flex:1 1 auto;}
+  .ph-card-tools .ph-icon-btn{width:34px; height:34px; font-size:15px;}
 </style>
 </head>
 <body>
@@ -439,7 +452,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v4.34';
+  var PH_VERSION = 'v4.35';
   var PH_VERSION_DATE = '05/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -724,7 +737,8 @@
       });
     });
 
-    var rows = [];
+    var rows = [], doneRows = [];
+    var phTodayStart = (function(){ var d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
     phCrStatus = {};
     Object.keys(contMap).forEach(function(key){
       var entry = contMap[key];
@@ -738,7 +752,6 @@
       var status = (isManualUser || isShipDone) ? 'manualDone' : autoStatus;
       // Ghi trạng thái pick theo từng CR — để dòng tồn Loading của CR đó hiện đúng nhãn "Đang pick"/"Đã pick".
       entry.csrs.forEach(function(csr){ phLoadingCrCodes(csr).forEach(function(cr){ phCrStatus[cr] = status; }); });
-      if(status === 'done' || status === 'manualDone') return; // Pick xong -> loại khỏi danh sách
 
       var items = Object.keys(entry.items).map(function(k){
         var it = entry.items[k];
@@ -750,13 +763,24 @@
       var autoKho = phTopKho(items);
       var topKho = isManualKho ? manualKhoVal : autoKho;
 
-      rows.push({
+      var rowObj = {
         type: entry.type, cNo: entry.cNo, status: status,
         loadDate: entry.loadDate, planTime: entry.planTime,
         invoice: entry.invoices.join(', ') || '—', csr: entry.csrs.join(', ') || '—',
         planQty: entry.planQty, picked: entry.contribution, items: items, topKho: topKho, autoKho: autoKho, isManualKho: isManualKho
-      });
+      };
+      // v4.35: cont Pick xong / Load xong không còn bị bỏ hẳn — gom riêng vào mục "Đã pick xong" (chỉ cont có
+      // Ngày load từ hôm nay trở đi), không tính vào Đủ/Thiếu của các cont đang chờ.
+      if(status === 'done' || status === 'manualDone'){
+        rowObj.done = true; rowObj.isShipDone = isShipDone;
+        if(phDateTimeSortKey(entry.loadDate, '23:59') >= phTodayStart) doneRows.push(rowObj);
+        return;
+      }
+      rows.push(rowObj);
     });
+    doneRows.sort(function(a, b){ return phDateTimeSortKey(a.loadDate, a.planTime) - phDateTimeSortKey(b.loadDate, b.planTime); });
+    doneRows.forEach(function(row){ row.short = false; row.items.forEach(function(it){ it.need = Math.max(0, (it.qty || 0) - (it.picked || 0)); it.short = 0; }); });
+    phDoneRows = doneRows;
     rows.sort(function(a, b){ return phDateTimeSortKey(a.loadDate, a.planTime) - phDateTimeSortKey(b.loadDate, b.planTime); });
     // Đủ/Thiếu theo từng mã (item + PO) — tính CHUNG mọi container còn đang chờ (giống cột Chênh lệch
     // của Excel): tồn PASS chưa pick phải >= tổng phần còn cần pick của mã đó ở tất cả container.
@@ -837,18 +861,25 @@
     var kho = row.topKho ? row.topKho.replace('Kho ', '') : '';
     var pct = row.planQty > 0 ? Math.min(100, (row.picked || 0) / row.planQty * 100) : 0;
     var picking = row.status === 'inProgress';
+    var ckey = row.type + '|' + row.cNo + '|' + row.loadDate + '|' + row.planTime;
+    phRowsByKey[ckey] = row;
+    var stCls = row.done ? 'ph-st-done' : (row.short ? 'ph-st-short' : 'ph-st-ok');
+    var stBadge = row.done ? '<span class="ph-st ph-st-badge-done">' + (row.isShipDone ? '🚚 Load xong' : '✓ Pick xong') + '</span>'
+      : '<span class="ph-st ' + (row.short ? 'ph-st-badge-short' : 'ph-st-badge-ok') + '">' + (row.short ? 'Thiếu' : 'Đủ') + '</span>';
     var hay = [row.type, row.invoice, row.csr, row.loadDate, row.planTime, kho].concat(row.items.map(function(it){ return it.item + ' ' + it.po + ' ' + (it.ebPo || ''); })).join(' ').toLowerCase();
-    return '<div class="ph-card ' + (row.short ? 'ph-st-short' : 'ph-st-ok') + '" data-ckey="' + phEsc(row.type + '|' + row.cNo + '|' + row.loadDate + '|' + row.planTime) + '" data-type="' + phEsc(row.type) + '" data-day="' + phEsc(row.loadDate) + '" data-short="' + (row.short ? 1 : 0) + '" data-picking="' + (picking ? 1 : 0) + '" data-hay="' + phEsc(hay) + '">' +
+    return '<div class="ph-card ' + stCls + '" data-ckey="' + phEsc(ckey) + '" data-type="' + phEsc(row.type) + '" data-day="' + phEsc(row.loadDate) + '" data-short="' + (row.short ? 1 : 0) + '" data-picking="' + (picking ? 1 : 0) + '" data-hay="' + phEsc(hay) + '">' +
       '<div class="ph-card-head" data-target="' + detailId + '">' +
         '<div class="ph-l1"><span class="ph-badge" style="background:' + contColor + ';">' + phEsc(row.type) + '</span>' +
           '<span class="ph-vnc">' + phEsc(row.invoice) + '</span><span class="ph-time">' + phEsc(row.planTime || '—') + '</span>' +
           (kho ? '<span class="ph-kho-tag" title="Kho có nhiều tồn nhất">' + phEsc(kho) + '</span>' : '') +
-          '<span class="ph-st ' + (row.short ? 'ph-st-badge-short' : 'ph-st-badge-ok') + '">' + (row.short ? 'Thiếu' : 'Đủ') + '</span><span class="ph-arrow">▸</span></div>' +
+          stBadge + '<span class="ph-arrow">▸</span></div>' +
         '<div class="ph-l2"><span><b>' + phFmt(row.planQty) + '</b> pcs</span>·<span><b>' + phFmtDec(totalCbm, 2) + '</b> CBM</span>·<span class="ph-csr">' + phEsc(row.csr) + '</span>·<span>' + row.items.length + ' mã</span></div>' +
         '<div class="ph-prog"><div class="ph-prog-track"><div class="ph-prog-fill' + (pct <= 0 ? ' ph-prog-zero' : '') + '" style="width:' + pct.toFixed(1) + '%;"></div></div><span>Pick <b>' + phFmt(row.picked) + '/' + phFmt(row.planQty) + '</b></span></div>' +
       '</div>' +
       '<div class="ph-card-body" id="' + detailId + '" style="display:none;">' +
-        '<div class="ph-card-tools">Ngày load ' + phEsc(row.loadDate) + ' · Kho: ' + khoSelect + '</div>' + itemsHtml +
+        '<div class="ph-card-tools"><span class="ph-ct-info">Ngày load ' + phEsc(row.loadDate) + ' · Kho: ' + khoSelect + '</span>' +
+          '<button type="button" class="ph-icon-btn ph-cont-shot" data-ckey="' + phEsc(ckey) + '" title="Lưu ảnh cả thẻ cont này">📷</button>' +
+          '<button type="button" class="ph-icon-btn ph-cont-shot" data-share="1" data-ckey="' + phEsc(ckey) + '" title="Chia sẻ ảnh cả thẻ cont này (Zalo/Telegram...)">📤</button></div>' + itemsHtml +
       '</div></div>';
   };
 
@@ -862,15 +893,20 @@
       if(!dayMap[d]){ dayMap[d] = { day: d, rows: [] }; byDay.push(dayMap[d]); }
       dayMap[d].rows.push(row);
     });
-    if(!rows.length) return '<div class="ph-empty-note">Không còn container nào đang chờ pick.</div>';
+    var doneList = phDoneRows || [];
+    var doneHtml = doneList.length ? '<div class="ph-done-sec ph-collapsed" id="ph-done-sec"><button type="button" class="ph-done-hdr" id="ph-done-hdr">' +
+        '<span>✓ Đã pick xong · <b id="ph-done-n">' + doneList.length + '</b> cont</span><span class="ph-done-arrow">▸</span></button><div class="ph-done-body">' +
+        doneList.map(function(row){ return phBuildContainerRowHtml(row, khoMeta, uidState); }).join('') + '</div></div>' : '';
+    if(!rows.length) return '<div class="ph-empty-note">Không còn container nào đang chờ pick.</div>' + doneHtml;
     return byDay.map(function(g){
       var nShort = g.rows.filter(function(r){ return r.short; }).length;
       var label = g.day === phIsoDay(0) ? ' (hôm nay)' : (g.day === phIsoDay(1) ? ' (ngày mai)' : '');
       return '<div class="ph-day" data-day="' + phEsc(g.day) + '"><div class="ph-day-hdr">📅 ' + phEsc(g.day) + phEsc(label) + ' <span>· ' + g.rows.length + ' cont</span>' +
         (nShort ? ' <span class="ph-day-short">· ' + nShort + ' thiếu</span>' : '') + '</div>' +
         g.rows.map(function(row){ return phBuildContainerRowHtml(row, khoMeta, uidState); }).join('') + '</div>';
-    }).join('') + '<div class="ph-empty-note" id="ph-filter-empty" style="display:none;">Không có container nào khớp bộ lọc.</div>';
+    }).join('') + '<div class="ph-empty-note" id="ph-filter-empty" style="display:none;">Không có container nào khớp bộ lọc.</div>' + doneHtml;
   };
+  var phDoneRows = [], phRowsByKey = {};
 
   // ===== Bộ lọc nhanh + tìm kiếm (nhớ lựa chọn trên máy) =====
   var PH_FILTER_KEY = 'tp3_cont_filters_v1';
@@ -895,6 +931,16 @@
       });
       dayEl.style.display = any ? '' : 'none';
     });
+    var doneShown = 0;
+    document.querySelectorAll('#ph-done-sec .ph-card').forEach(function(card){
+      var ok = (!dayWant || card.dataset.day === dayWant) &&
+        (!phFilters.types.length || phFilters.types.indexOf(card.dataset.type) !== -1) &&
+        terms.every(function(t){ return card.dataset.hay.indexOf(t) !== -1; });
+      card.style.display = ok ? '' : 'none';
+      if(ok) doneShown++;
+    });
+    var dn = document.getElementById('ph-done-n'); if(dn) dn.textContent = doneShown;
+    var ds = document.getElementById('ph-done-sec'); if(ds) ds.style.display = doneShown ? '' : 'none';
     var emptyEl = document.getElementById('ph-filter-empty');
     if(emptyEl) emptyEl.style.display = (total && !shown) ? '' : 'none';
     var cnt = document.getElementById('ph-count');
@@ -1453,6 +1499,9 @@
     });
     ctx.textAlign = 'left';
 
+    phDeliverCanvas(canvas, title, share);
+  };
+  var phDeliverCanvas = function(canvas, title, share){
     canvas.toBlob(function(blob){
       if(!blob) return;
       var url = URL.createObjectURL(blob);
@@ -1481,6 +1530,106 @@
       setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
     }, 'image/png');
   };
+
+  // ===== Ảnh CẢ THẺ CONT (mục 10): đầu ảnh thông tin cont, rồi từng mã: Pick x/y · Pick thiếu / Đã pick đủ, bên
+  // dưới là các vị trí theo kho (dòng NG nền đỏ nhạt, dòng Loading đã pick chữ xám + nhãn Pick xong/Đang pick). =====
+  var phSaveContImage = function(row, share){
+    var khoMeta = phLastKhoMeta || { khoLabels: [], khoColors: {} };
+    var totalCbm = row.items.reduce(function(s, it){ return s + (it.cbm || 0); }, 0);
+    var kho = row.topKho ? row.topKho.replace('Kho ', '') : '';
+    var title = row.type + ' · ' + row.invoice + ' · ' + row.loadDate + ' ' + (row.planTime || '');
+    var stText = row.done ? (row.isShipDone ? 'LOAD XONG' : 'PICK XONG') : (row.short ? 'THIẾU' : 'ĐỦ');
+    var stColor = row.done ? '#B9A5F5' : (row.short ? '#FF9B9B' : '#8EE0AE');
+    var sub = 'CSR ' + row.csr + ' · ' + phFmt(row.planQty) + ' pcs · ' + phFmtDec(totalCbm, 2) + ' CBM · Pick ' + phFmt(row.picked) + '/' + phFmt(row.planQty) + (kho ? ' · Kho ' + kho : '');
+    // Dựng danh sách dòng vẽ
+    var lines = [];
+    row.items.forEach(function(it){
+      var poLabel = it.po ? (it.ebPo && it.ebPo !== it.po ? it.po + ' (' + it.ebPo + ')' : it.po) : '—';
+      lines.push({ t: 'item', left: it.item + '  ·  PO ' + poLabel, pick: 'Pick ' + phFmt(it.picked) + '/' + phFmt(it.qty), need: it.need > 0 ? 'Pick thiếu ' + phFmt(it.need) : '✓ Đã pick đủ', needOk: !(it.need > 0) });
+      var groups = phKhoGroups(it.locs || [], khoMeta.khoLabels);
+      var any = false;
+      khoMeta.khoLabels.forEach(function(label){
+        (groups[label].locs || []).forEach(function(l){
+          any = true;
+          var tag = l.picked ? (it.need > 0 && phLoadingCrCodes(l.ref).some(function(cr){ var st = phCrStatus[cr]; return st && st !== 'done' && st !== 'manualDone'; }) ? 'Đang pick' : 'Pick xong') : '';
+          lines.push({ t: 'loc', kho: label, color: khoMeta.khoColors[label] || '#eee', loc: phLocatorLabel(l.locator, l.ref) + (tag ? '  [' + tag + ']' : ''), oqc: l.oqc || '—', qty: l.picked ? '(' + phFmt(l.qty) + ')' : phFmt(l.qty), picked: !!l.picked, ng: !l.picked && String(l.oqc || '').toUpperCase() === 'NG' });
+        });
+      });
+      if(!any) lines.push({ t: 'none' });
+    });
+    var scale = 2, padX = 14, titleH = 58, itemH = 32, rowH = 26, cp = 10;
+    var FONT = '13px ui-monospace, Menlo, Consolas, monospace', FONTB = 'bold 13px ui-monospace, Menlo, Consolas, monospace';
+    var m = document.createElement('canvas').getContext('2d');
+    var wK = 50, wL = 120, wO = 50, wQ = 60, wItem = 0;
+    lines.forEach(function(ln){
+      if(ln.t === 'loc'){
+        m.font = FONTB; wK = Math.max(wK, m.measureText(ln.kho).width + cp * 2);
+        m.font = FONT; wL = Math.max(wL, m.measureText(ln.loc).width + cp * 2);
+        wO = Math.max(wO, m.measureText(ln.oqc).width + cp * 2);
+        m.font = FONTB; wQ = Math.max(wQ, m.measureText(ln.qty).width + cp * 2);
+      } else if(ln.t === 'item'){
+        m.font = 'bold 14px ui-monospace, Menlo, Consolas, monospace'; var a = m.measureText(ln.left).width;
+        m.font = 'bold 12.5px system-ui, sans-serif'; var b = m.measureText(ln.pick).width + m.measureText(ln.need).width + 50;
+        wItem = Math.max(wItem, a + b + cp * 2);
+      }
+    });
+    m.font = 'bold 17px system-ui, sans-serif'; var tW = m.measureText(title).width + 130;
+    m.font = '12.5px system-ui, sans-serif'; var sW = m.measureText(sub).width;
+    var tableW = Math.max(wK + wL + wO + wQ, wItem, tW, sW + 4, 320);
+    wL += tableW - (wK + wL + wO + wQ);
+    var width = Math.ceil(tableW + padX * 2);
+    var height = titleH + 12;
+    lines.forEach(function(ln){ height += ln.t === 'item' ? itemH + 6 : rowH; });
+    height += 14;
+    var cv = document.createElement('canvas');
+    cv.width = width * scale; cv.height = Math.ceil(height * scale);
+    var g = cv.getContext('2d'); g.scale(scale, scale);
+    g.fillStyle = '#fff'; g.fillRect(0, 0, width, height); g.textBaseline = 'middle';
+    g.fillStyle = '#1F2A44'; g.fillRect(0, 0, width, titleH);
+    g.fillStyle = '#fff'; g.font = 'bold 17px system-ui, sans-serif'; g.textAlign = 'left'; g.fillText(title, padX, 20);
+    g.font = 'bold 12px system-ui, sans-serif'; var stW = g.measureText(stText).width + 18;
+    g.fillStyle = stColor; g.fillRect(width - padX - stW, 9, stW, 22);
+    g.fillStyle = '#1F2A44'; g.textAlign = 'center'; g.fillText(stText, width - padX - stW / 2, 20);
+    g.fillStyle = '#C9D3E6'; g.font = '12.5px system-ui, sans-serif'; g.textAlign = 'left'; g.fillText(sub, padX, 42);
+    var y = titleH + 12, x0 = padX;
+    var xs = [x0, x0 + wK, x0 + wK + wL, x0 + wK + wL + wO];
+    lines.forEach(function(ln, idx){
+      if(ln.t === 'item'){
+        if(idx) y += 6;
+        g.fillStyle = '#EEF1F6'; g.fillRect(x0, y, tableW, itemH);
+        g.strokeStyle = '#222'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0, y); g.lineTo(x0 + tableW, y); g.stroke();
+        g.fillStyle = '#12161F'; g.font = 'bold 14px ui-monospace, Menlo, Consolas, monospace'; g.textAlign = 'left'; g.fillText(ln.left, x0 + cp, y + itemH / 2);
+        g.font = 'bold 12.5px system-ui, sans-serif';
+        var nW = g.measureText(ln.need).width + 16;
+        g.fillStyle = ln.needOk ? '#E3F5EA' : '#FFF4CC'; g.fillRect(x0 + tableW - cp - nW, y + 5, nW, itemH - 10);
+        g.fillStyle = ln.needOk ? '#0B7A3B' : '#9A5B00'; g.textAlign = 'center'; g.fillText(ln.need, x0 + tableW - cp - nW / 2, y + itemH / 2);
+        g.fillStyle = '#55637C'; g.textAlign = 'right'; g.fillText(ln.pick, x0 + tableW - cp - nW - 10, y + itemH / 2);
+        y += itemH;
+        return;
+      }
+      if(ln.t === 'none'){
+        g.fillStyle = '#9AA3B2'; g.font = 'italic 12.5px system-ui, sans-serif'; g.textAlign = 'left'; g.fillText('Không có tồn kho', x0 + cp, y + rowH / 2);
+        y += rowH; return;
+      }
+      g.fillStyle = ln.ng ? '#FDECEC' : (ln.picked ? '#F4F5F7' : '#FFFFFF'); g.fillRect(x0, y, tableW, rowH);
+      g.fillStyle = ln.color; g.fillRect(x0, y, wK, rowH);
+      g.strokeStyle = '#E3E7EE'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y + rowH - 0.5); g.lineTo(x0 + tableW, y + rowH - 0.5); g.stroke();
+      var col = ln.picked ? '#9AA3B2' : '#12161F';
+      g.textAlign = 'left'; g.font = FONTB; g.fillStyle = '#374151'; g.fillText(ln.kho, xs[0] + cp, y + rowH / 2);
+      g.font = FONT; g.fillStyle = col; g.fillText(ln.loc, xs[1] + cp, y + rowH / 2);
+      g.font = ln.ng ? FONTB : FONT; g.fillStyle = ln.ng ? '#B42318' : col; g.fillText(ln.oqc, xs[2] + cp, y + rowH / 2);
+      g.font = FONTB; g.textAlign = 'right'; g.fillStyle = ln.ng ? '#B42318' : col; g.fillText(ln.qty, x0 + tableW - cp, y + rowH / 2);
+      y += rowH;
+    });
+    g.strokeStyle = '#222'; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x0, y); g.lineTo(x0 + tableW, y); g.stroke();
+    phDeliverCanvas(cv, title, share);
+  };
+  document.addEventListener('click', function(e){
+    var b = e.target.closest('.ph-cont-shot');
+    if(b){ var row = phRowsByKey[b.dataset.ckey]; if(row) phSaveContImage(row, !!b.dataset.share); return; }
+    var dh = e.target.closest('#ph-done-hdr');
+    if(dh){ document.getElementById('ph-done-sec').classList.toggle('ph-collapsed'); }
+  });
   document.addEventListener('click', function(e){
     var btn = e.target.closest('.ph-shot-btn');
     if(!btn) return;
