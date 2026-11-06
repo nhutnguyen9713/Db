@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.25';
+const APP_VERSION = 'v6.26';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18961,7 +18961,30 @@ function v5ShiftReportCanvas(){
   const cardH = 204 + maxKho * 44;
   const tableTop = 124 + cardH + 30;
   const nBands = listRows.filter((x, i) => !i || listRows[i - 1][0] !== x[0]).length;
-  const H = tableTop - 4 + 34 + nBands * 42 + listRows.length * 33 + (listRows.length ? 0 : 40) + 90 + noteH;
+  // v6.26: ghi chú cont xuống dòng cho đủ chữ (trước đây cắt "…"), dòng bảng cao theo số dòng ghi chú
+  const CMT_W = W - PAD * 2 - 950, CMT_FONT = '700 12.5px Inter, "Segoe UI", Arial, sans-serif';
+  const mcc = document.createElement('canvas').getContext('2d'); mcc.font = CMT_FONT;
+  const wrapCmt = t => {
+    const out = [];
+    String(t || '').split(/\n/).forEach(par => {
+      let line = '';
+      par.split(/\s+/).filter(Boolean).forEach(w => {
+        while(mcc.measureText(w).width > CMT_W){ // từ quá dài (mã hàng liền nhau) → cắt theo ký tự
+          let k = w.length; while(k > 1 && mcc.measureText((line ? line + ' ' : '') + w.slice(0, k)).width > CMT_W) k--;
+          if(k <= 1 && line){ out.push(line); line = ''; continue; }
+          out.push((line ? line + ' ' : '') + w.slice(0, k)); line = ''; w = w.slice(k);
+        }
+        const t2 = line ? line + ' ' + w : w;
+        if(mcc.measureText(t2).width > CMT_W && line){ out.push(line); line = w; } else line = t2;
+      });
+      if(line) out.push(line);
+    });
+    return out;
+  };
+  const cmtOf = r => (r.instanceKey && contPickComments[r.instanceKey]) || r.comment || '';
+  const rowCmt = listRows.map(([, r]) => wrapCmt(cmtOf(r)));
+  const rowH = rowCmt.map(ls => Math.max(32, 12 + ls.length * 16));
+  const H = tableTop - 4 + 34 + nBands * 42 + rowH.reduce((a, b) => a + b + 1, 0) + (listRows.length ? 0 : 40) + 90 + noteH;
   const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
   const c = cv.getContext('2d'); c.scale(S, S);
   const F = (w, px) => `${w} ${px}px Inter, "Segoe UI", Arial, sans-serif`;
@@ -19054,8 +19077,9 @@ function v5ShiftReportCanvas(){
       y += 34;
     }
     const s = stOf(r);
-    c.fillStyle = ROWBG[s]; c.fillRect(PAD, y, W - PAD * 2, 32);
-    c.fillStyle = '#E6EAF1'; c.fillRect(PAD, y + 32, W - PAD * 2, 1);
+    const rh = rowH[i], y0 = y; y += (rh - 32) / 2; // các cột khác căn giữa theo chiều cao dòng
+    c.fillStyle = ROWBG[s]; c.fillRect(PAD, y0, W - PAD * 2, rh);
+    c.fillStyle = '#E6EAF1'; c.fillRect(PAD, y0 + rh, W - PAD * 2, 1);
     const yy = y + 21;
     txt(fit(r.type, 50, F(700, 13)), PAD + 14, yy, F(700, 13), '#374151');
     txt(fit(r.cNo, 160, F(800, 13.5)), PAD + 74, yy, F(800, 13.5), '#111827');
@@ -19075,9 +19099,9 @@ function v5ShiftReportCanvas(){
     c.font = F(800, 12); const lw = c.measureText(lb).width + 20;
     rr(PAD + 802, y + 6, lw, 21, 10.5, STCOL[s]); txt(lb, PAD + 802 + lw / 2, y + 21, F(800, 12), s === 'todo' ? '#374151' : '#FFFFFF', 'center');
     // Ghi chú: chỉ ghi chú tự điền của cont (đọc trực tiếp, r.comment chỉ cập nhật khi bảng vẽ lại)
-    const cmt = (r.instanceKey && contPickComments[r.instanceKey]) || r.comment || '';
-    txt(fit(cmt, W - PAD * 2 - 950, F(700, 12.5)), PAD + 934, yy, F(700, 12.5), '#D92D35');
-    y += 33;
+    const cl = rowCmt[i], cy = y0 + rh / 2 - (cl.length * 16) / 2 + 12;
+    cl.forEach((ln, j) => txt(ln, PAD + 934, cy + j * 16, CMT_FONT, '#D92D35'));
+    y = y0 + rh + 1;
   });
   if(noteLines.length){
     y += 20;
