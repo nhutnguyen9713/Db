@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.91';
+const APP_VERSION = 'v5.92';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -15517,7 +15517,8 @@ function txChartPopupRenderRows(rows){
     `<td${c.num ? ' class="num"' : ''}>${escHtml(String(r[c.key] === undefined || r[c.key] === null || r[c.key] === '' ? '—' : r[c.key]))}</td>`
   ).join('')}</tr>`).join('');
   const grandTotal = rows.reduce((s, r) => s + (r.total || 0), 0);
-  const footTds = cols.map(c => {
+  const footTds = cols.map((c, ci) => {
+    if(ci === 0 && !c.num) return '<td>Grand Total</td>'; // ô đầu = nhãn Grand Total (không thêm ô thừa làm lệch cột)
     if(c.key === 'qty') return `<td class="num">${fmt(rows.reduce((s,r)=>s+(r.qty||0),0))}</td>`;
     // Số cont ở dòng Grand Total = số CR# DUY NHẤT (gộp contCodes của mọi dòng) — KHÔNG cộng dồn contCount từng
     // dòng vì cùng 1 CR có thể nằm ở nhiều dòng (khác Item/User) và sẽ bị đếm trùng; khớp cách đếm của bảng Picking chính.
@@ -15529,7 +15530,7 @@ function txChartPopupRenderRows(rows){
     if(c.key === 'total') return `<td class="num tx-total-col">${fmt(grandTotal)}</td>`;
     return '<td></td>';
   }).join('');
-  tfoot.innerHTML = `<tr style="font-weight:700; border-top:2px solid var(--line);"><td>Grand Total</td>${footTds}</tr>`;
+  tfoot.innerHTML = `<tr style="font-weight:700; border-top:2px solid var(--line);">${cols.length && !cols[0].num ? '' : '<td>Grand Total</td>'}${footTds}</tr>`;
   summary.innerHTML = `${fmt(rows.length)} dòng · Tổng: <b>${fmt(grandTotal)}</b>`;
 }
 // ---- Picking: bảng "Xem theo cont (CR)" đặt dưới bảng "Xem theo Người" trong popup ----
