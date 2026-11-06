@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.99';
+const APP_VERSION = 'v6.00';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -16511,6 +16511,8 @@ function txCollectMovePalletCandidates(records, masterMap){
     // Đã thuộc logic Lên/Xuống khu lầu 3AFG hoặc Lên/Xuống Rack (1 đầu thuộc khu đó, đầu kia không) -> loại.
     if(txLocatorHasMezzaninePrefix(d.locatorXuat) !== txLocatorHasMezzaninePrefix(d.locatorDen)) continue;
     if(txLocatorIsRack(d.locatorXuat) !== txLocatorIsRack(d.locatorDen)) continue;
+    // v6.00: ra/vào locator PROD đã tính là Xuất/Nhận RW -> không đếm thêm 1 lần Move Pallet.
+    if(txLocatorHasProdSuffix(d.locatorXuat) !== txLocatorHasProdSuffix(d.locatorDen)) continue;
     if(txIsShipUser(d.user, masterMap)) continue;
     out.push(d);
   }
