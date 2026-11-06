@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.15';
+const APP_VERSION = 'v6.16';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18900,7 +18900,7 @@ function v5ShiftKhoLine(list){
   // v6.14: mỗi kho 1 dòng to rõ — số cont + Chưa / Đang / Xong (Load xong) của kho đó
   return `<div class="v5-sh-kho v5-sh-kho-lg">${ks.map(([k, e]) => `<div class="v5-shk-row" style="--kc:${(typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR[k]) || 'var(--muted-2)'}">
     <span class="v5-shk-name"><i></i>${escHtml(k.replace('Kho ', ''))}</span><span class="v5-shk-n"><b>${fmt(e.n)}</b> cont</span>
-    <span class="v5-shk-st">${e.todo ? `<span class="c0">Chưa <b>${fmt(e.todo)}</b></span>` : ''}${e.prog ? `<span class="c1">Đang <b>${fmt(e.prog)}</b></span>` : ''}${e.done ? `<span class="c2">Xong <b>${fmt(e.done)}</b>${e.ship ? ` <em>(load ${fmt(e.ship)})</em>` : ''}</span>` : ''}</span>
+    <span class="v5-shk-st">${e.todo ? `<span class="c0">Chưa Pick <b>${fmt(e.todo)}</b></span>` : ''}${e.prog ? `<span class="c1">Picking <b>${fmt(e.prog)}</b></span>` : ''}${e.done ? `<span class="c2">Pick Done <b>${fmt(e.done)}</b></span>` : ''}${e.ship ? `<span class="c3">Load Done <b>${fmt(e.ship)}</b></span>` : ''}</span>
   </div>`).join('')}</div>`;
 }
 function v5ShiftGroups(sh){
@@ -18985,9 +18985,10 @@ function v5ShiftReportCanvas(){
       txt(e.n, x + 100, ry + 26, F(800, 18), '#111827');
       txt('cont', x + 106 + c.measureText(String(e.n)).width, ry + 25, F(600, 13), '#6B7485');
       const parts = [];
-      if(e.todo) parts.push(['Chưa', e.todo, '#111827']);
-      if(e.prog) parts.push(['Đang', e.prog, '#D98A0B']);
-      if(e.done) parts.push([e.ship ? `Xong` : 'Xong', e.done + (e.ship ? ` (load ${e.ship})` : ''), '#0E8F76']);
+      if(e.todo) parts.push(['Chưa Pick', e.todo, '#111827']);
+      if(e.prog) parts.push(['Picking', e.prog, '#D98A0B']);
+      if(e.done) parts.push(['Pick Done', e.done, '#0E8F76']);
+      if(e.ship) parts.push(['Load Done', e.ship, '#7C5CFF']);
       let rx = x + gw - 24;
       parts.reverse().forEach(([l, v, vc]) => {
         c.font = F(600, 12); const lw = c.measureText(l + ' ').width; c.font = F(800, 12.5); const vw = c.measureText(String(v)).width;
