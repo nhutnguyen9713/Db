@@ -39,7 +39,8 @@ $DateFromXY     = @(680, 627)
 # Sau khi Export, nếu hiện hộp thoại lưu file thì tự gõ tên file kèm giờ vào thư
 # mục này rồi Enter. Để '' = chỉ bấm Enter (lưu theo tên/thư mục mặc định).
 $SaveDir = ''   # file tự tải về Downloads, không cần đổi tên
-$SaveDialogTitles = @('Save As', 'Lưu', 'Export', 'File Download', 'Tải xuống')
+# File fnd_gfm tự tải về Downloads, không có hộp thoại lưu → để trống (trước đây tên 'Export' khớp nhầm cửa sổ Oracle).
+$SaveDialogTitles = @()
 
 # Chrome KHÔNG cho trang web đọc thẳng thư mục Downloads ("contains system files"), nên sau
 # mỗi lượt script chép file fnd_gfm mới nhất từ Downloads sang thư mục riêng này. Trên
@@ -151,17 +152,21 @@ function Get-DownloadsDir {
   try { $p = (New-Object -ComObject Shell.Application).NameSpace('shell:Downloads').Self.Path; if ($p -and (Test-Path $p)) { return $p } } catch {}
   return (Join-Path $env:USERPROFILE 'Downloads')
 }
-# Chép file fnd_gfm mới tải (sau $since) từ Downloads sang $CopyDir. Chờ thêm tối đa $extraSec giây nếu file chưa xong.
-function Copy-NewExport($since, $extraSec) {
+# Chép file fnd_gfm mới nhất (mới hơn file đã chép lần trước) từ Downloads sang $CopyDir.
+# Chờ tối đa $extraSec giây nếu file chưa tải xong. File về trễ thì vòng chờ 5 phút vẫn tự bắt được.
+$script:LastCopied = (Get-Date).AddMinutes(-10)
+function Copy-NewExport($since, $extraSec, [switch]$Quiet) {
+  if ($script:LastCopied -gt $since) { $since = $script:LastCopied }
   $dl = Get-DownloadsDir
   $deadline = (Get-Date).AddSeconds($extraSec)
   do {
     $f = Get-ChildItem -Path $dl -File -Filter 'fnd_gfm*' -ErrorAction SilentlyContinue |
-         Where-Object { $_.LastWriteTime -ge $since -and $_.Extension -match '^\.(tsv|txt|csv)$' } |
+         Where-Object { $_.LastWriteTime -gt $since -and $_.Extension -match '^\.(tsv|txt|csv)$' } |
          Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($f -and ((Get-Date) - $f.LastWriteTime).TotalSeconds -ge 5) {
       try {
         Copy-Item -LiteralPath $f.FullName -Destination (Join-Path $CopyDir $f.Name) -Force -ErrorAction Stop
+        $script:LastCopied = $f.LastWriteTime
         Log "  -> da chep $($f.Name) sang $CopyDir"
         Get-ChildItem -Path $CopyDir -File -Filter 'fnd_gfm*' | Sort-Object LastWriteTime -Descending |
           Select-Object -Skip $KeepFiles | Remove-Item -Force -ErrorAction SilentlyContinue
@@ -171,7 +176,7 @@ function Copy-NewExport($since, $extraSec) {
     }
     Start-Sleep -Seconds 3
   } while ((Get-Date) -lt $deadline)
-  Log "  -> chua thay file fnd_gfm moi trong $dl"
+  if (-not $Quiet) { Log "  -> chua thay file fnd_gfm moi trong $dl (se tiep tuc canh trong luc cho)" }
 }
 # Nén gzip + base64 rồi ghi vào <FirebaseUrl>/wms_inbox. Dashboard (v6.22+) tự nhận, tính tồn và lưu Cloud.
 function Send-ToFirebase($f) {
@@ -201,7 +206,7 @@ function Set-DateFrom($h) {
 }
 function Run-Cycle {
   $script:LastPos = $null
-  $since = (Get-Date).AddSeconds(-5)
+  $since = (Get-Date).AddMinutes(-2)
   $h = Get-Oracle
   if ($h -eq [IntPtr]::Zero) { Log 'Khong thay cua so Oracle - bo qua luot nay'; return }
   foreach ($f in $Forms) {
@@ -218,7 +223,7 @@ function Run-Cycle {
       Log "  -> da bam Continue to End, cho $($f.WaitExport) giay tai file"
     }
     Handle-SaveDialog $f.Name $f.WaitExport
-    if ($CopyDir) { Copy-NewExport $since 90 }
+    if ($CopyDir) { Copy-NewExport $since 180 }
   }
   Focus-Oracle $h
   Log 'Xong 1 luot Find + Export'
@@ -260,5 +265,9 @@ while ($true) {
     if ($_.Exception.Message -like '*USER_ACTIVE*') { Log 'Co nguoi dung chuot giua chung - dung luot nay, se thu lai khi may ranh'; $ok = $false }
     else { Log ("Loi: " + $_.Exception.Message) }
   }
-  if ($ok) { Start-Sleep -Seconds ($IntervalMin * 60) } else { Start-Sleep -Seconds 30 }
+  $waitEnd = (Get-Date).AddSeconds($(if ($ok) { $IntervalMin * 60 } else { 30 }))
+  while ((Get-Date) -lt $waitEnd) {   # trong lúc chờ vẫn canh Downloads: file về trễ thì chép + đẩy ngay
+    if ($CopyDir) { Copy-NewExport (Get-Date).AddMinutes(-10) 0 -Quiet }
+    Start-Sleep -Seconds 15
+  }
 }
