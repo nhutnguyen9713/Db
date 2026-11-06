@@ -10,7 +10,9 @@
 // chắc được ghi vào cache (SW có thể bị dừng) -> F5 mãi ra bản cũ, chỉ Ctrl+Shift+R mới thấy bản mới.
 // Sửa: chờ mạng lâu hơn (12s), ghi cache trong event.waitUntil, và nếu đã phải dùng bản cache mà bản
 // mạng về sau KHÁC thì báo trang hiện thanh "Có bản cập nhật mới — Bấm để tải lại".
-const CACHE_NAME = 'tn5-dashboard-v9';
+// v10 (app v6.06): fetch dùng cache:'reload' — y hệt Ctrl+Shift+R (gửi Cache-Control: no-cache tới CDN GitHub
+// Pages). Với 'no-cache' trước đây, CDN (cache 10 phút) vẫn trả 304 cho bản cũ nên F5 ra bản cũ.
+const CACHE_NAME = 'tn5-dashboard-v10';
 const NETWORK_TIMEOUT_MS = 12000;
 const CORE_ASSETS = [
   './', './index.html', './app.js', './styles.css', './manifest.json', './icon-192.png', './icon-512.png',
@@ -54,7 +56,7 @@ self.addEventListener('fetch', (event) => {
   // cache:'no-cache' — luôn hỏi lại máy chủ (ETag, trả 304 rất nhẹ nếu không đổi) thay vì lấy bản trong
   // HTTP cache của trình duyệt: GitHub Pages cho cache 10 phút, nên trước đây F5 vẫn ra app.js cũ dù đã
   // cập nhật (chỉ Ctrl+Shift+R mới thấy bản mới).
-  const network = fetch(req, { cache: 'no-cache' });
+  const network = fetch(req, { cache: 'reload' });
   network.catch(() => {}); // tránh cảnh báo 'unhandled rejection' khi bản cache đã thắng cuộc đua
   let servedFromCache = false;
   // Ghi bản mạng vào cache TRONG waitUntil để SW không bị dừng giữa chừng; nếu trang đang chạy bản cache
