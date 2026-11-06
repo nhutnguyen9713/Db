@@ -21,7 +21,7 @@ $IdleSec     = 60                      # chỉ chạy khi chuột/bàn phím đ�
 # Toạ độ MÀN HÌNH (cửa sổ Oracle phóng to) — lấy bằng Lay-Toa-Do.bat.
 # Quy trình 1 lượt: Find → chờ WaitFind giây → Export → chờ WaitDecision giây → bấm
 # "Continue to End" ở hộp thoại Decision → chờ WaitExport giây để file fnd_gfm_*.tsv tải
-# về thư mục Downloads. Dashboard (nút "📂 Tự cập nhật từ Downloads") tự đọc file đó + lưu Cloud.
+# về thư mục Downloads, rồi chép sang $CopyDir (TN5_WMS). Dashboard (nút "📂 Tự cập nhật file WMS") tự đọc + lưu Cloud.
 # Run = $false để bỏ qua form đó.
 $Forms = @(
   @{ Name = 'Locator Allocate Query (ton kho)'; Run = $true
@@ -40,6 +40,12 @@ $DateFromXY     = @(680, 627)
 # mục này rồi Enter. Để '' = chỉ bấm Enter (lưu theo tên/thư mục mặc định).
 $SaveDir = ''   # file tự tải về Downloads, không cần đổi tên
 $SaveDialogTitles = @('Save As', 'Lưu', 'Export', 'File Download', 'Tải xuống')
+
+# Chrome KHÔNG cho trang web đọc thẳng thư mục Downloads ("contains system files"), nên sau
+# mỗi lượt script chép file fnd_gfm mới nhất từ Downloads sang thư mục riêng này. Trên
+# Dashboard bấm "📂 Tự cập nhật file WMS" rồi chọn thư mục này (C:\Users\<tên>\TN5_WMS).
+$CopyDir  = Join-Path $env:USERPROFILE 'TN5_WMS'
+$KeepFiles = 30   # giữ lại bấy nhiêu file mới nhất trong TN5_WMS, file cũ hơn tự xoá
 # -----------------------------------------------------------------------------
 
 Add-Type @"
@@ -135,6 +141,31 @@ function Handle-SaveDialog($formName, $waitSec) {
     Start-Sleep -Milliseconds 500
   }
 }
+function Get-DownloadsDir {
+  try { $p = (New-Object -ComObject Shell.Application).NameSpace('shell:Downloads').Self.Path; if ($p -and (Test-Path $p)) { return $p } } catch {}
+  return (Join-Path $env:USERPROFILE 'Downloads')
+}
+# Chép file fnd_gfm mới tải (sau $since) từ Downloads sang $CopyDir. Chờ thêm tối đa $extraSec giây nếu file chưa xong.
+function Copy-NewExport($since, $extraSec) {
+  $dl = Get-DownloadsDir
+  $deadline = (Get-Date).AddSeconds($extraSec)
+  do {
+    $f = Get-ChildItem -Path $dl -File -Filter 'fnd_gfm*' -ErrorAction SilentlyContinue |
+         Where-Object { $_.LastWriteTime -ge $since -and $_.Extension -match '^\.(tsv|txt|csv)$' } |
+         Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($f -and ((Get-Date) - $f.LastWriteTime).TotalSeconds -ge 5) {
+      try {
+        Copy-Item -LiteralPath $f.FullName -Destination (Join-Path $CopyDir $f.Name) -Force -ErrorAction Stop
+        Log "  -> da chep $($f.Name) sang $CopyDir"
+        Get-ChildItem -Path $CopyDir -File -Filter 'fnd_gfm*' | Sort-Object LastWriteTime -Descending |
+          Select-Object -Skip $KeepFiles | Remove-Item -Force -ErrorAction SilentlyContinue
+        return
+      } catch { }   # file còn đang ghi → thử lại
+    }
+    Start-Sleep -Seconds 3
+  } while ((Get-Date) -lt $deadline)
+  Log "  -> chua thay file fnd_gfm moi trong $dl"
+}
 function Set-DateFrom($h) {
   $now = Get-Date
   if ($now.Hour -lt 7) { $d = $now.AddDays(-1); $hh = '19' } elseif ($now.Hour -lt 19) { $d = $now; $hh = '07' } else { $d = $now; $hh = '19' }
@@ -146,6 +177,7 @@ function Set-DateFrom($h) {
 }
 function Run-Cycle {
   $script:LastPos = $null
+  $since = (Get-Date).AddSeconds(-5)
   $h = Get-Oracle
   if ($h -eq [IntPtr]::Zero) { Log 'Khong thay cua so Oracle - bo qua luot nay'; return }
   foreach ($f in $Forms) {
@@ -162,6 +194,7 @@ function Run-Cycle {
       Log "  -> da bam Continue to End, cho $($f.WaitExport) giay tai file"
     }
     Handle-SaveDialog $f.Name $f.WaitExport
+    if ($CopyDir) { Copy-NewExport $since 90 }
   }
   Focus-Oracle $h
   Log 'Xong 1 luot Find + Export'
@@ -182,6 +215,7 @@ if ($ToaDo) {
 }
 
 if ($SaveDir -and -not (Test-Path $SaveDir)) { New-Item -ItemType Directory -Path $SaveDir | Out-Null }
+if ($CopyDir -and -not (Test-Path $CopyDir)) { New-Item -ItemType Directory -Path $CopyDir | Out-Null }
 if ($MotLuot) {
   try { Run-Cycle } catch { if ($_.Exception.Message -like '*USER_ACTIVE*') { Log 'Co nguoi dung chuot giua chung - da dung luot thu' } else { Log ("Loi: " + $_.Exception.Message) } }
   return

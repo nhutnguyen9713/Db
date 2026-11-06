@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.20';
+const APP_VERSION = 'v6.21';
 const APP_VERSION_DATE = '07/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -19792,7 +19792,7 @@ if(txState){ try{ renderTransactionPage(); }catch(e){ console.error(e); } }
 })();
 
 
-// ===== v6.20: TỰ CẬP NHẬT TỒN KHO TỪ THƯ MỤC DOWNLOADS =====
+// ===== v6.20: TỰ CẬP NHẬT TỒN KHO TỪ FILE WMS (v6.21: đọc thư mục TN5_WMS — Chrome chặn Downloads) =====
 // Script tools/wms-auto-export.ps1 cứ 5 phút bấm Find + Export trên Oracle → file fnd_gfm_*.tsv rơi vào
 // Downloads. Bật nút này (chọn thư mục Downloads 1 lần) thì cứ 30 giây trang tự tìm file fnd_gfm mới nhất,
 // nếu là file TỒN KHO (có cột Onhand Qty, không phải file Transaction) và mới hơn lần trước thì nạp vào
@@ -19806,7 +19806,7 @@ if(txState){ try{ renderTransactionPage(); }catch(e){ console.error(e); } }
   let dir = null, timer = null, busy = false;
   const setBtn = (state, extra) => {
     const txt = { off: 'TẮT', on: 'BẬT', need: 'bấm để bật lại' }[state];
-    btn.innerHTML = `📂 Tự cập nhật từ Downloads: <b>${txt}</b>${extra ? ` <span>${escHtml(extra)}</span>` : ''}`;
+    btn.innerHTML = `📂 Tự cập nhật file WMS: <b>${txt}</b>${extra ? ` <span>${escHtml(extra)}</span>` : ''}`;
     btn.classList.toggle('on', state === 'on'); btn.classList.toggle('need', state === 'need');
   };
   async function isInventoryFile(file){
@@ -19844,7 +19844,11 @@ if(txState){ try{ renderTransactionPage(); }catch(e){ console.error(e); } }
     try{
       if(timer){ stop(); lsSet(K_ON, '0'); setBtn('off'); return; }
       if(dir && (await dir.requestPermission({ mode: 'read' })) === 'granted'){ start(); return; }
-      dir = await window.showDirectoryPicker({ id: 'tn5-downloads', startIn: 'downloads', mode: 'read' });
+      if(!lsGet('tn5_autoinv_hint')){
+        alert('Chrome không cho mở thẳng thư mục Downloads.\n\nScript WMS tự chép file fnd_gfm sang thư mục TN5_WMS trong thư mục người dùng (C:\\Users\\<tên bạn>\\TN5_WMS).\n\nỞ cửa sổ sắp mở, hãy chọn thư mục TN5_WMS đó (chạy script 1 lần để nó được tạo).');
+        lsSet('tn5_autoinv_hint', '1');
+      }
+      dir = await window.showDirectoryPicker({ id: 'tn5-wms-dir', mode: 'read' });
       await fvIdbSet(K_DIR, dir);
       start();
     }catch(e){ if(e && e.name !== 'AbortError') alert('Không bật được: ' + (e.message || e)); }
