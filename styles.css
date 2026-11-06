@@ -2717,3 +2717,82 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
 .v5-sh-note textarea{width:100%; box-sizing:border-box; resize:vertical; min-height:52px; font-family:var(--sans); font-size:13px; line-height:1.45; padding:9px 12px; border-radius:12px; border:1px solid var(--line); background:var(--panel-2); color:var(--text);}
 .v5-sh-note textarea:focus{outline:none; border-color:var(--amber); box-shadow:0 0 0 3px rgba(245,166,35,.18);}
 .v5-sh-note-s{font-family:var(--sans); font-size:11.5px; color:var(--muted-2);}
+
+/* ===== v5.90: Transaction trực quan ===== */
+.v5-txk-wrap{display:block; margin-bottom:16px;}
+.v5-txk-total{font-family:var(--sans); font-size:12.5px; color:var(--muted); margin:0 0 8px 2px;} .v5-txk-total b{color:var(--text);}
+.v5-txk{display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px;}
+.v5-txk-g{border:1px solid var(--line); border-radius:16px; background:var(--panel); box-shadow:var(--shadow); padding:12px; position:relative; overflow:hidden;}
+.v5-txk-g::before{content:''; position:absolute; left:0; top:0; right:0; height:3px; background:var(--gc);}
+.v5-txk-g.zero{opacity:.55;}
+.v5-txk-h{font-family:var(--sans); font-size:13px; font-weight:800; color:var(--text); margin-bottom:8px;}
+.v5-txk-tiles{display:flex; flex-wrap:wrap; gap:8px;}
+.v5-txk-t{flex:1 1 110px; min-width:0; background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:8px 10px; font-family:var(--sans);}
+.v5-txk-t .v{font-size:22px; font-weight:800; color:var(--gc); letter-spacing:-.02em; font-variant-numeric:tabular-nums;}
+.v5-txk-t .l{font-size:12px; font-weight:700; color:var(--text);}
+.v5-txk-t .f{font-size:11px; color:var(--muted-2); margin-top:2px; line-height:1.35;}
+.v5-txk-t.red .v{color:var(--red);}
+.v5-txk-t.zero{flex:0 1 auto; padding:5px 9px; display:flex; align-items:baseline; gap:6px; opacity:.6;}
+.v5-txk-t.zero .v{font-size:13px; color:var(--muted-2);} .v5-txk-t.zero .l{font-size:11.5px; font-weight:600; color:var(--muted);}
+@media (max-width:1100px){ .v5-txk{grid-template-columns:repeat(2, minmax(0, 1fr));} }
+@media (max-width:560px){ .v5-txk{grid-template-columns:1fr;} }
+/* Ma trận Grand Total */
+.v5-txm-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:12px;}
+.v5-txm{width:100%; border-collapse:collapse; font-family:var(--sans); font-size:13px;}
+.v5-txm th, .v5-txm td{padding:9px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top;}
+.v5-txm thead th{font-size:11.5px; font-weight:700; color:var(--muted); background:var(--panel-2); white-space:nowrap;}
+.v5-txm thead th .dot, .v5-txr thead th .dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:1px;}
+.v5-txm th.kho{font-weight:800; color:var(--text); white-space:nowrap;}
+.v5-txm td{min-width:96px;} .v5-txm td.na{color:var(--muted-2); text-align:center;}
+.v5-txm .tot{text-align:right; font-weight:800; white-space:nowrap;}
+.v5-txm-p{cursor:pointer; padding:2px 0; border-radius:6px;} .v5-txm-p + .v5-txm-p{margin-top:4px;}
+.v5-txm-p:hover .n{color:var(--blue);}
+.v5-txm-p .n{display:flex; justify-content:space-between; gap:6px; font-weight:800; font-variant-numeric:tabular-nums;}
+.v5-txm-p .n i{font-style:normal; font-weight:600; color:var(--muted); font-size:11.5px;}
+.v5-txm-p.zero .n{color:var(--muted-2); font-weight:500;}
+.v5-txm-p .b{display:block; height:5px; border-radius:3px; background:color-mix(in srgb, var(--muted-2) 18%, transparent); margin-top:3px; overflow:hidden;}
+.v5-txm-p .b span{display:block; height:100%; border-radius:3px;}
+.v5-txm-cont{font-size:11px; color:var(--violet); font-weight:700; margin-top:3px;}
+.v5-txm-hint{font-family:var(--sans); font-size:11.5px; color:var(--muted-2); margin-top:8px;}
+/* Mục lục dính */
+.v5-tx-nav{position:sticky; top:8px; z-index:35; display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding:8px; margin-bottom:14px; border:1px solid var(--line); border-radius:16px; background:color-mix(in srgb, var(--panel) 90%, transparent); backdrop-filter:blur(10px); box-shadow:var(--shadow);}
+.v5-tx-nav::-webkit-scrollbar{display:none;}
+.v5-tx-nb{flex:0 0 auto; display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); border-radius:999px; padding:6px 11px; font-family:var(--sans); font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap;}
+.v5-tx-nb b{font-size:11.5px; padding:1px 7px; border-radius:999px; background:color-mix(in srgb, var(--blue) 16%, transparent); color:var(--blue);}
+.v5-tx-nb.zero{opacity:.5;} .v5-tx-nb.zero b{background:transparent; color:var(--muted-2);}
+.v5-tx-nb:hover{border-color:var(--blue);}
+@media (max-width:900px){ .v5-tx-nav{position:relative; top:auto;} }
+#page-transaction .panel.v5-tx-empty:not(.v5-tx-open){padding-top:12px; padding-bottom:12px; cursor:pointer; opacity:.7;}
+#page-transaction .panel.v5-tx-empty:not(.v5-tx-open) > :not(:first-child){display:none !important;}
+#page-transaction .panel.v5-tx-empty:not(.v5-tx-open) > :first-child{margin-bottom:0 !important;}
+#page-transaction .panel.v5-tx-empty:not(.v5-tx-open) .sub{display:none;}
+#page-transaction .panel.v5-tx-empty:not(.v5-tx-open) h1::after{content:' · không có giao dịch (bấm để mở)'; font-size:12px; font-weight:600; color:var(--muted-2);}
+/* Bảng tổng hợp: thanh ngang + chấm kho */
+.tx-sum-table td.v5-lbar{background:linear-gradient(90deg, color-mix(in srgb, var(--blue) 18%, transparent) var(--w), transparent var(--w)); background-size:100% 70%; background-position:left center; background-repeat:no-repeat;}
+.v5-kdot{display:inline-block; font-style:normal; font-family:var(--sans); font-size:10.5px; font-weight:800; padding:1px 6px; border-radius:999px; margin:0 3px 0 0; color:#fff; background:var(--muted-2);}
+.v5-kdot.k2B{background:#2C6FCB;} .v5-kdot.k3A{background:#0E8F76;} .v5-kdot.k3B{background:#B76E00;} .v5-kdot.kDG1{background:#6E4FE0;}
+/* (5) Pick cont: bảng Theo container xuống hàng riêng, đủ rộng */
+#tx-picking-sumgrid{grid-template-columns:minmax(0, 1fr) minmax(0, 1.4fr);}
+#tx-picking-sumgrid > .tx-sum-card:nth-child(3){grid-column:1 / -1;}
+@media (max-width:760px){ #tx-picking-sumgrid{grid-template-columns:1fr;} }
+/* (6) ITN: tên người không gãy dòng */
+#tx-panel-itn table td, #tx-panel-itn table th{font-size:12px;}
+#tx-panel-itn table td:nth-child(2), #tx-panel-itn table td:nth-child(3), #tx-panel-itn table td:nth-child(4){white-space:nowrap;}
+.v5-uchip{display:inline-block; white-space:nowrap; font-family:var(--sans); font-size:11.5px; font-weight:600; padding:1px 7px; margin:1px 3px 1px 0; border-radius:999px; background:var(--panel-2); border:1px solid var(--line);}
+/* (8) Xếp hạng */
+.v5-txr-head{display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap; margin-bottom:10px;}
+.v5-txr{width:100%; border-collapse:collapse; font-family:var(--sans); font-size:13px;}
+.v5-txr th, .v5-txr td{padding:8px 10px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap;}
+.v5-txr thead th{font-size:11.5px; color:var(--muted); background:var(--panel-2); font-weight:700;}
+.v5-txr .num{text-align:right; font-variant-numeric:tabular-nums;} .v5-txr td.z{color:var(--muted-2);}
+.v5-txr td.rk{width:34px; font-weight:800; text-align:center;}
+.v5-txr td.u{font-weight:700;} .v5-txr td.u .kh{margin-left:8px;}
+.v5-txr tr.top td{background:color-mix(in srgb, var(--amber) 7%, transparent);}
+.v5-txr td.tot{position:relative; min-width:120px;} .v5-txr td.tot b{position:relative; color:var(--amber);}
+.v5-txr td.tot .v5-bar{position:absolute; right:10px; top:50%; height:60%; transform:translateY(-50%); width:calc((100% - 20px) * var(--w) / 100); background:color-mix(in srgb, var(--amber) 16%, transparent); border-radius:6px;}
+.v5-kdot{width:auto !important; height:auto !important; min-width:0 !important; line-height:1.5; vertical-align:1px; border:0 !important;}
+.v5-txm th, .v5-txm td, .v5-txr th, .v5-txr td{font-family:var(--sans) !important; text-transform:none !important; letter-spacing:0 !important;}
+.tx-sum-table td.v5-lbar{background:linear-gradient(90deg, color-mix(in srgb, var(--blue) 12%, transparent) var(--w), transparent var(--w)); background-size:100% 64%; background-position:left center; background-repeat:no-repeat;}
+.v5-txk-tiles{align-items:flex-start;}
+/* không để bảng cuộn ngang làm giãn bề ngang trang trên điện thoại */
+.v5-txm-scroll, .v5-tx-nav, #page-transaction .kho-modal-body, #page-transaction .tx-sum-scroll{width:0; min-width:100%; box-sizing:border-box;}

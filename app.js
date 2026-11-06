@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.85';
+const APP_VERSION = 'v5.90';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -19068,4 +19068,212 @@ if(typeof v5RenderShiftStats === 'function'){
     if(a && a.id === 'v5-sh-note-in'){ clearTimeout(v5ShiftNoteT); v5ShiftNoteSet(v5ShiftInfo().key, a.value); return; }
     return _v5RSS.apply(this, arguments);
   };
+}
+
+
+// ===== v5.90: Trang Transaction trực quan hơn =====
+// (1) KPI gom 4 nhóm, ô = 0 thu nhỏ + mờ
+const V5_TXK_GROUPS = [
+  { t: '📥 Nhập kho', c: 'var(--teal)', keys: ['RECEIVE', 'PUT AWAY', 'PUT AWAY (MENU)'] },
+  { t: '📦 Pick cont', c: 'var(--violet)', keys: ['PICKING'] },
+  { t: '🚚 Chuyển / ITN', c: 'var(--blue)', keys: ['TRANSFER · XUẤT', 'TRANSFER · NHẬN', 'XE TRUNG CHUYỂN · ĐI', 'XE TRUNG CHUYỂN · NHẬN'] },
+  { t: '↕️ Di chuyển nội bộ', c: 'var(--red)', keys: ['LÊN KHU LẦU 3AFG', 'XUỐNG KHU LẦU 3AFG', 'LÊN RACK 3A', 'XUỐNG RACK 3A', 'REWORK · XUẤT', 'REWORK · NHẬP'] }
+];
+const V5_TXK_LABEL = { 'RECEIVE': 'Receive', 'PUT AWAY': 'Put Away', 'PUT AWAY (MENU)': 'Put Away (Menu)', 'PICKING': 'Picking', 'TRANSFER · XUẤT': 'Transfer xuất', 'TRANSFER · NHẬN': 'Transfer nhận',
+  'XE TRUNG CHUYỂN · ĐI': 'Xe trung chuyển đi', 'XE TRUNG CHUYỂN · NHẬN': 'Xe trung chuyển nhận', 'LÊN KHU LẦU 3AFG': 'Lên lầu 3AFG', 'XUỐNG KHU LẦU 3AFG': 'Xuống lầu 3AFG',
+  'LÊN RACK 3A': 'Lên rack 3A', 'XUỐNG RACK 3A': 'Xuống rack 3A', 'REWORK · XUẤT': 'Rework xuất', 'REWORK · NHẬP': 'Rework nhập' };
+renderTxKpiStrip = function(){
+  const el = document.getElementById('transaction-kpi-strip');
+  if(!el) return;
+  if(!txState){ el.innerHTML = ''; el.className = 'kpis'; return; }
+  txEnsureDerived();
+  const items = txKpiItems(), by = {};
+  items.forEach(it => { by[it.label] = it; });
+  const total = by['TỔNG DÒNG'];
+  el.className = 'v5-txk-wrap';
+  el.innerHTML = (total ? `<div class="v5-txk-total">Tổng <b>${fmt(total.value)}</b> dòng giao dịch trong file</div>` : '') +
+    '<div class="v5-txk">' + V5_TXK_GROUPS.map(g => {
+      const its = g.keys.map(k => by[k]).filter(Boolean);
+      const sum = its.reduce((t, it) => t + (Number(it.value) || 0), 0);
+      return `<div class="v5-txk-g${sum ? '' : ' zero'}" style="--gc:${g.c}"><div class="v5-txk-h">${g.t}</div><div class="v5-txk-tiles">` +
+        its.map(it => `<div class="v5-txk-t${Number(it.value) ? '' : ' zero'}${it.cls === 'redbg' ? ' red' : ''}" title="${escHtml(it.foot)}"><div class="v">${fmt(it.value)}</div><div class="l">${escHtml(V5_TXK_LABEL[it.label] || it.label)}</div>${Number(it.value) ? `<div class="f">${escHtml(it.foot)}</div>` : ''}</div>`).join('') +
+        '</div></div>';
+    }).join('') + '</div>';
+};
+
+// (2) Grand Total dạng BẢNG MA TRẬN: dòng = kho, cột = loại giao dịch, mỗi ô có thanh theo độ lớn; kho trống ẩn
+renderTxChart = function(){
+  const wrap = document.getElementById('tx-chart-body');
+  if(!wrap) return;
+  if(!txState){ wrap.innerHTML = '<div class="kho-empty" style="padding:24px 0;">Chưa có dữ liệu — hãy tải file Transaction ở trên.</div>'; return; }
+  const cols = [];
+  TX_CHART_ITEMS.forEach(it => { if(!cols.some(c => c.label === it.label)) cols.push({ label: it.label, color: it.color || (it.split && it.split.top.color) }); });
+  const cell = {}; // kho -> label -> {parts:[{key,label,color,total,rows}], cont}
+  const colMax = {};
+  TX_CHART_KHO_ORDER.forEach(kho => {
+    cell[kho] = {};
+    TX_CHART_ITEMS.filter(it => (!it.onlyKho || it.onlyKho === kho) && it.excludeKho !== kho).forEach(it => {
+      const parts = it.split ? [it.split.top, it.split.bottom].map(p => ({ key: p.key, label: p.label, color: p.color, ...txKhoTotalFor(p.key, kho) }))
+        : [{ key: it.key, label: '', color: it.color, ...txKhoTotalFor(it.key, kho) }];
+      const c = { parts, cont: it.showContCount ? txKhoPickingContCount(kho) : null };
+      cell[kho][it.label] = c;
+      parts.forEach(p => { colMax[it.label] = Math.max(colMax[it.label] || 0, p.total); });
+    });
+  });
+  const khos = TX_CHART_KHO_ORDER.filter(kho => Object.values(cell[kho]).some(c => c.parts.some(p => p.total > 0)));
+  const usedCols = cols.filter(c => khos.some(k => cell[k][c.label] && cell[k][c.label].parts.some(p => p.total > 0)));
+  if(!khos.length){ wrap.innerHTML = '<div class="kho-empty" style="padding:24px 0;">Không có giao dịch nào trong file.</div>'; return; }
+  const partHtml = (p, kho, max, showLabel) => {
+    const w = max > 0 ? Math.max(p.total > 0 ? 6 : 0, Math.round(p.total / max * 100)) : 0;
+    return `<div class="v5-txm-p${p.total ? '' : ' zero'}" data-chart-kind="${p.key}" data-chart-kho="${escHtml(kho)}" title="${escHtml((p.label ? p.label + ' · ' : '') + fmt(p.rows || p.rowsCount || 0) + ' dòng — bấm để xem chi tiết')}">` +
+      `<span class="n">${showLabel && p.label ? `<i>${escHtml(p.label)}</i>` : ''}${p.total ? fmt(p.total) : '–'}</span><span class="b"><span style="width:${w}%;background:${p.color}"></span></span></div>`;
+  };
+  wrap.innerHTML = `<div class="v5-txm-scroll"><table class="v5-txm"><thead><tr><th>Kho</th>${usedCols.map(c => `<th><span class="dot" style="background:${c.color}"></span>${escHtml(c.label)}</th>`).join('')}<th class="tot">Tổng lượt</th></tr></thead><tbody>` +
+    khos.map(kho => {
+      let rowTot = 0;
+      const tds = usedCols.map(c => {
+        const x = cell[kho][c.label];
+        if(!x) return '<td class="na">·</td>';
+        x.parts.forEach(p => { rowTot += p.total; });
+        return `<td>${x.parts.map(p => partHtml(p, kho, colMax[c.label], x.parts.length > 1)).join('')}${x.cont ? `<div class="v5-txm-cont">${fmt(x.cont)} cont</div>` : ''}</td>`;
+      }).join('');
+      return `<tr><th class="kho">Kho ${escHtml(kho)}</th>${tds}<td class="tot">${fmt(rowTot)}</td></tr>`;
+    }).join('') + '</tbody></table></div><div class="v5-txm-hint">Bấm vào số bất kỳ để xem chi tiết từng dòng · thanh màu so với kho lớn nhất cùng cột</div>';
+};
+
+// (3) Mục lục dính + thu gọn mục không có giao dịch
+const V5_TX_SECTIONS = [
+  { id: 'tx-panel-chart', t: 'Tổng quan', kinds: null },
+  { id: 'v5-tx-rank', t: '🏆 Xếp hạng', kinds: null },
+  { id: 'tx-panel-receive', t: 'Receive', kinds: ['receive'] },
+  { id: 'tx-panel-transfer', t: 'Transfer', kinds: ['transfer', 'transferNhap'] },
+  { id: 'tx-panel-putaway', t: 'Put Away', kinds: ['putaway'] },
+  { id: 'tx-panel-movePallet', t: 'Move Pallet', kinds: ['movePallet'] },
+  { id: 'tx-panel-rework', t: 'Rework', kinds: ['reworkXuat', 'reworkNhap'] },
+  { id: 'tx-panel-updown', t: 'Lên/Xuống lầu', kinds: ['updownUp', 'updownDown'] },
+  { id: 'tx-panel-rack', t: 'Lên/Xuống rack', kinds: ['rackUp', 'rackDown'] },
+  { id: 'tx-panel-picking', t: 'Picking', kinds: ['picking'] },
+  { id: 'tx-panel-itn', t: 'Xe trung chuyển', kinds: ['itnTransferGroups', 'itnReceivingGroups'] }
+];
+function v5TxSecCount(kinds){ return (kinds || []).reduce((t, k) => t + ((txState && txState[k]) || []).reduce((a, r) => a + (r.total || 0), 0), 0); }
+function v5TxRenderNav(){
+  const page = document.getElementById('page-transaction'); if(!page) return;
+  let nav = document.getElementById('v5-tx-nav');
+  const kpi = document.getElementById('transaction-kpi-strip');
+  if(!nav){ nav = document.createElement('div'); nav.id = 'v5-tx-nav'; nav.className = 'v5-tx-nav'; if(kpi) kpi.parentNode.insertBefore(nav, kpi); }
+  if(!txState){ nav.style.display = 'none'; return; }
+  nav.style.display = '';
+  nav.innerHTML = V5_TX_SECTIONS.filter(s => document.getElementById(s.id)).map(s => {
+    const n = s.kinds ? v5TxSecCount(s.kinds) : null;
+    return `<button type="button" class="v5-tx-nb${n === 0 ? ' zero' : ''}" data-v5-tx-go="${s.id}">${escHtml(s.t)}${n !== null ? `<b>${fmt(n)}</b>` : ''}</button>`;
+  }).join('');
+  V5_TX_SECTIONS.forEach(s => {
+    const el = document.getElementById(s.id); if(!el || !s.kinds) return;
+    const empty = v5TxSecCount(s.kinds) === 0;
+    el.classList.toggle('v5-tx-empty', empty);
+    if(!empty) el.classList.remove('v5-tx-open');
+  });
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-v5-tx-go]');
+  if(b){ const el = document.getElementById(b.dataset.v5TxGo); if(el){ el.classList.add('v5-tx-open'); const nav = document.getElementById('v5-tx-nav'); const off = (nav ? nav.offsetHeight : 0) + 16; window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - off, behavior: 'smooth' }); } return; }
+  const p = e.target.closest('.v5-tx-empty');
+  if(p && !e.target.closest('input,button,select,a,table')) p.classList.toggle('v5-tx-open');
+});
+
+// (8) Bảng xếp hạng nhân viên trong file (gộp mọi thao tác) + xuất ảnh
+const V5_TX_RANK_COLS = [
+  { t: 'Receive', kinds: ['receive'], c: '#0E8F76' }, { t: 'Put Away', kinds: ['putaway'], c: '#F5A623' }, { t: 'Picking', kinds: ['picking'], c: '#6E4FE0' },
+  { t: 'Transfer', kinds: ['transfer', 'transferNhap'], c: '#2C6FCB' }, { t: 'Move Pallet', kinds: ['movePallet'], c: '#7CB342' },
+  { t: 'Lầu ↕', kinds: ['updownUp', 'updownDown'], c: '#D6394B' }, { t: 'Rack ↕', kinds: ['rackUp', 'rackDown'], c: '#3949AB' }, { t: 'Rework', kinds: ['reworkXuat', 'reworkNhap'], c: '#C2185B' }
+];
+function v5TxRankData(){
+  const m = new Map();
+  V5_TX_RANK_COLS.forEach((col, ci) => col.kinds.forEach(k => ((txState && txState[k]) || []).forEach(r => {
+    const u = String(r.user || '').trim(); if(!u) return;
+    if(!m.has(u)) m.set(u, { user: u, v: V5_TX_RANK_COLS.map(() => 0), total: 0, khos: new Set() });
+    const o = m.get(u); o.v[ci] += (r.total || 0); o.total += (r.total || 0); if(r.khoXuat) o.khos.add(r.khoXuat);
+  })));
+  return [...m.values()].filter(o => o.total > 0).sort((a, b) => b.total - a.total);
+}
+function v5TxRenderRank(){
+  const chart = document.getElementById('tx-panel-chart'); if(!chart) return;
+  let el = document.getElementById('v5-tx-rank');
+  if(!el){ el = document.createElement('div'); el.id = 'v5-tx-rank'; el.className = 'panel search-panel v5-tx-rank'; chart.parentNode.insertBefore(el, chart.nextSibling); }
+  if(!txState){ el.style.display = 'none'; return; }
+  const rows = v5TxRankData();
+  el.style.display = rows.length ? '' : 'none';
+  if(!rows.length) return;
+  const used = V5_TX_RANK_COLS.map((c, i) => i).filter(i => rows.some(r => r.v[i] > 0));
+  const max = rows[0].total || 1, medal = ['🥇', '🥈', '🥉'];
+  el.innerHTML = `<div class="v5-txr-head"><div><div class="brand-eyebrow"><span class="dot" style="background:#F5A623;box-shadow:0 0 8px #F5A623"></span>XẾP HẠNG</div><h1 style="font-size:17px;">Bảng xếp hạng nhân viên</h1>
+      <div class="sub">Gộp mọi thao tác của từng người trong file (số lượt) · ${fmt(rows.length)} người</div></div>
+      <button type="button" class="btn-update btn-ghost-outline" data-v5-tx-rank-shot="1">📷 Xuất ảnh</button></div>
+    <div class="v5-txm-scroll"><table class="v5-txr"><thead><tr><th>#</th><th>Người</th>${used.map(i => `<th class="num"><span class="dot" style="background:${V5_TX_RANK_COLS[i].c}"></span>${V5_TX_RANK_COLS[i].t}</th>`).join('')}<th class="num tot">Tổng lượt</th></tr></thead><tbody>` +
+    rows.map((r, i) => `<tr${i < 3 ? ' class="top"' : ''}><td class="rk">${medal[i] || (i + 1)}</td><td class="u">${escHtml(r.user)}<span class="kh">${[...r.khos].sort().map(k => `<i class="v5-kdot k${escHtml(k)}">${escHtml(k)}</i>`).join('')}</span></td>` +
+      used.map(ci => `<td class="num${r.v[ci] ? '' : ' z'}">${r.v[ci] ? fmt(r.v[ci]) : '–'}</td>`).join('') +
+      `<td class="num tot"><span class="v5-bar" style="--w:${Math.round(r.total / max * 100)}%"></span><b>${fmt(r.total)}</b></td></tr>`).join('') + '</tbody></table></div>';
+}
+async function v5TxRankShot(){
+  const rows = v5TxRankData(); if(!rows.length) return;
+  const used = V5_TX_RANK_COLS.map((c, i) => i).filter(i => rows.some(r => r.v[i] > 0));
+  const W = Math.max(760, 300 + used.length * 92 + 120), S = 2, PAD = 28, RH = 34, H = 120 + 36 + rows.length * RH + 40;
+  const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S; const c = cv.getContext('2d'); c.scale(S, S); c.textBaseline = 'middle';
+  const F = (w, px) => `${w} ${px}px Inter, "Segoe UI", Arial, sans-serif`;
+  const T = (t, x, y, f, col, a) => { c.font = f; c.fillStyle = col; c.textAlign = a || 'left'; c.fillText(String(t), x, y); };
+  c.fillStyle = '#F4F6FB'; c.fillRect(0, 0, W, H);
+  const g = c.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#0F1B33'); g.addColorStop(1, '#1E3A6E'); c.fillStyle = g; c.fillRect(0, 0, W, 96);
+  T('BẢNG XẾP HẠNG NHÂN VIÊN · TN5', PAD, 38, F(800, 22), '#fff');
+  const fl = (document.getElementById('transaction-file-line') || {}).textContent || '';
+  T(`${rows.length} người · số lượt thao tác · ${fl.replace(/^File:\s*/, '')}`, PAD, 68, F(500, 13), '#B8C7E6');
+  let y = 112; const x0 = PAD, xU = PAD + 44, xC = 300;
+  c.fillStyle = '#E8EDF6'; c.fillRect(PAD, y, W - PAD * 2, 32);
+  T('#', x0 + 10, y + 16, F(700, 12), '#4B5563'); T('Người', xU, y + 16, F(700, 12), '#4B5563');
+  used.forEach((ci, k) => T(V5_TX_RANK_COLS[ci].t, xC + k * 92 + 80, y + 16, F(700, 12), V5_TX_RANK_COLS[ci].c, 'right'));
+  T('Tổng', W - PAD - 10, y + 16, F(800, 12), '#111827', 'right');
+  y += 32;
+  const medal = ['🥇', '🥈', '🥉'];
+  rows.forEach((r, i) => {
+    c.fillStyle = i < 3 ? '#FFF8E6' : (i % 2 ? '#FFFFFF' : '#F8FAFD'); c.fillRect(PAD, y, W - PAD * 2, RH);
+    T(medal[i] || (i + 1), x0 + 10, y + RH / 2, F(800, 14), '#374151');
+    T(r.user, xU, y + RH / 2, F(700, 14), '#111827');
+    used.forEach((ci, k) => T(r.v[ci] ? fmt(r.v[ci]) : '–', xC + k * 92 + 80, y + RH / 2, F(600, 13), r.v[ci] ? '#111827' : '#9AA3B2', 'right'));
+    T(fmt(r.total), W - PAD - 10, y + RH / 2, F(800, 14), '#B76E00', 'right');
+    y += RH;
+  });
+  T('Dashboard TN5 · ' + APP_VERSION, PAD, H - 18, F(500, 11), '#9AA3B2');
+  const blob = await new Promise(res => cv.toBlob(res, 'image/png')); if(!blob) return;
+  const name = 'Xep-hang-nhan-vien.png';
+  const file = typeof File === 'function' ? new File([blob], name, { type: 'image/png' }) : null;
+  if(file && IS_TOUCH_DEVICE && navigator.canShare && navigator.canShare({ files: [file] })){ try{ await navigator.share({ files: [file], title: 'Xếp hạng nhân viên' }); return; }catch(e){ if(e && e.name === 'AbortError') return; } }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+}
+document.addEventListener('click', e => { if(e.target.closest('[data-v5-tx-rank-shot]')) v5TxRankShot(); });
+
+// (4)+(6) Làm đẹp bảng sau khi vẽ: thanh ngang ở cột Lượt, kho thành chấm màu, tên người ITN không gãy dòng
+function v5TxEnhance(){
+  const page = document.getElementById('page-transaction'); if(!page) return;
+  page.querySelectorAll('.tx-sum-card:not([data-v5e])').forEach(card => {
+    card.dataset.v5e = '1';
+    const ths = [...card.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    const iL = ths.indexOf('Lượt'), iK = ths.indexOf('Kho');
+    const trs = [...card.querySelectorAll('tbody tr')];
+    if(iL >= 0){
+      const vals = trs.map(tr => Number(String((tr.children[iL] || {}).textContent || '').replace(/[^\d.-]/g, '')) || 0);
+      const mx = Math.max(1, ...vals);
+      trs.forEach((tr, i) => { const td = tr.children[iL]; if(td){ td.classList.add('v5-lbar'); td.style.setProperty('--w', Math.round(vals[i] / mx * 100) + '%'); } });
+    }
+    if(iK > 0) trs.forEach(tr => { const td = tr.children[iK]; if(!td) return; const ks = td.textContent.split(',').map(x => x.trim()).filter(x => x && x !== '—'); if(ks.length) td.innerHTML = ks.map(k => `<i class="v5-kdot k${escHtml(k)}" title="Kho ${escHtml(k)}">${escHtml(k)}</i>`).join(''); });
+  });
+  ['tx-xtc-transfer-tbody', 'tx-xtc-receiving-tbody'].forEach(id => {
+    const tb = document.getElementById(id); if(!tb) return;
+    tb.querySelectorAll('tr:not([data-v5e])').forEach(tr => { tr.dataset.v5e = '1'; const td = tr.children[4]; if(td && !td.firstElementChild){ const us = td.textContent.split(',').map(x => x.trim()).filter(Boolean); td.innerHTML = us.map(u => `<span class="v5-uchip">${escHtml(u)}</span>`).join(''); } });
+  });
+}
+{
+  const _rtp = renderTransactionPage;
+  renderTransactionPage = function(){ const r = _rtp.apply(this, arguments); try{ v5TxRenderNav(); v5TxRenderRank(); v5TxEnhance(); }catch(e){ console.error(e); } return r; };
+  let v5TxEnT = 0;
+  const pg = document.getElementById('page-transaction');
+  if(pg && typeof MutationObserver === 'function') new MutationObserver(() => { clearTimeout(v5TxEnT); v5TxEnT = setTimeout(() => { try{ v5TxEnhance(); }catch(e){} }, 60); }).observe(pg, { childList: true, subtree: true });
 }
