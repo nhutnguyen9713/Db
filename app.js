@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.30';
+const APP_VERSION = 'v5.40';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -4950,6 +4950,13 @@ document.addEventListener('click', (e) => {
   const domId = row.dataset.contJump;
   const target = document.getElementById('plan-cont-row-' + domId);
   if(!target) return;
+  const v5Card = !target.offsetParent && document.getElementById('plan-cont-card-' + domId);
+  if(v5Card){ // v5.40: đang xem dạng Thẻ -> nhảy tới thẻ container
+    v5Card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    v5Card.classList.remove('v5-flash'); void v5Card.offsetWidth; v5Card.classList.add('v5-flash');
+    setTimeout(() => v5Card.classList.remove('v5-flash'), 2000);
+    return;
+  }
   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
   // SỬA (lỗi thật đã gặp — thử cả outline offset dương lẫn position:relative + z-index đều vẫn bị
   // dòng kế bên vẽ đè lên che mất, vì outline có thể tràn RA NGOÀI khung dòng nên luôn có nguy cơ đụng
@@ -5408,6 +5415,7 @@ function renderPlanPanel(){
     }
     const contColorMap = new Map();
     let lastContainer = null;
+    const cardGroups = []; let cardGroup = null; // v5.40: gom theo container để vẽ chế độ Thẻ
     const rowsHtml = rows.map(r => {
       const cNo = r.containerNo || '—';
       const gKey = planContGroupKey(r);
@@ -5455,7 +5463,14 @@ function renderPlanPanel(){
       </div>`;
 
       const rowId = isNewGroup ? ` id="plan-cont-row-${contDomId(type, cNo, r.loadDate ? fmtDate(r.loadDate) : '', r.planTime || '')}"` : '';
-      return `
+      if(isNewGroup || !cardGroup){
+        cardGroup = { key: gKey, cNo, color: contColor, date: r.loadDate ? fmtDate(r.loadDate) : '', time: r.planTime || '', kind: r.type || '', invoice: r.invoice || '', csr: r.csr || '', items: [], trs: [] };
+        cardGroups.push(cardGroup);
+      }
+      cardGroup.items.push({ item: r.item, po: r.custPo || '', qty: planQty, ctn: r.ctn || 0, cbm: r.cbm || 0, pass: Math.min(passQty, planQty), pct, barColor });
+      if(r.invoice && cardGroup.invoice.indexOf(r.invoice) < 0) cardGroup.invoice += (cardGroup.invoice ? ', ' : '') + r.invoice;
+      if(r.csr && cardGroup.csr.indexOf(r.csr) < 0) cardGroup.csr += (cardGroup.csr ? ', ' : '') + r.csr;
+      const trHtml = `
       <tr class="${groupCls}"${rowId} style="background:${rowBg}; --cont-line:${contColor};">
         <td class="cont-no-cell" style="border-left-color:${contColor};"><span class="cont-badge" style="background:${contColor}">${cNo}</span></td>
         <td>${r.loadDate ? fmtDate(r.loadDate) : '—'}</td>
@@ -5470,10 +5485,19 @@ function renderPlanPanel(){
         <td>${r.csr || '—'}</td>
         <td>${barHtml}</td>
       </tr>`;
+      cardGroup.trs.push(trHtml);
+      return trHtml;
     }).join('');
     const compare = buildCompareTable(type);
+    const theadHtml = `
+            <tr>
+              <th>Cont</th><th>Loading Date</th><th>Plan Time</th><th>TTI Model</th><th>Customer PO</th>
+              <th style="text-align:right">QTY</th><th style="text-align:right">CTN</th><th style="text-align:right">CBM</th>${locCols.map(name=>`<th style="text-align:right" class="loc-head">${name}</th>`).join('')}
+              <th>Type</th><th>Invoice</th><th>CSR</th>
+              <th>Picking Status</th>
+            </tr>`;
     return `
-    <div class="plan-card" style="border:2px solid ${PLAN_COLORS[type]}; background:linear-gradient(90deg, ${PLAN_COLORS[type]}14, transparent 120px);">
+    <div class="plan-card${v5PlanView() === 'card' ? ' v5-pv-card' : ''}" style=""border:2px solid ${PLAN_COLORS[type]}; background:linear-gradient(90deg, ${PLAN_COLORS[type]}14, transparent 120px);">
       <div class="plan-card-head">
         <span class="plan-card-badge" style="background:${PLAN_COLORS[type]};">${type}</span>
         <span class="plan-card-title" style="color:${PLAN_COLORS[type]}">Plan ${type}</span>
@@ -5487,16 +5511,11 @@ function renderPlanPanel(){
         ${planData[type].nearestDateStr ? `<div><b>${planData[type].nearestDateStr}</b><span>Ngày load gần nhất</span></div>` : ''}
       </div>
       <div class="plan-card-chart-label">Chi tiết kế hoạch xuất (${rows.length} dòng) &nbsp; <span class="compare-summary" style="font-family:var(--mono); font-size:10px; color:var(--muted-2);">Mỗi màu = 1 container</span></div>
-      <div class="plan-table-wrap">
+      ${v5PlanViewBarHtml(type, cardGroups.length)}
+      ${v5PlanCardsHtml(type, cardGroups, theadHtml)}
+      <div class="plan-table-wrap v5-plan-tablewrap">
         <table class="plan-detail-table" data-colspan="${detailColCount}">
-          <thead>
-            <tr>
-              <th>Cont</th><th>Loading Date</th><th>Plan Time</th><th>TTI Model</th><th>Customer PO</th>
-              <th style="text-align:right">QTY</th><th style="text-align:right">CTN</th><th style="text-align:right">CBM</th>${locCols.map(name=>`<th style="text-align:right" class="loc-head">${name}</th>`).join('')}
-              <th>Type</th><th>Invoice</th><th>CSR</th>
-              <th>Picking Status</th>
-            </tr>
-          </thead>
+          <thead>${theadHtml}</thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>
@@ -18509,3 +18528,80 @@ document.querySelectorAll('.sidebar-nav-btn[data-page]').forEach(btn => btn.addE
   setTimeout(() => w.classList.remove('v5-enter'), 400);
 }));
 try{ v5RenderSummary(); }catch(e){ console.error(e); }
+
+
+// ===== v5.40: bảng "Chi tiết kế hoạch xuất" có chế độ Thẻ — mỗi container 1 thẻ (vòng % pick,
+// trạng thái, giờ plan, Invoice, QTY/Mã/CTN/CBM, thanh tiến độ từng mã). Bấm thẻ để xổ bảng chi tiết
+// đủ cột của riêng container đó. Nút Bảng | Thẻ lưu ở localStorage tn5_v5_plan_view (mặc định Thẻ).
+var V5_PLAN_VIEW_KEY = 'tn5_v5_plan_view';
+var v5PlanOpen = new Set();
+function v5PlanView(){ try{ return localStorage.getItem(V5_PLAN_VIEW_KEY) === 'table' ? 'table' : 'card'; }catch(e){ return 'card'; } }
+function v5PlanViewBarHtml(type, n){
+  const v = v5PlanView();
+  return `<div class="v5-pv-bar"><div class="v5-seg" role="tablist">
+    <button type="button" class="v5-seg-btn${v==='table'?' on':''}" data-v5-planview="table">Bảng</button>
+    <button type="button" class="v5-seg-btn${v==='card'?' on':''}" data-v5-planview="card">Thẻ</button>
+  </div><span class="v5-pv-note">${n} container · bấm thẻ để xem chi tiết</span></div>`;
+}
+function v5PlanContStatus(type, g, pct){
+  let row = null;
+  try{ const k = contInstanceKey(type, g.cNo, g.date, g.time); row = (contPickAllRows || []).find(r => r.instanceKey === k) || null; }catch(e){}
+  const st = row ? row.status : (pct >= 100 ? 'done' : pct > 0 ? 'inProgress' : 'notStarted');
+  if(row && row.isShipDone) return { cls: 'ship', label: 'Load xong' };
+  if(st === 'done' || st === 'manualDone') return { cls: 'done', label: 'Pick xong' };
+  if(st === 'inProgress') return { cls: 'prog', label: 'Đang pick' };
+  return { cls: 'idle', label: 'Chưa pick' };
+}
+function v5PlanCardsHtml(type, groups, theadHtml){
+  if(!groups.length) return '';
+  const C = 2 * Math.PI * 22;
+  let lastDay = null, html = '';
+  groups.forEach(g => {
+    if(g.date !== lastDay){ lastDay = g.date; html += `<div class="v5-pc-day">${g.date || 'Chưa có ngày load'}</div>`; }
+    const tq = g.items.reduce((s, i) => s + i.qty, 0);
+    const pk = g.items.reduce((s, i) => s + i.pass, 0);
+    const ctn = g.items.reduce((s, i) => s + (+i.ctn || 0), 0);
+    const cbm = g.items.reduce((s, i) => s + (+i.cbm || 0), 0);
+    const pct = tq ? Math.min(100, pk / tq * 100) : 0;
+    const st = v5PlanContStatus(type, g, pct);
+    const ringCol = pct >= 100 ? 'var(--teal)' : pct >= 70 ? 'var(--amber-bright)' : pct > 0 ? 'var(--red)' : 'transparent';
+    const domId = contDomId(type, g.cNo, g.date, g.time);
+    const open = v5PlanOpen.has(type + '|' + g.key);
+    const pctTxt = typeof pickPctLabel === 'function' ? pickPctLabel(pct) : Math.round(pct) + '%';
+    html += `<div class="v5-pc${open ? ' open' : ''}" id="plan-cont-card-${domId}" data-v5-pc="${escapeAttrV5(type + '|' + g.key)}" style="--c:${g.color}">
+      <div class="v5-pc-top">
+        <svg class="v5-pc-ring" viewBox="0 0 54 54"><circle cx="27" cy="27" r="22" class="trk"/><circle cx="27" cy="27" r="22" class="val" stroke="${ringCol}" stroke-dasharray="${(C * pct / 100).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 27 27)"/><text x="27" y="31" text-anchor="middle">${Math.round(pct)}%</text></svg>
+        <div class="v5-pc-head">
+          <div class="v5-pc-no"><span class="v5-pc-dot"></span>Cont ${g.cNo}<span class="v5-pc-st ${st.cls}">${st.label}</span></div>
+          <div class="v5-pc-sub">${g.time ? '⏰ ' + g.time : ''}${g.kind ? ' · ' + g.kind : ''}${g.invoice ? ' · ' + g.invoice : ''}</div>
+        </div>
+        <span class="v5-pc-chev">▾</span>
+      </div>
+      <div class="v5-pc-meta"><div><b>${fmt(tq)}</b><span>Tổng QTY</span></div><div><b>${g.items.length}</b><span>Mã hàng</span></div><div><b>${fmt(ctn)}</b><span>CTN</span></div><div><b>${fmtDec(cbm, 1)}</b><span>CBM</span></div></div>
+      <div class="v5-pc-items">${g.items.map(i => `<div class="v5-pc-it"><span><span class="item-link" data-item="${i.item}" data-po="${i.po}">${i.item}</span> <small>${i.po}</small></span><span class="q">${fmt(i.pass)} / ${fmt(i.qty)}</span><div class="tr"><div style="width:${i.pct}%;background:${i.barColor}"></div></div></div>`).join('')}</div>
+      <div class="v5-pc-foot"><span>${g.csr ? 'CSR ' + g.csr : 'Chưa có CSR'}</span><span>${fmt(pk)} / ${fmt(tq)} pcs · ${pctTxt}</span></div>
+      <div class="v5-pc-detail">${open ? `<div class="plan-table-wrap"><table class="plan-detail-table"><thead>${theadHtml}</thead><tbody>${g.trs.join('').replace(/ id="plan-cont-row-[^"]*"/g, '')}</tbody></table></div>` : ''}</div>
+    </div>`;
+  });
+  // lưu sẵn HTML chi tiết để xổ thẻ không cần vẽ lại cả bảng
+  v5PlanCardsHtml._cache = v5PlanCardsHtml._cache || {};
+  groups.forEach(g => { v5PlanCardsHtml._cache[type + '|' + g.key] = `<div class="plan-table-wrap"><table class="plan-detail-table"><thead>${theadHtml}</thead><tbody>${g.trs.join('').replace(/ id="plan-cont-row-[^"]*"/g, '')}</tbody></table></div>`; });
+  return `<div class="v5-pc-grid">${html}</div>`;
+}
+function escapeAttrV5(s){ return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+document.addEventListener('click', (e) => {
+  const vb = e.target.closest('[data-v5-planview]');
+  if(vb){
+    try{ localStorage.setItem(V5_PLAN_VIEW_KEY, vb.dataset.v5Planview); }catch(err){}
+    const on = vb.dataset.v5Planview === 'card';
+    document.querySelectorAll('#plan-overview-row .plan-card').forEach(c => { if(!c.classList.contains('plan-card-editing')) c.classList.toggle('v5-pv-card', on); });
+    document.querySelectorAll('[data-v5-planview]').forEach(b => b.classList.toggle('on', b.dataset.v5Planview === vb.dataset.v5Planview));
+    return;
+  }
+  const card = e.target.closest('.v5-pc');
+  if(!card || e.target.closest('.item-link') || e.target.closest('.v5-pc-detail')) return;
+  const k = card.dataset.v5Pc;
+  const det = card.querySelector('.v5-pc-detail');
+  if(v5PlanOpen.has(k)){ v5PlanOpen.delete(k); card.classList.remove('open'); if(det) det.innerHTML = ''; }
+  else { v5PlanOpen.add(k); card.classList.add('open'); if(det) det.innerHTML = (v5PlanCardsHtml._cache || {})[k] || ''; }
+});
