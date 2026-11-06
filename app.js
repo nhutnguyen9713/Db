@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.09';
+const APP_VERSION = 'v6.10';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -19666,7 +19666,7 @@ const V5_KPI_TASKS = [
   { t: 'Put away - Rack', kinds: k => k === '3A' ? ['putawayRack'] : [] },
   { t: 'Pick Order - Floor', kinds: k => k === '3A' ? ['pickingFloor'] : ['picking'] },
   { t: 'Pick Order - Rack', kinds: k => k === '3A' ? ['pickingRack'] : [] },
-  { t: 'Move Pallet Up Down', kinds: k => ['updownUp', 'updownDown', 'rackUp', 'rackDown'], hint: 'Lên + Xuống lầu M1/M2 + Lên + Xuống Rack' },
+  { t: 'Move Pallet Up Down', kinds: k => ['updownUp', 'updownDown'], hint: 'Lên + Xuống lầu M1/M2 (v6.10: không tính Rack)' },
   { t: 'Transfer to other WHs', kinds: k => ['transfer'] },
   { t: 'Recive from other WHs', kinds: k => ['transferNhap'] },
   { t: 'Stock Count', kinds: null },
@@ -19674,6 +19674,7 @@ const V5_KPI_TASKS = [
 ];
 const V5_KPI_EXTRA = [
   { t: 'Move Pallet (nội bộ)', kinds: k => ['movePallet'] },
+  { t: 'Lên/Xuống Rack', kinds: k => ['rackUp', 'rackDown'] },
   { t: 'Xuất RW', kinds: k => ['reworkXuat'] },
   { t: 'Nhận RW', kinds: k => ['reworkNhap'] }
 ];
