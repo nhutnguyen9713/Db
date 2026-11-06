@@ -2944,3 +2944,9 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
   .kt-mode-table tr.kt-loc-header-row > td{display:block !important; border-radius:10px; padding:8px 12px !important;}
   .v5-kt-only{margin-left:0;}
 }
+@media (min-width:761px){
+  .kt-mode-table .kt-calc-row{display:flex; flex-wrap:wrap; align-items:center; row-gap:4px;}
+  .kt-mode-table .kt-calc-row > *{flex:0 0 auto;}
+  .kt-mode-table .kt-calc-inputs{white-space:nowrap;}
+  #page-kiemton [id^="cc-loc-cards-"]{overflow-x:auto;}
+}
