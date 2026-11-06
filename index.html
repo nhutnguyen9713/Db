@@ -2620,6 +2620,13 @@ if('serviceWorker' in navigator){
       console.warn('Không đăng ký được Service Worker (PWA sẽ không cài đặt được):', err);
     });
   });
+  // v6.04: SW báo đã phải dùng bản cache (mạng chậm) và bản mới vừa tải xong -> hiện thanh tải lại
+  navigator.serviceWorker.addEventListener('message', function(e){
+    if(e.data && e.data.type === 'tn5-sw-updated'){
+      const banner = document.getElementById('pwa-update-banner');
+      if(banner) banner.style.display = 'flex';
+    }
+  });
   const reloadBtn = document.getElementById('pwa-update-reload-btn');
   if(reloadBtn) reloadBtn.addEventListener('click', function(){ window.location.reload(); });
 }
