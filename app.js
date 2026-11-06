@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v6.06';
+const APP_VERSION = 'v6.07';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -18904,7 +18904,7 @@ function v5ShiftReportCanvas(){
     noteText.split(/\n/).forEach(par => { let line = ''; par.split(/\s+/).forEach(w => { const t = line ? line + ' ' + w : w; if(mc.measureText(t).width > 1180 - 36 * 2 - 40 && line){ noteLines.push(line); line = w; } else line = t; }); noteLines.push(line); });
   }
   const noteH = noteLines.length ? 56 + noteLines.length * 22 : 0;
-  const H = 330 + 52 + listRows.length * 34 + (listRows.length ? 0 : 40) + 90 + noteH;
+  const H = 358 + 52 + listRows.length * 34 + (listRows.length ? 0 : 40) + 90 + noteH;
   const cv = document.createElement('canvas'); cv.width = W * S; cv.height = H * S;
   const c = cv.getContext('2d'); c.scale(S, S);
   const F = (w, px) => `${w} ${px}px Inter, "Segoe UI", Arial, sans-serif`;
@@ -18925,8 +18925,8 @@ function v5ShiftReportCanvas(){
   const gw = (W - PAD * 2 - 24) / 3;
   groups.forEach(([title, list, col, sub], i) => {
     const x = PAD + i * (gw + 12), y = 124;
-    rr(x, y, gw, 186, 14, '#FFFFFF', '#DDE3EE');
-    c.fillStyle = col; c.fillRect(x, y + 14, 4, 158);
+    rr(x, y, gw, 214, 14, '#FFFFFF', '#DDE3EE');
+    c.fillStyle = col; c.fillRect(x, y + 14, 4, 186);
     txt(title, x + 20, y + 32, F(800, 17), col);
     txt(sub, x + 20, y + 52, F(500, 12), '#6B7485');
     txt(list.length, x + 20, y + 102, F(800, 44), title === 'Cont rớt' && list.length ? col : '#111827');
@@ -18936,9 +18936,26 @@ function v5ShiftReportCanvas(){
     txt(`Chưa ${cnt('notStarted')} · Đang ${cnt('inProgress')} · Xong ${done} · Load ${ship}`, x + 20, y + 132, F(600, 13), '#374151');
     const pal = v5PalletSum(list);
     txt(`Pallet pick ${fmt(pal.picked)} · load ${pal.loaded === null ? '—' : fmt(pal.loaded)}`, x + 20, y + 160, F(700, 13), '#111827');
+    // v6.07: số cont theo kho pick chính, VD "● 3B: 3 cont (2 xong)  ● 2B: 5 cont"
+    const ks = v5ShiftKhoCounts(list);
+    if(ks.length){
+      const fontK = F(700, 13), maxW = gw - 40;
+      const label = (k, e, withDone) => `${k.replace('Kho ', '')}: ${e.n} cont${withDone && e.done ? ` (${e.done} xong)` : ''}`;
+      c.font = fontK;
+      const totalW = wd => ks.reduce((t, [k, e]) => t + 14 + c.measureText(label(k, e, wd)).width + 14, 0);
+      const withDone = totalW(true) <= maxW;
+      let kx = x + 20;
+      ks.forEach(([k, e]) => {
+        const t = label(k, e, withDone); c.font = fontK; const tw = c.measureText(t).width;
+        if(kx + 14 + tw > x + gw - 16) return;
+        c.beginPath(); c.arc(kx + 5, y + 189, 5, 0, Math.PI * 2); c.fillStyle = (typeof V5_KHO_COLOR !== 'undefined' && V5_KHO_COLOR[k]) || '#9AA3B2'; c.fill();
+        txt(t, kx + 14, y + 194, fontK, '#111827');
+        kx += 14 + tw + 14;
+      });
+    }
   });
   // bảng cont rớt + trong ca
-  let y = 340;
+  let y = 368;
   txt('Chi tiết cont rớt và cont trong ca', PAD, y, F(800, 16), '#111827');
   y += 16;
   const cols = [['Nhóm', 0], ['Plan', 90], ['Cont', 150], ['Ngày · Giờ', 330], ['Invoice', 480], ['Kho', 600], ['% pick', 680], ['Trạng thái', 770], ['Ghi chú', 900]];
