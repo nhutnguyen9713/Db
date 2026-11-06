@@ -339,7 +339,10 @@
   .ph-pick-sec .ph-sec-ng{color:#B42318; text-transform:none;}
   .ph-locs tr.ph-loc-ng > td{background:#FDECEC;}
   .ph-locs tr.ph-loc-ng > td.ph-num, .ph-locs tr.ph-loc-ng > td.ph-oqc-ng{color:#B42318; font-weight:700;}
-  .ph-locs tr.ph-loc-click > td:first-child{white-space:nowrap;}
+  /* chỉ cột PO (tab Tìm mã hàng) không xuống dòng — cột Locator phải được xuống dòng, nếu không bảng bị đẩy rộng và mất cột OQC/SL */
+  .ph-locs td.ph-po-col{white-space:nowrap;}
+  .ph-kho-panel .ph-locs td:first-child{white-space:normal; overflow-wrap:anywhere;}
+  .ph-kho-panel .ph-locs td:not(:first-child), .ph-kho-panel .ph-locs th:not(:first-child){white-space:nowrap; width:1%;}
   /* Mã chỉ có 1 PO -> ẩn cột PO (PO đã ghi ở đầu thẻ), mũi tên ▸ chuyển sang cột Locator */
   .ph-single-po .ph-locs .ph-po-col{display:none;}
   .ph-single-po .ph-locs tr.ph-loc-click > td:nth-child(2)::before{content:'▸'; display:inline-block; width:12px; color:#8a97ac; font-size:10px; transition:transform .15s;}
@@ -436,7 +439,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v4.33';
+  var PH_VERSION = 'v4.34';
   var PH_VERSION_DATE = '05/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
