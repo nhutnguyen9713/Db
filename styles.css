@@ -2543,6 +2543,7 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
 .v5-sh-head{font-family:var(--sans); font-size:13px; font-weight:800; color:var(--text); margin-bottom:10px; display:flex; gap:10px; align-items:baseline; flex-wrap:wrap;}
 .v5-sh-head em{font-style:normal; font-weight:600; font-size:12px; color:var(--muted);}
 .v5-sh-grid{display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px;}
+.v5-sh-grid.v5-sh-grid-2{grid-template-columns:repeat(2, minmax(0, 1fr));} /* v6.15: không có cont rớt → ẩn thẻ đó */
 .v5-sh{position:relative; border:1px solid var(--line); border-radius:14px; padding:12px 14px 12px 16px; background:color-mix(in srgb, var(--sc) 6%, transparent); overflow:hidden; font-family:var(--sans);}
 .v5-sh:before{content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--sc);}
 .v5-sh-h{display:flex; flex-direction:column; gap:1px;}
@@ -2558,7 +2559,7 @@ body[data-theme] .tn5-fc-now .fc-rain-now, body[data-theme] .tn5-fc-hour .fc-rai
 .v5-sh-chips .c1 b{color:var(--amber-bright);} .v5-sh-chips .c2 b{color:var(--teal);} .v5-sh-chips .c3 b{color:var(--violet);}
 .v5-sh-pal{display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:9px; padding-top:8px; border-top:1px dashed var(--line); font-size:12px; color:var(--muted);}
 .v5-sh-pal b{font-family:var(--mono); color:var(--text); font-size:13px; margin-left:3px;}
-@media (max-width:900px){ .v5-sh-grid{grid-template-columns:1fr;} }
+@media (max-width:900px){ .v5-sh-grid, .v5-sh-grid.v5-sh-grid-2{grid-template-columns:1fr;} }
 /* v5.51: popup Locator của mã hàng (từ thẻ container) */
 .v5-itemloc-tbl{width:100%; border-collapse:collapse;}
 .v5-itemloc-tbl > tbody > tr > td{padding:0; border:none; background:transparent;}
