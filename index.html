@@ -713,14 +713,14 @@
       <div>
         <div class="brand-eyebrow"><span class="dot"></span>TRA CỨU TỒN KHO</div>
         <h1>Tìm mã hàng</h1>
-        <div class="sub">Tìm một hoặc nhiều mã hàng cùng lúc, quét trên cả 4 khu vực kho</div>
+        <div class="sub">Tìm một hoặc nhiều mã hàng cùng lúc, quét trên tất cả các kho (2B, 3A, 3B)</div>
       </div>
     </div>
 
     <div class="panel search-panel search-sticky-controls" id="search-sticky-controls">
       <div class="kho-multi-wrap" style="padding:0 0 16px;">
         <div class="kho-multi-label">
-          <span class="v5-hint" data-hint-label="Cách tìm nhiều mã"><span class="badge-multi">MULTI</span>&nbsp; Mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng (quét cả 4 kho). Trong cùng 1 dòng, gõ cách nhau bằng khoảng trắng để <b>kết hợp nhiều điều kiện</b> (VD: mã hàng + CSR/Ref) trên cùng 1 dòng dữ liệu.</span>
+          <span class="v5-hint" data-hint-label="Cách tìm nhiều mã"><span class="badge-multi">MULTI</span>&nbsp; Mỗi dòng/cách nhau bằng dấu phẩy = 1 lượt tìm riêng (quét tất cả kho). Trong cùng 1 dòng, gõ cách nhau bằng khoảng trắng để <b>kết hợp nhiều điều kiện</b> (VD: mã hàng + CSR/Ref) trên cùng 1 dòng dữ liệu.</span>
           <button class="btn-clear-multi" id="btn-clear-multi" type="button">Xoá</button>
         </div>
         <textarea id="kho-multi-search" rows="2" placeholder="VD: 000123, 000456001DG9, 308398012 (mỗi dòng 1 lượt) — hoặc CR0163815 095079952 (kết hợp trên cùng 1 dòng)"></textarea>
@@ -735,6 +735,7 @@
       </div>
     </div>
 
+    <div class="panel search-panel v5-sc" id="v5-srch-codes" style="display:none; margin-top:16px;"></div>
     <div class="panel search-panel cc-collapse-panel open" id="kho-summary-panel" style="margin-top:16px;">
       <div class="cc-collapse-head" data-collapse-toggle>
         <div>
@@ -1828,7 +1829,7 @@
       <div>
         <div class="brand-eyebrow"><span class="dot" style="background:var(--red);box-shadow:0 0 8px var(--red);"></span>QUẢN LÝ HÀNG NG</div>
         <h1>Hàng NG</h1>
-        <div class="sub">Toàn bộ mã + PO đang có OQC = NG trong 3 kho (2B, 3A, 3B), không gồm locator PROD (khu sản xuất chứa hàng rework). Gán trạng thái xử lý và ghi chú cho từng dòng; cảnh báo nếu mã + PO đang nằm trong kế hoạch xuất cont. Trạng thái / ghi chú đồng bộ Cloud khi bấm "Lưu" và tự lưu lại 1 bản mỗi ca (ngày / đêm) để xem lại; hình chụp lưu trên máy này.</div>
+        <div class="sub ngp-sub-desc" title="Bấm để xem đầy đủ">Toàn bộ mã + PO đang có OQC = NG trong 3 kho (2B, 3A, 3B), không gồm locator PROD (khu sản xuất chứa hàng rework). Gán trạng thái xử lý và ghi chú cho từng dòng; cảnh báo nếu mã + PO đang nằm trong kế hoạch xuất cont. Trạng thái / ghi chú đồng bộ Cloud khi bấm "Lưu" và tự lưu lại 1 bản mỗi ca (ngày / đêm) để xem lại; hình chụp lưu trên máy này.</div>
       </div>
       <button type="button" class="btn-export-excel" id="ngp-export" style="white-space:nowrap;">📥 Xuất Excel</button>
     </div>
@@ -1854,18 +1855,27 @@
           <option value="pallets">Xếp theo: Số pallet</option>
           <option value="item">Xếp theo: Item No.</option>
           <option value="locator">Xếp theo: Locator</option>
+          <option value="age">Xếp theo: Tồn lâu nhất</option>
         </select>
         <label class="ngp-check"><input type="checkbox" id="ngp-plan-only"> Chỉ mã có trong Plan xuất cont</label>
         <select id="ngp-day" class="ngp-input" title="Mỗi ca (ngày 7h–19h, đêm 19h–7h sáng hôm sau) tự lưu 1 bản danh sách NG kèm trạng thái / ghi chú — chọn ca để xem lại"><option value="">Ca hiện tại (trực tiếp)</option></select>
       </div>
+      <div class="ngp-stbar" id="ngp-stbar"></div>
+      <div class="ngp-bulk" id="ngp-bulk" style="display:none;"></div>
       <div class="ngp-history-note" id="ngp-history-note" style="display:none;"></div>
       <div class="ngp-table-wrap">
         <table class="ngp-table">
-          <thead><tr><th>Kho</th><th>Item No.</th><th>Cust PO</th><th>Locator</th><th class="num">Pallet</th><th class="num">Pcs</th><th>Plan</th><th>Trạng thái</th><th>Ghi chú</th><th>Hình</th><th></th></tr></thead>
+          <thead><tr><th class="c-chk"><input type="checkbox" id="ngp-sel-all" title="Chọn tất cả dòng đang hiện"></th><th>Kho</th><th>Item No.</th><th>Cust PO</th><th>Locator</th><th class="num">Pallet</th><th class="num">Pcs</th><th>Ngày nhận</th><th class="num" title="Số ngày kể từ pallet NG cũ nhất được nhận vào kho">Tồn</th><th>Plan</th><th>Trạng thái</th><th>Ghi chú</th><th>Hình</th><th></th></tr></thead>
           <tbody id="ngp-body"></tbody>
           <tfoot id="ngp-foot"></tfoot>
         </table>
       </div>
+    </div>
+    <div class="panel search-panel ngp-top" id="ngp-top" style="display:none; margin-bottom:16px;">
+      <div class="brand-eyebrow"><span class="dot" style="background:var(--red);box-shadow:0 0 8px var(--red);"></span>TOP MÃ NG</div>
+      <h1 style="font-size:17px;">10 mã NG nhiều pallet nhất</h1>
+      <div class="sub">Gộp mọi PO và vị trí của cùng 1 Item theo tab kho đang chọn — bấm mã để lọc bảng phía trên.</div>
+      <div class="ngp-top-body"></div>
     </div>
   </div>
 

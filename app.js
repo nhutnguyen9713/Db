@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.92';
+const APP_VERSION = 'v5.93';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -8480,7 +8480,7 @@ function createSearchController(ids){
 
     if(!rows.length){
       rawTbody.innerHTML = '';
-      if(rawEmptyEl){ rawEmptyEl.style.display = 'block'; rawEmptyEl.textContent = multiMode ? 'Không tìm thấy mã hàng nào khớp ở cả 4 kho' : 'Không có dòng nào khớp tìm kiếm'; }
+      if(rawEmptyEl){ rawEmptyEl.style.display = 'block'; rawEmptyEl.textContent = multiMode ? 'Không tìm thấy mã hàng nào khớp ở tất cả kho' : 'Không có dòng nào khớp tìm kiếm'; }
       lastRawRenderedRows = [];
       return;
     }
@@ -8692,7 +8692,7 @@ function createSearchController(ids){
 
     if(!rows.length){
       if(khoTbody) khoTbody.innerHTML = '';
-      if(khoEmptyEl){ khoEmptyEl.style.display = 'block'; khoEmptyEl.textContent = multiMode ? 'Không tìm thấy mã hàng nào khớp ở cả 4 kho' : 'Không có dòng nào khớp tìm kiếm'; }
+      if(khoEmptyEl){ khoEmptyEl.style.display = 'block'; khoEmptyEl.textContent = multiMode ? 'Không tìm thấy mã hàng nào khớp ở tất cả kho' : 'Không có dòng nào khớp tìm kiếm'; }
       renderRawTable();
       return;
     }
@@ -8700,7 +8700,7 @@ function createSearchController(ids){
 
     const planCell = (type, r) => {
       const v = r['plan' + type];
-      return `<td class="col-plan col-plan-${type.toLowerCase()} num">${v === -1 ? '—' : fmt(v)}</td>`;
+      return `<td class="col-plan col-plan-${type.toLowerCase()} num${v === -1 ? ' is-empty' : ''}">${v === -1 ? '—' : fmt(v)}</td>`;
     };
 
     if(khoTbody){
@@ -13425,6 +13425,7 @@ const NGP_HISTORY_DAYS = 120; // số bản giữ lại (2 ca/ngày ≈ 60 ngày
 const NGP_STATUS = { new:'Chưa xử lý', doing:'Đang xử lý', done:'Đã xử lý' };
 const ngpState = { kho:'all', q:'', status:'all', sort:'qty', planOnly:false, day:'' }; // day: '' = hôm nay, 'YYYY-MM-DD' = xem lại ngày cũ
 const ngpExpanded = new Set(); // các dòng đang mở chi tiết (nút "Xem")
+const ngpSel = new Set(); // v5.93: các dòng đang tick để đổi trạng thái hàng loạt
 let ngpManage = null;
 function ngpLoad(){
   if(ngpManage) return ngpManage;
@@ -13513,8 +13514,13 @@ function ngpHistoryRows(day){
 }
 // Dữ liệu đang xem: hôm nay (trực tiếp) hoặc bản đã lưu của 1 ngày cũ.
 function ngpViewData(){
-  if(ngpState.day) return { rows: ngpHistoryRows(ngpState.day), usedByKho: {}, history: true };
-  return ngpCollectRows();
+  const v = ngpState.day ? { rows: ngpHistoryRows(ngpState.day), usedByKho: {}, history: true } : ngpCollectRows();
+  // v5.93: gắn ngày nhận cũ nhất + số ngày tồn cho từng dòng (dùng cho cột, sắp xếp "Tồn lâu nhất", Top mã NG)
+  try{
+    const am = ngpAgeMap(), today = new Date(); today.setHours(0, 0, 0, 0);
+    v.rows.forEach(r => { const d = am.get([r.kho, r.item, r.custpo || '', r.locator].join('||')); r.rdate = d || null; r.age = d ? Math.max(0, Math.round((today - d) / 86400000)) : null; });
+  }catch(e){}
+  return v;
 }
 function ngpRenderDaySelect(){
   const sel = document.getElementById('ngp-day'); if(!sel) return;
@@ -13566,7 +13572,8 @@ function ngpFilteredRows(all){
     qty: (a, b) => b.qty - a.qty,
     pallets: (a, b) => b.pallets - a.pallets || b.qty - a.qty,
     item: (a, b) => String(a.item).localeCompare(String(b.item)) || String(a.custpo).localeCompare(String(b.custpo)),
-    locator: (a, b) => String(a.locator).localeCompare(String(b.locator))
+    locator: (a, b) => String(a.locator).localeCompare(String(b.locator)),
+    age: (a, b) => (b.age == null ? -1 : b.age) - (a.age == null ? -1 : a.age) || b.qty - a.qty
   }[ngpState.sort] || ((a, b) => b.qty - a.qty);
   return rows.sort(cmp);
 }
@@ -13690,12 +13697,65 @@ function ngpThumbsHtml(arr, key){
   return shown + (more > 0 ? `<button type="button" class="ngp-thumb ngp-thumb-more" data-ngkey="${key}" data-idx="${NGP_THUMB_SHOW}" title="Còn ${more} ảnh nữa — bấm để xem">+${more}</button>` : '');
 }
 
+// v5.93: ngày nhận cũ nhất + số ngày tồn của từng dòng NG (Kho|Item|PO|Locator), lấy từ dữ liệu gốc theo pallet.
+function ngpParseDmy(s){ const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(s || '')); return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null; }
+function ngpAgeMap(){
+  const map = new Map();
+  getRawRows(currentData).forEach(x => {
+    if(!String(x[RAW_KEY_IDX.oqc] || '').toUpperCase().includes('NG')) return;
+    const d = ngpParseDmy(x[RAW_KEY_IDX.dt]); if(!d) return;
+    const k = [x[RAW_KEY_IDX.kho], x[RAW_KEY_IDX.item], x[RAW_KEY_IDX.custpo] || '', x[RAW_KEY_IDX.locator]].join('||');
+    const e = map.get(k); if(!e || d < e) map.set(k, d);
+  });
+  return map;
+}
+function ngpAgeCls(age){ return age == null ? '' : age >= 14 ? ' age-bad' : age >= 7 ? ' age-warn' : ''; }
+function ngpRenderStatusBar(rs){
+  const el = document.getElementById('ngp-stbar'); if(!el) return;
+  const n = { new: 0, doing: 0, done: 0 }; rs.forEach(r => { n[r.status] = (n[r.status] || 0) + 1; });
+  const tot = rs.length || 1, pct = k => (n[k] / tot * 100).toFixed(1);
+  const chip = (k, label, c) => `<button type="button" class="ngp-stchip${ngpState.status === k ? ' on' : ''}" data-ngst="${k}">${c ? `<i style="background:${c}"></i>` : ''}${label} <b>${fmt(k === 'all' ? rs.length : n[k])}</b></button>`;
+  el.innerHTML = `<div class="ngp-prog" title="Đã xử lý ${fmt(n.done)}/${fmt(rs.length)} dòng"><span class="p-done" style="width:${pct('done')}%"></span><span class="p-doing" style="width:${pct('doing')}%"></span></div>
+    <div class="ngp-prog-lbl">Đã xử lý <b>${fmt(n.done)}</b>/${fmt(rs.length)} dòng (${rs.length ? Math.round(n.done / rs.length * 100) : 0}%)</div>
+    <div class="ngp-stchips">${chip('all', 'Tất cả')}${chip('new', NGP_STATUS.new, '#D6394B')}${chip('doing', NGP_STATUS.doing, '#F5A623')}${chip('done', NGP_STATUS.done, '#0E8F76')}</div>`;
+}
+function ngpRenderBulkBar(){
+  const el = document.getElementById('ngp-bulk'); if(!el) return;
+  if(!ngpSel.size || ngpState.day){ el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.innerHTML = `<b>Đã chọn ${fmt(ngpSel.size)} dòng</b> · Đổi trạng thái thành <select id="ngp-bulk-st" class="ngp-input">${Object.keys(NGP_STATUS).map(k => `<option value="${k}">${NGP_STATUS[k]}</option>`).join('')}</select>
+    <button type="button" class="btn-update" id="ngp-bulk-apply">Áp dụng</button><button type="button" class="tx-filter-clear-link" id="ngp-bulk-clear">Bỏ chọn</button>`;
+}
+function ngpRenderTop(all){
+  const el = document.getElementById('ngp-top'); if(!el) return;
+  const rs = all.filter(r => ngpState.kho === 'all' || r.code === ngpState.kho);
+  const m = new Map();
+  rs.forEach(r => {
+    let e = m.get(r.item); if(!e){ e = { item: r.item, pallets: 0, qty: 0, khos: new Set(), pos: new Set(), age: null, open: 0 }; m.set(r.item, e); }
+    e.pallets += r.pallets; e.qty += r.qty; e.khos.add(r.code); if(r.custpo) e.pos.add(r.custpo);
+    if(r.age != null && (e.age == null || r.age > e.age)) e.age = r.age; if(r.status !== 'done') e.open++;
+  });
+  const top = [...m.values()].sort((a, b) => b.pallets - a.pallets || b.qty - a.qty).slice(0, 10);
+  if(!top.length){ el.style.display = 'none'; return; }
+  el.style.display = '';
+  const mx = top[0].pallets || 1;
+  el.querySelector('.ngp-top-body').innerHTML = `<table class="ngp-table ngp-top-t"><thead><tr><th>#</th><th>Item No.</th><th>Kho</th><th class="num">Số PO</th><th class="num">Pallet</th><th class="num">Pcs</th><th class="num">Tồn lâu nhất</th><th class="num">Chưa xong</th></tr></thead><tbody>` +
+    top.map((e, i) => `<tr><td>${i + 1}</td><td><button type="button" class="ngp-top-item" data-ngitem="${escAttr(e.item)}" title="Lọc bảng theo mã này"><b>${escHtml(e.item)}</b></button></td>
+      <td>${[...e.khos].sort().map(k => `<i class="v5-kdot k${escHtml(k)}">${escHtml(k)}</i>`).join('')}</td><td class="num">${fmt(e.pos.size)}</td>
+      <td class="num v5-lbar" style="--w:${Math.round(e.pallets / mx * 100)}%">${fmt(e.pallets)}</td><td class="num">${fmt(e.qty)}</td>
+      <td class="num${ngpAgeCls(e.age)}">${e.age == null ? '—' : e.age + ' ngày'}</td><td class="num">${fmt(e.open)}</td></tr>`).join('') + '</tbody></table>';
+}
+
 function renderNgPage(){
   const bodyEl = document.getElementById('ngp-body');
   if(!bodyEl) return;
   const view = ngpViewData();
   const { rows: all, usedByKho } = view;
   if(!view.history) ngpRecordToday(all);
+  ngpRenderStatusBar(all.filter(r => ngpState.kho === 'all' || r.code === ngpState.kho));
+  ngpRenderTop(all);
+  if(view.history) ngpSel.clear();
+  ngpRenderBulkBar();
   ngpRenderDaySelect();
   const histNote = document.getElementById('ngp-history-note');
   if(histNote){
@@ -13731,10 +13791,12 @@ function renderNgPage(){
 
   const rows = ngpFilteredRows(all);
   if(!rows.length){
-    bodyEl.innerHTML = `<tr><td colspan="11" class="ngp-empty">${all.length ? 'Không có dòng nào khớp bộ lọc.' : 'Không có hàng NG trong dữ liệu tồn kho hiện tại.'}</td></tr>`;
+    bodyEl.innerHTML = `<tr><td colspan="14" class="ngp-empty">${all.length ? 'Không có dòng nào khớp bộ lọc.' : 'Không có hàng NG trong dữ liệu tồn kho hiện tại.'}</td></tr>`;
     document.getElementById('ngp-foot').innerHTML = '';
     return;
   }
+  const p2 = n => String(n).padStart(2, '0');
+  const dCell = r => `<td class="c-dt">${r.rdate ? p2(r.rdate.getDate()) + '/' + p2(r.rdate.getMonth() + 1) : '—'}</td><td class="num c-age${ngpAgeCls(r.age)}">${r.age == null ? '—' : r.age + ' ngày'}</td>`;
   bodyEl.innerHTML = rows.map(r => {
     const key = escAttr(ngpKey(r));
     const open = ngpExpanded.has(ngpKey(r));
@@ -13742,28 +13804,27 @@ function renderNgPage(){
       ? `<button type="button" class="ov-ng-plan-badge item-link" data-item="${escAttr(r.item)}" data-po="${escAttr(r.custpo)}" data-jump-combined="${escAttr(combinedRowDomId(r.item, r.custpo))}" title="Mã + PO này đang nằm trong kế hoạch xuất cont — bấm để xem trong Tổng hợp 3 Plan">⚠ Có trong Plan</button>`
       : '<span style="color:var(--muted);">—</span>';
     const opts = Object.keys(NGP_STATUS).map(k => `<option value="${k}"${k === r.status ? ' selected' : ''}>${NGP_STATUS[k]}</option>`).join('');
+    const base = `<td class="c-kho">${escHtml(r.code)}</td><td class="c-item"><b>${escHtml(r.item)}</b></td><td class="c-po">${escHtml(r.custpo)}</td><td class="c-loc">${escHtml(r.locator)}</td>
+      <td class="num c-pal">${fmt(r.pallets)}</td><td class="num c-pcs">${fmt(r.qty)}</td>${dCell(r)}`;
     if(view.history){
-      return `<tr class="st-${r.status}"><td>${escHtml(r.code)}</td><td><b>${escHtml(r.item)}</b></td><td>${escHtml(r.custpo)}</td><td>${escHtml(r.locator)}</td>
-        <td class="num">${fmt(r.pallets)}</td><td class="num">${fmt(r.qty)}</td><td>${r.hasPlan ? '<span class="ov-ng-plan-badge">⚠ Có trong Plan</span>' : '<span style="color:var(--muted);">—</span>'}</td>
-        <td><span class="ngp-status st-${r.status} ngp-status-ro">${NGP_STATUS[r.status]}</span></td><td>${r.note ? escHtml(r.note) : '<span style="color:var(--muted);">—</span>'}</td>
-        <td class="ngp-photos">${ngpThumbsHtml(ngpPhotos.get(ngpKey(r)) || [], key)}</td><td></td></tr>`;
+      return `<tr class="st-${r.status}"><td class="c-chk"></td>${base}<td class="c-plan${r.hasPlan ? '' : ' none'}">${r.hasPlan ? '<span class="ov-ng-plan-badge">⚠ Có trong Plan</span>' : '<span style="color:var(--muted);">—</span>'}</td>
+        <td class="c-st"><span class="ngp-status st-${r.status} ngp-status-ro">${NGP_STATUS[r.status]}</span></td><td class="c-note">${r.note ? escHtml(r.note) : '<span style="color:var(--muted);">—</span>'}</td>
+        <td class="ngp-photos c-img">${ngpThumbsHtml(ngpPhotos.get(ngpKey(r)) || [], key)}</td><td class="c-act"></td></tr>`;
     }
-    return `<tr class="st-${r.status}" data-ngkey="${key}">
-      <td>${escHtml(r.code)}</td>
-      <td><b>${escHtml(r.item)}</b></td>
-      <td>${escHtml(r.custpo)}</td>
-      <td>${escHtml(r.locator)}</td>
-      <td class="num">${fmt(r.pallets)}</td>
-      <td class="num">${fmt(r.qty)}</td>
-      <td>${badge}</td>
-      <td><select class="ngp-status st-${r.status}" data-ngkey="${key}">${opts}</select></td>
-      <td><input type="text" class="ngp-note" data-ngkey="${key}" value="${escAttr(r.note)}" placeholder="Ghi chú…" maxlength="300"></td>
-      <td class="ngp-photos">${ngpThumbsHtml(ngpPhotos.get(ngpKey(r)) || [], key)}<button type="button" class="ngp-photo-add" data-ngkey="${key}" title="Thêm ảnh chụp (chụp mới hoặc chọn từ máy) — không giới hạn số ảnh">📷</button></td>
-      <td><button type="button" class="ngp-jump" data-ngkey="${key}" title="Mở / đóng chi tiết từng pallet của dòng này">${open ? '▲ Ẩn' : '🔍 Xem'}</button></td>
-    </tr>` + (open ? `<tr class="ngp-detail-row"><td colspan="11">${ngpDetailHtml(r)}</td></tr>` : '');
+    return `<tr class="st-${r.status}${ngpSel.has(ngpKey(r)) ? ' sel' : ''}" data-ngkey="${key}">
+      <td class="c-chk"><input type="checkbox" class="ngp-sel" data-ngselkey="${key}"${ngpSel.has(ngpKey(r)) ? ' checked' : ''} title="Chọn để đổi trạng thái hàng loạt"></td>
+      ${base}
+      <td class="c-plan${r.hasPlan ? '' : ' none'}">${badge}</td>
+      <td class="c-st"><select class="ngp-status st-${r.status}" data-ngkey="${key}">${opts}</select></td>
+      <td class="c-note"><input type="text" class="ngp-note" data-ngkey="${key}" value="${escAttr(r.note)}" placeholder="Ghi chú…" maxlength="300"></td>
+      <td class="ngp-photos c-img">${ngpThumbsHtml(ngpPhotos.get(ngpKey(r)) || [], key)}<button type="button" class="ngp-photo-add" data-ngkey="${key}" title="Thêm ảnh chụp (chụp mới hoặc chọn từ máy) — không giới hạn số ảnh">📷</button></td>
+      <td class="c-act"><button type="button" class="ngp-jump" data-ngkey="${key}" title="Mở / đóng chi tiết từng pallet của dòng này">${open ? '▲ Ẩn' : '🔍 Xem'}</button></td>
+    </tr>` + (open ? `<tr class="ngp-detail-row"><td colspan="14">${ngpDetailHtml(r)}</td></tr>` : '');
   }).join('');
-  document.getElementById('ngp-foot').innerHTML = `<tr><td colspan="4">Tổng (${fmt(rows.length)} dòng · ${fmt(new Set(rows.map(r => r.item + '||' + r.custpo)).size)} mã + PO)</td>
-    <td class="num">${fmt(rows.reduce((s, r) => s + r.pallets, 0))}</td><td class="num">${fmt(rows.reduce((s, r) => s + r.qty, 0))}</td><td colspan="5"></td></tr>`;
+  const allChk = document.getElementById('ngp-sel-all');
+  if(allChk){ allChk.disabled = !!view.history; const keys = rows.map(ngpKey); allChk.checked = keys.length > 0 && keys.every(k => ngpSel.has(k)); allChk.indeterminate = !allChk.checked && keys.some(k => ngpSel.has(k)); }
+  document.getElementById('ngp-foot').innerHTML = `<tr><td colspan="5">Tổng (${fmt(rows.length)} dòng · ${fmt(new Set(rows.map(r => r.item + '||' + r.custpo)).size)} mã + PO)</td>
+    <td class="num">${fmt(rows.reduce((s, r) => s + r.pallets, 0))}</td><td class="num">${fmt(rows.reduce((s, r) => s + r.qty, 0))}</td><td colspan="7"></td></tr>`;
 }
 
 async function ngpExportExcel(){
@@ -13916,6 +13977,20 @@ async function ngpExportExcel(){
     if(ngpPhotoTarget && files.length) await ngpAddPhotos(ngpPhotoTarget, files);
   });
   page.addEventListener('click', e => {
+    const sc = e.target.closest('[data-ngst]');
+    if(sc){ ngpState.status = sc.dataset.ngst; const sf = document.getElementById('ngp-status-filter'); if(sf) sf.value = ngpState.status; renderNgPage(); return; }
+    const ti = e.target.closest('[data-ngitem]');
+    if(ti){ const si = document.getElementById('ngp-search'); ngpState.q = ti.dataset.ngitem; if(si) si.value = ngpState.q; renderNgPage(); const tb = document.querySelector('#page-ng .ngp-table-wrap'); if(tb) tb.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    if(e.target.id === 'ngp-bulk-clear'){ ngpSel.clear(); renderNgPage(); return; }
+    if(e.target.id === 'ngp-bulk-apply'){
+      const st = (document.getElementById('ngp-bulk-st') || {}).value; if(!NGP_STATUS[st] || ngpState.day) return;
+      const m = ngpLoad(), now = Date.now();
+      ngpSel.forEach(k => { const cur = m[k] || {}; cur.status = st; cur.t = now; m[k] = cur; });
+      const n = ngpSel.size; ngpSel.clear(); ngpSave(); renderNgPage();
+      if(typeof showAppToast === 'function') showAppToast(`Đã đổi ${n} dòng sang "${NGP_STATUS[st]}" — bấm Lưu để đồng bộ Cloud.`);
+      return;
+    }
+    if(e.target.closest('.ngp-sub-desc')){ e.target.closest('.ngp-sub-desc').classList.toggle('open'); return; }
     const th = e.target.closest('.ngp-thumb'); if(th){ ngpOpenLightbox(th.dataset.ngkey, Number(th.dataset.idx)); return; }
     const ad = e.target.closest('.ngp-photo-add'); if(ad){ ngpPhotoTarget = ad.dataset.ngkey; if(fileInput) fileInput.click(); return; }
     const b = e.target.closest('.ngp-jump[data-ngkey]'); if(!b) return;
@@ -13924,6 +13999,16 @@ async function ngpExportExcel(){
     renderNgPage();
   });
   page.addEventListener('change', e => {
+    if(e.target.id === 'ngp-sel-all'){
+      const keys = ngpFilteredRows(ngpViewData().rows).map(ngpKey);
+      keys.forEach(k => e.target.checked ? ngpSel.add(k) : ngpSel.delete(k)); renderNgPage(); return;
+    }
+    if(e.target.classList.contains('ngp-sel')){
+      const k = e.target.dataset.ngselkey; if(e.target.checked) ngpSel.add(k); else ngpSel.delete(k);
+      const tr = e.target.closest('tr'); if(tr) tr.classList.toggle('sel', e.target.checked);
+      ngpRenderBulkBar(); return;
+    }
+    if(e.target.id === 'ngp-bulk-st') return;
     const key = e.target.dataset && e.target.dataset.ngkey; if(!key || ngpState.day) return;
     const m = ngpLoad(); const cur = m[key] || {};
     if(e.target.classList.contains('ngp-status')){
@@ -19341,4 +19426,50 @@ document.addEventListener('click', e => {
     });
     return r;
   };
+}
+
+// v5.93 — Tìm mã: tổng theo từng mã tìm (Pcs, pallet, theo kho, PASS/NG), chip mã không thấy, pallet cũ nhất để pick FIFO
+function v5SrchCodesRender(){
+  const el = document.getElementById('v5-srch-codes'); if(!el) return;
+  const ta = document.getElementById('kho-multi-search');
+  const groups = ta ? parseMultiCodes(ta.value || '') : [];
+  if(!groups.length || !currentData){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  const I = RAW_KEY_IDX, raw = getRawRows(currentData);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const res = groups.map(g => ({ g, label: g.join(' '), rows: [] }));
+  raw.forEach(x => {
+    const hay = `${x[I.item]} ${x[I.custpo]} ${x[I.locator]} ${x[I.oqc]} ${x[I.kho]} ${x[I.ref] || ''}`.toLowerCase();
+    res.forEach(r => { if(r.g.every(t => hay.includes(t))) r.rows.push(x); });
+  });
+  const miss = res.filter(r => !r.rows.length), hit = res.filter(r => r.rows.length);
+  const short = k => String(k || '').replace(/^Kho\s*/i, '');
+  const cards = hit.map(r => {
+    let qty = 0, pass = 0, ng = 0; const byKho = new Map();
+    let fifo = null, fifoD = null;
+    r.rows.forEach(x => {
+      const q = Number(x[I.qty]) || 0, isNg = String(x[I.oqc] || '').toUpperCase().includes('NG');
+      qty += q; if(isNg) ng += q; else pass += q;
+      const k = short(x[I.kho]); const e = byKho.get(k) || { p: 0, q: 0 }; e.p++; e.q += q; byKho.set(k, e);
+      if(!isNg && !/LOADING/i.test(x[I.locator] || '')){ const d = ngpParseDmy(x[I.dt]); if(d && (!fifoD || d < fifoD)){ fifoD = d; fifo = x; } }
+    });
+    const khoChips = [...byKho.entries()].sort().map(([k, e]) => `<span class="v5-sc-k"><i class="v5-kdot k${escHtml(k)}">${escHtml(k)}</i>${fmt(e.p)} pl · ${fmt(e.q)}</span>`).join('');
+    const age = fifoD ? Math.round((today - fifoD) / 86400000) : null;
+    const fifoHtml = fifo ? `<div class="v5-sc-fifo">⏳ FIFO — cũ nhất: <b>${escHtml(fifo[I.dt])}</b> (${age} ngày) · <b>${escHtml(fifo[I.locator])}</b>${fifo[I.gi] ? ' · GI ' + escHtml(fifo[I.gi]) : ''}${fifo[I.lot] ? ' · Lot ' + escHtml(fifo[I.lot]) : ''}</div>` : '';
+    return `<div class="v5-sc-card"><div class="v5-sc-h"><b>${escHtml(r.label)}</b><span class="v5-sc-q">${fmt(qty)} <small>Pcs · ${fmt(r.rows.length)} pallet</small></span></div>
+      <div class="v5-sc-oqc"><span class="pass">PASS ${fmt(pass)}</span>${ng ? `<span class="ng">NG ${fmt(ng)}</span>` : ''}</div>
+      <div class="v5-sc-ks">${khoChips}</div>${fifoHtml}</div>`;
+  }).join('');
+  el.style.display = '';
+  el.innerHTML = `<div class="v5-sc-top"><div class="brand-eyebrow"><span class="dot"></span>TỔNG THEO MÃ TÌM</div><span class="v5-sc-cnt">Thấy ${fmt(hit.length)}/${fmt(res.length)} mã</span></div>` +
+    (miss.length ? `<div class="v5-sc-miss">Không thấy: ${miss.map(r => `<span class="v5-sc-mchip">${escHtml(r.label)}</span>`).join('')}</div>` : '') +
+    (cards ? `<div class="v5-sc-grid">${cards}</div>` : '');
+}
+{
+  const _rksp = renderKhoSearchPage;
+  renderKhoSearchPage = function(){ const r = _rksp.apply(this, arguments); try{ v5SrchCodesRender(); }catch(e){ console.error(e); } return r; };
+  let t = 0;
+  const ta = document.getElementById('kho-multi-search');
+  if(ta) ta.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { try{ v5SrchCodesRender(); }catch(e){} }, 200); });
+  const clr = document.getElementById('btn-clear-multi');
+  if(clr) clr.addEventListener('click', () => setTimeout(() => { try{ v5SrchCodesRender(); }catch(e){} }, 0));
 }
