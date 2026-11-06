@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.41';
+const APP_VERSION = 'v5.50';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -3841,7 +3841,8 @@ function contShipSerialize(data){
     fileName: data.fileName, updatedAtText: data.updatedAtText,
     byRef: Object.fromEntries(data.byRef),
     byRefItem: Object.fromEntries([...data.byRefItem].map(([k, v]) => [k, Object.fromEntries(v)])),
-    byRefLocators: Object.fromEntries([...(data.byRefLocators || new Map())].map(([k, v]) => [k, [...v]]))
+    byRefLocators: Object.fromEntries([...(data.byRefLocators || new Map())].map(([k, v]) => [k, [...v]])),
+    byRefGis: Object.fromEntries([...(data.byRefGis || new Map())].map(([k, v]) => [k, [...v]]))
   };
 }
 function contShipDeserialize(obj){
@@ -3850,7 +3851,8 @@ function contShipDeserialize(obj){
     fileName: obj.fileName, updatedAtText: obj.updatedAtText,
     byRef: new Map(Object.entries(obj.byRef || {})),
     byRefItem: new Map(Object.entries(obj.byRefItem || {}).map(([k, v]) => [k, new Map(Object.entries(v))])),
-    byRefLocators: new Map(Object.entries(obj.byRefLocators || {}).map(([k, v]) => [k, new Set(v)]))
+    byRefLocators: new Map(Object.entries(obj.byRefLocators || {}).map(([k, v]) => [k, new Set(v)])),
+    byRefGis: obj.byRefGis ? new Map(Object.entries(obj.byRefGis).map(([k, v]) => [k, new Set(v)])) : null
   };
 }
 
@@ -3858,7 +3860,8 @@ function contShipBuildFromRecords(records){
   const byRef = new Map();
   const byRefItem = new Map();
   const byRefLocators = new Map(); // ref -> Set(locator) — để suy ra Kho nào đang/đã Load
-  records.forEach(r => {
+  const byRefGis = new Map(); // v5.50: ref -> Set(GI No.) — mỗi GI = 1 pallet đã load
+  records.forEach((r, ri) => {
     if(String(r.transType || '').trim().toUpperCase() !== 'SHIP') return;
     // Chuẩn hoá Reference: cắt khoảng trắng 2 đầu + bỏ dấu câu thừa ở CUỐI (dấu ; , . thấy xuất hiện
     // trong dữ liệu gốc, VD: "CR0165293;") — không cắt dấu câu ở giữa để không làm sai các Reference
@@ -3877,8 +3880,10 @@ function contShipBuildFromRecords(records){
       if(!byRefLocators.has(ref)) byRefLocators.set(ref, new Set());
       byRefLocators.get(ref).add(r.locator);
     }
+    if(!byRefGis.has(ref)) byRefGis.set(ref, new Set());
+    byRefGis.get(ref).add(String(r.gi || '').trim() || ('__set' + (r.setId || ri)));
   });
-  return { byRef, byRefItem, byRefLocators };
+  return { byRef, byRefItem, byRefLocators, byRefGis };
 }
 
 // Suy ra danh sách Kho (VD: "Kho 2B", "Kho 2B + Kho 3A") từ tập hợp Locator Name gom được của các
@@ -16812,9 +16817,9 @@ if(contShipFileInput){
     try{
       const rows = await txReadFileAsRows(file);
       const records = txParseTransactionRecords(rows);
-      const { byRef, byRefItem, byRefLocators } = contShipBuildFromRecords(records);
+      const { byRef, byRefItem, byRefLocators, byRefGis } = contShipBuildFromRecords(records);
       if(!byRef.size) throw new Error('Không tìm thấy dòng nào có Transaction Type = Ship trong file này.');
-      contShipData = { byRef, byRefItem, byRefLocators, fileName: file.name, updatedAtText: `Cập nhật lúc ${fmtDateTime(new Date())}` };
+      contShipData = { byRef, byRefItem, byRefLocators, byRefGis, fileName: file.name, updatedAtText: `Cập nhật lúc ${fmtDateTime(new Date())}` };
       _localShipDirty = true;
       renderContShipUpdatedLine();
       // Gọi lại renderPlanPanel() (không chỉ renderContainerPickingOverview()) — vì "Tổng hợp 3 Plan"
@@ -18351,6 +18356,7 @@ function v5BuildHero(){
       <div class="v5-h-stats" id="v5-h-stats"></div>
       <div class="v5-h-next" id="v5-h-next"></div>
     </div>
+    <div class="v5-h-shiftstats" id="v5-h-shiftstats"></div>
     <div class="v5-h-foot" id="v5-h-foot"><button type="button" class="v5-cmdk-btn" data-v5-cmdk="1"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Tìm nhanh mã hàng, cont, CR, locator…<kbd>Ctrl K</kbd></button></div>`;
   if(topRow){
     topRow.parentNode.insertBefore(hero, topRow);
@@ -18368,15 +18374,14 @@ function v5RenderHero(){
   const today = v5TodayStr(0);
   const tRows = rows.filter(r => String(r.loadDate || '').split(',')[0].trim() === today);
   const tDone = tRows.filter(v5IsDone).length;
-  let pq = 0, pp = 0;
-  tRows.forEach(r => (r.items || []).forEach(it => { pq += it.qty || 0; pp += Math.min(it.qty || 0, it.picked || 0); }));
+  const tPal = v5PalletSum(tRows);
   const pct = tRows.length ? tDone / tRows.length : 0;
   const C = 2 * Math.PI * 54;
   ringEl.innerHTML = rows.length ? `
     <svg viewBox="0 0 132 132" class="v5-ring"><defs><linearGradient id="v5rg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2FD5A8"/><stop offset="1" stop-color="#5EA8FF"/></linearGradient></defs>
       <circle cx="66" cy="66" r="54" class="trk"/><circle cx="66" cy="66" r="54" class="val" style="stroke-dasharray:${C};stroke-dashoffset:${C * (1 - pct)}"/></svg>
     <div class="v5-ring-c"><b>${fmt(tDone)}<span>/${fmt(tRows.length)}</span></b><em>cont hôm nay xong</em></div>
-    <div class="v5-ring-sub">Pcs đã pick <b>${fmt(pp)}</b> / ${fmt(pq)}<div class="v5-prog"><i style="width:${pq ? Math.round(pp / pq * 100) : 0}%"></i></div></div>`
+    <div class="v5-ring-sub"><div class="v5-pal-l"><span>Pallet đã pick</span><b>${fmt(tPal.picked)}</b></div><div class="v5-pal-l"><span>Pallet đã load xong</span><b>${tPal.loaded === null ? '—' : fmt(tPal.loaded)}</b></div><div class="v5-prog"><i style="width:${tPal.picked ? Math.round((tPal.loaded || 0) / tPal.picked * 100) : 0}%"></i></div></div>`
     : `<div class="v5-ring-empty"><div class="sk sk-ring"></div><em>Chưa tải Plan</em></div>`;
   const cnt = s => rows.filter(r => r.status === s).length;
   const doneAll = rows.filter(r => r.status === 'done' || r.status === 'manualDone').length;
@@ -18399,6 +18404,7 @@ function v5RenderHero(){
       <div class="v5-nx-m">${escHtml(r.loadDate)} ${escHtml(r.planTime)} · ${escHtml((r.topKho || '').replace('Kho ', 'Kho '))} · ${pickPctLabel(r.pct)}</div><div class="v5-nx-cd" id="v5-nx-cd"></div>`;
     nextEl.style.display = '';
   } else nextEl.style.display = 'none';
+  v5RenderShiftStats();
   v5HeroTick();
 }
 function v5HeroTick(){
@@ -18411,6 +18417,7 @@ function v5HeroTick(){
   const h = now.getHours() + now.getMinutes() / 60, dayShift = h >= 7 && h < 19;
   const into = dayShift ? h - 7 : (h >= 19 ? h - 19 : h + 5);
   document.getElementById('v5-shift').innerHTML = `<span>${dayShift ? '☀️ Ca ngày · 07:00–19:00' : '🌙 Ca đêm · 19:00–07:00'}</span><div class="v5-prog"><i style="width:${Math.round(into / 12 * 100)}%"></i></div><em>còn ${v5FmtLeft((12 - into) * 3600000)} hết ca</em>`;
+  if(v5ShiftInfo().key !== v5ShiftKeyShown) v5RenderShiftStats(); // sang ca mới -> tính lại 3 nhóm
   const cd = document.getElementById('v5-nx-cd');
   if(cd && v5NextInfo){
     const diff = v5NextInfo.ts - Date.now(), s = Math.floor(Math.abs(diff) / 1000);
@@ -18608,3 +18615,99 @@ document.addEventListener('click', (e) => {
   if(v5PlanOpenSet().has(k)){ v5PlanOpenSet().delete(k); card.classList.remove('open'); if(det) det.innerHTML = ''; }
   else { v5PlanOpenSet().add(k); card.classList.add('open'); if(det) det.innerHTML = (v5PlanCardsHtml._cache || {})[k] || ''; }
 });
+
+
+// ===== v5.50: đếm theo PALLET (mỗi GI No. = 1 pallet) + thống kê theo ca =====
+// Pallet đã pick của 1 cont = các pallet PASS trong tồn có Reference = CR của cont (đúng mã hàng của cont)
+// GỘP với các pallet đã Ship theo CR đó (đã load thì chắc chắn đã pick) — gộp theo GI nên không đếm trùng.
+// Pallet đã load xong = số GI đã Ship theo CR của cont (từ file Transaction Ship). null = chưa có dữ liệu.
+var v5PalIdxCache = null;
+function v5PalStockIdx(){
+  if(v5PalIdxCache && v5PalIdxCache.data === currentData) return v5PalIdxCache.idx;
+  const idx = new Map(); // REF -> [[itemLower, gi]]
+  try{
+    getRawRows(currentData).forEach((rw, i) => {
+      if(String(rw[4] || '').toUpperCase() !== 'PASS') return;
+      const crs = String(rw[11] || '').match(/CR\d+/gi);
+      if(!crs) return;
+      const ent = [String(rw[1] || '').toLowerCase(), String(rw[6] || '').trim() || ('__row' + i)];
+      new Set(crs.map(c => c.toUpperCase())).forEach(cr => { if(!idx.has(cr)) idx.set(cr, []); idx.get(cr).push(ent); });
+    });
+  }catch(e){}
+  v5PalIdxCache = { data: currentData, idx };
+  return idx;
+}
+function v5ContPallets(r){
+  const idx = v5PalStockIdx();
+  const items = new Set((r.items || []).map(it => String(it.item || '').toLowerCase()));
+  const refs = new Set((String(r.csr || '').match(/CR\d+/gi) || []).map(c => c.toUpperCase()));
+  const picked = new Set(), loaded = new Set();
+  const shipIdx = v5PalShipIdx();
+  refs.forEach(ref => {
+    (idx.get(ref) || []).forEach(([it, gi]) => { if(items.has(it)) picked.add(gi); });
+    if(shipIdx && shipIdx.get(ref)) shipIdx.get(ref).forEach(gi => { loaded.add(gi); picked.add(gi); });
+  });
+  return { picked: picked.size, loaded: shipIdx ? loaded.size : null };
+}
+var v5PalShipCache = null;
+function v5PalShipIdx(){ // CR -> Set(GI) đã Ship; null nếu chưa có dữ liệu Ship có GI
+  const g = contShipData && contShipData.byRefGis;
+  if(!g) return null;
+  if(v5PalShipCache && v5PalShipCache.src === g) return v5PalShipCache.idx;
+  const idx = new Map();
+  g.forEach((set, ref) => (String(ref).match(/CR\d+/gi) || []).forEach(c => { c = c.toUpperCase(); if(!idx.has(c)) idx.set(c, new Set()); set.forEach(gi => idx.get(c).add(gi)); }));
+  v5PalShipCache = { src: g, idx };
+  return idx;
+}
+function v5PalletSum(rows){
+  let picked = 0, loaded = 0, hasShip = !!(contShipData && contShipData.byRefGis);
+  rows.forEach(r => { const p = v5ContPallets(r); picked += p.picked; loaded += p.loaded || 0; });
+  return { picked, loaded: hasShip ? loaded : null };
+}
+function v5ShiftInfo(now){
+  now = now || new Date();
+  const h = now.getHours();
+  const at = (dOff, hh) => { const d = new Date(now); d.setDate(d.getDate() + dOff); d.setHours(hh, 0, 0, 0); return d; };
+  let start, end, day;
+  if(h >= 7 && h < 19){ start = at(0, 7); end = at(0, 19); day = true; }
+  else if(h >= 19){ start = at(0, 19); end = at(1, 7); day = false; }
+  else { start = at(-1, 19); end = at(0, 7); day = false; }
+  return { start: start.getTime(), end: end.getTime(), day, key: start.getTime() };
+}
+var v5ShiftKeyShown = null;
+function v5RenderShiftStats(){
+  const el = document.getElementById('v5-h-shiftstats');
+  if(!el) return;
+  const sh = v5ShiftInfo();
+  v5ShiftKeyShown = sh.key;
+  const rows = contPickAllRows || [];
+  if(!rows.length){ el.innerHTML = ''; el.style.display = 'none'; return; }
+  el.style.display = '';
+  const hm = t => { const d = new Date(t); return `${v5Pad(d.getHours())}:${v5Pad(d.getMinutes())} ${v5Pad(d.getDate())}/${v5Pad(d.getMonth() + 1)}`; };
+  const late = [], inShift = [], next = [];
+  rows.forEach(r => {
+    const ts = ovParseDateTimeSortKey(r.loadDate, r.planTime);
+    if(!isFinite(ts)) return;
+    if(ts < sh.start){ if(!r.isShipDone) late.push(r); }
+    else if(ts < sh.end) inShift.push(r);
+    else next.push(r);
+  });
+  const card = (cls, title, sub, list, c) => {
+    const n = s => list.filter(r => r.status === s).length;
+    const done = list.filter(r => r.status === 'done' || r.status === 'manualDone').length;
+    const ship = list.filter(r => r.isShipDone).length;
+    const pal = v5PalletSum(list);
+    return `<div class="v5-sh ${cls}" style="--sc:${c}">
+      <div class="v5-sh-h"><span class="v5-sh-t">${title}</span><span class="v5-sh-s">${sub}</span></div>
+      <div class="v5-sh-n"><b>${fmt(list.length)}</b><span>cont</span></div>
+      <div class="v5-sh-chips"><span class="c0">Chưa pick <b>${fmt(n('notStarted'))}</b></span><span class="c1">Đang pick <b>${fmt(n('inProgress'))}</b></span><span class="c2">Pick xong <b>${fmt(done)}</b></span><span class="c3">Load xong <b>${fmt(ship)}</b></span></div>
+      <div class="v5-sh-pal"><span>Pallet đã pick <b>${fmt(pal.picked)}</b></span><span>Pallet đã load <b>${pal.loaded === null ? '—' : fmt(pal.loaded)}</b></span></div>
+    </div>`;
+  };
+  el.innerHTML = `<div class="v5-sh-head">Thống kê theo ca <em>${sh.day ? '☀️ Ca ngày' : '🌙 Ca đêm'} · ${hm(sh.start)} → ${hm(sh.end)}</em></div>
+    <div class="v5-sh-grid">
+      ${card('late', 'Cont rớt', `giờ plan trước ${hm(sh.start)}, chưa load xong`, late, 'var(--red)')}
+      ${card('cur', 'Cont trong ca', `${hm(sh.start)} – ${hm(sh.end)}`, inShift, 'var(--blue)')}
+      ${card('next', 'Cont ca sau', `từ ${hm(sh.end)} trở đi`, next, 'var(--violet)')}
+    </div>`;
+}
