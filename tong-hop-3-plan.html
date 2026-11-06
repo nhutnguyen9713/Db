@@ -452,7 +452,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   // Phiên bản hiện ở góc trên trái — đổi CÙNG lúc với APP_VERSION / APP_VERSION_DATE trong app.js.
-  var PH_VERSION = 'v5.60';
+  var PH_VERSION = 'v5.70';
   var PH_VERSION_DATE = '06/11/2026';
   (function(){ var el = document.getElementById('ph-version'); if(el) el.textContent = PH_VERSION + ' · ' + PH_VERSION_DATE; })();
   var PH_URL_KEY = 'tp3_cloud_url';
@@ -701,6 +701,7 @@
   };
   var phBuildContainers = function(planDataLive, pickingIdx, manualPicked, hidden, sppOk, contShipByRef, invIdx, manualKho){
     var contMap = {};
+    var pickLeft = {}; // v5.70: chia lượng đã pick theo CR cho các dòng trùng mã + CSR (giống TN5)
     ['Row', 'FC', 'HCP'].forEach(function(type){
       var plan = planDataLive[type];
       if(!plan || !plan.detailRows) return;
@@ -714,9 +715,11 @@
         var itemKey = String(r.item || '').toLowerCase();
         var csrKey = String(r.csr || '').trim().toLowerCase();
         var passQty = 0;
-        if(csrKey) passQty = pickingIdx[itemKey + '|' + csrKey] || 0;
+        var pkKey = itemKey + '|' + csrKey;
+        if(csrKey){ if(!(pkKey in pickLeft)) pickLeft[pkKey] = pickingIdx[pkKey] || 0; passQty = pickLeft[pkKey]; }
         var planQty = r.qty || 0;
         var contribution = planQty > 0 ? Math.min(passQty, planQty) : 0;
+        if(csrKey) pickLeft[pkKey] = Math.max(0, passQty - contribution);
         var custPoForSppKey = (r.custPo && r.custPo.trim()) ? r.custPo.trim() : '(Khong co)';
         if(phIsSppItem(r.item) && sppOk[phSppOkKey(r.item, custPoForSppKey)]) contribution = planQty;
         var entry = contMap[key];
