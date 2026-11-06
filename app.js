@@ -1427,7 +1427,7 @@ function clearStoredState(){
 let currentFileName = null;
 // Tăng số này (và cập nhật ngày) mỗi lần sửa file — hiện trong Cài đặt ⚙️ để biết đang chạy đúng bản
 // mới nhất chưa, hay trình duyệt/PWA vẫn đang dùng bản cache cũ chưa kịp cập nhật.
-const APP_VERSION = 'v5.00';
+const APP_VERSION = 'v5.01';
 const APP_VERSION_DATE = '06/11/2026';
 // TRUE khi CHÍNH máy này vừa tải file tồn kho mới (chưa kịp Lưu lên Cloud) — dùng để biết trước khi
 // bấm "Lưu": nếu máy này KHÔNG tự thay đổi tồn kho, mà Cloud đang có bản tồn kho khác (do máy khác
@@ -17927,7 +17927,7 @@ function v5DayBandHtml(day, rows){
   else if(day === v5TodayStr(-1)) tag = 'Hôm qua';
   const dm = day.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   const wd = dm ? ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][new Date(+dm[3], +dm[2] - 1, +dm[1]).getDay()] + ' · ' : '';
-  return `<tr class="cpt-day-band${cls}"><td colspan="11"><span class="v5-band-day">${wd}${escHtml(day || 'Chưa có ngày')}</span>${tag ? `<span class="v5-band-tag">${tag}</span>` : ''}<span class="v5-band-meta">${same.length} cont · ${done} xong${short ? ` · <b class="v5-ng">${short} thiếu hàng</b>` : ''}</span></td></tr>`;
+  return `<tr class="cpt-day-band${cls}"><td colspan="11"><div class="v5-band-in"><span class="v5-band-day">${wd}${escHtml(day || 'Chưa có ngày')}</span>${tag ? `<span class="v5-band-tag">${tag}</span>` : ''}<span class="v5-band-meta">${same.length} cont · ${done} xong${short ? ` · <b class="v5-ng">${short} thiếu hàng</b>` : ''}</span></div></td></tr>`;
 }
 function v5RenderSummary(){
   const el = document.getElementById('v5-summary');
@@ -17985,4 +17985,129 @@ document.addEventListener('click', (e) => {
     b.addEventListener('click', (e) => { e.stopPropagation(); const on = h.classList.toggle('v5-hint-open'); b.classList.toggle('on', on); });
     h.parentNode.insertBefore(b, h);
   });
+})();
+
+
+/* ============================================================
+   v5.01 — Dòng thời gian cont theo giờ (vạch "Bây giờ") + chế độ xem Thẻ (Kanban) cho bảng
+   Picking Status. Cả 2 dựng lại mỗi lần bảng vẽ lại (lọc/sắp xếp/cập nhật dữ liệu).
+   Thẻ/khối dùng chung class .cont-pick-row + data-row-idx/data-cont-jump với dòng bảng nên bấm vào
+   vẫn nhảy tới đúng dòng Kế hoạch xuất cont và hover vẫn hiện popup chi tiết như bảng.
+   ============================================================ */
+const V5_VIEW_KEY = 'tn5_v5_pick_view';
+let v5View = (function(){ try{ return localStorage.getItem(V5_VIEW_KEY) || 'table'; }catch(e){ return 'table'; } })();
+let v5TlDayOff = 0;
+function v5StKey(r){ return r.isShipDone ? 'ship' : (r.status === 'manualDone' ? 'done' : r.status); }
+function v5RowAttrs(r){
+  const idx = (contPickRowsCache || []).indexOf(r);
+  if(idx < 0) return '';
+  return ` data-row-idx="${idx}" data-cont-jump="${contDomId(r.type, r.cNo, r.loadDate, r.planTime)}"`;
+}
+function v5EnsureShell(){
+  const panel = document.getElementById('cont-picking-overview');
+  const wrap = document.getElementById('cont-picking-detail-wrap');
+  if(!panel || !wrap || document.getElementById('v5-viewbar')) return;
+  const tl = document.createElement('div'); tl.id = 'v5-timeline'; tl.className = 'v5-timeline';
+  const bar = document.createElement('div'); bar.id = 'v5-viewbar'; bar.className = 'v5-viewbar';
+  bar.innerHTML = `<div class="v5-seg" role="tablist"><button type="button" data-v5-view="table">☰ Bảng</button><button type="button" data-v5-view="cards">▦ Thẻ</button></div><span class="v5-viewbar-note" id="v5-viewbar-note"></span>`;
+  const kb = document.createElement('div'); kb.id = 'v5-kanban'; kb.className = 'v5-kanban';
+  wrap.parentNode.insertBefore(tl, wrap);
+  wrap.parentNode.insertBefore(bar, wrap);
+  wrap.parentNode.insertBefore(kb, wrap.nextSibling);
+}
+function v5ApplyView(){
+  const panel = document.getElementById('cont-picking-overview');
+  if(!panel) return;
+  panel.classList.toggle('v5-mode-cards', v5View === 'cards');
+  document.querySelectorAll('[data-v5-view]').forEach(b => b.classList.toggle('on', b.dataset.v5View === v5View));
+}
+function v5RenderKanban(){
+  const kb = document.getElementById('v5-kanban');
+  if(!kb) return;
+  const rows = contPickRowsCache || [];
+  const cols = [['notStarted', 'Chưa pick'], ['inProgress', 'Đang pick'], ['done', 'Pick xong'], ['ship', 'Load xong']];
+  kb.innerHTML = cols.map(([k, label]) => {
+    const list = rows.filter(r => v5StKey(r) === k);
+    const cards = list.map(r => {
+      const short = !v5IsDone(r) && r.shortItems && r.shortItems.length;
+      const kho = r.topKho ? r.topKho.replace('Kho ', '') : '—';
+      return `<div class="v5-kc cont-pick-row${short ? ' short' : ''}"${v5RowAttrs(r)}>
+        <div class="v5-kc-top"><b>${escHtml(r.type)} · ${escHtml(String(r.cNo))}</b><span class="v5-kc-kho" style="--kc:${V5_KHO_COLOR[r.topKho] || 'var(--muted-2)'}">${escHtml(kho)}</span></div>
+        <div class="v5-kc-inv">${escHtml(String(r.invoice).split(',')[0])} · ${escHtml(String(r.csr).split(',')[0])}</div>
+        <div class="v5-kc-time">${escHtml(r.loadDate)} · ${escHtml(r.planTime)}${v5CountdownChip(r)}</div>
+        <div class="v5-kc-bar"><i style="width:${Math.min(100, r.pct || 0)}%"></i></div>
+        <div class="v5-kc-foot"><span>${pickPctLabel(r.pct)}</span>${short ? `<span class="v5-kc-short">⚠ Thiếu ${r.shortItems.length} mã</span>` : ''}${r.comment ? `<span class="v5-kc-note" title="${escAttr(r.comment)}">📝</span>` : ''}</div>
+      </div>`;
+    }).join('');
+    return `<div class="v5-kcol v5-kcol-${k}"><div class="v5-kcol-head"><span class="v5-kdot"></span>${label}<b>${list.length}</b></div><div class="v5-kcol-body">${cards || '<div class="v5-kempty">Không có cont</div>'}</div></div>`;
+  }).join('');
+}
+function v5RenderTimeline(){
+  const el = document.getElementById('v5-timeline');
+  if(!el) return;
+  const all = contPickAllRows || [];
+  if(!all.length){ el.style.display = 'none'; return; }
+  el.style.display = '';
+  const day = v5TodayStr(v5TlDayOff);
+  const items = all.map(r => ({ r, ts: ovParseDateTimeSortKey(r.loadDate, r.planTime) }))
+    .filter(x => isFinite(x.ts) && String(x.r.loadDate || '').split(',')[0].trim() === day)
+    .sort((x, y) => x.ts - y.ts);
+  const dm = day.split('/');
+  const d0 = new Date(+dm[2], +dm[1] - 1, +dm[0]).getTime();
+  let h0 = 0, h1 = 24;
+  if(items.length){
+    const hs = items.map(x => (x.ts - d0) / 3600000);
+    h0 = Math.max(0, Math.floor(Math.min.apply(null, hs)) - 1);
+    h1 = Math.min(24, Math.ceil(Math.max.apply(null, hs)) + 2);
+    if(v5TlDayOff === 0){ const nh = (Date.now() - d0) / 3600000; if(nh >= 0 && nh < 24){ h0 = Math.min(h0, Math.floor(nh)); h1 = Math.max(h1, Math.min(24, Math.ceil(nh) + 1)); } }
+    if(h1 - h0 < 8){ h1 = Math.min(24, h0 + 8); h0 = Math.max(0, h1 - 8); }
+  }
+  const done = items.filter(x => v5IsDone(x.r)).length;
+  const head = `<div class="v5-tl-head"><div class="v5-tl-title">Dòng thời gian cont<span>${items.length} cont · ${done} xong</span></div>
+    <div class="v5-seg"><button type="button" data-v5-tlday="0" class="${v5TlDayOff === 0 ? 'on' : ''}">Hôm nay</button><button type="button" data-v5-tlday="1" class="${v5TlDayOff === 1 ? 'on' : ''}">Ngày mai</button></div></div>`;
+  el.innerHTML = head + `<div class="v5-tl-track" id="v5-tl-track"></div>`;
+  const track = document.getElementById('v5-tl-track');
+  const W = track.clientWidth || 1000, BW = 118, span = h1 - h0;
+  const posPx = ts => ((ts - d0) / 3600000 - h0) / span * W;
+  let ticks = '';
+  const step = Math.max(1, Math.ceil(span / Math.max(1, Math.floor(W / 70))));
+  for(let h = h0; h <= h1; h += step){ const x = (h - h0) / span * 100; ticks += `<div class="v5-tl-tick" style="left:${x}%"><span>${v5Pad(h)}:00</span></div>`; }
+  const laneEnd = [];
+  let blocks = '';
+  items.forEach(x => {
+    let left = Math.max(0, Math.min(W - BW, posPx(x.ts) - 6));
+    let lane = laneEnd.findIndex(e => e <= left);
+    if(lane < 0){ lane = laneEnd.length; laneEnd.push(0); }
+    laneEnd[lane] = left + BW + 6;
+    const r = x.r, st = v5StKey(r);
+    const short = !v5IsDone(r) && r.shortItems && r.shortItems.length;
+    const late = !v5IsDone(r) && x.ts < Date.now();
+    const kho = r.topKho ? r.topKho.replace('Kho ', '') : '';
+    blocks += `<div class="v5-tl-blk v5-tl-${st}${short ? ' short' : ''}${late ? ' late' : ''}${v5RowAttrs(r) ? ' cont-pick-row' : ''}"${v5RowAttrs(r)} style="left:${left}px; top:${lane * 50 + 30}px; width:${BW}px" title="${escAttr(r.type + ' · ' + r.cNo + ' · ' + r.invoice + ' · ' + r.planTime)}">
+      <b>${escHtml(r.type)} ${escHtml(String(r.cNo))}</b><span>${escHtml(String(r.planTime).split(',')[0])}${kho ? ' · ' + escHtml(kho) : ''}${short ? ' · ⚠' : ''}</span><i style="width:${Math.min(100, r.pct || 0)}%"></i></div>`;
+  });
+  let now = '';
+  const nowTs = Date.now();
+  if(v5TlDayOff === 0){
+    const nx = posPx(nowTs);
+    if(nx >= 0 && nx <= W) now = `<div class="v5-tl-now" style="left:${nx}px"><span>${v5Pad(new Date().getHours())}:${v5Pad(new Date().getMinutes())}</span></div>`;
+  }
+  const lanes = Math.max(1, laneEnd.length);
+  track.style.height = (lanes * 50 + 36) + 'px';
+  track.innerHTML = ticks + now + (items.length ? blocks : `<div class="v5-tl-empty">Không có cont nào load ${v5TlDayOff ? 'ngày mai' : 'hôm nay'}</div>`);
+}
+function v5RenderPickViews(){ try{ v5EnsureShell(); v5ApplyView(); v5RenderTimeline(); v5RenderKanban(); }catch(e){ console.error(e); } }
+document.addEventListener('click', (e) => {
+  const vb = e.target.closest('[data-v5-view]');
+  if(vb){ v5View = vb.dataset.v5View; try{ localStorage.setItem(V5_VIEW_KEY, v5View); }catch(err){} v5ApplyView(); return; }
+  if(e.target.closest('.sidebar-nav-btn[data-page="picking"]')) setTimeout(v5RenderTimeline, 60);
+  const db = e.target.closest('[data-v5-tlday]');
+  if(db){ v5TlDayOff = +db.dataset.v5Tlday; v5RenderTimeline(); }
+});
+(function v5HookViews(){
+  const orig = renderContPickTable;
+  renderContPickTable = function(){ const r = orig.apply(this, arguments); v5RenderPickViews(); return r; };
+  let t = null;
+  window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(v5RenderTimeline, 150); });
+  if((contPickAllRows || []).length) v5RenderPickViews();
 })();
